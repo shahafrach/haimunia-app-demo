@@ -32,7 +32,7 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import fs from "node:fs";
-import { bootCommunity, waitFor } from "./helpers/boot.mjs";
+import { bootCommunity, waitFor, seedAdminStepUp, unlockAdminPanel } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
 
 const src = fs.readFileSync(new URL("../cloud.js", import.meta.url), "utf8");
@@ -108,6 +108,7 @@ async function openManageMembers(window) { await gotoManage(window, "members"); 
 async function openManageAudit(window) {
   await waitFor(() => !!window.document.getElementById("tabManageBtn"), 4000);
   window.document.getElementById("tabManageBtn").click();
+  await unlockAdminPanel(window);
   await waitFor(() => !!window.document.querySelector('[data-community-action="set-manage-tab"][data-tab="moderation"]'), 4000);
   window.document.querySelector('[data-community-action="set-manage-tab"][data-tab="moderation"]').click();
   await waitFor(() => !!window.document.getElementById("manageArea-audit"), 4000);
@@ -148,6 +149,7 @@ test("a role that gains community.comment.moderate gains the queue, and loses it
   });
   mock.seedCredentials("mod-1", "mod@members.haimuniya.invalid", "pw123456");
   mock.setUser({ id: "mod-1", is_anonymous: false, email: "mod@members.haimuniya.invalid" });
+  seedAdminStepUp(mock, "mod-1", "mod@members.haimuniya.invalid");
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openAccount(window);
   assert.doesNotMatch(bodyText(window), /תור מודרציה/, "a plain member sees no moderation queue");
@@ -180,6 +182,7 @@ test("a role that gains community.comment.moderate gains the queue, and loses it
 test("the report sheet lists the six reasons and its acknowledgement discloses nothing about consequences", async () => {
   const mock = baseMock();
   mock.setUser({ id: "reporter-1", is_anonymous: false, email: "noa@members.haimuniya.invalid" });
+  seedAdminStepUp(mock, "reporter-1", "noa@members.haimuniya.invalid");
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openCommunity(window);
   window.eval('window.handleCommunityClick({ dataset: { communityAction: "report", id: "post-1" } })');
@@ -201,6 +204,7 @@ test("the report sheet lists the six reasons and its acknowledgement discloses n
 test("a comment is reported through the same report() path with target_type comment", async () => {
   const mock = baseMock();
   mock.setUser({ id: "reporter-1", is_anonymous: false, email: "noa@members.haimuniya.invalid" });
+  seedAdminStepUp(mock, "reporter-1", "noa@members.haimuniya.invalid");
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openCommunity(window);
   window.eval('window.handleCommunityClick({ dataset: { communityAction: "report-comment", id: "cmt-1" } })');
@@ -220,6 +224,7 @@ test("a duplicate report by the same member collapses; a second unique reporter 
     ],
   });
   mock.setUser({ id: "reporter-1", is_anonymous: false, email: "noa@members.haimuniya.invalid" });
+  seedAdminStepUp(mock, "reporter-1", "noa@members.haimuniya.invalid");
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openCommunity(window);
   window.eval('window.handleCommunityClick({ dataset: { communityAction: "report", id: "post-1" } })');
@@ -244,6 +249,7 @@ test("a resubmission with a genuinely different reason reopens a report that was
     reports: [{ id: "rep-1", reporter_id: "reporter-1", target_type: "post", target_id: "post-1", reason: "spam", note: "", status: "dismissed", reviewed_by: "mod-1", reviewed_at: VERIFIED, review_note: "not spam" }],
   });
   mock.setUser({ id: "reporter-1", is_anonymous: false, email: "noa@members.haimuniya.invalid" });
+  seedAdminStepUp(mock, "reporter-1", "noa@members.haimuniya.invalid");
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openCommunity(window);
   window.eval('window.handleCommunityClick({ dataset: { communityAction: "report", id: "post-1" } })');
@@ -262,6 +268,7 @@ test("resubmitting the exact same reason does not reopen a report that was alrea
     reports: [{ id: "rep-1", reporter_id: "reporter-1", target_type: "post", target_id: "post-1", reason: "spam", note: "", status: "dismissed", reviewed_by: "mod-1", reviewed_at: VERIFIED }],
   });
   mock.setUser({ id: "reporter-1", is_anonymous: false, email: "noa@members.haimuniya.invalid" });
+  seedAdminStepUp(mock, "reporter-1", "noa@members.haimuniya.invalid");
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openCommunity(window);
   window.eval('window.handleCommunityClick({ dataset: { communityAction: "report", id: "post-1" } })');
@@ -283,6 +290,7 @@ test("the queue shows content, reported member, reporter count, reason, date and
     ],
   });
   mock.setUser({ id: "mod-1", is_anonymous: false, email: "mod@members.haimuniya.invalid" });
+  seedAdminStepUp(mock, "mod-1", "mod@members.haimuniya.invalid");
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openManageModeration(window);
   // Wait for the actual report content, not just the section heading -
@@ -307,6 +315,7 @@ test("the queue is not rendered for a member without the moderation permission",
     reports: [{ id: "rep-1", reporter_id: "reporter-1", target_type: "post", target_id: "post-1", reason: "spam", note: "", status: "open", created_at: VERIFIED }],
   });
   mock.setUser({ id: "mod-1", is_anonymous: false, email: "mod@members.haimuniya.invalid" });
+  seedAdminStepUp(mock, "mod-1", "mod@members.haimuniya.invalid");
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openAccount(window);
   assert.equal(window.document.getElementById("tabManageBtn"), null, "a plain member never gets the Manage tab at all");
@@ -317,6 +326,7 @@ test("the queue is not rendered for a member without the moderation permission",
 
 async function bootQueueAs(mock) {
   mock.setUser({ id: "mod-1", is_anonymous: false, email: "mod@members.haimuniya.invalid" });
+  seedAdminStepUp(mock, "mod-1", "mod@members.haimuniya.invalid");
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openManageModeration(window);
   await waitFor(() => !!window.document.querySelector('[data-community-action="mod-action"]'), 3000);
@@ -437,6 +447,7 @@ test("a plain coach (below head_coach) sees remove/warn/dismiss in the moderatio
     reports: [{ id: "rep-1", reporter_id: "reporter-1", target_type: "post", target_id: "post-1", reason: "harassment", note: "", status: "open", created_at: VERIFIED }],
   });
   mock.setUser({ id: "coach-1", is_anonymous: false, email: "coach@members.haimuniya.invalid" });
+  seedAdminStepUp(mock, "coach-1", "coach@members.haimuniya.invalid");
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openManageModeration(window);
   await waitFor(() => !!window.document.querySelector('[data-community-action="mod-action"]'), 3000);
@@ -450,7 +461,7 @@ test("a plain coach (below head_coach) sees remove/warn/dismiss in the moderatio
 
 // ===== COMM-154 audit view ==========================================
 
-test("the audit view is gated on community.analytics.view and reads admin_actions_page()", async () => {
+test("the audit view is gated on is_admin() (202609150004 moved it off analytics.view) and reads admin_actions_page()", async () => {
   const mock = baseMock({
     invite_redemptions: [{ user_id: "mod-1", invite_id: "i1", role: "head_coach", redeemed_at: VERIFIED }],
     admin_actions: [
@@ -458,9 +469,13 @@ test("the audit view is gated on community.analytics.view and reads admin_action
     ],
   });
   mock.setUser({ id: "mod-1", is_anonymous: false, email: "mod@members.haimuniya.invalid" });
+  seedAdminStepUp(mock, "mod-1", "mod@members.haimuniya.invalid");
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openManageModeration(window);
-  // head_coach does not hold community.analytics.view, so no audit view.
+  // head_coach is not an admin, so no audit view. (It DOES hold
+  // community.analytics.view since 202609150004 - which is exactly why the
+  // audit log was moved off that permission: granting analytics must not
+  // hand someone the record of their own actions.)
   assert.doesNotMatch(window.document.body.textContent, /יומן פעולות ניהול/);
 
   const mock2 = baseMock({
@@ -474,6 +489,7 @@ test("the audit view is gated on community.analytics.view and reads admin_action
     ],
   });
   mock2.setUser({ id: "adm-1", is_anonymous: false, email: "adm@members.haimuniya.invalid" });
+  seedAdminStepUp(mock2, "adm-1", "adm@members.haimuniya.invalid");
   const w2 = await bootCommunity(mock2, { syncEnabled: false });
   await openManageAudit(w2);
   await waitFor(() => /יומן פעולות ניהול/.test(w2.document.body.textContent), 3000);
@@ -496,6 +512,7 @@ test("fresh-eyes audit: the audit log names the actual staff member who acted, n
     ],
   });
   mock.setUser({ id: "adm-1", is_anonymous: false, email: "mor@members.haimuniya.invalid" });
+  seedAdminStepUp(mock, "adm-1", "mor@members.haimuniya.invalid");
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openManageAudit(window);
   const findAuditSection = () => Array.from(window.document.querySelectorAll(".ach-section")).find((s) => /יומן פעולות ניהול/.test(s.textContent));
@@ -530,6 +547,7 @@ test("every admin_actions action_type and target_type the schema allows has a He
     ],
   });
   mock.setUser({ id: "adm-1", is_anonymous: false, email: "adm@members.haimuniya.invalid" });
+  seedAdminStepUp(mock, "adm-1", "adm@members.haimuniya.invalid");
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openManageAudit(window);
   await waitFor(() => /יומן פעולות ניהול/.test(window.document.body.textContent), 3000);
@@ -591,6 +609,7 @@ test("consecutive repeats of the same action on the same target collapse into on
     ],
   });
   mock.setUser({ id: "adm-1", is_anonymous: false, email: "adm@members.haimuniya.invalid" });
+  seedAdminStepUp(mock, "adm-1", "adm@members.haimuniya.invalid");
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openManageAudit(window);
   await waitFor(() => /יומן פעולות ניהול/.test(window.document.body.textContent), 3000);
@@ -627,6 +646,7 @@ test("the pinned strip renders at the top of the feed and a fourth pin is refuse
     ],
   });
   mock.setUser({ id: "mod-1", is_anonymous: false, email: "mod@members.haimuniya.invalid" });
+  seedAdminStepUp(mock, "mod-1", "mod@members.haimuniya.invalid");
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openCommunity(window);
   const strip = window.document.getElementById("communityPinnedStrip");
@@ -641,6 +661,7 @@ test("the pinned strip renders at the top of the feed and a fourth pin is refuse
 test("pin_set and pin_clear both write an admin_actions row", async () => {
   const mock = baseMock();
   mock.setUser({ id: "mod-1", is_anonymous: false, email: "mod@members.haimuniya.invalid" });
+  seedAdminStepUp(mock, "mod-1", "mod@members.haimuniya.invalid");
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openCommunity(window);
   await window.eval('window.handleCommunityClick({ dataset: { communityAction: "pin", type: "post", id: "post-1" } })');
@@ -663,6 +684,7 @@ test("pin_set and pin_clear both write an admin_actions row", async () => {
 test("a head_coach can pin a post to club home from its real overflow menu, not just a direct handler call", async () => {
   const mock = baseMock();
   mock.setUser({ id: "mod-1", is_anonymous: false, email: "mod@members.haimuniya.invalid" });
+  seedAdminStepUp(mock, "mod-1", "mod@members.haimuniya.invalid");
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openCommunity(window);
   await waitFor(() => !!window.document.querySelector('[data-community-action="toggle-post-menu"][data-id="post-1"]'), 3000);
@@ -683,6 +705,7 @@ test("head_coach is selectable in member management; staff and owner are not", a
     invite_redemptions: [{ user_id: "adm-1", invite_id: "i1", role: "member", redeemed_at: VERIFIED }],
   });
   mock.setUser({ id: "adm-1", is_anonymous: false, email: "adm@members.haimuniya.invalid" });
+  seedAdminStepUp(mock, "adm-1", "adm@members.haimuniya.invalid");
   mock.onRpc("admin_search_members", () => ({ data: [{ id: "author-1", handle: "kobi", display_name: "קובי", role: "member", redeemed_at: VERIFIED, last_activity_on: null }], error: null }));
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openManageMembers(window);
@@ -704,6 +727,7 @@ test("granting head_coach passes p_role and is confirmed; the mock records a rol
     ],
   });
   mock.setUser({ id: "adm-1", is_anonymous: false, email: "adm@members.haimuniya.invalid" });
+  seedAdminStepUp(mock, "adm-1", "adm@members.haimuniya.invalid");
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openManageMembers(window);
   window.eval('window.handleCommunityClick({ dataset: { communityAction: "admin-set-role", id: "author-1", role: "head_coach" } })');
@@ -814,6 +838,7 @@ test("a plain coach (below head_coach) can see the active-restrictions panel but
     }],
   });
   mock.setUser({ id: "coach-1", is_anonymous: false, email: "coach@members.haimuniya.invalid" });
+  seedAdminStepUp(mock, "coach-1", "coach@members.haimuniya.invalid");
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openManageModeration(window);
   await waitFor(() => /הגבלות פרסום פעילות/.test(window.document.body.textContent), 3000);

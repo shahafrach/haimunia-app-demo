@@ -24,7 +24,7 @@
 // separate work - see the COMM-329 ticket file's "Not done" section.
 import { test } from "node:test";
 import assert from "node:assert";
-import { bootApp, bootCommunity, waitFor } from "./helpers/boot.mjs";
+import { bootApp, bootCommunity, waitFor, seedAdminStepUp, unlockAdminPanel } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
 
 function headingOutline(container) {
@@ -76,8 +76,10 @@ test('heading outline: the "manage" tab (dashboard sub-tab) has a non-empty, log
     clubs: [{ id: "club-1", name: "חיימוניה" }],
   });
   mock.setUser({ id: "u1", is_anonymous: false, email: "dana@members.haimuniya.invalid" });
+  seedAdminStepUp(mock, "u1", "dana@members.haimuniya.invalid");
   const window = await bootCommunity(mock, { syncEnabled: false });
   window.document.getElementById("tabManageBtn").click();
+  await unlockAdminPanel(window);
   await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
   const main = window.document.querySelector("main");
   assert.ok(main, "expected a <main> landmark");

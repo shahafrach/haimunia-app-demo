@@ -9,7 +9,7 @@
 // bucket/RLS SQL only, per COMM-318's own resolution note).
 import { test } from "node:test";
 import assert from "node:assert";
-import { bootCommunity, waitFor } from "./helpers/boot.mjs";
+import { bootCommunity, waitFor, seedAdminStepUp, unlockAdminPanel } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
 
 const VERIFIED = new Date().toISOString();
@@ -33,6 +33,7 @@ function seeded(extra, role) {
     club_features: allModulesOn(),
   }, extra || {}));
   mock.setUser({ id: "u1", is_anonymous: false, email: "dana@members.haimuniya.invalid" });
+  seedAdminStepUp(mock, "u1", "dana@members.haimuniya.invalid");
   return mock;
 }
 
@@ -45,6 +46,7 @@ async function openAccountTab(window) {
 // "account" sub-tab to the Manage tab's own "settings" sub-tab.
 async function openManageSettings(window) {
   window.document.getElementById("tabManageBtn").click();
+  await unlockAdminPanel(window);
   await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
   // "settings" is no longer a sub-tab id. The operator-depth rework collapsed
   // Manage's seven sub-tabs into three; the club module switches are now an

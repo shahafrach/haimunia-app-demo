@@ -343,6 +343,24 @@
       // Community load would be a real cost for every member who is not
       // staff at all.
       bugs: [], bugsStatus: "open", bugsLoading: false, bugsError: false, bugsLoaded: false, bugsSaving: "",
+      // STEP-UP LOCK on the admin panel (2026-09-15), at the owner's request:
+      // "on ניהול מערכת there is need to be separate log in for admin,
+      // because this is the area for that."
+      //
+      // IN MEMORY ONLY - deliberately not localStorage, not sessionStorage.
+      // Persisting the unlock would defeat the thing it exists for: this
+      // protects against someone holding an already-unlocked phone, and a
+      // token that survives a reload hands them the panel anyway.
+      //
+      // WHAT IT IS AND IS NOT. It is not the security boundary - that is
+      // is_admin() in the database, re-checked on every action regardless of
+      // this flag, and nothing here can grant a non-admin anything. It is a
+      // barrier against the physical-access case: an unattended phone in a
+      // gym, a head coach who is also an admin, a member handed the device to
+      // look at a photo. Saying that plainly matters, because a lock that is
+      // described as more than it is becomes the reason nobody adds the real
+      // one later.
+      adminUnlockedUntil: 0, adminUnlockBusy: false, adminUnlockError: "",
       auditLog: [], auditCursor: null, auditLoading: false, auditError: false, auditLoaded: false, auditEnd: false, auditFilters: {},
       // Fresh-eyes audit: admin_id -> {display_name,handle,avatar_url},
       // batched by loadAuditLog() so renderAuditLog() can name an actor
@@ -9554,6 +9572,66 @@
     if (!rows.length) return "";
     return `<pre class="mono" style="white-space:pre-wrap;word-break:break-word;font-size:11px;color:var(--steel);margin:6px 0 0;">${esc(rows.join("\n"))}</pre>`;
   }
+  // =====================================================================
+  // Step-up lock on the admin panel
+  // =====================================================================
+  // 15 minutes: long enough to triage a queue and read the audit log without
+  // retyping, short enough that a phone left on a bench re-locks before
+  // anyone wanders past. Re-checked on every render rather than on a timer,
+  // so a backgrounded app is locked the moment it is looked at again.
+  const ADMIN_UNLOCK_MINUTES = 15;
+  function adminUnlocked() {
+    return Date.now() < (Number(state.admin.adminUnlockedUntil) || 0);
+  }
+  function renderAdminUnlockGate() {
+    const a = state.admin;
+    // The account is named, because an admin who also holds a personal member
+    // account needs to know WHICH password is being asked for.
+    const who = (state.user && state.user.email) ? state.user.email : "";
+    const whoLine = who && !/@members\.haimuniya\.invalid$/.test(who)
+      ? `<div class="footer-note" style="margin:0 0 10px;" dir="ltr">${esc(who)}</div>`
+      : "";
+    return `<div class="chart-card">
+      <div style="font-weight:800;font-size:16px;margin-bottom:6px;">אזור ניהול האפליקציה</div>
+      <div style="color:var(--steel);font-size:13px;line-height:1.7;margin-bottom:12px;">${bidiText("כאן נמצאים דיווחי התקלות, יומן הפעולות, ההרשאות ואיפוס הסיסמאות. כדי להיכנס צריך להזין שוב את הסיסמה — גם אם כבר התחברתם. זה מגן על האזור הזה אם הטלפון נשאר פתוח.")}</div>
+      ${whoLine}
+      <form id="adminUnlock">
+        ${field("adminUnlock", "password", "סיסמה", `<input class="text-input" name="password" type="password" dir="ltr" autocomplete="current-password" placeholder="סיסמה" required/>`)}
+        <button class="save-btn" type="submit"${a.adminUnlockBusy ? " disabled" : ""} style="margin-top:12px;">${a.adminUnlockBusy ? "בודקים…" : "כניסה לאזור הניהול"}</button>
+      </form>
+      ${a.adminUnlockError ? `<div class="field-error" role="alert" style="margin-top:10px;">${esc(a.adminUnlockError)}</div>` : ""}
+      <div class="footer-note" style="margin:12px 0 0;">${bidiText(`הכניסה נשמרת ל-${ADMIN_UNLOCK_MINUTES} דקות, ומתאפסת בכל פתיחה מחדש של האפליקציה.`)}</div>
+    </div>`;
+  }
+  async function adminUnlock(form) {
+    if (!client || !state.user) return;
+    const password = String(form.elements.password.value || "");
+    if (!password) { state.admin.adminUnlockError = "יש להזין סיסמה"; rerender(); return; }
+    state.admin.adminUnlockBusy = true; state.admin.adminUnlockError = ""; rerender();
+    // Verified by signing in again as the SAME account. Supabase has no
+    // "check this password without a session" call, and this is the standard
+    // step-up shape: same user, same tokens refreshed, no session swap and no
+    // sign-out on failure. Deliberately NOT a stored hash or a client-side
+    // comparison - the password never leaves auth.users, and this app has no
+    // business holding a second copy of it anywhere.
+    let ok = false;
+    try {
+      const { error } = await client.auth.signInWithPassword({ email: state.user.email, password });
+      ok = !error;
+    } catch (e) { ok = false; }
+    state.admin.adminUnlockBusy = false;
+    if (!ok) {
+      // One message for a wrong password and for a failed request alike: an
+      // error that distinguishes them tells someone probing the device which
+      // half they got right.
+      state.admin.adminUnlockError = "הסיסמה שגויה";
+      rerender();
+      return;
+    }
+    state.admin.adminUnlockError = "";
+    state.admin.adminUnlockedUntil = Date.now() + ADMIN_UNLOCK_MINUTES * 60 * 1000;
+    rerender();
+  }
   function renderBugReports() {
     if (!isStaff()) return `<div class="empty">אין לך הרשאה לצפות בדיווחי תקלות.</div>`;
     const a = state.admin;
@@ -18605,6 +18683,10 @@
     if (isAdminMode ? !isAdmin() : !isStaff()) {
       return `<h1 class="page-title">${esc(panelTitle)}</h1><div class="empty">אין הרשאה לצפות בעמוד זה.</div>`;
     }
+    // The admin panel asks for the password again before it will render.
+    if (isAdminMode && !adminUnlocked()) {
+      return `<h1 class="page-title">${esc(panelTitle)}</h1>${renderAdminUnlockGate()}`;
+    }
     // Tab 3's five areas, each still self-gated exactly as it was. The two
     // permission fallbacks below are the same strings the retired "הגדרות"
     // and "אנליטיקס" sub-tabs carried: a coach who is staff enough to be
@@ -20007,6 +20089,7 @@
     else if (event.target.id === "communityClubWodSession") { event.preventDefault(); publishClubWodSession(event.target); }
     else if (event.target.id === "communityInviteCode") { event.preventDefault(); redeemCode(event.target); }
     else if (event.target.id === "communityLogin") { event.preventDefault(); login(event.target); }
+    else if (event.target.id === "adminUnlock") { event.preventDefault(); adminUnlock(event.target); }
     else if (event.target.id === "communityCredentials") { event.preventDefault(); setCredentials(event.target); }
     else if (event.target.id === "backupCredentials") { event.preventDefault(); setCredentials(event.target); }
     else if (event.target.dataset && event.target.dataset.commentPostId) {
@@ -20095,6 +20178,10 @@
         state.profile = null; state.redemption = null; state.signupStarted = false;
         state.profileLoadError = false; state.redemptionLoadError = false;
         state.avatarUpload = { status: "idle", error: "" }; state.permissions = []; state.permissionsLoaded = false;
+        // The admin step-up unlock dies with the session. Leaving it set would
+        // hand the next person to sign in on this device an already-unlocked
+        // admin panel, which is precisely the case the lock exists for.
+        state.admin.adminUnlockedUntil = 0; state.admin.adminUnlockError = ""; state.admin.adminUnlockBusy = false;
         state.ui.fieldErrors = {}; state.ui.confirmDialog = null;
         // Back to the neutral choice screen, not to whichever gate screen the
         // member happened to be on before. Signing out on a shared phone and

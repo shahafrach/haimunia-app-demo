@@ -26,7 +26,7 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import fs from "node:fs";
-import { bootCommunity, waitFor } from "./helpers/boot.mjs";
+import { bootCommunity, waitFor, seedAdminStepUp, unlockAdminPanel } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
 
 const VERIFIED = new Date().toISOString();
@@ -50,6 +50,7 @@ function seeded(extra, role) {
     monthly_club_recaps: [], reports: [], club_features: [],
   }, extra || {}));
   mock.setUser({ id: "u1", is_anonymous: false, email: "dana@members.haimuniya.invalid" });
+  seedAdminStepUp(mock, "u1", "dana@members.haimuniya.invalid");
   return mock;
 }
 
@@ -165,6 +166,10 @@ test("every section the seven-tab Manage rendered is still reachable from one of
   const adminRow = window.document.getElementById("tabManageBtn");
   if (adminRow) {
     adminRow.click();
+    // The admin panel is behind a step-up password now, so the sweep has to
+    // get through it before it can see the admin areas - otherwise this test
+    // would report a false loss for every section that lives there.
+    await unlockAdminPanel(window);
     await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
     await sweep();
   }
@@ -404,6 +409,7 @@ test("opening an admin area (audit log, closed by default) survives an unrelated
   // The audit log is the ADMIN panel's area since the split, so this one
   // deliberately goes through the admin row rather than the club row.
   window.document.getElementById("tabManageBtn").click();
+  await unlockAdminPanel(window);
   await waitFor(() => !!window.document.getElementById("manageTab-moderation"), 3000);
   window.document.getElementById("manageTab-moderation").click();
   await waitFor(() => !!window.document.getElementById("manageArea-audit"), 3000);
@@ -491,6 +497,7 @@ test("an admin gets the APP panel, and it is disjoint from the club panel", asyn
   const mock = seeded(null, "admin");
   const window = await bootCommunity(mock, { syncEnabled: false });
   window.document.getElementById("tabManageBtn").click();
+  await unlockAdminPanel(window);
   await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
   window.document.querySelector('.subtabbtn[data-community-action="set-manage-tab"][data-tab="moderation"]').click();
   await waitFor(() => !!window.document.getElementById("manageArea-audit"), 3000);

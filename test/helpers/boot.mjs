@@ -219,3 +219,32 @@ export function waitFor(check, timeoutMs = 2000, intervalMs = 5) {
     })();
   });
 }
+
+// The admin panel's step-up lock (2026-09-15) asks for the password again
+// before it renders, even for an account that is already signed in as admin.
+// That is deliberate and is tested in test/admin-panel-step-up-lock.test.mjs.
+//
+// Every OTHER test that needs to look at an admin surface has to get past it,
+// and does so HONESTLY - by seeding a credential on the mock and submitting
+// the real form - rather than through a back door in production code. A test
+// seam that skips the gate would mean the gate is never exercised on the path
+// the other 1600 tests take, which is how a lock quietly stops working.
+//
+// Call BEFORE bootCommunity() to seed, then AFTER opening the admin panel to
+// submit. Returns quietly if no gate is present, so a caller that lands on a
+// club surface (which has no lock) needs no branch.
+export const ADMIN_STEP_UP_PASSWORD = "Aa123456789!";
+export function seedAdminStepUp(mock, userId, email) {
+  if (mock && typeof mock.seedCredentials === "function") {
+    mock.seedCredentials(userId, email, ADMIN_STEP_UP_PASSWORD);
+  }
+  return mock;
+}
+export async function unlockAdminPanel(window) {
+  const form = window.document.getElementById("adminUnlock");
+  if (!form) return false; // not the admin panel, or already unlocked
+  form.elements.password.value = ADMIN_STEP_UP_PASSWORD;
+  form.dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
+  await waitFor(() => !window.document.getElementById("adminUnlock"), 4000);
+  return true;
+}

@@ -18,7 +18,7 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import fs from "node:fs";
-import { bootCommunity, waitFor } from "./helpers/boot.mjs";
+import { bootCommunity, waitFor, seedAdminStepUp, unlockAdminPanel } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
 
 const src = fs.readFileSync(new URL("../cloud.js", import.meta.url), "utf8");
@@ -36,6 +36,7 @@ function staffMock(extra, isAdmin) {
     monthly_club_recaps: [], reports: [], challenges: [], weekly_challenges: [], onboarding_step_content: [],
   }, extra || {}));
   mock.setUser({ id: "coach-1", is_anonymous: false, email: "dana_k@members.haimuniya.invalid" });
+  seedAdminStepUp(mock, "coach-1", "dana_k@members.haimuniya.invalid");
   return mock;
 }
 async function openCoachTab(window) {
@@ -114,6 +115,7 @@ test("an empty state that offers an action offers a real one: >=44px, primary, a
   mock.onRpc("community_health_history", () => { calls.push(1); return { data: [], error: null }; });
   const window = await bootCommunity(mock, { syncEnabled: false });
   window.document.getElementById("tabManageBtn").click();
+  await unlockAdminPanel(window);
   await waitFor(() => !!window.document.querySelector('[data-community-action="set-manage-tab"]'), 4000);
 
   // Every action an empty state declares must be a real branch of the click

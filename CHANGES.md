@@ -1,3 +1,59 @@
+## The admin panel asks again — 2026-09-15 (ninth entry)
+
+**"On ניהול מערכת there is need to be separate log in for admin, because this
+is the area for that."** Tapping the admin panel now asks for the password a
+second time, even for an account already signed in as admin. Not a collapsed
+section either - the bug inbox, the audit log and the module toggles are not
+in the DOM at all until it is answered.
+
+Fifteen minutes, then it re-locks. Checked on every render rather than on a
+timer, so a phone that was backgrounded is locked the moment it is looked at
+again. **Held in memory only** - never localStorage, never sessionStorage -
+because persisting it would defeat the exact thing it exists for: this guards
+an already-unlocked phone, and a token that survives a reload hands the panel
+over anyway. Cleared on sign-out too, or the next person to sign in on the
+device inherits an open admin panel.
+
+A wrong password leaves the gate up and **does not sign you out**. Losing a
+session to a mistyped password would be a worse outcome than the one this
+prevents. The failure message is the same for a wrong password and for a
+failed request, because an error that distinguishes them tells someone
+probing the device which half they got right.
+
+**What this is not, stated in the code and in the tests.** It is not the
+security boundary. `is_admin()` in the database is, and it is re-checked on
+every action regardless of this flag - nothing client-side can grant a
+non-admin anything. This guards the PHYSICAL-ACCESS case: an unattended phone
+in a gym, a head coach who also holds admin, a member handed the device to
+look at a photo. Saying so plainly matters, because a lock described as more
+than it is becomes the reason nobody adds the real one later.
+
+Verification uses `signInWithPassword` against the SAME account - the standard
+step-up shape, since Supabase has no "check this password without a session"
+call. Deliberately not a stored hash or any client-side comparison: the
+password stays in `auth.users` and this app holds no second copy of it.
+
+**The gate broke thirteen tests that reach admin surfaces, and they were fixed
+honestly rather than bypassed.** Each seeds a credential on its mock and
+submits the real form, through two helpers in `test/helpers/boot.mjs`. A test
+seam that skipped the gate would mean the lock is never exercised on the path
+the other sixteen hundred tests take, which is how a lock quietly stops
+working. One test title was also corrected: it still claimed the audit view is
+gated on `community.analytics.view`, which stopped being true earlier the same
+day when 202609150004 moved it to `is_admin()`.
+
+**And a decisions ledger.** `docs/audit/RESEARCH_DECISIONS.md` records what
+happened to each of the ~70 recommendations from the eleven-agent research
+pass: built, declined by the owner, refused on the research's own reasoning,
+or still open. Three items were closed by the owner this session - streak
+consolidation, opt-in board ranking, and finishing the `lang="en"` tagging -
+and they are written down for one reason: an unrecorded "no" gets re-proposed
+by the next pass, researched again, and argued again.
+
+Verified: npm test 1687/1687.
+
+---
+
 ## Two jobs, two screens: the admin and head-coach panels split apart for real — 2026-09-15 (eighth entry)
 
 The owner opened the admin panel on a phone and corrected the design in one
