@@ -28,6 +28,19 @@ the whole discussion a second time.
 
 ---
 
+## Settled by the owner, 2026-09-15 — not defects
+
+- **The monthly club recap is published by the head coach, not the admin.**
+  The publish control lives on the coach board (coach-tier only since "coach
+  area will be visible only for coach"), while `recap_monthly_publish()` gates
+  on `analytics.view OR is_admin()`. A head coach holds both halves; a plain
+  admin may publish as far as the server is concerned and has nowhere to press
+  it. Owner's ruling: *"Monthly recap is head coach."* The server gate stays as
+  it is rather than being narrowed to match — roles are additive, so an admin
+  who also coaches keeps the capability, and tightening it would remove the
+  only route back if the head coach account were lost. Do not move this
+  section to the admin panel.
+
 ## Declined by the owner, 2026-09-15 — do not re-propose
 
 **Streak consolidation (display).** Three streak definitions coexist and the

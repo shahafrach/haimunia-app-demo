@@ -1176,6 +1176,20 @@
   // משתתפים" for the single most common real case - a challenge/event's
   // first joiner. One shared helper instead of six separately-typed
   // ternaries, matching relativeTime()'s own singular-branch fix above.
+  // Hebrew does not pluralise the way the template did. Live bug hunt, fresh
+  // round 2 (2026-09-15): the club header hardcoded `${n} חברי מועדון`, so a
+  // club with one member read "1 חברי מועדון" - a plural noun with the number
+  // one. Every fixture-seeded club in the suite has two or more members, so
+  // this string had never been rendered with 1 until production was emptied
+  // and the first real member arrived alone. It is the first line of the
+  // first tab they land on.
+  //
+  // Same shape as participantsLabel() right below, which already solved this
+  // exact problem for challenges - reused rather than re-invented.
+  function clubMembersLabel(n) {
+    const count = Number(n) || 0;
+    return count === 1 ? "חבר/ה אחד/ת במועדון" : `${count} חברי מועדון`;
+  }
   function participantsLabel(n) {
     const count = Number(n) || 0;
     return count === 1 ? "משתתף אחד" : `${count} משתתפים`;
@@ -1198,10 +1212,61 @@
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   }
+  // A REJECTED SUBMIT MUST NOT EMPTY THE FORM.
+  //
+  // Live bug hunt, fresh round 2 (2026-09-15) - HIGH, reproduced live on all
+  // three forms of the join path. This calls rerender(), which replaces
+  // #content's innerHTML wholesale, and these inputs are written as plain
+  // HTML with no value= bound back to state. So a password one character
+  // short of ten wiped the USERNAME too; a taken username wiped the password
+  // and its confirmation; a mistyped login password wiped the username on
+  // every attempt; an invalid club handle wiped a perfectly good display name
+  // and bio.
+  //
+  // Every member creates an account through this path exactly once, on a
+  // phone, in an RTL app with LTR credential fields, and there is no
+  // self-service password reset to fall back on. Being made to retype
+  // everything because one rule was missed is the kind of friction that ends
+  // a signup.
+  //
+  // Restored from the DOM rather than by binding every input to state: the
+  // invite-code field already does the state-binding version
+  // (state.ui.inviteCodeDraft) and it takes a dedicated state key, a render
+  // site and an input handler per field. This is one place, works for every
+  // form, and cannot drift out of sync with what the member actually typed.
+  //
+  // ONLY ON REJECTION. Clearing errors after a SUCCESSFUL submit calls this
+  // too, and a form that refilled itself on success would be worse than the
+  // bug - so the snapshot is restored only when there is an error to show.
+  function captureFormValues(form) {
+    const out = {};
+    if (!form || !form.elements) return out;
+    for (const el of Array.prototype.slice.call(form.elements)) {
+      if (!el.name || el.type === "hidden" || el.type === "submit" || el.type === "button") continue;
+      if (el.type === "checkbox" || el.type === "radio") out[el.name] = { checked: !!el.checked };
+      else out[el.name] = { value: el.value };
+    }
+    return out;
+  }
+  function restoreFormValues(formId, snapshot) {
+    const form = document.getElementById(formId);
+    if (!form || !form.elements || !snapshot) return;
+    for (const name of Object.keys(snapshot)) {
+      const el = form.elements[name];
+      if (!el || typeof el.name !== "string") continue;
+      const v = snapshot[name];
+      if ("checked" in v) el.checked = v.checked;
+      else el.value = v.value;
+    }
+  }
   function setFieldErrors(formId, errors) {
-    if (errors && Object.keys(errors).length) state.ui.fieldErrors[formId] = errors;
+    const hasErrors = !!(errors && Object.keys(errors).length);
+    const snapshot = hasErrors ? captureFormValues(document.getElementById(formId)) : null;
+    if (hasErrors) state.ui.fieldErrors[formId] = errors;
     else delete state.ui.fieldErrors[formId];
     rerender();
+    // rerender() is synchronous, so the rebuilt form is already in the DOM.
+    if (snapshot) restoreFormValues(formId, snapshot);
   }
   // Compact, deterministic per-identity color so the same person always
   // gets the same avatar color across the feed, comments and search.
@@ -7577,18 +7642,59 @@
       try { window.HaimuniaEvents.emit(window.PRODUCT_EVENTS.ATTENDANCE_RECORDED, { occurred_on: occurredOn }); } catch (e) {}
     }
   }
+  // ONE FLUSH AT A TIME, and a re-run if anything was queued while it ran.
+  //
+  // Live bug hunt, fresh round 2 (2026-09-15) - CRITICAL, reproduced live.
+  // queueSyncRecord() fires "haimunia-sync-needed" on EVERY local write, and
+  // that event calls this fire-and-forget. Two edits to the same entry within
+  // one network round trip therefore started two independent flushes, each
+  // reading the same outbox row. They completed out of order, the STALE
+  // upload landed last and overwrote the newer one in private_records, and
+  // then both deleted the same outbox row - so nothing was left queued to
+  // ever correct the drift. Local IndexedDB held the right value, the cloud
+  // backup held a permanently wrong one, and nothing would notice unless the
+  // member happened to edit that exact record again.
+  //
+  // The re-run matters as much as the lock: dropping the second call outright
+  // would lose a write that arrived mid-flush. This defers it instead.
+  let outboxFlushing = false;
+  let outboxFlushQueued = false;
   async function flushOutbox() {
     if (!client || !state.user || !state.syncEnabled || typeof window.dbLoadSyncOutbox !== "function") return;
-    const rows = await window.dbLoadSyncOutbox();
-    for (const row of rows) {
-      const payload = { user_id: state.user.id, record_type: row.recordType, record_id: row.recordId, payload: row.payload || {}, deleted_at: row.deleted ? new Date(row.queuedAt).toISOString() : null, updated_at: new Date(row.queuedAt).toISOString() };
-      const { error } = await client.from("private_records").upsert(payload, { onConflict: "user_id,record_type,record_id" });
-      if (!error) {
-        await window.dbDeleteSyncOutbox(row.id);
-        // After the write succeeded, never before: a failed sync is not a
-        // session, and the row stays in the outbox to be retried.
-        noteAttendanceRecorded(row);
-      }
+    if (outboxFlushing) { outboxFlushQueued = true; return; }
+    outboxFlushing = true;
+    try {
+      do {
+        outboxFlushQueued = false;
+        const me = state.user && state.user.id;
+        if (!me) return;
+        const rows = await window.dbLoadSyncOutbox();
+        for (const row of rows) {
+          // A ROW BELONGS TO WHOEVER MADE IT, not to whoever is signed in
+          // when it finally drains. Same hunt, also CRITICAL and also
+          // reproduced live: member A logs a workout while offline, signs
+          // out, member B signs in on the same phone, the queue drains - and
+          // A's private training data was uploaded tagged with B's user_id.
+          // A's cloud backup silently lost the entry and B's silently gained
+          // one they never did.
+          //
+          // Rows queued before this shipped carry no owner; they are adopted
+          // by the current member, which is exactly the old behaviour and the
+          // best available answer for a row whose origin was never recorded.
+          // New rows always know, so the window closes as the queue drains.
+          if (row.userId && row.userId !== me) continue;
+          const payload = { user_id: me, record_type: row.recordType, record_id: row.recordId, payload: row.payload || {}, deleted_at: row.deleted ? new Date(row.queuedAt).toISOString() : null, updated_at: new Date(row.queuedAt).toISOString() };
+          const { error } = await client.from("private_records").upsert(payload, { onConflict: "user_id,record_type,record_id" });
+          if (!error) {
+            await window.dbDeleteSyncOutbox(row.id);
+            // After the write succeeded, never before: a failed sync is not a
+            // session, and the row stays in the outbox to be retried.
+            noteAttendanceRecorded(row);
+          }
+        }
+      } while (outboxFlushQueued);
+    } finally {
+      outboxFlushing = false;
     }
   }
   // ---------------------------------------------------------------------
@@ -13164,6 +13270,30 @@
   // draft (is_staff() is enough for the read policy) but may NOT publish
   // one (the function's check is narrower) - gating the button on
   // isStaff() would show a coach a control the database refuses.
+  // THE MONTHLY CLUB RECAP IS THE HEAD COACH'S, confirmed by the owner
+  // 2026-09-15: "Monthly recap is head coach."
+  //
+  // Recorded here because the arrangement looks like a bug from two different
+  // angles and is neither. This section lives on the coach board, which is
+  // coach-tier only - a redeemed coach/head_coach role, never the is_admin
+  // flag - while recap_monthly_publish() still gates on
+  // `has_perm('community.analytics.view') or is_admin()`. So:
+  //
+  //   head_coach  holds both halves (coach tier for the board, analytics for
+  //               the gate) and is the intended publisher.
+  //   coach       sees the draft and gets no publish control - correct, and
+  //               asserted in community-monthly-recap-publish.mjs.
+  //   admin       may publish as far as the SERVER is concerned and has
+  //               nowhere to press it.
+  //
+  // That last line is the one that reads like a defect. It is not: the
+  // monthly club recap is club content, the club is the head coach's job, and
+  // the owner has confirmed that division. The server gate is deliberately
+  // left as it is rather than narrowed to match - roles are additive on one
+  // account, so an admin who also coaches keeps the capability, and tightening
+  // it would remove the only route back if the head coach account were ever
+  // lost. Do not "fix" the asymmetry by moving this section to the admin
+  // panel; it was put here on purpose.
   function renderCoachMonthlyRecapSection() {
     // Redesign, Phase 2. Same clientOnly UI-section guard as the two coach
     // sections above.
@@ -16552,6 +16682,28 @@
   function closeCommunityProfile() { state.members.profileView = null; rerender(); }
   function setProfileViewTab(tab) { if (state.members.profileView) { state.members.profileView.tab = tab; rerender(); } }
   const PROFILE_ROLE_LABELS = { owner: "בעלים", admin: "מנהל/ת", staff: "צוות", head_coach: "מאמן/ת ראשי/ת", coach: "מאמן/ת", member: "חבר/ה" };
+  // "חבר/ה · חבר/ה מאז 15.9.2026" - the word twice, back to back.
+  //
+  // Live bug hunt, fresh round 2 (2026-09-15). The role label and the "member
+  // since" phrase were concatenated blind, and for the `member` role they are
+  // the SAME WORD: PROFILE_ROLE_LABELS.member is "חבר/ה" and the trailing
+  // phrase hardcodes "חבר/ה מאז". It reads correctly only for coach, admin
+  // and staff, where the role label happens to differ from the generic noun.
+  //
+  // So this was wrong on the most prominent line of EVERY ordinary member's
+  // profile - which will be almost every profile in this club - and had been
+  // since the surface shipped. The existing profile test asserts the "member
+  // since" phrase appears somewhere in the text and never looked at what sat
+  // immediately before it.
+  //
+  // For a plain member the role adds nothing the next phrase does not already
+  // say, so it is dropped rather than de-duplicated with punctuation.
+  function profileRoleAndSince(roleLabel, memberSince) {
+    const since = memberSince ? `חבר/ה מאז ${esc(shortHebDate(memberSince))}` : "";
+    const role = roleLabel && roleLabel !== PROFILE_ROLE_LABELS.member ? esc(roleLabel) : "";
+    if (role && since) return `${role} · ${since}`;
+    return role || since || esc(roleLabel || "");
+  }
 
   // ==========================================================================
   // COMM-230 - following surface (follower/following lists on a profile)
@@ -16741,7 +16893,22 @@
       // pushed it above.
       bodyHtml = renderFollowingTab(pv, d);
     }
-    const followBtn = d.allow_follows === false ? "" : followButtonHtml(pv.userId);
+    // Never on your OWN profile. Live bug hunt, fresh round 2 (2026-09-15):
+    // tapping your own byline on your own post opened your profile with a
+    // working "מעקב" button on it. The insert is refused by the database
+    // (follows carries `check (follower_id <> followed_id)`), but follow()
+    // only special-cases 23505 (already following, which it turns into an
+    // unfollow) - a check violation is a different code, so it fell through
+    // to the generic "עדכון המעקב נכשל" and dead-ended.
+    //
+    // The sibling reportProfileBtn two lines down already carries exactly
+    // this self-check, which is what makes it an oversight rather than a
+    // decision. It surfaced now because reaching your own profile this way is
+    // the one route available to a member alone in an empty club - and
+    // tapping your own byline right after your first post is precisely what
+    // a curious first member does.
+    const isSelfProfile = !!(state.user && pv.userId === state.user.id);
+    const followBtn = (isSelfProfile || d.allow_follows === false) ? "" : followButtonHtml(pv.userId);
     // 2026-09-05. A member's bio/display name were reportable nowhere - only
     // posts and comments were. Own profile has no report button.
     const reportProfileBtn = (state.user && pv.userId === state.user.id) ? "" : `<button class="chip-btn" data-community-action="report-profile" data-id="${esc(pv.userId)}">דיווח</button>`;
@@ -16753,7 +16920,7 @@
               ${avatarHtml(name, 44, d.avatar_url)}
               <div style="min-width:0;">
                 <h2 id="profileViewTitle" style="margin-top:0;font-weight:800;font-size:16px;margin-bottom:0;">${esc(name)}${isCoachRole(d.role) ? " " + coachBadgeHtml(d.role) : ""}</h2>
-                <div style="color:var(--steel);font-size:12px;">${roleLabel ? esc(roleLabel) : ""}${d.member_since ? ` · חבר/ה מאז ${esc(shortHebDate(d.member_since))}` : ""}</div>
+                <div style="color:var(--steel);font-size:12px;">${profileRoleAndSince(roleLabel, d.member_since)}</div>
               </div>
             </div>
             <button class="link-btn" data-community-action="close-profile" aria-label="סגירה">סגירה</button>
@@ -18521,7 +18688,7 @@
           ${clubMark}
           <div style="min-width:0;">
             <div style="font-weight:800;font-size:16px;">${bidiText(club.name || "המועדון")}</div>
-            <div style="color:var(--steel);font-size:12px;">${Number(club.member_count || 0)} חברי מועדון</div>
+            <div style="color:var(--steel);font-size:12px;">${clubMembersLabel(club.member_count)}</div>
           </div>
         </div>
         ${renderNotificationBell()}
@@ -20577,6 +20744,11 @@
     else if (action === "coach-monthly-recap-publish") publishMonthlyRecap(el.dataset.id);
   };
   window.isCommunitySignedIn = function () { return !!(state.user && state.profile); };
+  // WHO OWNS A WRITE, at the moment it is made. app.js's queueSyncRecord()
+  // needs this to stamp an outbox row with the member who created it - see
+  // flushOutbox()'s identity check for why a row that does not know its own
+  // owner is dangerous.
+  window.communityMemberId = function () { return (state.user && state.user.id) || null; };
   // Fresh-eyes audit: the main header's always-visible bell used to be
   // wired to app.js's own offline "what's new" release notes only — a
   // member could have unread reactions/comments/achievement notifications

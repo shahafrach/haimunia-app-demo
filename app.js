@@ -15,7 +15,7 @@ let barWeight = 20;
 // Single source of truth for the app version. After bumping this, run
 // `npm run sync-version` to copy it into SW_VERSION in sw.js — `npm test`
 // fails if the two drift apart.
-const APP_VERSION = "4.52.0";
+const APP_VERSION = "4.53.0";
 
 // A movement typed into the WOD builder that isn't in the built-in list
 // above - persisted (see WODTAGSTORE), same "custom X" pattern as
@@ -2319,7 +2319,15 @@ const syncApplyingRemote = new Set();
 async function queueSyncRecord(recordType, record, deleted = false) {
   if (!record || !record.id) return;
   if (syncApplyingRemote.has(`${recordType}:${record.id}`)) return;
-  const row = { id: `${recordType}:${record.id}`, recordType, recordId: record.id, payload: deleted ? {} : record, deleted, queuedAt: Date.now() };
+  // userId binds this row to the member who made it. Live bug hunt, fresh
+  // round 2 (2026-09-15): without it, flushOutbox() stamped whoever was
+  // signed in at DRAIN time, so a write made offline by one member and
+  // flushed after a different member signed in on the same phone was
+  // uploaded under the wrong account - one member's backup silently lost an
+  // entry, another's silently gained one. Read at queue time, which is the
+  // only moment the answer is certainly right.
+  const owner = (typeof window.communityMemberId === "function" ? window.communityMemberId() : null);
+  const row = { id: `${recordType}:${record.id}`, recordType, recordId: record.id, payload: deleted ? {} : record, deleted, queuedAt: Date.now(), userId: owner };
   try {
     await dbPutSyncOutboxRow(row);
     window.dispatchEvent(new Event("haimunia-sync-needed"));

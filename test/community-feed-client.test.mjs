@@ -395,7 +395,13 @@ test("the club strip shows name, member count, the challenge shortcut and the be
   const top = window.document.getElementById("communityClubTop");
   assert.ok(top, "the club strip renders");
   assert.match(top.textContent, /חיימוניה/);
-  assert.match(top.textContent, /1 חברי מועדון/, "member count comes from club_summary");
+  // Was /1 חברי מועדון/ - which pinned the bug rather than the behaviour.
+  // Hebrew needs the singular for a count of one, and this fixture's club has
+  // exactly one member; every other fixture in the suite has two or more, so
+  // this assertion was the only one rendering the number 1 and it had
+  // codified the wrong form. Live bug hunt, fresh round 2 (2026-09-15).
+  assert.match(top.textContent, /חבר\/ה אחד\/ת במועדון/,
+    "member count comes from club_summary, in Hebrew that agrees with the number");
   const shortcut = top.querySelector('[data-community-action="open-active-challenge"]');
   assert.ok(shortcut, "the active-challenge shortcut renders");
   // No data-id on a WEEKLY challenge: it has no `challenges` row, so
