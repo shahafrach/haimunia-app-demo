@@ -97,7 +97,13 @@ check("joining wrote a challenge_participants row for the real signed-in user", 
 await page.waitForFunction(
   (id) => {
     const card = document.querySelector(`[data-challenge-id="${id}"]`);
-    return !!card && card.textContent.includes("נרשמת/ה");
+    // "נרשמת", not "נרשמת/ה". Hebrew 2nd-person past-tense verbs are
+    // homographs across gender, so this word is ALREADY neutral and the slash
+    // made it grammatically wrong - see CHANGES.md and
+    // test/hebrew-copy-rules.test.mjs, which guards the rule at the node
+    // level. 74527a4 corrected the copy; this scenario was never updated, so
+    // it has been waiting for a string the app is right not to render.
+    return !!card && card.textContent.includes("נרשמת");
   },
   createdId,
   { timeout: 5000 }

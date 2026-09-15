@@ -349,8 +349,21 @@ export async function consoleErrorCollector(page) {
 // account has no real mailbox.
 export async function openManagementPanel(page, rowId, account, password, { timeout = 8000 } = {}) {
   await switchTab(page, rowId);
-  // Already unlocked (a previous call in the same scenario, within the
-  // 15-minute window) - nothing to submit.
+  await submitManagementGate(page, account, password, { timeout });
+}
+
+// Submits the gate that is ALREADY on screen, without navigating to it.
+//
+// Split out from openManagementPanel (2026-09-15) because that one reaches the
+// panel through switchTab(), which drives the hamburger - and on a desktop
+// viewport the hamburger row is not visible at all, the sidebar is. A desktop
+// scenario clicks its own sidebar row and then needs only the credentials
+// half, so that half has to be callable on its own.
+//
+// Returns quietly when no gate is present: a caller that is already inside an
+// unlocked panel (a previous call in the same scenario, within the window)
+// needs no branch of its own.
+export async function submitManagementGate(page, account, password, { timeout = 8000 } = {}) {
   const gate = await page.$("#panelUnlock");
   if (!gate) return;
   await page.fill("#panelUnlock input[name=email]", account);

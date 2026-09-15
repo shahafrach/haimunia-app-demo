@@ -15,7 +15,7 @@ let barWeight = 20;
 // Single source of truth for the app version. After bumping this, run
 // `npm run sync-version` to copy it into SW_VERSION in sw.js — `npm test`
 // fails if the two drift apart.
-const APP_VERSION = "4.51.0";
+const APP_VERSION = "4.52.0";
 
 // A movement typed into the WOD builder that isn't in the built-in list
 // above - persisted (see WODTAGSTORE), same "custom X" pattern as
@@ -186,17 +186,27 @@ function getNavItems() {
   // that queue. A count rendered for everyone would be both meaningless and a
   // small leak of club state to people with no part in it.
   //
-  // The ONE condition left is that this device has a community account signed
-  // in at all. Not a check on that member's powers - they have none, by
-  // design - but on whether the club half of the app exists here yet. The
-  // offline log works with no account whatsoever, and putting two management
-  // doors in front of someone who has never joined the club is noise in the
-  // one menu a phone-first app cannot afford to clutter. Anyone who needs
-  // these signs into the club first, which is a step they have taken already.
-  if (typeof window.isCommunitySignedIn === "function" && window.isCommunitySignedIn()) {
-    items.push({ id: "manage", tab: "manage", rowId: "tabManageBtn", label: "ניהול מערכת", tint: "steel", icon: ICONS.manageTabIcon, main: false });
-    items.push({ id: "clubmanage", tab: "clubmanage", rowId: "tabClubManageBtn", label: "ניהול המועדון", tint: "teal", icon: ICONS.communityIcon, main: false });
-  }
+  // UNCONDITIONAL, including when nobody is signed in at all (2026-09-15,
+  // corrected). A previous version required a community session on the device,
+  // on the reasoning that two management doors are clutter for someone who has
+  // never joined the club. That reasoning was wrong, and the way it was wrong
+  // is the whole point of this design:
+  //
+  //   "I want a sign in option only to admin and head coach - they are not
+  //    related to the actual user using app, it's different."
+  //
+  // Management is not a privilege some member holds. It is a SEPARATE LOGIN,
+  // and the person who needs it may well not be a member of this club on this
+  // device at all - the owner, signed out, on a phone that has just been
+  // wiped, is exactly the case. Requiring a member session first made the
+  // management door reachable only by first becoming the thing management is
+  // deliberately not.
+  //
+  // Nothing is given away by showing them. Each opens onto a gate that wants
+  // management credentials, and every RPC behind it is RLS-enforced against
+  // the management account's own JWT.
+  items.push({ id: "manage", tab: "manage", rowId: "tabManageBtn", label: "ניהול מערכת", tint: "steel", icon: ICONS.manageTabIcon, main: false });
+  items.push({ id: "clubmanage", tab: "clubmanage", rowId: "tabClubManageBtn", label: "ניהול המועדון", tint: "teal", icon: ICONS.communityIcon, main: false });
   return items;
 }
 // The fixed bottom tab bar (#bottomTabBar, index.html) - one tap to any of

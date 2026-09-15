@@ -36,9 +36,9 @@ export function createMockSupabase(seedTables = {}) {
   const MOCK_ROLE_PERMS = {
     member: ["community.post.create"],
     coach: ["community.post.create", "community.comment.moderate", "community.challenge.create", "community.event.manage", "community.announcement.publish", "community.member.invite", "community.content.manage_onboarding"],
-    head_coach: ["community.post.create", "community.comment.moderate", "community.challenge.create", "community.event.manage", "community.announcement.publish", "community.post.delete_any", "community.member.restrict", "community.content.pin", "community.member.invite", "community.content.manage_onboarding"],
+    head_coach: ["community.post.create", "community.comment.moderate", "community.challenge.create", "community.event.manage", "community.announcement.publish", "community.post.delete_any", "community.member.restrict", "community.content.pin", "community.member.invite", "community.content.manage_onboarding", "community.invite.manage_codes", "community.analytics.view"],
     staff: ["community.post.create", "community.event.manage", "community.announcement.publish", "community.content.pin", "community.member.invite", "community.content.manage_onboarding"],
-    admin: ["community.post.create", "community.post.delete_any", "community.comment.moderate", "community.challenge.create", "community.event.manage", "community.analytics.view", "community.member.restrict", "community.announcement.publish", "community.content.pin", "community.member.invite", "community.invite.manage_codes", "community.content.manage_onboarding"],
+    admin: ["community.post.create", "community.post.delete_any", "community.comment.moderate", "community.challenge.create", "community.event.manage", "community.analytics.view", "community.member.restrict", "community.announcement.publish", "community.content.pin", "community.member.invite", "community.invite.manage_codes", "community.content.manage_onboarding", "community.club.manage_modules"],
   };
   MOCK_ROLE_PERMS.owner = MOCK_ROLE_PERMS.admin.slice();
   function roleOf(uid) {
@@ -1467,6 +1467,18 @@ export function createMockSupabase(seedTables = {}) {
     // exercise signInWithPassword() without going through the full
     // anonymous->credentials upgrade flow first.
     seedCredentials(userId, email, password) { rows("__credentials").push({ userId, email, password }); },
+    // Does this user hold this permission, by the same rule my_permissions()
+    // answers with? Exposed (2026-09-15) so a scenario's RPC stand-in can
+    // MIRROR a real function's authorization instead of restating it.
+    //
+    // Restating it is what went wrong: community-monthly-recap-publish.mjs
+    // wrote its gate as `isAdmin || role === "admin"`, which matched the real
+    // `has_perm('community.analytics.view') or is_admin()` right up until
+    // 202609150004 granted head_coach analytics. After that the stand-in
+    // refused a caller the real database would have allowed, and the scenario
+    // failed against correct code. A stand-in that derives the answer cannot
+    // drift the way a stand-in that hardcodes it does.
+    hasPerm(userId, code) { return permHas(userId, code); },
     // THE SECOND CLIENT (2026-09-15). cloud.js now creates a separate,
     // memory-only Supabase client to hold the management session, so that
     // signing into a management panel does not disturb the member session the

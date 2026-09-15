@@ -150,13 +150,17 @@ test("club feature state resets on sign-out so the next member's fresh load isn'
   // the panel that used to render them.
   await waitFor(() => !window.document.querySelector("[data-club-feature]"), 3000);
   // Signing out tears down the management session with the member's
-  // (mgmtTeardown(), 2026-09-15), and takes the management rows with it: they
-  // are shown to everyone WITH a community session on this device, and after
-  // a sign-out there is none. So the reset is proved twice over - the toggles
-  // are gone, and there is no longer a door to go looking behind.
-  await waitFor(() => !window.document.getElementById("tabManageBtn"), 3000);
-  assert.equal(window.document.getElementById("tabClubManageBtn"), null,
-    "and the club door goes with it - no community session, no management rows");
+  // (mgmtTeardown(), 2026-09-15). The management ROWS survive - they are a
+  // separate login and deliberately do not depend on there being a member
+  // session at all - so the reset is proved by what is behind the door: the
+  // toggles are gone and the panel is locked again for whoever signs in next.
+  await waitFor(() => !window.document.querySelector("[data-club-feature]"), 3000);
+  window.document.getElementById("tabManageBtn").click();
+  await waitFor(() => !!window.document.querySelector("#content .page-title"), 4000);
+  assert.ok(window.document.getElementById("panelUnlock"),
+    "the panel is locked again for whoever picks up this device next");
+  assert.equal(window.document.querySelector("[data-club-feature]"), null,
+    "and the previous member's loaded toggles are not sitting behind it");
 });
 
 // ===== Redesign, Phase 2: pill-level gating, not just content-level =======

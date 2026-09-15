@@ -14,7 +14,7 @@
 // element WOULD fail without it.
 import { chromium } from "playwright";
 import { resolveLocalOnlyTarget } from "./lib/target.mjs";
-import { consoleErrorCollector, dismissWelcomeModal } from "./lib/actions.mjs";
+import { consoleErrorCollector, dismissWelcomeModal, submitManagementGate } from "./lib/actions.mjs";
 import { installMockCloud } from "./lib/mockCloud.mjs";
 
 let failed = false;
@@ -43,8 +43,19 @@ await page.goto(target.url, { waitUntil: "networkidle" });
 await page.waitForSelector("#app", { state: "visible" });
 await dismissWelcomeModal(page);
 
-await page.waitForSelector("#desktopSidebar .navrow[data-tab='manage']", { timeout: 10000 });
-await page.click("#desktopSidebar .navrow[data-tab='manage']");
+// clubmanage, not manage (2026-09-15). Inviting a member is CLUB work and the
+// invite surfaces moved to the club panel when the two were split apart; the
+// admin panel does not carry them at all any more. This fixture holds
+// is_admin, which clears the club panel's coach-rank bar, so the same account
+// still reaches it.
+await page.waitForSelector("#desktopSidebar .navrow[data-tab='clubmanage']", { timeout: 10000 });
+await page.click("#desktopSidebar .navrow[data-tab='clubmanage']");
+// And a management login stands in front of it: management is a separate
+// identity from the member using the app, so the panel is not simply open to
+// whoever is signed in. Seed this account's credentials and go through it the
+// way a person would.
+await page.evaluate(() => window.__mock.seedCredentials("admin-1", "roi@members.haimuniya.invalid", "Aa123456789!"));
+await submitManagementGate(page, "roi@members.haimuniya.invalid", "Aa123456789!");
 await page.waitForSelector("#content .subtabbar[aria-label='ניווט בניהול']", { timeout: 10000 });
 
 const appWidth = await page.evaluate(() => Math.round(document.getElementById("app").getBoundingClientRect().width));

@@ -130,8 +130,12 @@ export async function bootCommunity(mock, opts = {}) {
   // Handing out mock.client both times would have let the management sign-in
   // silently take over the member's session inside the mock, which is the one
   // thing these tests most need to be able to catch.
-  let madeClients = 0;
-  window.supabase = { createClient: () => (madeClients++ === 0 ? mock.client : mock.secondaryClient()) };
+  // Exposed on window (as scripts/browser-check/lib/mockCloud.mjs does) so a
+  // test can assert HOW MANY clients an interaction built - the difference
+  // between one intent producing one management sign-in and a double tap
+  // producing two, one of which nothing can ever revoke.
+  window.__mockClientCount = 0;
+  window.supabase = { createClient: () => (window.__mockClientCount++ === 0 ? mock.client : mock.secondaryClient()) };
   // Redesign, Phase 3: default every test to "already saw the first-run
   // intro carousel" - unlike syncEnabled/coachEngage below, cloud.js reads
   // this on every render (hasSeenIntroCarousel()), not just at module init,

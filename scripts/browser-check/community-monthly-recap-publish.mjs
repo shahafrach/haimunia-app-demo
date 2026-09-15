@@ -48,8 +48,14 @@ async function registerPublishRpc(page) {
       // re-derived, so the mock and the client agree on who may call this.
       const me = window.__mock.db.profiles.find((p) => p.id === uid);
       const isAdmin = !!(me && me.is_admin);
-      const role = (window.__mock.db.invite_redemptions.find((r) => r.user_id === uid) || {}).role;
-      const canPublish = isAdmin || role === "admin";
+      // DERIVED, not restated. This was `isAdmin || role === "admin"`, which
+      // matched the real gate right up until 202609150004 granted head_coach
+      // community.analytics.view - after which this stand-in refused a caller
+      // the real database allows, and the scenario failed against correct
+      // code. mock.hasPerm() answers by the same rule my_permissions() does,
+      // and MOCK_ROLE_PERMS is itself now guarded against schema drift by
+      // test/mock-permissions-match-schema.test.mjs.
+      const canPublish = isAdmin || window.__mock.hasPerm(uid, "community.analytics.view");
       if (!canPublish) return Promise.resolve({ data: null, error: { message: "not authorized" } });
       const row = window.__mock.db.monthly_club_recaps.find((r) => r.id === args.p_id);
       if (!row) return Promise.resolve({ data: null, error: { message: "recap not found" } });
@@ -97,12 +103,29 @@ async function registerPublishRpc(page) {
 }
 
 // ===========================================================================
-// Part 2: an admin publishes it.
+// Part 2: the head coach publishes it.
 // ===========================================================================
+// WAS AN ADMIN, and the change is a real narrowing rather than a test tweak
+// (live bug hunt, fresh round 1, 2026-09-15). The publish control lives on the
+// COACH BOARD - renderCoachMonthlyRecapSection() is part of renderCoachBoard()
+// - and the board became coach-tier-only earlier today, on the owner's
+// instruction that "coach area will be visible only for coach": a redeemed
+// coach/head_coach role, never the is_admin flag on its own.
+//
+// So a plain admin can still publish a monthly recap as far as the SERVER is
+// concerned (recap_monthly_publish gates on `has_perm('community.analytics
+// .view') or is_admin()`), and has nowhere to press. A head coach holds both
+// halves - coach tier for the board, community.analytics.view for the gate -
+// and is the right publisher besides: the monthly CLUB recap is club content,
+// and the club is the head coach's job.
+//
+// This part therefore proves the capability still exists for SOMEBODY, which
+// is the thing that would otherwise have rotted unnoticed. An admin who also
+// coaches keeps it too, since the roles are additive on one account.
 {
   const seedTables = {
-    profiles: [{ id: "admin1", handle: "roi", display_name: "רועי", is_admin: true, recovery_verified_at: VERIFIED, visible_to_club: true }],
-    invite_redemptions: [{ user_id: "admin1", invite_id: "inv-1", role: "admin", redeemed_at: VERIFIED }],
+    profiles: [{ id: "admin1", handle: "roi", display_name: "רועי", is_admin: false, recovery_verified_at: VERIFIED, visible_to_club: true }],
+    invite_redemptions: [{ user_id: "admin1", invite_id: "inv-1", role: "head_coach", redeemed_at: VERIFIED }],
     clubs: [{ id: "club-1", name: "חיימוניה" }],
     monthly_club_recaps: [draftRow()],
     notifications: [], notification_preferences: [],
@@ -121,7 +144,7 @@ async function registerPublishRpc(page) {
   await page.click('[data-community-action="set-tab"][data-tab="coach"]');
   await page.waitForFunction(() => document.body.textContent.includes("סיכום חודשי למועדון"), { timeout: 5000 });
   await page.waitForSelector('[data-community-action="coach-monthly-recap-publish"]', { timeout: 5000 });
-  check("an admin (community.analytics.view / is_admin) gets the real publish control on the draft", true);
+  check("a head coach (coach tier for the board, community.analytics.view for the gate) gets the real publish control", true);
   check("the draft is still labelled a draft before publishing", (await page.textContent("body")).includes("טיוטה"));
 
   await page.click('[data-community-action="coach-monthly-recap-publish"]');

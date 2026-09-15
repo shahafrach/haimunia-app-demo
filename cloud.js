@@ -104,7 +104,28 @@
   // The writes reached only from an unlocked panel therefore always run as
   // the management account, and nothing reachable outside a panel changes
   // behaviour at all.
-  function mgmtDb() { return (mgmtClient && state.admin.mgmt) ? mgmtClient : client; }
+  function mgmtDb() {
+    if (!mgmtClient || !state.admin.mgmt) return client;
+    // EXPIRY IS ENFORCED HERE, not only on the panel's render path.
+    //
+    // Live bug hunt, fresh round 1 (2026-09-15). This used to ask only whether
+    // a management session OBJECT existed, and the only thing that ever
+    // retired one was renderManagePanel() calling mgmtExpireIfStale() on its
+    // way to deciding whether to draw a gate. So a session left idle well past
+    // its window kept answering any mgmtDb() read fired from somewhere else -
+    // reproduced live with a faked clock: unlock the panel, never go back to
+    // it, open Community 35 minutes later, and loadRestrictions()' second
+    // read went out on the management account's JWT.
+    //
+    // Only a read is reachable that way today, because every mgmtDb() WRITE
+    // sits behind UI that renderManagePanel() has already expired. That is
+    // luck, not design: mgmtDb() gives a caller no hint that it is supposed to
+    // be panel-scoped, so the next one added outside a panel would inherit an
+    // unenforced expiry silently. Asking here makes the guarantee true of the
+    // accessor itself rather than of one of its callers.
+    mgmtExpireIfStale();
+    return (mgmtClient && state.admin.mgmt) ? mgmtClient : client;
+  }
   // COMM-365. One state object, namespaced by feature domain.
   //
   // Until COMM-365 this was 139 flat sibling keys, grouped only by which
@@ -9798,6 +9819,17 @@
     mgmtClient = null;
     state.admin.mgmt = null;
     state.admin.panelUnlockedUntil = { admin: 0, club: 0 };
+    // The change-password form belongs to the session that opened it. Live bug
+    // hunt, fresh round 1: these three survived a teardown, so locking with
+    // the form open handed it - still open, still showing the previous
+    // account's error - to whoever unlocked next. Worst case reproduced was an
+    // admin's "this is your current password" error greeting the HEAD COACH by
+    // name in their own brand-new session. No value leaked (the inputs are
+    // rebuilt empty), but a session bar built to answer "which of my two
+    // accounts is this" must not open wearing the other one's state.
+    state.admin.mgmtPasswordOpen = false;
+    state.admin.mgmtPasswordError = "";
+    state.admin.mgmtPasswordBusy = false;
     // Best-effort: revokes the refresh token server-side. The session is
     // memory-only either way, so a failure here loses nothing - the object
     // is already unreachable.
@@ -9918,6 +9950,9 @@
   }
   async function mgmtChangePassword(form) {
     if (!mgmtClient || !state.admin.mgmt) return;
+    // Same missing guard as panelUnlock() above, same reason - a double click
+    // here issued two updateUser calls for one intent.
+    if (state.admin.mgmtPasswordBusy) return;
     const password = String(form.elements.password.value || "");
     const confirm = String(form.elements.passwordConfirm.value || "");
     // The same two validators every other password in this app goes through,
@@ -9964,6 +9999,19 @@
   }
   async function panelUnlock(form) {
     if (!configured || !window.supabase) return;
+    // ONE ATTEMPT AT A TIME. Live bug hunt, fresh round 1 (2026-09-15), found
+    // twice independently: the busy flag was set after the synchronous prelude
+    // rather than checked at the top, and the submit button is only disabled
+    // by the re-render that follows it - so two real mouse clicks in quick
+    // succession (observed: __mockClientCount 1 -> 3) each built their own
+    // client and ran a full sign-in plus three profile round trips.
+    //
+    // The visible outcome was benign, which is what made it worth fixing
+    // rather than shrugging at: whichever attempt lost the last-write-wins
+    // race on `mgmtClient` was left AUTHENTICATED and unreferenced, and
+    // mgmtTeardown() only ever signs out the one client it can still see. A
+    // live session nothing can reach is a session nothing can revoke.
+    if (state.admin.panelUnlockBusy) return;
     const panel = form.dataset.panel === "club" ? "club" : "admin";
     const typed = String(form.elements.email.value || "").trim().toLowerCase();
     const password = String(form.elements.password.value || "");
@@ -10042,6 +10090,11 @@
       return;
     }
 
+    // Belt and braces behind the guard above: never overwrite a live client
+    // without revoking it first. If one is somehow still here, it is an
+    // attempt that raced past the guard, and dropping the reference would
+    // strand its session exactly as described there.
+    if (mgmtClient && mgmtClient !== c) { const prev = mgmtClient; try { prev.auth.signOut(); } catch (e) {} }
     mgmtClient = c;
     state.admin.mgmt = {
       email, userId: uid, displayName: (prof.display_name || prof.handle || ""),
@@ -19284,7 +19337,11 @@
            </div>
          </div>${renderMgmtPasswordChange()}`
       : "";
-    return `<h1 class="page-title" style="display:flex;align-items:center;justify-content:space-between;gap:10px;"><span>${esc(panelTitle)}</span>${renderNotificationBell()}</h1>`
+    // The bell belongs to the MEMBER, so it only renders when there is one.
+    // A management session opened on a signed-out phone has no notification
+    // centre to link to, and a bell reading 0 for nobody is furniture.
+    const bell = (state.user && state.profile) ? renderNotificationBell() : "";
+    return `<h1 class="page-title" style="display:flex;align-items:center;justify-content:space-between;gap:10px;"><span>${esc(panelTitle)}</span>${bell}</h1>`
       + mgmtBar
       + renderManageAttention()
       + manageTabBar
@@ -19530,6 +19587,33 @@
   // every syncCloudDialogFocus() call so a stale earlier click is never
   // mistaken for the one that just opened a dialog.
   let cloudDialogClickCandidate = null;
+  // WHERE THE MEMBER'S FOCUS WAS INSIDE THE OPEN DIALOG, by position in its
+  // own focusable order.
+  //
+  // Live bug hunt, fresh round 1 (2026-09-15). Surfaced by correcting a stale
+  // test fixture, which let the club panel load analytics it had never loaded
+  // in tests before - and a loader resolving while a modal is open triggers a
+  // rerender that REBUILDS the dialog's DOM. The node holding focus stops
+  // existing, document.activeElement falls back to <body>, and
+  // syncCloudDialogFocus's "focus is no longer inside" branch does the only
+  // thing it could: sends it to the first control.
+  //
+  // For anyone using a keyboard or a screen reader that is a real defect, not
+  // a cosmetic one: you tab down to "confirm", an unrelated background load
+  // lands, and you are silently back at the top of the sheet with the button
+  // you were about to press no longer under you. It is invisible to a mouse
+  // user, which is why it survived ten rounds of hunting.
+  //
+  // Tracked by INDEX rather than by element identity, because identity is
+  // exactly what the rerender destroys. focusin rather than a pre-render hook,
+  // so nothing has to remember to record it - the browser tells us.
+  let cloudDialogFocusIndex = -1;
+  document.addEventListener("focusin", function (e) {
+    const key = currentCloudDialog();
+    const el = key ? cloudDialogEl(key) : null;
+    if (!el || !e.target || !el.contains(e.target)) { cloudDialogFocusIndex = -1; return; }
+    cloudDialogFocusIndex = cloudDialogFocusables(el).indexOf(e.target);
+  }, true);
   document.addEventListener("click", function (e) {
     const t = e.target;
     cloudDialogClickCandidate = (t && t.closest) ? t.closest("[data-community-action]") : null;
@@ -19651,7 +19735,13 @@
         const active = document.activeElement;
         if (el && !(active && el.contains(active))) {
           const f = cloudDialogFocusables(el);
-          if (f.length) { try { f[0].focus(); } catch (e) {} }
+          // Back to where they were, when that position still exists. Falls
+          // through to the first control otherwise - a dialog that genuinely
+          // shrank has nowhere better to go, and that was the whole of this
+          // branch before.
+          const want = (cloudDialogFocusIndex >= 0 && cloudDialogFocusIndex < f.length)
+            ? f[cloudDialogFocusIndex] : f[0];
+          if (want) { try { want.focus(); } catch (e) {} }
         }
       }
       return;

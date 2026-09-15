@@ -452,6 +452,113 @@ test("the change never runs on the member's client", () => {
     "and refuses outright without a management session");
 });
 
+// ===========================================================================
+// Live bug hunt, fresh round 1 (2026-09-15) - three defects found by agents
+// driving the real panel in Chromium, all of them mine from earlier today.
+// ===========================================================================
+
+test("the idle window is enforced by mgmtDb() itself, not only by the panel's render", () => {
+  // THE DEFECT: mgmtDb() asked only whether a management session object
+  // existed. The only thing that ever retired one was renderManagePanel()
+  // calling mgmtExpireIfStale(). So a session left idle past its window kept
+  // answering mgmtDb() reads fired from elsewhere - reproduced live with a
+  // faked clock: unlock, never return to the panel, open Community 35 minutes
+  // later, and loadRestrictions()'s second read went out on the management
+  // JWT, five minutes past a limit this file documents.
+  //
+  // Only a read is reachable that way today, because every mgmtDb() write
+  // sits behind UI the panel has already expired. That is luck. mgmtDb() gives
+  // callers no hint it is panel-scoped, so the next one added outside a panel
+  // inherits an unenforced expiry in silence.
+  const at = cloudJs.indexOf("function mgmtDb()");
+  assert.ok(at > -1, "mgmtDb exists");
+  const body = cloudJs.slice(at, cloudJs.indexOf("\n  }", at));
+  assert.match(body, /mgmtExpireIfStale\(\);/,
+    "mgmtDb() must retire a lapsed session itself");
+  // And the expiry must be asked BEFORE the client is handed back, or it
+  // enforces nothing on this call.
+  assert.ok(body.indexOf("mgmtExpireIfStale();") < body.lastIndexOf("return"),
+    "expiry is checked before the client is returned");
+  // The control: the old shape was a single-line ternary on existence alone.
+  assert.ok(!/function mgmtDb\(\) \{ return \(mgmtClient && state\.admin\.mgmt\) \? mgmtClient : client; \}/.test(cloudJs),
+    "the existence-only version must be gone");
+});
+
+test("locking hands the next session a clean slate, not the last one's open form", async () => {
+  // THE DEFECT: mgmtTeardown() reset the session but not the change-password
+  // form's three state fields. Locking with that form open handed it - still
+  // open, still showing the previous account's error - to whoever unlocked
+  // next. The worst reproduction was an admin's "this is your current
+  // password" error greeting the HEAD COACH by name in their own new session.
+  // No value leaked; the inputs are rebuilt empty. But a session bar built to
+  // answer "which of my two accounts is this" must not open wearing the
+  // other one's state.
+  const mock = separateIdentitiesMock();
+  const window = await unlockedAdminPanel(mock);
+  window.document.querySelector('[data-community-action="mgmt-password-open"]').click();
+  await waitFor(() => !!window.document.getElementById("mgmtPassword"), 4000);
+  // Leave an error standing, exactly as someone interrupted mid-fix would.
+  submitNewPassword(window, "short");
+  await waitFor(() => /הסיסמה קצרה מדי/.test(window.document.body.textContent), 4000);
+
+  window.document.querySelector('[data-community-action="panel-lock"]').click();
+  await waitFor(() => !!window.document.getElementById("panelUnlock"), 4000);
+  submitGate(window, MGMT_EMAIL, ADMIN_STEP_UP_PASSWORD);
+  await waitFor(() => !window.document.getElementById("panelUnlock"), 4000);
+
+  assert.equal(window.document.getElementById("mgmtPassword"), null,
+    "the new session must not open with the previous one's form already expanded");
+  assert.ok(!/הסיסמה קצרה מדי/.test(window.document.body.textContent),
+    "nor carrying its error");
+});
+
+test("one submit at a time - a double tap cannot strand an authenticated session", async () => {
+  // THE DEFECT, found independently by two agents: the busy flag was set after
+  // the synchronous prelude rather than checked at the top, and the button is
+  // only disabled by the re-render that follows. Two real clicks each built
+  // their own client and ran a full sign-in (observed: the mock's client count
+  // going 1 -> 3 for one double-click).
+  //
+  // The visible outcome was benign, which is what made it worth fixing rather
+  // than shrugging at: whichever attempt lost the last-write-wins race was
+  // left AUTHENTICATED and unreferenced, and mgmtTeardown() only signs out the
+  // one client it can still see. A live session nothing can reach is a session
+  // nothing can revoke.
+  const mock = separateIdentitiesMock();
+  const window = await bootCommunity(mock, { syncEnabled: false });
+  await openPanel(window, "tabManageBtn");
+  const form = window.document.getElementById("panelUnlock");
+  form.elements.email.value = MGMT_EMAIL;
+  form.elements.password.value = ADMIN_STEP_UP_PASSWORD;
+  const before = window.__mockClientCount;
+  // Two submits with no await between them - the real double-tap interleaving.
+  form.dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
+  form.dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
+  await waitFor(() => !window.document.getElementById("panelUnlock"), 4000);
+
+  assert.equal(window.__mockClientCount - before, 1,
+    `one intent must build one management client, got ${window.__mockClientCount - before}`);
+  assert.ok(window.document.getElementById("manageArea-bugs"), "and the panel still opens");
+  assert.equal(mock.getUser().id, "member-1", "member session untouched, as always");
+});
+
+test("both management submit handlers refuse re-entry while busy", () => {
+  // Source-level, because the password form's version of the same gap is
+  // awkward to race deterministically in jsdom and the consequence is
+  // identical - two updateUser calls for one intent.
+  for (const [fn, flag] of [["panelUnlock", "panelUnlockBusy"], ["mgmtChangePassword", "mgmtPasswordBusy"]]) {
+    const at = cloudJs.indexOf(`async function ${fn}(form)`);
+    assert.ok(at > -1, `${fn} exists`);
+    const head = cloudJs.slice(at, at + 1800);
+    assert.ok(new RegExp(`if \\(state\\.admin\\.${flag}\\) return;`).test(head),
+      `${fn}() must return early while an attempt is already in flight`);
+  }
+  // And a superseded client is revoked rather than dropped.
+  const pu = cloudJs.slice(cloudJs.indexOf("async function panelUnlock(form)"));
+  assert.match(pu.slice(0, 6000), /if \(mgmtClient && mgmtClient !== c\)[\s\S]{0,120}?auth\.signOut\(\)/,
+    "an overwritten management client must be signed out, not stranded");
+});
+
 test("the management session is memory-only and dies with the member's", () => {
   // Persisting it would defeat what it exists for: this guards an already
   // unlocked phone, and a management session that survived a reload would
@@ -470,7 +577,7 @@ test("the management session is memory-only and dies with the member's", () => {
   // Torn down on sign-out, or the next person to sign in on this device
   // inherits a live management account.
   assert.match(cloudJs, /\n        mgmtTeardown\(\);/, "sign-out tears the management session down");
-  const td = cloudJs.slice(cloudJs.indexOf("async function mgmtTeardown"), cloudJs.indexOf("async function mgmtTeardown") + 700);
+  const td = cloudJs.slice(cloudJs.indexOf("async function mgmtTeardown"), cloudJs.indexOf("async function mgmtTeardown") + 1800);
   assert.match(td, /mgmtClient = null/, "the reference is dropped");
   assert.match(td, /panelUnlockedUntil = \{ admin: 0, club: 0 \}/, "BOTH unlocks are cleared");
   assert.match(td, /c\.auth\.signOut\(\)/, "and the refresh token is revoked, not merely forgotten");
@@ -481,8 +588,14 @@ test("management reads run as the management account, member reads as the member
   // `client` is what every member surface keeps using. If a management loader
   // were left on `client` it would read as the member - who holds nothing -
   // and the panel would render empty behind a gate it had just opened.
-  assert.match(cloudJs, /function mgmtDb\(\) \{ return \(mgmtClient && state\.admin\.mgmt\) \? mgmtClient : client; \}/,
-    "mgmtDb() falls back to the member client when nothing is unlocked");
+  // Falls back to the member client when nothing is unlocked - and since the
+  // fresh round-1 hunt, also when the session has gone stale (see the idle
+  // window test above).
+  const db = cloudJs.slice(cloudJs.indexOf("function mgmtDb()"), cloudJs.indexOf("function mgmtDb()") + 1600);
+  assert.match(db, /if \(!mgmtClient \|\| !state\.admin\.mgmt\) return client;/,
+    "no management session means the member client");
+  assert.match(db, /return \(mgmtClient && state\.admin\.mgmt\) \? mgmtClient : client;/,
+    "and a session that just expired means the member client too");
   for (const fn of ["loadBugReports", "loadAuditLog", "loadRoster", "loadModQueue", "adminSetRole",
                     "adminResetPassword", "loadInvites", "toggleClubFeature", "setBugReportStatus"]) {
     const at = cloudJs.indexOf(`function ${fn}(`);
@@ -549,11 +662,15 @@ test("the hamburger no longer decides these rows from the signed-in member", () 
     "row visibility must not depend on the member being staff - that hides it from the owner");
   assert.ok(!/communityIsAdmin\(\)/.test(code),
     "nor on the member being admin, for the same reason");
-  // The one condition that remains is not about powers: it is whether this
-  // device has joined the club at all. The offline log works with no account,
-  // and two management doors in front of someone who never joined is clutter.
-  assert.match(code, /isCommunitySignedIn\(\)/,
-    "the rows still require a community session on this device");
+  // And not on there being a member session at all (2026-09-15, corrected):
+  // "they are not related to the actual user using app, it's different."
+  // Management is a separate login, and the person who needs it may well not
+  // be a member of this club on this device - the owner, signed out, on a
+  // freshly wiped phone is exactly the case. Requiring a member session first
+  // made the management door reachable only by first becoming the thing
+  // management is deliberately not.
+  assert.ok(!/isCommunitySignedIn\(\)/.test(code),
+    "the rows must not require a member session - that locks the owner out");
 });
 
 // ===========================================================================

@@ -11,7 +11,7 @@
 //   TARGET_URL=<url> node desktop-layout.mjs # a deployed site
 import { chromium } from "playwright";
 import { resolveTarget } from "./lib/target.mjs";
-import { dismissWelcomeModal, consoleErrorCollector } from "./lib/actions.mjs";
+import { dismissWelcomeModal, consoleErrorCollector, submitManagementGate } from "./lib/actions.mjs";
 import { installMockCloud } from "./lib/mockCloud.mjs";
 
 let failed = false;
@@ -341,20 +341,31 @@ async function colGeometry(page) {
   const memberWidth = await page.evaluate(() => Math.round(document.getElementById("app").getBoundingClientRect().width));
   check("a member-facing tab keeps the 560px column at 1440", memberWidth === 560, `#app w=${memberWidth}`);
 
-  // getNavItems() only emits a management row for a staff viewer, so reaching
-  // it from the sidebar is itself the permission check.
+  // BOTH management rows render for everyone now (2026-09-15, third revision).
   //
-  // data-tab='clubmanage', not 'manage' (2026-09-15): the two panels were
-  // split apart, and THIS FIXTURE IS A HEAD COACH (is_admin false, role
-  // head_coach just above), so the row it gets is the club panel. An admin
-  // fixture would emit data-tab='manage' instead. Asserting the specific one
-  // is stronger than accepting either - it proves the split actually routes
-  // by role rather than always falling back to one panel.
+  // They used to be emitted only for a staff viewer, so reaching one from the
+  // sidebar was itself the permission check. That stopped being possible when
+  // management became a SEPARATE IDENTITY with its own login: the person who
+  // needs these may not be a member of this club on this device at all, so a
+  // member-role check at the door hid it from exactly the people it is for.
+  // The gate behind each row is the real check now, and it is the one this
+  // scenario exercises below.
   await page.waitForSelector("#desktopSidebar .navrow[data-tab='clubmanage']", { timeout: 10000 });
-  check("a head coach's sidebar row opens the CLUB panel, not the admin one",
-    (await page.locator("#desktopSidebar .navrow[data-tab='manage']").count()) === 0,
-    "no admin-panel row is offered to a non-admin");
+  check("both management rows are offered in the sidebar, whoever is looking",
+    (await page.locator("#desktopSidebar .navrow[data-tab='manage']").count()) === 1
+      && (await page.locator("#desktopSidebar .navrow[data-tab='clubmanage']").count()) === 1,
+    "each opens onto a gate, not onto a panel");
   await page.click("#desktopSidebar .navrow[data-tab='clubmanage']");
+  // The gate stands in front of it - and a head coach's own credentials open
+  // the CLUB panel specifically.
+  await page.waitForSelector("#panelUnlock", { timeout: 10000 });
+  check("the club row lands on a management login, not on the panel",
+    (await page.locator("#panelUnlock").getAttribute("data-panel")) === "club",
+    "and the gate knows which panel it guards");
+  await page.evaluate(() => window.__mock.seedCredentials("coach-1", "coach@members.haimuniya.invalid", "Aa123456789!"));
+  // The sidebar row above already opened the gate - only the credentials
+  // half is needed here, not another trip through the hamburger.
+  await submitManagementGate(page, "coach@members.haimuniya.invalid", "Aa123456789!");
   await page.waitForSelector("#content .subtabbar[aria-label='ניווט בניהול']", { timeout: 10000 });
   const clubTitle = await page.textContent("#content .page-title");
   check("and the panel it lands on names itself as the club panel",

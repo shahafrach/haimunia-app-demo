@@ -33,6 +33,21 @@ function focusables(dlg) {
     .call(dlg.querySelectorAll('button, [href], input:not([type="hidden"]), select, textarea, [tabindex]:not([tabindex="-1"])'))
     .filter((n) => !n.disabled && n.getAttribute("aria-hidden") !== "true" && !/display:\s*none/.test(n.getAttribute("style") || ""));
 }
+// Let every in-flight loader land before capturing node references.
+//
+// Live bug hunt, fresh round 1 (2026-09-15): correcting a stale permission
+// fixture let the club panel start loading analytics it had never loaded in
+// these tests, and those loads resolve with a rerender that REBUILDS the open
+// dialog. Any node captured beforehand is detached by the time the assertion
+// runs, so `activeElement === f[0]` compares the live DOM against a corpse and
+// fails however correct the trap is.
+//
+// Two settle rounds because one loader's completion can schedule another's.
+// The app-side half of this - focus returning to where it was rather than to
+// the top of the dialog - is fixed separately in cloud.js and tested there.
+async function settle(window) {
+  for (let i = 0; i < 2; i++) await new Promise((r) => setTimeout(r, 120));
+}
 function tab(window, shift) {
   window.document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Tab", shiftKey: !!shift, bubbles: true }));
 }
@@ -358,7 +373,50 @@ async function openQueue(window) {
   await waitFor(() => !!window.document.querySelector('[data-community-action="set-manage-tab"][data-tab="moderation"]'), 4000);
   window.document.querySelector('[data-community-action="set-manage-tab"][data-tab="moderation"]').click();
   await waitFor(() => !!window.document.querySelector('[data-community-action="mod-action"]'), 4000);
+  // Let the club panel's own lazy loaders land BEFORE any dialog opens.
+  // Otherwise one resolves mid-dialog, rerenders, and rebuilds the sheet's
+  // DOM under the node references these tests captured - see settle().
+  await settle(window);
 }
+
+test("a background rerender does not throw the member back to the top of an open dialog", async () => {
+  // Live bug hunt, fresh round 1 (2026-09-15). A loader resolving while a
+  // modal is open rerenders and REBUILDS the dialog's DOM. The node holding
+  // focus stops existing, document.activeElement falls back to <body>, and
+  // syncCloudDialogFocus's "focus is no longer inside" branch sent it to the
+  // FIRST control - so a keyboard or screen-reader user who had tabbed down
+  // to "confirm" was silently returned to the top of the sheet with the
+  // button they were about to press no longer under them.
+  //
+  // Invisible to a mouse user, which is why it survived ten rounds of
+  // hunting; it only surfaced when a corrected permission fixture let the
+  // club panel load analytics mid-dialog for the first time.
+  const window = await bootCommunity(modMock(), { syncEnabled: false });
+  await openQueue(window);
+  window.document.querySelector('[data-community-action="mod-action"][data-decision="warn"]').click();
+  await waitFor(() => !!window.document.querySelector('[data-cloud-dialog="modAction"]'), 3000);
+
+  const dlg = window.document.querySelector('[data-cloud-dialog="modAction"]');
+  const before = focusables(dlg);
+  assert.ok(before.length >= 2, "the sheet has somewhere to move focus to");
+  const wantedIndex = before.length - 1;
+  before[wantedIndex].focus();
+  assert.equal(window.document.activeElement, before[wantedIndex], "focus starts on the last control");
+
+  // Exactly what a loader landing does: a full re-render underneath the
+  // still-open dialog.
+  window.render();
+  await new Promise((r) => setTimeout(r, 30));
+
+  const after = focusables(window.document.querySelector('[data-cloud-dialog="modAction"]'));
+  assert.equal(after.length, before.length, "the sheet rebuilt with the same controls");
+  assert.equal(window.document.activeElement, after[wantedIndex],
+    "focus is restored to where the member left it, not to the first control");
+  // The control: before the fix this was after[0], which is a different node
+  // whenever the sheet has more than one focusable.
+  assert.notEqual(window.document.activeElement, after[0],
+    "and specifically not back at the top");
+});
 
 test("moderation review sheet: focus-in, trap, Escape restores focus, backdrop closes", async () => {
   const window = await bootCommunity(modMock(), { syncEnabled: false });
