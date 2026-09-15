@@ -1,3 +1,57 @@
+## A scaled PR says so, and a recommendation that was wrong for this codebase — 2026-09-15 (seventh entry)
+
+**The PR flash now names the level.** `bestWodScore(id, excludeId, rx)` has
+always kept an Rx ladder and a scaled ladder apart, so a scaled athlete's
+personal record has always been a real record in the data - which is better
+than Wodify, where only Rx metcons can be PRs at all. The screen never said
+so: the same "שיא חדש!" appeared either way, leaving a scaled athlete to
+wonder whether the app was humouring them. It now reads "שיא אישי מסוקיילד!"
+- named as a fact, not parenthesised, because a bracket reads as an asterisk
+on the achievement.
+
+The research behind this is consistent and runs both ways: scaled athletes
+read an unmarked board as "everyone else did the real one" and stop logging,
+and competitive athletes suppress honest scaled results to protect a board
+position. Both end in a thinner log, and every other feature here - the
+achievement engine, the coach dashboard, the club board itself - is built on
+the log.
+
+**And a recommendation that turned out to be wrong for this codebase, built
+and then backed out.** The same research pass recommended splitting the club
+WOD board into Rx and scaled lanes, on the stated premise that it renders
+"one list where Rx rows carry a badge and the rest are bare". It was built
+that way, and an existing test caught it: *"nothing ranks: no position, no
+sort, and the ranked conventions are not borrowed"*, which defends the
+board's promise to render in arrival order, full stop.
+
+Two things were true on inspection, and both are worth recording:
+
+1. **The premise was false.** `renderClubWodResultRow()` already pushes
+   `effortHtml(r.rx ? "rx" : "scaled")` for EITHER value, and `effortHtml()`
+   renders both through identical markup off one display map. Both levels
+   were already named with equal weight. There was no asymmetry to fix.
+2. **The fix cost something real.** Grouping is not ranking - it used
+   `filter()`, never `sort()`, and computed no position - but it is still
+   reordering, and this board was deliberately built to be unable to become a
+   leaderboard. That guarantee is worth more than a fix to a problem that was
+   not there.
+
+Reverted in full. `test/scaled-parity.test.mjs` now asserts what is actually
+true - that both levels already go through one helper, and that the board
+still renders unsplit in arrival order - so the same recommendation does not
+get rebuilt from the same false premise later.
+
+Two mis-targeted edits were caught by tests rather than by review, which is
+the argument for writing the test first: the label hook landed on `#prFlash`
+(the STRENGTH flash, driven by a different function that knows nothing about
+rx) instead of `#wodFlashBox`, and the flash fixture needed
+`choosePickedWod()` because `renderWodLogSection()` early-returns until a WOD
+is actually chosen.
+
+Verified: npm test 1683/1683.
+
+---
+
 ## Hebrew grammar the app had been getting wrong, and the recent chips become buttons — 2026-09-15 (sixth entry)
 
 Eleven research agents read eleven competitor products. The most valuable

@@ -15,7 +15,7 @@ let barWeight = 20;
 // Single source of truth for the app version. After bumping this, run
 // `npm run sync-version` to copy it into SW_VERSION in sw.js — `npm test`
 // fails if the two drift apart.
-const APP_VERSION = "4.43.0";
+const APP_VERSION = "4.44.0";
 
 // A movement typed into the WOD builder that isn't in the built-in list
 // above - persisted (see WODTAGSTORE), same "custom X" pattern as
@@ -3990,7 +3990,7 @@ async function saveWod() {
   editingWodEntryId = null;
   wodLogDate = todayISO();
   wodLogDateExplicitlyChosen = false;
-  if (isPR) flashWodPR();
+  if (isPR) flashWodPR(entry.rx);
   // Same ordering rule as saveSet(): the debt is claimed before the render
   // that evaluates S5's consent card, never after it.
   const isFirstLogArrival = !firstLogCelebrated && totalLoggedEntries() === 1;
@@ -4094,9 +4094,26 @@ async function restoreWodEntry(entry) {
 }
 
 let wodPrFlashTimeout = null;
-function flashWodPR() {
+// SAY WHICH LEVEL THE RECORD IS AT (2026-09-15).
+//
+// bestWodScore(id, excludeId, rx) has always kept an Rx best and a scaled best
+// as separate ladders, so a scaled athlete's PR is already a real PR in our
+// data - which is better than Wodify, where only Rx metcons can be PRs at all.
+// The UI just never said so: the same "שיא חדש!" appeared either way, which
+// leaves a scaled athlete to wonder whether the app is humouring them.
+//
+// The research on this is consistent: scaled athletes read an unmarked board
+// as "everyone else did the real one", and competitive athletes suppress
+// honest scaled logging to protect a leaderboard position. Both failures end
+// in the same place - people not logging - which is the one outcome this app
+// cannot afford, since every downstream feature is built on the log.
+function flashWodPR(rx) {
   const el = document.getElementById("wodFlashBox");
   if (!el) return;
+  const label = el.querySelector("[data-wod-flash-label]");
+  // Named rather than qualified: "שיא אישי מסוקיילד" states the level as a
+  // fact about the record. A hedge like "שיא (מסוקיילד)" reads as an asterisk.
+  if (label) label.textContent = rx === false ? "שיא אישי מסוקיילד!" : "שיא חדש!";
   el.style.display = "flex";
   clearTimeout(wodPrFlashTimeout);
   wodPrFlashTimeout = setTimeout(() => { if (el) el.style.display = "none"; }, 1400);
@@ -6053,7 +6070,7 @@ function renderWodLogSection() {
       </div>`;
     })()}
 
-    <div id="wodFlashBox" class="flex items-center justify-center" style="display:none; gap:6px; color:#fff; font-weight:800; font-size:14px; background-image:var(--stripe); border-radius:14px; padding:10px 0; margin-bottom:16px; text-shadow:0 1px 3px rgba(0,0,0,.5);">${ICONS.flame}<span>שיא חדש!</span></div>
+    <div id="wodFlashBox" class="flex items-center justify-center" style="display:none; gap:6px; color:#fff; font-weight:800; font-size:14px; background-image:var(--stripe); border-radius:14px; padding:10px 0; margin-bottom:16px; text-shadow:0 1px 3px rgba(0,0,0,.5);">${ICONS.flame}<span data-wod-flash-label>שיא חדש!</span></div>
 
     <!-- Design spec §3.6. Hebrew-first with the English kept in parentheses,
          so Rx and Scaled stay LEARNABLE rather than disappearing - the member
