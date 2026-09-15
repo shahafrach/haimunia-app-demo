@@ -365,7 +365,15 @@ test("a plain member (no staff role, no permission at all) never sees the retent
   const window = await bootCommunity(mock, { syncEnabled: false });
   window.document.getElementById("tabCommunityBtn").click();
   await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
-  assert.equal(window.document.getElementById("tabManageBtn"), null, "a plain member never gets the Manage tab at all");
+  // The ROW is shown to everyone since management became a separate identity
+  // (2026-09-15): gating it on the signed-in member would hide it from the
+  // owner, whose training account deliberately holds nothing. So the stronger
+  // assertion is not "no door" but "the door opens onto a login" - and, below,
+  // that nothing behind it loaded.
+  window.document.getElementById("tabClubManageBtn").click();
+  await waitFor(() => !!window.document.querySelector("#content .page-title"), 4000);
+  assert.ok(window.document.getElementById("panelUnlock"),
+    "a plain member reaches a management login, never the panel");
   await new Promise((r) => setTimeout(r, 30));
   assert.equal(window.document.querySelector('[data-retention-correlations="1"]'), null);
   assert.equal(retentionCalls.length, 0);

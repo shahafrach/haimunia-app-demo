@@ -41,6 +41,70 @@
     // audit, SEC-013.
     auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
   }) : null;
+  // =====================================================================
+  // The management client - a SECOND, separate Supabase session
+  // =====================================================================
+  // "no, i want it to be seperate from the regular user" (2026-09-15), read
+  // together with "because i also train and use the app". Those two together
+  // are the whole specification, and neither one alone would have produced
+  // this design:
+  //
+  //   SEPARATE means the management account is its own identity with its own
+  //     credentials, not a re-check of whoever happens to be signed in. The
+  //     owner's member account should not carry admin power just because the
+  //     owner also administers.
+  //   AND STILL TRAINING means signing into the management area must not cost
+  //     them their own session. They log workouts on this phone. An admin
+  //     login that signs them out of their training account, or worse writes
+  //     their next workout to the admin account, is not acceptable.
+  //
+  // One client cannot hold two identities: supabase-js keeps one session and
+  // every request carries that session's JWT, which is exactly what RLS reads
+  // to decide what the request may see. So there are two clients.
+  //
+  //   `client`     - the member. persistSession: true, localStorage-backed,
+  //                  survives reloads. Never touched by anything below.
+  //   `mgmtClient` - the management account. Created on unlock, signed in
+  //                  with credentials typed into the gate, held in MEMORY
+  //                  ONLY, and destroyed on lock, sign-out or reload.
+  //
+  // persistSession:false is the important half of that second line. It keeps
+  // the management session out of localStorage entirely, which means it
+  // cannot outlive the tab, cannot be restored by a later visit, and cannot
+  // be read off the device by anything that can read storage. A management
+  // session that survived a reload would be a worse lock than the 15-minute
+  // timer it sits behind. storageKey is set anyway so that if a future
+  // supabase-js ever touches storage despite persistSession:false, it lands
+  // on its own key instead of overwriting the member's session.
+  //
+  // autoRefreshToken:false: the unlock window is 15 minutes and a Supabase
+  // access token is good for an hour, so there is nothing to refresh. It also
+  // means no background timer keeps a management session alive unattended.
+  let mgmtClient = null;
+  function makeMgmtClient() {
+    if (!configured || !window.supabase) return null;
+    return window.supabase.createClient(cfg.supabaseUrl, cfg.supabasePublishableKey, {
+      auth: {
+        persistSession: false, autoRefreshToken: false, detectSessionInUrl: false,
+        storageKey: "haimunia-mgmt-memory-only",
+      },
+    });
+  }
+  // WHICH CLIENT A MANAGEMENT CALL SHOULD USE.
+  //
+  // Returns the management client when a management session is live, and the
+  // member client otherwise. The fallback is deliberate and is what makes
+  // this refactor safe to land in one go: a management read that somehow runs
+  // while nothing is unlocked behaves exactly as it did before this change
+  // (as the member, subject to the member's own RLS), rather than throwing or
+  // silently returning nothing. Boot-time loadRestrictions() is a real
+  // instance - it runs for any member holding a moderation permission, long
+  // before any panel is opened.
+  //
+  // The writes reached only from an unlocked panel therefore always run as
+  // the management account, and nothing reachable outside a panel changes
+  // behaviour at all.
+  function mgmtDb() { return (mgmtClient && state.admin.mgmt) ? mgmtClient : client; }
   // COMM-365. One state object, namespaced by feature domain.
   //
   // Until COMM-365 this was 139 flat sibling keys, grouped only by which
@@ -366,6 +430,15 @@
       // asked twice if it wants both. One shared flag would have made the
       // weaker of the two the effective lock on both.
       panelUnlockedUntil: { admin: 0, club: 0 }, panelUnlockBusy: "", panelUnlockError: "",
+      // The signed-in management identity, or null when nothing is unlocked.
+      // { email, userId, displayName, isAdmin, isStaff, role, perms[] } -
+      // resolved from the MANAGEMENT account's own profile, redemption and
+      // my_permissions() after it signs in, never from state.profile, which
+      // describes the member using the app. Held here rather than on `state`
+      // itself so that every existing member-facing read of state.profile /
+      // state.permissions keeps answering about the member, which is what
+      // every one of those call sites means.
+      mgmt: null,
       auditLog: [], auditCursor: null, auditLoading: false, auditError: false, auditLoaded: false, auditEnd: false, auditFilters: {},
       // Fresh-eyes audit: admin_id -> {display_name,handle,avatar_url},
       // batched by loadAuditLog() so renderAuditLog() can name an actor
@@ -897,7 +970,38 @@
     { key: "engagement_alerts", label: "התראות ירידה במעורבות חבר/ה לצוות" },
   ];
   const CLUB_MODULE_KEYS = CLUB_MODULE_TOGGLES.concat(COACH_MODULE_TOGGLES).map((m) => m.key);
-  function hasPerm(code) { return !!state.permissions && state.permissions.indexOf(code) >= 0; }
+  // PERMISSION QUESTIONS HAVE TWO SUBJECTS NOW.
+  //
+  // Everywhere in the app, "may I?" means the member who is signed in. On the
+  // two management tabs it means the management account that signed into the
+  // gate - a different identity entirely (see makeMgmtClient()). Since the
+  // owner's training account deliberately holds no admin power, asking about
+  // the member inside a management panel would answer "no" to every section
+  // on a screen they had just proved they were entitled to open.
+  //
+  // Scoped by CURRENT TAB rather than by a flag set around the render call,
+  // on purpose. The same three questions are asked from three places - the
+  // render pass, the after-render pass that decides which loaders to fire,
+  // and the action handlers - and a stack-scoped flag would have covered the
+  // first and silently missed the other two, which is the kind of gap that
+  // renders a panel and then refuses to fill it. "Which tab is this?" is true
+  // in all three places without anyone having to remember to wrap anything.
+  function inMgmtContext() {
+    if (!state.admin.mgmt) return false;
+    // window.haimuniaActiveTab, NOT state.ui.tab. state.ui.tab is this file's
+    // COMMUNITY SUB-TAB (feed / boards / directory / ...) and never holds
+    // "manage" - an earlier version of this function read it and every
+    // section of an unlocked panel rendered "no permission" while the panel
+    // itself opened perfectly. app.js sets this on every render pass, before
+    // it dispatches, so it is already right for the render, the after-render
+    // loaders and the click handlers alike.
+    const t = window.haimuniaActiveTab;
+    return t === "manage" || t === "clubmanage";
+  }
+  function hasPerm(code) {
+    const src = inMgmtContext() ? state.admin.mgmt.perms : state.permissions;
+    return !!src && src.indexOf(code) >= 0;
+  }
   async function loadPermissions() {
     if (!state.user) { state.permissions = []; state.permissionsLoaded = false; return; }
     const { data, error } = await client.rpc("my_permissions");
@@ -937,12 +1041,18 @@
   // whose policies bind to is_staff() rather than a named permission; the
   // server is the authority, this only decides what to show. head_coach
   // reads as staff here the same way it does server-side.
-  function isStaff() { return !!(state.profile && (state.profile.is_admin || (state.redemption && (state.redemption.role === "coach" || state.redemption.role === "head_coach")))); }
+  function isStaff() {
+    if (inMgmtContext()) return mgmtIsStaff();
+    return !!(state.profile && (state.profile.is_admin || (state.redemption && (state.redemption.role === "coach" || state.redemption.role === "head_coach"))));
+  }
   // Real is_admin only. Kept for the handful of server functions that still
   // check the profiles.is_admin column inline rather than a permission:
   // review_report(), the posts_select_admin_review RLS bypass, and the
   // admin_* member-management RPCs. Every other gate uses hasPerm().
-  function isAdmin() { return !!(state.profile && state.profile.is_admin); }
+  function isAdmin() {
+    if (inMgmtContext()) return mgmtIsAdmin();
+    return !!(state.profile && state.profile.is_admin);
+  }
   // COACH-TIER, deliberately narrower than isStaff() (2026-09-15): "coach area
   // will be visible only for coach."
   //
@@ -2233,7 +2343,7 @@
     if (!title) { setFieldErrors(formId, { title: "יש למלא כותרת" }); return; }
     setFieldErrors(formId, {});
     e.saving[step] = true; e.saved[step] = false; rerender();
-    const { error } = await client.from("onboarding_step_content").update({ title, body }).eq("step", step);
+    const { error } = await mgmtDb().from("onboarding_step_content").update({ title, body }).eq("step", step);
     e.saving[step] = false;
     if (error) { setFieldErrors(formId, { title: "השמירה נכשלה, נסו שוב." }); rerender(); return; }
     // contracts.md's own COMM-373 note: a refused UPDATE against this table
@@ -2307,7 +2417,7 @@
     if (!title) { setFieldErrors(formId, { title: "יש למלא כותרת" }); return; }
     setFieldErrors(formId, {});
     e.saving[step] = true; e.saved[step] = false; rerender();
-    const { error } = await client.from("intro_carousel_content").update({ title, body }).eq("step", step);
+    const { error } = await mgmtDb().from("intro_carousel_content").update({ title, body }).eq("step", step);
     e.saving[step] = false;
     if (error) { setFieldErrors(formId, { title: "השמירה נכשלה, נסו שוב." }); rerender(); return; }
     // Same honest read-back check onboarding_step_content's own editor
@@ -4218,7 +4328,7 @@
     const ids = [...new Set((data || []).map((r) => r.user_id).filter(Boolean))];
     let names = {};
     if (ids.length) {
-      const { data: profs } = await client.from("profiles").select("id,handle,display_name").in("id", ids);
+      const { data: profs } = await mgmtDb().from("profiles").select("id,handle,display_name").in("id", ids);
       for (const pr of (profs || [])) names[pr.id] = pr.display_name || pr.handle || "";
     }
     for (const r of (data || [])) r.member_name = names[r.user_id] || "";
@@ -4232,7 +4342,7 @@
   async function liftRestriction(id) {
     if (!id || state.admin.restrictionLifting) return;
     state.admin.restrictionLifting = id; rerender();
-    const { error } = await client.rpc("mod_lift_restriction", { p_restriction_id: id, p_reason: "" });
+    const { error } = await mgmtDb().rpc("mod_lift_restriction", { p_restriction_id: id, p_reason: "" });
     state.admin.restrictionLifting = "";
     if (error) { setMessage(serverErrorText(error)); rerender(); return; }
     setMessage("ההגבלה בוטלה");
@@ -4241,7 +4351,7 @@
   async function loadModQueue() {
     if (!state.user || !(hasPerm(PERM.COMMENT_MODERATE) || isAdmin())) { state.admin.modQueue = []; return; }
     state.admin.modQueueLoading = true; state.admin.modQueueError = false; rerender();
-    const { data, error } = await client.rpc("mod_queue", { p_status: state.admin.modQueueStatus, p_cursor: null, p_limit: 50 });
+    const { data, error } = await mgmtDb().rpc("mod_queue", { p_status: state.admin.modQueueStatus, p_cursor: null, p_limit: 50 });
     state.admin.modQueueLoading = false;
     state.admin.modQueueLoaded = true;
     if (error) { state.admin.modQueueError = true; state.admin.modQueue = []; rerender(); return; }
@@ -4289,7 +4399,7 @@
     // Only a temporary restriction carries an end time; mod_review ignores
     // p_expires_at for every other decision.
     if (a.decision === "restrict_temp") args.p_expires_at = new Date(Date.now() + a.days * 86400000).toISOString();
-    const { error } = await client.rpc("mod_review", args);
+    const { error } = await mgmtDb().rpc("mod_review", args);
     if (error) {
       a.saving = false;
       a.error = modActionErrorText(error);
@@ -4348,7 +4458,7 @@
     const a = state.admin.reclaim;
     if (!a || a.saving) return;
     a.saving = true; a.error = ""; rerender();
-    const { data, error } = await client.rpc("admin_reclaim_invite", {
+    const { data, error } = await mgmtDb().rpc("admin_reclaim_invite", {
       p_user_id: a.userId,
       // Capped at 500 like mod_review's note, and sent as null rather than an
       // empty string so the audit row carries "no reason given" instead of a
@@ -4389,7 +4499,7 @@
     if (q.length < 2) { state.members.results = []; return rerender(); }
     memberSearchDebounceTimer = setTimeout(async () => {
       memberSearchDebounceTimer = null;
-      const { data, error } = await client.rpc("admin_search_members", { p_query: q });
+      const { data, error } = await mgmtDb().rpc("admin_search_members", { p_query: q });
       state.members.results = error ? [] : (data || []);
       rerender();
     }, SEARCH_DEBOUNCE_MS);
@@ -4408,7 +4518,7 @@
   function roleCodeLabel(code) { const r = GRANTABLE_ROLES.find((x) => x.id === code); return r ? r.label : code; }
   async function adminGrantCoach(userId) {
     if (!state.user || !isAdmin()) return;
-    const { error } = await client.rpc("admin_grant_coach", { p_user_id: userId });
+    const { error } = await mgmtDb().rpc("admin_grant_coach", { p_user_id: userId });
     if (error) return setMessage(failText("הענקת ההרשאה נכשלה", error));
     setMessage("הרשאת מאמן/ת הוענקה");
     await searchMembers(state.members.search);
@@ -4418,7 +4528,7 @@
     if (roleCode === "member") return adminRevokeCoach(userId);
     if (roleCode === "coach") return adminGrantCoach(userId);
     if (roleCode !== "head_coach") return;
-    const { error } = await client.rpc("admin_grant_coach", { p_user_id: userId, p_role: "head_coach" });
+    const { error } = await mgmtDb().rpc("admin_grant_coach", { p_user_id: userId, p_role: "head_coach" });
     if (error) return setMessage(failText("שינוי ההרשאה נכשל", error));
     setMessage("ההרשאה עודכנה ל" + roleCodeLabel(roleCode));
     await searchMembers(state.members.search);
@@ -4443,7 +4553,7 @@
   }
   async function adminRevokeCoach(userId) {
     if (!state.user || !isAdmin()) return;
-    const { error } = await client.rpc("admin_revoke_coach", { p_user_id: userId });
+    const { error } = await mgmtDb().rpc("admin_revoke_coach", { p_user_id: userId });
     if (error) return setMessage(failText("ביטול ההרשאה נכשל", error));
     setMessage("הרשאת מאמן/ת בוטלה");
     await searchMembers(state.members.search);
@@ -4470,7 +4580,7 @@
     if (!state.user || !(hasPerm(PERM.INVITE_MANAGE_CODES) || isAdmin())) { state.admin.inviteCodes.items = []; return; }
     const ic = state.admin.inviteCodes;
     ic.loading = true; ic.error = false; rerender();
-    const { data, error } = await client.rpc("admin_invite_code_list");
+    const { data, error } = await mgmtDb().rpc("admin_invite_code_list");
     ic.loading = false; ic.loaded = true;
     if (error) { ic.error = true; rerender(); return; }
     ic.items = Array.isArray(data) ? data : [];
@@ -4499,7 +4609,7 @@
     // with role='coach' would be permanently unredeemable, since
     // redeem_invite_code's shared branch never grants anything but member),
     // so there is no role selector here at all, not even for an admin.
-    const { data, error } = await client.rpc("admin_invite_code_create", { p_role: "member", p_expires_at: expiresAtIso, p_max_uses: maxUses });
+    const { data, error } = await mgmtDb().rpc("admin_invite_code_create", { p_role: "member", p_expires_at: expiresAtIso, p_max_uses: maxUses });
     if (error) return setMessage(inviteCodeCreateErrorText(error));
     form.reset();
     state.admin.inviteCodes.created = data;
@@ -4509,7 +4619,7 @@
     // exists is exactly the "risk losing a credential that's never shown
     // again" case this fix closes.
     state.admin.openAreas[SHARED_CODE_DISCLOSURE_ID] = true;
-    // The one moment the plaintext code exists in the client. Build the QR
+    // The one moment the plaintext code exists in the mgmtDb(). Build the QR
     // now or never - admin_invite_code_list() below returns everything about
     // this row EXCEPT the code itself.
     openInviteQr(data && data.code, "shared");
@@ -4519,7 +4629,7 @@
   async function setInviteCodeActive(codeId, active) {
     if (!state.user || !(hasPerm(PERM.INVITE_MANAGE_CODES) || isAdmin()) || state.admin.inviteCodes.busy) return;
     state.admin.inviteCodes.busy = codeId; rerender();
-    const { error } = await client.rpc("admin_invite_code_set_active", { p_code_id: codeId, p_active: active });
+    const { error } = await mgmtDb().rpc("admin_invite_code_set_active", { p_code_id: codeId, p_active: active });
     state.admin.inviteCodes.busy = null;
     if (error) { setMessage(failText("עדכון הסטטוס נכשל", error)); rerender(); return; }
     await loadInviteCodes();
@@ -4585,7 +4695,7 @@
     const iv = state.admin.invites;
     if (reset) { iv.items = []; iv.cursor = null; iv.end = false; iv.loading = true; } else { iv.loadingMore = true; }
     iv.error = false; rerender();
-    const { data, error } = await client.rpc("admin_invite_list", { p_status: iv.status, p_cursor: iv.cursor, p_limit: 25 });
+    const { data, error } = await mgmtDb().rpc("admin_invite_list", { p_status: iv.status, p_cursor: iv.cursor, p_limit: 25 });
     iv.loading = false; iv.loadingMore = false; iv.loaded = true;
     if (error) { iv.error = true; rerender(); return; }
     const page = Array.isArray(data) ? data : [];
@@ -4631,7 +4741,7 @@
     }
     if (Object.keys(errors).length) return setFieldErrors("communityInviteCreate", errors);
     setFieldErrors("communityInviteCreate", {});
-    const { data, error } = await client.rpc("admin_invite_create", { p_role: role, p_label: label || null, p_expires_at: expiresAtIso });
+    const { data, error } = await mgmtDb().rpc("admin_invite_create", { p_role: role, p_label: label || null, p_expires_at: expiresAtIso });
     if (error) return setFieldErrors("communityInviteCreate", { label: inviteCreateErrorText(error) });
     form.reset();
     state.admin.invites.created = data;
@@ -4645,7 +4755,7 @@
   async function revokeInvite(inviteId) {
     if (!state.user || !(hasPerm(PERM.MEMBER_INVITE) || isAdmin()) || state.admin.invites.revoking) return;
     state.admin.invites.revoking = inviteId; rerender();
-    const { error } = await client.rpc("admin_invite_revoke", { p_invite_id: inviteId });
+    const { error } = await mgmtDb().rpc("admin_invite_revoke", { p_invite_id: inviteId });
     state.admin.invites.revoking = null;
     if (error) {
       setMessage(error.message === "already redeemed" ? "לא ניתן לבטל הזמנה שכבר מומשה" : "ביטול ההזמנה נכשל");
@@ -5659,7 +5769,7 @@
     a.data = null;
     a.loading = true; a.error = false; a.errorText = "";
     rerender();
-    const { data, error } = await client.rpc("analytics_dashboard", { p_period_start: a.start, p_period_end: a.end });
+    const { data, error } = await mgmtDb().rpc("analytics_dashboard", { p_period_start: a.start, p_period_end: a.end });
     a.loading = false; a.loaded = true;
     if (error) { a.error = true; a.errorText = adminAnalyticsErrorText(error); rerender(); return; }
     a.data = data || null;
@@ -5738,7 +5848,7 @@
     const asOf = memberSegmentsAsOf();
     ms.loading = true; ms.error = false; ms.errorText = ""; ms.asOf = asOf;
     rerender();
-    const { data, error } = await client.rpc("member_segments", { p_as_of: asOf });
+    const { data, error } = await mgmtDb().rpc("member_segments", { p_as_of: asOf });
     ms.loading = false; ms.loaded = true;
     if (error) { ms.error = true; ms.errorText = memberSegmentsErrorText(error); rerender(); return; }
     // setof jsonb comes back as a plain array from PostgREST; defensive
@@ -5770,7 +5880,7 @@
     const rf = state.analytics.registrationFunnel;
     rf.loading = true; rf.error = false; rf.errorText = "";
     rerender();
-    const { data, error } = await client.rpc("registration_funnel", { p_period_start: a.start, p_period_end: a.end });
+    const { data, error } = await mgmtDb().rpc("registration_funnel", { p_period_start: a.start, p_period_end: a.end });
     rf.loading = false; rf.loaded = true;
     if (error) { rf.error = true; rf.errorText = registrationFunnelErrorText(error); rerender(); return; }
     rf.data = data || null;
@@ -5830,9 +5940,9 @@
     r.loading = true; r.error = false; r.errorText = "";
     rerender();
     const [cohortsRes, onboardingRes, welcomeRes] = await Promise.all([
-      client.rpc("retention_cohorts", { p_cohort_months: RETENTION_COHORT_MONTHS }),
-      client.rpc("retention_onboarding_correlation"),
-      client.rpc("retention_welcome_correlation"),
+      mgmtDb().rpc("retention_cohorts", { p_cohort_months: RETENTION_COHORT_MONTHS }),
+      mgmtDb().rpc("retention_onboarding_correlation"),
+      mgmtDb().rpc("retention_welcome_correlation"),
     ]);
     r.loading = false; r.loaded = true;
     // The cohort curve is this section's primary content - if it fails, the
@@ -5884,7 +5994,7 @@
     const h = state.analytics.health;
     h.loading = true; h.error = false; h.errorText = "";
     rerender();
-    const { data, error } = await client.rpc("community_health_history", { p_weeks: COMMUNITY_HEALTH_WEEKS });
+    const { data, error } = await mgmtDb().rpc("community_health_history", { p_weeks: COMMUNITY_HEALTH_WEEKS });
     h.loading = false; h.loaded = true;
     if (error) { h.error = true; h.errorText = communityHealthErrorText(error); rerender(); return; }
     // setof jsonb comes back as a plain array from PostgREST; defensive
@@ -5906,7 +6016,7 @@
     const filters = {};
     if (state.admin.auditFilters.action_type) filters.action_type = state.admin.auditFilters.action_type;
     if (state.admin.auditFilters.admin_id) filters.admin_id = state.admin.auditFilters.admin_id;
-    const { data, error } = await client.rpc("admin_actions_page", { p_cursor: state.admin.auditCursor, p_limit: 25, p_filters: filters });
+    const { data, error } = await mgmtDb().rpc("admin_actions_page", { p_cursor: state.admin.auditCursor, p_limit: 25, p_filters: filters });
     state.admin.auditLoading = false;
     state.admin.auditLoaded = true;
     if (error) { state.admin.auditError = true; rerender(); return; }
@@ -5975,7 +6085,7 @@
     if (!state.user || !isAdmin()) return;
     if (removeMemberBusy[userId]) return;
     removeMemberBusy[userId] = true;
-    const { error } = await client.rpc("admin_remove_member", { p_user_id: userId });
+    const { error } = await mgmtDb().rpc("admin_remove_member", { p_user_id: userId });
     removeMemberBusy[userId] = false;
     if (error) return setMessage(failText("הסרת החבר/ה נכשלה", error));
     setMessage("החבר/ה הוסר/ה");
@@ -5996,7 +6106,7 @@
     if (resetPasswordBusy[userId]) return;
     resetPasswordBusy[userId] = true;
     rerender();
-    const { data, error } = await client.functions.invoke("admin_reset_password", { body: { target_user_id: userId } });
+    const { data, error } = await mgmtDb().functions.invoke("admin_reset_password", { body: { target_user_id: userId } });
     resetPasswordBusy[userId] = false;
     if (error || !data || !data.temp_password) { rerender(); return setMessage("איפוס הסיסמה נכשל"); }
     state.admin.passwordResetResult = { userId, tempPassword: data.temp_password };
@@ -8008,7 +8118,7 @@
     state.club.features[key] = { enabled, config: (prevRow && prevRow.config) || {} };
     state.club.moduleBusy = key;
     rerender();
-    const { error } = await client.rpc("admin_set_club_feature", { p_module_key: key, p_enabled: enabled });
+    const { error } = await mgmtDb().rpc("admin_set_club_feature", { p_module_key: key, p_enabled: enabled });
     state.club.moduleBusy = null;
     if (error) {
       state.club.features[key] = { enabled: prevEnabled, config: (prevRow && prevRow.config) || {} };
@@ -9566,7 +9676,7 @@
     if (state.admin.bugsLoading) return;
     if (state.admin.bugsLoaded && !force) return;
     state.admin.bugsLoading = true; state.admin.bugsError = false; rerender();
-    const { data, error } = await client.rpc("bug_report_list_all", {
+    const { data, error } = await mgmtDb().rpc("bug_report_list_all", {
       p_status: state.admin.bugsStatus === "all" ? null : state.admin.bugsStatus,
       p_limit: 100,
     });
@@ -9579,7 +9689,7 @@
   async function setBugReportStatus(id, status) {
     if (!state.user || !isAdmin()) return;
     state.admin.bugsSaving = id; rerender();
-    const { error } = await client.rpc("bug_report_set_status", { p_id: id, p_status: status, p_note: null });
+    const { error } = await mgmtDb().rpc("bug_report_set_status", { p_id: id, p_status: status, p_note: null });
     state.admin.bugsSaving = "";
     if (error) { setMessage(failText("עדכון הדיווח נכשל", error)); rerender(); return; }
     await loadBugReports(true);
@@ -9594,86 +9704,187 @@
     return `<pre class="mono" style="white-space:pre-wrap;word-break:break-word;font-size:11px;color:var(--steel);margin:6px 0 0;">${esc(rows.join("\n"))}</pre>`;
   }
   // =====================================================================
-  // Step-up lock on the admin panel
+  // The two management panels and the lock on them
   // =====================================================================
+  // Both panels are locked, and both open a SEPARATE management session
+  // rather than re-checking the member who is signed in - see makeMgmtClient()
+  // at the top of this file for why there are two clients at all.
+  //
+  // Both, not just the admin panel: adding and removing members, lifting
+  // restrictions and editing what every new member reads is not a smaller
+  // responsibility than reading the audit log, it is just a different one.
+  //
   // 15 minutes: long enough to triage a queue and read the audit log without
   // retyping, short enough that a phone left on a bench re-locks before
   // anyone wanders past. Re-checked on every render rather than on a timer,
-  // so a backgrounded app is locked the moment it is looked at again.
+  // so a backgrounded app is locked the moment it is looked at again - and
+  // when the last panel's window runs out, mgmtExpireIfStale() drops the
+  // management session with it, so an idle phone stops holding one at all.
   const ADMIN_UNLOCK_MINUTES = 15;
-  // Both management panels are locked (2026-09-15, second pass). The admin
-  // panel got it first; the owner then asked for the club panel too, which is
-  // right - adding and removing members, lifting restrictions and editing what
-  // every new member reads is not a smaller responsibility than reading the
-  // audit log, it is just a different one.
+  function panelUnlocked(panel) {
+    // Both halves must hold. The timer alone is not enough: a management
+    // session that failed to load, or was torn down by a sign-out, must
+    // re-lock the panel even if its 15 minutes have not run out.
+    return !!state.admin.mgmt && Date.now() < (Number(state.admin.panelUnlockedUntil[panel]) || 0);
+  }
+  // What the MANAGEMENT account may do - deliberately parallel to isAdmin()
+  // and isStaff(), and deliberately not them. Those two answer about the
+  // member using the app; these answer about the account that signed into
+  // the gate. Mixing them up is the entire bug this design exists to avoid.
+  function mgmtIsAdmin() { return !!(state.admin.mgmt && state.admin.mgmt.isAdmin); }
+  function mgmtIsStaff() { return !!(state.admin.mgmt && state.admin.mgmt.isStaff); }
+  // Drops the management session. Called on lock expiry, on sign-out, and
+  // whenever an unlock attempt fails part-way - so a half-built session can
+  // never be left behind for mgmtDb() to pick up.
+  async function mgmtTeardown() {
+    const c = mgmtClient;
+    mgmtClient = null;
+    state.admin.mgmt = null;
+    state.admin.panelUnlockedUntil = { admin: 0, club: 0 };
+    // Best-effort: revokes the refresh token server-side. The session is
+    // memory-only either way, so a failure here loses nothing - the object
+    // is already unreachable.
+    if (c) { try { await c.auth.signOut(); } catch (e) {} }
+  }
+  // Re-locks a panel whose window has run out, and tears the management
+  // session down with it once NEITHER panel is still open. Called from the
+  // render path, so a backgrounded phone re-locks the moment it is looked at
+  // again rather than on a timer that a sleeping tab would not fire.
+  function mgmtExpireIfStale() {
+    if (!state.admin.mgmt) return;
+    const now = Date.now();
+    const u = state.admin.panelUnlockedUntil;
+    if (now >= (Number(u.admin) || 0) && now >= (Number(u.club) || 0)) mgmtTeardown();
+  }
   const PANEL_UNLOCK_COPY = Object.freeze({
     admin: {
       title: "אזור ניהול האפליקציה",
-      body: "כאן נמצאים דיווחי התקלות, יומן הפעולות, ההרשאות ואיפוס הסיסמאות. כדי להיכנס צריך להזין שוב את הסיסמה — גם אם כבר התחברתם. זה מגן על האזור הזה אם הטלפון נשאר פתוח.",
+      body: "כאן נמצאים דיווחי התקלות, יומן הפעולות, ההרשאות ואיפוס הסיסמאות. האזור הזה עובד עם חשבון ניהול נפרד — צריך להזין את שם המשתמש או האימייל שלו, ואת הסיסמה.",
       cta: "כניסה לאזור הניהול",
+      denied: "חשבון הניהול שהוזן אינו מורשה לנהל את האפליקציה.",
     },
     club: {
       title: "אזור ניהול המועדון",
-      body: "כאן מוסיפים ומסירים חברים, מנהלים את רשימת המועדון, את המודרציה ואת מה שחברים חדשים רואים. כדי להיכנס צריך להזין שוב את הסיסמה — גם אם כבר התחברתם. זה מגן על האזור הזה אם הטלפון נשאר פתוח.",
+      body: "כאן מוסיפים ומסירים חברים, מנהלים את רשימת המועדון, את המודרציה ואת מה שחברים חדשים רואים. האזור הזה עובד עם חשבון ניהול נפרד — צריך להזין את שם המשתמש או האימייל שלו, ואת הסיסמה.",
       cta: "כניסה לניהול המועדון",
+      denied: "חשבון הניהול שהוזן אינו מורשה לנהל את המועדון.",
     },
   });
-  function panelUnlocked(panel) {
-    return Date.now() < (Number(state.admin.panelUnlockedUntil[panel]) || 0);
-  }
+  // THE GATE. Takes an email as well as a password, because the management
+  // account is a separate identity - "no, i want it to be seperate from the
+  // regular user". It does NOT name the current user and does not ask them to
+  // confirm their own password: whoever is signed in to train is irrelevant
+  // here, and prefilling their address would suggest otherwise.
+  //
+  // The reassurance in the footer is the thing the owner actually asked to be
+  // true, so it is stated on the screen where the worry arises rather than
+  // left for them to discover: signing in here does not disturb the account
+  // they train with.
   function renderPanelUnlockGate(panel) {
     const a = state.admin;
     const copy = PANEL_UNLOCK_COPY[panel];
-    // The account is named, because someone who also holds a personal member
-    // account needs to know WHICH password is being asked for. Only shown for
-    // a real address - a synthetic @members.haimuniya.invalid one is an
-    // implementation detail the member never typed and would not recognise.
-    const who = (state.user && state.user.email) ? state.user.email : "";
-    const whoLine = who && !/@members\.haimuniya\.invalid$/.test(who)
-      ? `<div class="footer-note" style="margin:0 0 10px;" dir="ltr">${esc(who)}</div>`
-      : "";
     const busy = a.panelUnlockBusy === panel;
     return `<div class="chart-card">
       <div style="font-weight:800;font-size:16px;margin-bottom:6px;">${esc(copy.title)}</div>
       <div style="color:var(--steel);font-size:13px;line-height:1.7;margin-bottom:12px;">${bidiText(copy.body)}</div>
-      ${whoLine}
       <form id="panelUnlock" data-panel="${esc(panel)}">
-        ${field("panelUnlock", "password", "סיסמה", `<input class="text-input" name="password" type="password" dir="ltr" autocomplete="current-password" placeholder="סיסמה" required/>`)}
+        ${field("panelUnlock", "email", "שם משתמש או אימייל של חשבון הניהול", `<input class="text-input" name="email" type="text" dir="ltr" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off" placeholder="headcoach" required/>`)}
+        ${field("panelUnlock", "password", "סיסמה", `<input class="text-input" name="password" type="password" dir="ltr" autocomplete="off" placeholder="סיסמה" required/>`)}
         <button class="save-btn" type="submit"${busy ? " disabled" : ""} style="margin-top:12px;">${busy ? "בודקים…" : esc(copy.cta)}</button>
       </form>
       ${a.panelUnlockError ? `<div class="field-error" role="alert" style="margin-top:10px;">${esc(a.panelUnlockError)}</div>` : ""}
-      <div class="footer-note" style="margin:12px 0 0;">${bidiText(`הכניסה נשמרת ל-${ADMIN_UNLOCK_MINUTES} דקות, ומתאפסת בכל פתיחה מחדש של האפליקציה.`)}</div>
+      <div class="footer-note" style="margin:12px 0 0;">${bidiText(`הכניסה לכאן לא משנה את החשבון שאיתו אתם מחוברים באפליקציה — האימונים שלכם נשארים בחשבון שלכם. הכניסה נשמרת ל-${ADMIN_UNLOCK_MINUTES} דקות, ומתאפסת בכל פתיחה מחדש של האפליקציה.`)}</div>
     </div>`;
   }
   async function panelUnlock(form) {
-    if (!client || !state.user) return;
+    if (!configured || !window.supabase) return;
     const panel = form.dataset.panel === "club" ? "club" : "admin";
+    const typed = String(form.elements.email.value || "").trim().toLowerCase();
     const password = String(form.elements.password.value || "");
-    if (!password) { state.admin.panelUnlockError = "יש להזין סיסמה"; rerender(); return; }
+    if (!typed || !password) { state.admin.panelUnlockError = "יש להזין שם משתמש או אימייל, וסיסמה"; rerender(); return; }
+    // A USERNAME IS ACCEPTED TOO, and this is not a convenience - without it
+    // the head coach could not get in at all. That account has no real email
+    // address: it signs in as `headcoach`, which the app maps onto a synthetic
+    // @members.haimuniya.invalid address (usernameToEmail), exactly as it does
+    // for every member. Demanding the synthetic form here would mean asking
+    // someone to type an address that does not exist and that they have never
+    // been shown. The admin account is the other case - it has a real mailbox,
+    // because it is the one that has to be able to receive a password reset -
+    // so both forms have to work. The "@" test is the same one login() uses.
+    const email = typed.includes("@") ? typed : usernameToEmail(typed);
     state.admin.panelUnlockBusy = panel; state.admin.panelUnlockError = ""; rerender();
-    // Verified by signing in again as the SAME account. Supabase has no
-    // "check this password without a session" call, and this is the standard
-    // step-up shape: same user, tokens refreshed, no session swap and no
-    // sign-out on failure. Deliberately NOT a stored hash or a client-side
-    // comparison - the password never leaves auth.users, and this app has no
-    // business holding a second copy of it anywhere.
-    let ok = false;
+
+    // A FRESH client per attempt, discarded on every failure path below. Not
+    // reused across attempts: a client that half-signed-in on a previous try
+    // could otherwise carry a stale session into this one.
+    const c = makeMgmtClient();
+    if (!c) { state.admin.panelUnlockBusy = ""; state.admin.panelUnlockError = "לא ניתן להתחבר כרגע"; rerender(); return; }
+
+    let uid = null;
     try {
-      const { error } = await client.auth.signInWithPassword({ email: state.user.email, password });
-      ok = !error;
-    } catch (e) { ok = false; }
-    state.admin.panelUnlockBusy = "";
-    if (!ok) {
-      // One message for a wrong password and for a failed request alike: an
-      // error that distinguishes them tells someone probing the device which
-      // half they got right.
-      state.admin.panelUnlockError = "הסיסמה שגויה";
+      const { data, error } = await c.auth.signInWithPassword({ email, password });
+      if (!error && data && data.user) uid = data.user.id;
+    } catch (e) { uid = null; }
+    if (!uid) {
+      // One message for wrong credentials and for a failed request alike: an
+      // error that told them apart would tell someone probing a borrowed
+      // phone which half they had already got right.
+      //
+      // The member's session is untouched on this path - a failed sign-in on
+      // a DIFFERENT client cannot sign anyone out of `client`, which is the
+      // structural reason the old same-account step-up had to be careful here
+      // and this one does not.
+      try { await c.auth.signOut(); } catch (e) {}
+      state.admin.panelUnlockBusy = "";
+      state.admin.panelUnlockError = "שם המשתמש או הסיסמה שגויים";
       rerender();
       return;
     }
+
+    // Signed in. Now ask the SERVER what this account may do, through the
+    // management client, so the answer is about the management account and
+    // carries its JWT. profiles/invite_redemptions/my_permissions are the
+    // same three sources the member path uses (loadProfile, loadRedemption,
+    // loadPermissions) - read here rather than reused, because those three
+    // write into state.profile/state.redemption/state.permissions, which
+    // must keep describing the member.
+    let prof = null, redemption = null, perms = [];
+    try {
+      const [{ data: p }, { data: r }, { data: pm }] = await Promise.all([
+        c.from("profiles").select("id,display_name,handle,is_admin").eq("id", uid).maybeSingle(),
+        c.from("invite_redemptions").select("role").eq("user_id", uid).maybeSingle(),
+        c.rpc("my_permissions"),
+      ]);
+      prof = p || null; redemption = r || null; perms = Array.isArray(pm) ? pm : [];
+    } catch (e) { prof = null; }
+
+    const role = redemption && redemption.role ? String(redemption.role) : "";
+    const acctIsAdmin = !!(prof && prof.is_admin) || role === "admin" || role === "owner";
+    const acctIsStaff = acctIsAdmin || role === "coach" || role === "head_coach";
+    // The panel decides against the account that just signed in, not against
+    // the member. Admin panel needs admin; club panel needs staff.
+    const allowed = panel === "admin" ? acctIsAdmin : acctIsStaff;
+    if (!prof || !allowed) {
+      // Correct password, wrong account. Said plainly - this is not a
+      // credential-probing signal, it is a real person who typed the wrong
+      // one of their two management logins, and telling them so is the
+      // difference between a five-second fix and a support call.
+      try { await c.auth.signOut(); } catch (e) {}
+      state.admin.panelUnlockBusy = "";
+      state.admin.panelUnlockError = prof ? PANEL_UNLOCK_COPY[panel].denied : "לא ניתן לאמת את חשבון הניהול";
+      rerender();
+      return;
+    }
+
+    mgmtClient = c;
+    state.admin.mgmt = {
+      email, userId: uid, displayName: (prof.display_name || prof.handle || ""),
+      isAdmin: acctIsAdmin, isStaff: acctIsStaff, role, perms,
+    };
+    state.admin.panelUnlockBusy = "";
     state.admin.panelUnlockError = "";
-    // Only the panel that was asked for. Unlocking the club must not hand over
-    // the app, and vice versa.
+    // Only the panel that was asked for. One management account may well hold
+    // both jobs, but unlocking the club must not silently hand over the app.
     state.admin.panelUnlockedUntil[panel] = Date.now() + ADMIN_UNLOCK_MINUTES * 60 * 1000;
     rerender();
   }
@@ -9845,7 +10056,7 @@
     const r = state.admin.roster;
     if (reset) { r.items = []; r.cursor = null; r.end = false; r.loading = true; } else { r.loadingMore = true; }
     r.error = false; rerender();
-    const { data, error } = await client.rpc("admin_member_roster", { p_cursor: r.cursor, p_limit: ROSTER_PAGE_SIZE });
+    const { data, error } = await mgmtDb().rpc("admin_member_roster", { p_cursor: r.cursor, p_limit: ROSTER_PAGE_SIZE });
     r.loading = false; r.loadingMore = false; r.loaded = true;
     if (error) { r.error = true; rerender(); return; }
     const page = Array.isArray(data) ? data : [];
@@ -9953,7 +10164,7 @@
     const g = state.admin.incompleteSignups;
     if (reset) { g.items = []; g.cursor = null; g.end = false; g.loading = true; } else { g.loadingMore = true; }
     g.error = false; rerender();
-    const { data, error } = await client.rpc("admin_incomplete_signups", { p_cursor: g.cursor, p_limit: GHOST_PAGE_SIZE });
+    const { data, error } = await mgmtDb().rpc("admin_incomplete_signups", { p_cursor: g.cursor, p_limit: GHOST_PAGE_SIZE });
     g.loading = false; g.loadingMore = false; g.loaded = true;
     if (error) { g.error = true; rerender(); return; }
     const page = Array.isArray(data) ? data : [];
@@ -18727,13 +18938,33 @@
     // through a registry that deliberately doesn't know this page exists
     // for them.
     const panelTitle = isAdminMode ? "ניהול מערכת" : "ניהול המועדון";
-    if (isAdminMode ? !isAdmin() : !isStaff()) {
-      return `<h1 class="page-title">${esc(panelTitle)}</h1><div class="empty">אין הרשאה לצפות בעמוד זה.</div>`;
-    }
-    // BOTH panels ask for the password again before they will render.
     const panelKey = isAdminMode ? "admin" : "club";
+    // ORDER MATTERS, and it is the reverse of what it was.
+    //
+    // This used to refuse the page outright unless the MEMBER held admin (or
+    // staff), and only then offer the lock. That was right while the lock was
+    // a re-check of the signed-in member. It is wrong now that management is a
+    // separate identity: the person who may open this panel is generally NOT
+    // an admin on the account they train with - that separation is the whole
+    // point - so a member-permission check in front of the gate would refuse
+    // the page to exactly the people it is for, and there would be no way in.
+    //
+    // So the gate comes first and is the only thing standing here. The
+    // permission decision moved inside panelUnlock(), where it is made against
+    // the account that signed in, and is re-asserted below for the rendered
+    // panel. Nothing is weakened by showing the gate to anyone: it grants
+    // nothing without management credentials, and every RPC behind it is
+    // RLS-gated server-side against the management account's own JWT.
+    mgmtExpireIfStale();
     if (!panelUnlocked(panelKey)) {
       return `<h1 class="page-title">${esc(panelTitle)}</h1>${renderPanelUnlockGate(panelKey)}`;
+    }
+    // Belt and braces. panelUnlock() will not set the unlock for a panel the
+    // account may not run, so this is unreachable by the normal path - but it
+    // means the rendered panel states its own requirement rather than relying
+    // on the gate having checked, which is what makes the gate safe to change.
+    if (isAdminMode ? !mgmtIsAdmin() : !mgmtIsStaff()) {
+      return `<h1 class="page-title">${esc(panelTitle)}</h1><div class="empty">אין הרשאה לצפות בעמוד זה.</div>`;
     }
     // Tab 3's five areas, each still self-gated exactly as it was. The two
     // permission fallbacks below are the same strings the retired "הגדרות"
@@ -20226,10 +20457,14 @@
         state.profile = null; state.redemption = null; state.signupStarted = false;
         state.profileLoadError = false; state.redemptionLoadError = false;
         state.avatarUpload = { status: "idle", error: "" }; state.permissions = []; state.permissionsLoaded = false;
-        // The admin step-up unlock dies with the session. Leaving it set would
-        // hand the next person to sign in on this device an already-unlocked
-        // admin panel, which is precisely the case the lock exists for.
-        state.admin.panelUnlockedUntil = { admin: 0, club: 0 }; state.admin.panelUnlockError = ""; state.admin.panelUnlockBusy = "";
+        // The management session dies with the member's. Leaving it up would
+        // hand the next person to sign in on this device a live, already
+        // unlocked management account - precisely the case the lock exists
+        // for. mgmtTeardown() clears the unlock windows too, and signs the
+        // second client out rather than merely dropping the reference, so the
+        // refresh token is revoked server-side and not just forgotten here.
+        mgmtTeardown();
+        state.admin.panelUnlockError = ""; state.admin.panelUnlockBusy = "";
         state.ui.fieldErrors = {}; state.ui.confirmDialog = null;
         // Back to the neutral choice screen, not to whichever gate screen the
         // member happened to be on before. Signing out on a shared phone and

@@ -328,3 +328,33 @@ export async function consoleErrorCollector(page) {
   page.on("pageerror", (err) => errors.push("pageerror: " + err.message));
   return errors;
 }
+
+// Opens one of the two management panels and gets through its gate.
+//
+// Both panels sit behind a login for a SEPARATE management account
+// (2026-09-15) - not a re-check of the member who is signed in, who
+// deliberately holds no powers at all. So a scenario that wants the roster,
+// the moderation queue or the invite form has to supply management
+// credentials, exactly as a person would.
+//
+//   rowId  "tabClubManageBtn" for club work - the roster, invites,
+//          moderation, the club's numbers, onboarding content.
+//          "tabManageBtn" for app work - bug reports, the audit log, roles,
+//          password resets, module toggles.
+//
+// account/password must belong to a seeded account holding the right role for
+// that panel (coach rank or above for the club, admin for the app), or the
+// gate refuses it and this throws on the wait below. `account` may be an
+// email or a bare username - the gate accepts both, because the head coach
+// account has no real mailbox.
+export async function openManagementPanel(page, rowId, account, password, { timeout = 8000 } = {}) {
+  await switchTab(page, rowId);
+  // Already unlocked (a previous call in the same scenario, within the
+  // 15-minute window) - nothing to submit.
+  const gate = await page.$("#panelUnlock");
+  if (!gate) return;
+  await page.fill("#panelUnlock input[name=email]", account);
+  await page.fill("#panelUnlock input[name=password]", password);
+  await page.click("#panelUnlock button[type=submit]");
+  await page.waitForFunction(() => !document.getElementById("panelUnlock"), { timeout });
+}

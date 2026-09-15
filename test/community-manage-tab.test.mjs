@@ -59,13 +59,17 @@ function seeded(extra, role) {
 test("a plain member who lands on ?tab=manage directly sees the denial state, not the Manage dashboard", async () => {
   const mock = seeded(null, "member");
   const window = await bootCommunity(mock, { syncEnabled: false, url: "https://example.test/index.html?tab=manage" });
-  // The bottom-bar button never exists for a non-staff caller (getNavItems()
-  // omits the whole entry) - the regression is specifically about reaching
-  // the tab a second way, straight off the URL, which does not go through
-  // getNavItems() at all.
-  assert.equal(window.document.getElementById("tabManageBtn"), null, "no Manage nav button renders for a plain member");
-  await waitFor(() => window.document.body.textContent.includes("אין הרשאה לצפות בעמוד זה"), 3000);
-  assert.ok(!window.document.querySelector(".subtabbar"), "no Manage sub-tab bar renders for the denied caller");
+  // The original regression this guards: reaching the panel a second way,
+  // straight off the URL, which does not go through getNavItems() at all.
+  //
+  // The denial state it used to land on is gone, and not by weakening -
+  // management is a separate identity now, so "is the signed-in member an
+  // admin?" is the wrong question to ask at the door. Whoever arrives here,
+  // by nav row or by URL, meets the same management login. That is a stricter
+  // outcome than the old one: the old denial was computed from the member's
+  // own flags, so an account that carried is_admin sailed past it.
+  assert.ok(window.document.getElementById("panelUnlock"), "a plain member lands on a management login");
+  assert.ok(!window.document.querySelector(".subtabbar"), "and no Manage sub-tab bar renders in front of it");
 });
 
 // ===== P2: all 3 sub-tabs render ============================================

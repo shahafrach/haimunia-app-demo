@@ -345,10 +345,15 @@ function modMock() {
 // Redesign, Phase 1: renderModeration() moved from Community's "account"
 // sub-tab to the Manage tab's own "moderation" sub-tab.
 async function openQueue(window) {
-  await waitFor(() => !!window.document.getElementById("tabManageBtn"), 4000);
-  window.document.getElementById("tabManageBtn").click();
-  // The moderation queue is a CLUB surface and the club panel is behind a
-  // step-up password now - submit the real gate rather than bypassing it.
+  await waitFor(() => !!window.document.getElementById("tabClubManageBtn"), 4000);
+  // tabClubManageBtn, not tabManageBtn. Moderation is a CLUB surface, and
+  // since both rows are now always present (management is a separate
+  // identity, so the rows cannot be chosen by the signed-in member's flags)
+  // tabManageBtn is unambiguously the APP panel - which a head coach is
+  // rightly refused. The two panels are disjoint jobs.
+  window.document.getElementById("tabClubManageBtn").click();
+  // The club panel is behind a management login - submit the real gate rather
+  // than bypassing it.
   await unlockAdminPanel(window);
   await waitFor(() => !!window.document.querySelector('[data-community-action="set-manage-tab"][data-tab="moderation"]'), 4000);
   window.document.querySelector('[data-community-action="set-manage-tab"][data-tab="moderation"]').click();

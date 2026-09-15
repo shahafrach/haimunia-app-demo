@@ -8,7 +8,12 @@ const cloudJs = fs.readFileSync(new URL("../cloud.js", import.meta.url), "utf8")
 test("cloud.js's isStaff() matches is_staff()'s server-side rule: admin OR a coach-rank redemption", () => {
   // COMM-156 exposed head_coach, which is coach rank or above server-side,
   // so isStaff() recognises it too.
-  assert.match(cloudJs, /function isStaff\(\) \{ return !!\(state\.profile && \(state\.profile\.is_admin \|\| \(state\.redemption && \(state\.redemption\.role === "coach" \|\| state\.redemption\.role === "head_coach"\)\)\)\); \}/);
+  // Two subjects since management became a separate identity (2026-09-15):
+  // inside a management panel isStaff() answers about the account that signed
+  // into the gate; everywhere else it answers about the member, by the same
+  // rule as before - is_admin OR a coach-rank redemption.
+  assert.match(cloudJs, /function isStaff\(\) \{\s*if \(inMgmtContext\(\)\) return mgmtIsStaff\(\);/);
+  assert.match(cloudJs, /return !!\(state\.profile && \(state\.profile\.is_admin \|\| \(state\.redemption && \(state\.redemption\.role === "coach" \|\| state\.redemption\.role === "head_coach"\)\)\)\);/);
 });
 
 test("all five staff-only render gates (announcements composer, challenge setter, new/inactive members, the redesign's moved-to-Manage note) use isStaff(), not a raw is_admin check", () => {

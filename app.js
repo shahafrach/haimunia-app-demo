@@ -15,7 +15,7 @@ let barWeight = 20;
 // Single source of truth for the app version. After bumping this, run
 // `npm run sync-version` to copy it into SW_VERSION in sw.js — `npm test`
 // fails if the two drift apart.
-const APP_VERSION = "4.47.0";
+const APP_VERSION = "4.48.0";
 
 // A movement typed into the WOD builder that isn't in the built-in list
 // above - persisted (see WODTAGSTORE), same "custom X" pattern as
@@ -153,54 +153,49 @@ function getNavItems() {
     { id: "wod", tab: "wod", rowId: "tabWodBtn", label: "אימונים", tint: "purple", icon: ICONS.stopwatchIcon, main: true },
     { id: "community", tab: "community", rowId: "tabCommunityBtn", label: "קהילה", tint: "teal", icon: ICONS.communityIcon, main: true },
   ];
-  // Redesign, Phase 1: a 6th tab, staff-only, same footing as the other 5
-  // (main: true - bottom bar, not hamburger-only). window.communityIsStaff
-  // mirrors the isCommunitySignedIn() pattern already used all over this
-  // file for a cloud.js-owned fact app.js's nav has to react to. Absent
-  // entirely for anyone else, not just disabled - matching the mockup's own
-  // "showManageTab: isAdmin" behaviour (here: coach and up, see cloud.js's
-  // isStaff(), the same access these tools already had inside Account).
   // SPLIT INTO TWO DESTINATIONS, BOTH HAMBURGER-ONLY (2026-09-15).
   //
-  // Two changes here, both requested directly. First, admin and head coach
-  // are separate screens for separate people rather than one shared "ניהול"
-  // with half of it inert - see cloud.js's renderManagePanel(). Second, both
-  // are main:false, which is what puts them in the hamburger: this registry
-  // feeds BOTH the bottom bar (main:true only) and the hamburger
+  // Two changes, both requested directly. First, admin and head coach are
+  // separate screens for separate people rather than one shared "ניהול" with
+  // half of it inert - see cloud.js's renderManagePanel(). Second, both are
+  // main:false, which is what puts them in the hamburger: this registry feeds
+  // BOTH the bottom bar (main:true only) and the hamburger
   // (renderNavRows(true, true), non-main only), so flipping the flag moves
-  // them from one to the other with no second navigation mechanism. That
-  // also hands the 6th bottom slot back to the five member tabs, which is
-  // where a phone-sized bottom bar wants to be.
+  // them from one to the other with no second navigation mechanism. That also
+  // hands the 6th bottom slot back to the five member tabs, which is where a
+  // phone-sized bottom bar wants to be.
   //
-  // An ADMIN gets one row, not two: their panel is a superset that already
-  // contains every club area, so a second row would be a second door into
-  // the same screen.
-  if (typeof window.communityIsStaff === "function" && window.communityIsStaff()) {
-    // Redesign, Phase 3 fix: the moderation-queue badge used to live only
-    // on Community's own "חשבון" pill, which stopped meaning anything once
-    // moderation moved to Manage - see cloud.js's pendingModerationCount().
-    const badge = typeof window.communityPendingModerationCount === "function" ? window.communityPendingModerationCount() : 0;
-    const isClubAdmin = typeof window.communityIsAdmin === "function" && window.communityIsAdmin();
-    if (isClubAdmin) {
-      // BOTH rows for an admin, corrected 2026-09-15 on the owner's second
-      // look. The first pass gave an admin a single row on the reasoning that
-      // their panel is a superset, so a second row would be a second door into
-      // the same screen. On the actual phone that read as "there is no club
-      // owner section" - which is the honest reaction: a superset is invisible.
-      // Two named doors, each landing on the panel it names, is what makes the
-      // separation legible. The admin row keeps the moderation badge; the club
-      // row does not duplicate it, because it is the same queue counted once.
-      items.push({ id: "manage", tab: "manage", rowId: "tabManageBtn", label: "ניהול מערכת", tint: "steel", icon: ICONS.manageTabIcon, main: false, badge });
-      items.push({ id: "clubmanage", tab: "clubmanage", rowId: "tabClubManageBtn", label: "ניהול המועדון", tint: "teal", icon: ICONS.communityIcon, main: false });
-    } else {
-      // Same rowId as the admin row above, deliberately. Exactly one of the
-      // two is ever in the registry - they are the same DESTINATION SLOT
-      // ("the management screen for whoever this is"), differing only in
-      // which panel it opens, so one stable id is the honest description and
-      // keeps every existing reference to it valid. The panels are told
-      // apart by `tab` (manage vs clubmanage), not by the id.
-      items.push({ id: "clubmanage", tab: "clubmanage", rowId: "tabManageBtn", label: "ניהול המועדון", tint: "steel", icon: ICONS.manageTabIcon, main: false, badge });
-    }
+  // WHY THESE TWO ROWS ARE NOT GATED ON WHO IS SIGNED IN (2026-09-15, third
+  // revision). They used to appear only for a member whose own account was
+  // staff. That stopped being possible when management became a SEPARATE
+  // IDENTITY - "no, i want it to be seperate from the regular user". The
+  // owner trains on an account that deliberately holds no admin power, so a
+  // staff check against the signed-in member now hides these rows from
+  // exactly the person they exist for, and there is no other way in.
+  //
+  // Showing them to everyone gives nothing away and grants nothing. Each row
+  // lands on a locked gate that wants a management email and password, and
+  // every RPC behind that gate is RLS-enforced server-side against the
+  // management account's own JWT - a member who taps through sees a login
+  // form and stops there. The alternative, some hidden gesture only the owner
+  // knows, would be a secret that protects nothing while being impossible to
+  // hand to a new head coach. A visible, locked door is the honest shape.
+  //
+  // The moderation badge is deliberately NOT on these rows any more: it
+  // counted a queue the signed-in member could see, and a member cannot see
+  // that queue. A count rendered for everyone would be both meaningless and a
+  // small leak of club state to people with no part in it.
+  //
+  // The ONE condition left is that this device has a community account signed
+  // in at all. Not a check on that member's powers - they have none, by
+  // design - but on whether the club half of the app exists here yet. The
+  // offline log works with no account whatsoever, and putting two management
+  // doors in front of someone who has never joined the club is noise in the
+  // one menu a phone-first app cannot afford to clutter. Anyone who needs
+  // these signs into the club first, which is a step they have taken already.
+  if (typeof window.isCommunitySignedIn === "function" && window.isCommunitySignedIn()) {
+    items.push({ id: "manage", tab: "manage", rowId: "tabManageBtn", label: "ניהול מערכת", tint: "steel", icon: ICONS.manageTabIcon, main: false });
+    items.push({ id: "clubmanage", tab: "clubmanage", rowId: "tabClubManageBtn", label: "ניהול המועדון", tint: "teal", icon: ICONS.communityIcon, main: false });
   }
   return items;
 }
@@ -5581,6 +5576,23 @@ function applyFieldValue(action, field, value) {
 
 function render() {
   let content;
+  // WHICH TOP-LEVEL TAB IS ON SCREEN, published for cloud.js (2026-09-15).
+  //
+  // cloud.js has its own state.ui.tab, but that is the COMMUNITY SUB-TAB
+  // (feed / boards / directory / ...) - it never holds "manage", and reading
+  // it as though it did is a mistake that renders a management panel and then
+  // fills every section of it with "no permission".
+  //
+  // It needs this because permission questions there have two subjects now:
+  // the signed-in member everywhere, and the separate management account
+  // inside a management panel (see cloud.js's inMgmtContext()). "Which tab is
+  // this?" is the only fact that distinguishes them, and app.js is the only
+  // one that knows it.
+  //
+  // Set before the dispatch below, so it is already correct for the render
+  // pass it describes as well as for the after-render and click handlers that
+  // follow it.
+  window.haimuniaActiveTab = tab;
   try {
     if (tab === "add") {
       const selected = movementById(selectedId);

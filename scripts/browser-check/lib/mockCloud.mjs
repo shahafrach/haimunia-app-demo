@@ -83,7 +83,16 @@ export async function installMockCloud(page, seedTables = {}, opts = {}) {
   const glue = `${mockSupabaseSource()}
 localStorage.setItem("haimunia-demo:seenIntroCarousel", ${opts.seenIntroCarousel === false ? '"0"' : '"1"'});
 window.__mock = createMockSupabase(${JSON.stringify(seedTables)});
-window.supabase = { createClient: function () { return window.__mock.client; } };
+// FIRST call gets the member client; every later one gets an independent
+// secondary. cloud.js creates exactly one extra client, lazily, when a
+// management panel is unlocked (makeMgmtClient()) - it holds the separate
+// management session, and handing out the member client both times would let
+// that sign-in quietly take over the member's session inside the mock, which
+// is the one thing these scenarios most need to be able to catch.
+window.__mockClientCount = 0;
+window.supabase = { createClient: function () {
+  return (window.__mockClientCount++ === 0) ? window.__mock.client : window.__mock.secondaryClient();
+} };
 ${userLine}
 window.__mockReady = true;
 `;

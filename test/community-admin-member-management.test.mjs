@@ -51,10 +51,14 @@ test("admin_user_directory is a dashboard-only view with zero grants to any clie
 });
 
 test("cloud.js wires search, grant/revoke coach, and remove-member through the RPCs and the shared confirm dialog for the elevating/destructive ones", () => {
-  assert.match(cloudJs, /client\.rpc\("admin_search_members", \{ p_query: q \}\)/);
-  assert.match(cloudJs, /client\.rpc\("admin_grant_coach", \{ p_user_id: userId \}\)/);
-  assert.match(cloudJs, /client\.rpc\("admin_revoke_coach", \{ p_user_id: userId \}\)/);
-  assert.match(cloudJs, /client\.rpc\("admin_remove_member", \{ p_user_id: userId \}\)/);
+  // mgmtDb(), not client: these run as the MANAGEMENT account that signed
+  // into the panel, not as the member using the app (2026-09-15). On `client`
+  // they would run as a member who deliberately holds no admin power, and the
+  // server would refuse every one of them.
+  assert.match(cloudJs, /mgmtDb\(\)\.rpc\("admin_search_members", \{ p_query: q \}\)/);
+  assert.match(cloudJs, /mgmtDb\(\)\.rpc\("admin_grant_coach", \{ p_user_id: userId \}\)/);
+  assert.match(cloudJs, /mgmtDb\(\)\.rpc\("admin_revoke_coach", \{ p_user_id: userId \}\)/);
+  assert.match(cloudJs, /mgmtDb\(\)\.rpc\("admin_remove_member", \{ p_user_id: userId \}\)/);
   // REVERSED by the five-persona UX audit, defect 1. This test used to
   // assert the OPPOSITE of the line below - "revoking coach only ever lowers
   // privilege - it shouldn't need a confirm dialog" - and that reasoning is

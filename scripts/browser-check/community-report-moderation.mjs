@@ -14,7 +14,7 @@
 // dedicated coverage elsewhere and is not what this scenario is testing.
 import { chromium } from "playwright";
 import { resolveLocalOnlyTarget } from "./lib/target.mjs";
-import { switchTab, consoleErrorCollector, dismissWelcomeModal } from "./lib/actions.mjs";
+import { switchTab, consoleErrorCollector, dismissWelcomeModal, openManagementPanel } from "./lib/actions.mjs";
 import { installMockCloud } from "./lib/mockCloud.mjs";
 
 let failed = false;
@@ -91,7 +91,12 @@ await page.waitForFunction(() => !!document.querySelector(".subtabbar"), { timeo
 // --- Step 3: the moderator opens the queue and removes the content. ---
 // Redesign, Phase 1: moderation now lives on its own "ניהול" (Manage)
 // bottom-tab, Moderation sub-tab - relocated out of Community's Account tab.
-await switchTab(page, "tabManageBtn");
+// tabClubManageBtn, through the gate. Moderation is CLUB work and lives on
+// the club panel; tabManageBtn is the APP panel, which a head coach is
+// rightly refused. Both ask for a management login now - management is a
+// separate identity from the member signed in (2026-09-15) - and this
+// account's own credentials are the ones seeded above.
+await openManagementPanel(page, "tabClubManageBtn", "mod@members.haimuniya.invalid", "modpass123");
 await page.waitForSelector('[data-community-action="set-manage-tab"][data-tab="moderation"]', { timeout: 5000 });
 await page.click('[data-community-action="set-manage-tab"][data-tab="moderation"]');
 await page.waitForSelector('[data-community-action="mod-action"][data-decision="remove"]', { timeout: 5000 });

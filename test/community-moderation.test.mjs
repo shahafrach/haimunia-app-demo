@@ -121,7 +121,13 @@ const bodyText = (window) => window.document.body.textContent;
 test("no community staff gate reads is_admin or a role literal; every one goes through hasPerm()", () => {
   // The permission cache and helper exist.
   assert.match(src, /async function loadPermissions\(\)\s*\{[\s\S]*client\.rpc\("my_permissions"\)/);
-  assert.match(src, /function hasPerm\(code\)\s*\{\s*return[^\n]*state\.permissions/);
+  // hasPerm() has TWO subjects since management became a separate identity
+  // (2026-09-15): the signed-in member everywhere in the app, and the
+  // management account inside a management panel. Both sources are asserted,
+  // because dropping either one is a real defect - losing state.permissions
+  // would break every member gate, losing the management one would render
+  // every section of an unlocked panel as "no permission".
+  assert.match(src, /function hasPerm\(code\) \{[\s\S]{0,240}?state\.admin\.mgmt\.perms : state\.permissions/);
   // The queue, audit view and pin controls are permission-gated.
   assert.match(src, /function renderModeration\(\)\s*\{\s*if \(!\(hasPerm\(PERM\.COMMENT_MODERATE\) \|\| isAdmin\(\)\)\) return "";/);
   // Updated 2026-09-15. This asserted ANALYTICS_VIEW, which was correct while
@@ -174,8 +180,16 @@ test("a role that gains community.comment.moderate gains the queue, and loses it
   await mock.client.auth.signInWithPassword({ email: "mod@members.haimuniya.invalid", password: "pw123456" });
   window.document.getElementById("tabCommunityBtn").click();
   await gotoAccount(window);
-  assert.equal(window.document.getElementById("tabManageBtn"), null, "the Manage tab itself is gone once the permission is removed");
-  assert.doesNotMatch(bodyText(window), /תור מודרציה/, "the queue is gone again once the permission is removed");
+  // The ROW survives - it is a door, shown to everyone, because management is
+  // a separate identity and gating the row on the signed-in member would hide
+  // it from the very people it is for (2026-09-15). What must be gone is what
+  // is behind it: no queue, and a gate rather than a panel.
+  assert.doesNotMatch(bodyText(window), /תור מודרציה/, "the queue is gone once the permission is removed");
+  window.document.getElementById("tabManageBtn").click();
+  await waitFor(() => !!window.document.querySelector("#content .page-title"), 4000);
+  assert.ok(window.document.getElementById("panelUnlock"),
+    "and the panel is behind a management login, not open to a demoted account");
+  assert.doesNotMatch(bodyText(window), /תור מודרציה/, "still no queue behind the gate");
 });
 
 // ===== COMM-151 report flow ==========================================
@@ -319,8 +333,14 @@ test("the queue is not rendered for a member without the moderation permission",
   seedAdminStepUp(mock, "mod-1", "mod@members.haimuniya.invalid");
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openAccount(window);
-  assert.equal(window.document.getElementById("tabManageBtn"), null, "a plain member never gets the Manage tab at all");
-  assert.doesNotMatch(window.document.body.textContent, /תור מודרציה/);
+  assert.doesNotMatch(window.document.body.textContent, /תור מודרציה/, "a plain member never sees the queue");
+  // They can see the door - it is shown to everyone since management became a
+  // separate identity - but it opens onto a login, never onto the queue.
+  window.document.getElementById("tabManageBtn").click();
+  await waitFor(() => !!window.document.querySelector("#content .page-title"), 4000);
+  assert.ok(window.document.getElementById("panelUnlock"), "the panel is gated");
+  assert.doesNotMatch(window.document.body.textContent, /תור מודרציה/, "and the queue is not behind it either");
+  assert.equal(mock.callsTo("mod_queue").length, 0, "mod_queue is never called for a plain member");
 });
 
 // ===== COMM-153 queue actions =======================================
@@ -767,7 +787,11 @@ async function signInAsModerator(mock) {
   // helper could not satisfy - and as a bonus that value was 8 characters,
   // below the 10 the real app enforces, so it was never a realistic password
   // anyway. The shared constant keeps sign-in and re-auth in agreement.
-  mock.seedCredentials("mod-1", "mod@members.haimuniya.invalid", ADMIN_STEP_UP_PASSWORD);
+  // seedAdminStepUp rather than seedCredentials directly: the management
+  // gate is a SEPARATE account with its own address now (2026-09-15), and
+  // this registers both that address and the moderator's own against this
+  // user, so unlockAdminPanel() can open the panel afterwards.
+  seedAdminStepUp(mock, "mod-1", "mod@members.haimuniya.invalid");
   await mock.client.auth.signOut();
   const { error } = await mock.client.auth.signInWithPassword({ email: "mod@members.haimuniya.invalid", password: ADMIN_STEP_UP_PASSWORD });
   assert.equal(error, null, "the moderator session must be real - these tests are about what a signed-in moderator can do");

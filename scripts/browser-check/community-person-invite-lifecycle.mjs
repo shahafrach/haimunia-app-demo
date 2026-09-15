@@ -24,7 +24,7 @@
 // fresh, sign back in with a password.
 import { chromium } from "playwright";
 import { resolveLocalOnlyTarget } from "./lib/target.mjs";
-import { switchTab, consoleErrorCollector, dismissWelcomeModal, submitForm } from "./lib/actions.mjs";
+import { switchTab, consoleErrorCollector, dismissWelcomeModal, submitForm, openManagementPanel } from "./lib/actions.mjs";
 import { installMockCloud } from "./lib/mockCloud.mjs";
 
 let failed = false;
@@ -140,7 +140,12 @@ await page.waitForSelector(".subtabbar", { timeout: 5000 });
 // (Manage) bottom-tab, Invites sub-tab - relocated out of Community's
 // Account tab.
 async function openManageInvites() {
-  await switchTab(page, "tabManageBtn");
+  // tabClubManageBtn, and through the gate. Adding a member is CLUB work, so
+  // it lives on the club panel - and both panels ask for a management login
+  // now, because management is a separate identity from the member using the
+  // app (2026-09-15). This account holds is_admin, which clears the club
+  // panel's coach-rank bar.
+  await openManagementPanel(page, "tabClubManageBtn", ADMIN_EMAIL, ADMIN_PASSWORD);
   await page.waitForSelector('[data-community-action="set-manage-tab"][data-tab="invites"]', { timeout: 5000 });
   await page.click('[data-community-action="set-manage-tab"][data-tab="invites"]');
 }

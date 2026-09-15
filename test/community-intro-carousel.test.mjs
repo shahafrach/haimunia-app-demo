@@ -209,7 +209,11 @@ test("a plain member never sees the intro-carousel editor entry point", async ()
   const window = await bootCommunity(seededStaff(null, "member"), { syncEnabled: false });
   window.document.getElementById("tabCommunityBtn").click();
   await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
-  assert.ok(!window.document.getElementById("tabManageBtn"), "a plain member has no Manage tab at all");
+  // The door is shown to everyone since management became a separate
+  // identity - what a plain member must never get is what is behind it.
+  window.document.getElementById("tabManageBtn").click();
+  await waitFor(() => !!window.document.querySelector("#content .page-title"), 4000);
+  assert.ok(window.document.getElementById("panelUnlock"), "a plain member reaches a management login, not the editor");
 });
 
 test("a coach sees the intro-carousel editor beside the recurring-onboarding one, and saving a row writes via a direct update", async () => {

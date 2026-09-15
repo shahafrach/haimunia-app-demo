@@ -1467,6 +1467,62 @@ export function createMockSupabase(seedTables = {}) {
     // exercise signInWithPassword() without going through the full
     // anonymous->credentials upgrade flow first.
     seedCredentials(userId, email, password) { rows("__credentials").push({ userId, email, password }); },
+    // THE SECOND CLIENT (2026-09-15). cloud.js now creates a separate,
+    // memory-only Supabase client to hold the management session, so that
+    // signing into a management panel does not disturb the member session the
+    // app is training on - see makeMgmtClient() there.
+    //
+    // A test cannot prove that with one shared client: signing in on it would
+    // move `currentUser` and fire authCb, which is the exact regression the
+    // separation exists to prevent, and the assertion would pass while the
+    // app was broken. So this returns a genuinely independent client.
+    //
+    // What makes it independent, and what does not:
+    //   - Its own `secUser`. Nothing here ever assigns the outer currentUser
+    //     except transiently inside as(), so the member's session is
+    //     structurally untouchable from this object.
+    //   - It NEVER fires authCb. That mirrors the real thing exactly: a second
+    //     supabase-js client with its own storage key raises no auth event on
+    //     the first, which is precisely why the app's onAuthStateChange does
+    //     not reload the member's profile as the management account.
+    //   - Data is SHARED, deliberately - it is one database. Reads and writes
+    //     land in the same tables; only the identity differs.
+    //
+    // as() swaps the identity for the duration of a call. That is sound here
+    // because rpc() reads currentUser synchronously when it dispatches to a
+    // handler, and .from() chains carry no identity at all in this mock (they
+    // have no RLS simulation - the real boundary is Postgres, asserted in
+    // pgTAP). If a future stand-in ever defers its currentUser read past the
+    // synchronous call, this swap would stop covering it.
+    secondaryClient() {
+      let secUser = null;
+      const as = (fn) => {
+        const saved = currentUser;
+        currentUser = secUser;
+        try { return fn(); } finally { currentUser = saved; }
+      };
+      return {
+        __secondary: true,
+        get currentUser() { return secUser; },
+        auth: {
+          signInWithPassword: ({ email, password }) => {
+            const found = rows("__credentials").find((c) => c.email === email && c.password === password);
+            if (!found) return Promise.resolve({ data: null, error: { message: "invalid" } });
+            secUser = { id: found.userId, is_anonymous: false, email };
+            return Promise.resolve({ data: { user: secUser }, error: null });
+          },
+          signOut: () => { secUser = null; return Promise.resolve({ error: null }); },
+          getSession: () => Promise.resolve({ data: { session: secUser ? { user: secUser } : null }, error: null }),
+          onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }),
+        },
+        from: (table) => mock.client.from(table),
+        rpc: (name, args) => as(() => mock.client.rpc(name, args)),
+        functions: { invoke: (name, opts) => as(() => mock.client.functions.invoke(name, opts)) },
+        storage: mock.client.storage,
+        channel: (name) => mock.client.channel(name),
+        removeChannel: (ch) => mock.client.removeChannel(ch),
+      };
+    },
   };
   return mock;
 }

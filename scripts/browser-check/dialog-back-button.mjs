@@ -63,7 +63,7 @@ import { chromium } from "playwright";
 import { resolveLocalOnlyTarget } from "./lib/target.mjs";
 import {
   switchTab, dismissWelcomeModal, selectMovement, consoleErrorCollector,
-  clickOverlayBackdrop, readAppConfirm, resolveAppConfirm,
+  clickOverlayBackdrop, readAppConfirm, resolveAppConfirm, openManagementPanel,
 } from "./lib/actions.mjs";
 import { installMockCloud } from "./lib/mockCloud.mjs";
 
@@ -481,7 +481,13 @@ async function runCloudAdminDialogs(browser) {
   await page.goto(target.url, { waitUntil: "networkidle" });
   await page.waitForSelector("#app", { state: "visible", timeout: 10000 });
   await dismissWelcomeModal(page);
-  await switchTab(page, "tabManageBtn");
+  // The club panel asks for a management login (2026-09-15) - management is a
+  // separate identity from the member signed in - so this scenario has to
+  // register credentials for the head coach and go through the gate, the same
+  // way a person would. tabClubManageBtn, not tabManageBtn: moderation is
+  // club work, and the app panel would refuse a head coach.
+  await page.evaluate(() => window.__mock.seedCredentials("mod-1", "mod@members.haimuniya.invalid", "Aa123456789!"));
+  await openManagementPanel(page, "tabClubManageBtn", "mod@members.haimuniya.invalid", "Aa123456789!");
   await page.click('[data-community-action="set-manage-tab"][data-tab="moderation"]');
   await page.waitForSelector('[data-community-action="mod-action"]', { timeout: 5000 });
 

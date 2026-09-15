@@ -142,10 +142,21 @@ test("club feature state resets on sign-out so the next member's fresh load isn'
   await openAccountTab(window);
   await waitFor(() => !!window.document.querySelector('[data-community-action="sign-out"]'), 3000);
   window.document.querySelector('[data-community-action="sign-out"]').click();
-  // Redesign, Phase 1: signing out also clears isStaff(), so the whole
-  // Manage tab (and everything in it, including this panel) becomes
-  // unreachable - a stronger proof of the same reset than before.
+  // Signing out tears down the management session with the member's
+  // (mgmtTeardown(), 2026-09-15), so the panel re-locks and the toggles it
+  // had loaded are gone. The nav row itself survives - it is a door shown to
+  // everyone - so the reset is proved by what is behind it, not by its
+  // absence: no feature toggles anywhere, and a login standing in front of
+  // the panel that used to render them.
+  await waitFor(() => !window.document.querySelector("[data-club-feature]"), 3000);
+  // Signing out tears down the management session with the member's
+  // (mgmtTeardown(), 2026-09-15), and takes the management rows with it: they
+  // are shown to everyone WITH a community session on this device, and after
+  // a sign-out there is none. So the reset is proved twice over - the toggles
+  // are gone, and there is no longer a door to go looking behind.
   await waitFor(() => !window.document.getElementById("tabManageBtn"), 3000);
+  assert.equal(window.document.getElementById("tabClubManageBtn"), null,
+    "and the club door goes with it - no community session, no management rows");
 });
 
 // ===== Redesign, Phase 2: pill-level gating, not just content-level =======

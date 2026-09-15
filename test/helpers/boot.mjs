@@ -123,7 +123,15 @@ export async function bootCommunity(mock, opts = {}) {
     // Push API needs a real (if fake) key here for vapidKeyToUint8Array to
     // decode, matching what a real browser is handed.
     notifPushVapidPublicKey: "BD16mHSAcS-jU5cV2xEqkNy09hCQ7MTjkY22CK8UrRw1JpI_5kjReL7tME6O4BFmQhuiaOVCWQ-nqsnoa1_0nAo" };
-  window.supabase = { createClient: () => mock.client };
+  // FIRST call gets the member client; every later one gets an independent
+  // secondary. cloud.js creates exactly one extra client, lazily, when a
+  // management panel is unlocked (makeMgmtClient()), so the ordering here is
+  // not a guess about call counts - it is the only shape the app produces.
+  // Handing out mock.client both times would have let the management sign-in
+  // silently take over the member's session inside the mock, which is the one
+  // thing these tests most need to be able to catch.
+  let madeClients = 0;
+  window.supabase = { createClient: () => (madeClients++ === 0 ? mock.client : mock.secondaryClient()) };
   // Redesign, Phase 3: default every test to "already saw the first-run
   // intro carousel" - unlike syncEnabled/coachEngage below, cloud.js reads
   // this on every render (hasSeenIntroCarousel()), not just at module init,
@@ -234,18 +242,40 @@ export function waitFor(check, timeoutMs = 2000, intervalMs = 5) {
 // submit. Returns quietly if no gate is present, so a caller that lands on a
 // club surface (which has no lock) needs no branch.
 export const ADMIN_STEP_UP_PASSWORD = "Aa123456789!";
+// The management account's address. A fixed, obviously-fake value: the real
+// one lives only in Supabase Auth and must never appear in this repo, which
+// GitHub Pages serves in full to anyone who asks.
+export const ADMIN_STEP_UP_EMAIL = "manage@example.test";
 export function seedAdminStepUp(mock, userId, email) {
   if (mock && typeof mock.seedCredentials === "function") {
-    mock.seedCredentials(userId, email, ADMIN_STEP_UP_PASSWORD);
+    // Two addresses, one account. The caller's own (usually the member's
+    // synthetic @members.haimuniya.invalid address) is registered because
+    // some tests sign in with it directly; ADMIN_STEP_UP_EMAIL is registered
+    // as well so unlockAdminPanel() can open the gate with no argument.
+    //
+    // That both resolve to the same user is a property of the FIXTURE, not of
+    // the app: here the member and the management account happen to be one
+    // person, which keeps the ~150 existing panel tests reading as they did.
+    // The app itself never assumes it - the separation is asserted directly
+    // in admin-panel-step-up-lock.test.mjs, where they are different accounts.
+    if (email) mock.seedCredentials(userId, email, ADMIN_STEP_UP_PASSWORD);
+    mock.seedCredentials(userId, ADMIN_STEP_UP_EMAIL, ADMIN_STEP_UP_PASSWORD);
   }
   return mock;
 }
-export async function unlockAdminPanel(window) {
-  // Both management panels are locked now (2026-09-15) and share one form id;
-  // the panel it belongs to is in data-panel. Callers do not need to care -
-  // this submits whichever gate is on screen.
+export async function unlockAdminPanel(window, email) {
+  // Both management panels are locked (2026-09-15) and share one form id; the
+  // panel it belongs to is in data-panel. Callers do not need to care - this
+  // submits whichever gate is on screen.
+  //
+  // The gate asks for an EMAIL as well as a password, because management is a
+  // separate identity from the member using the app - it is not a re-check of
+  // whoever is signed in. Defaults to ADMIN_STEP_UP_EMAIL, the address
+  // seedAdminStepUp() registers by default; pass one explicitly to model a
+  // different management account, or a wrong one.
   const form = window.document.getElementById("panelUnlock");
-  if (!form) return false; // not the admin panel, or already unlocked
+  if (!form) return false; // not a management panel, or already unlocked
+  form.elements.email.value = email || ADMIN_STEP_UP_EMAIL;
   form.elements.password.value = ADMIN_STEP_UP_PASSWORD;
   form.dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
   await waitFor(() => !window.document.getElementById("panelUnlock"), 4000);
