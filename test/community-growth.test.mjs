@@ -4,6 +4,8 @@ import fs from "node:fs";
 
 const sql = fs.readFileSync(new URL("../supabase/migrations/202608270001_community_growth.sql", import.meta.url), "utf8");
 const lockdownSql = fs.readFileSync(new URL("../supabase/migrations/202608270002_lock_anon_defaults.sql", import.meta.url), "utf8");
+const expandSql = fs.readFileSync(new URL("../supabase/migrations/202609080005_community_streaks_function_expand.sql", import.meta.url), "utf8");
+const contractSql = fs.readFileSync(new URL("../supabase/migrations/202609150001_community_streaks_view_contract.sql", import.meta.url), "utf8");
 
 test("reactions policies now gate on post_visible_to_viewer, not just row existence", () => {
   assert.match(sql, /create policy reactions_visible on public\.reactions for select to authenticated using \(public\.post_visible_to_viewer\(post_id\)\)/i);
@@ -28,11 +30,40 @@ test("activity_pings is RLS-enabled and self-scoped only, never widened to authe
   assert.match(sql, /create policy activity_pings_self_insert on public\.activity_pings for insert to authenticated with check \(user_id = auth\.uid\(\)\)/i);
 });
 
-test("community_streaks is not security_invoker, so it can aggregate across everyone's private activity_pings rows", () => {
+// 202608270001's view is HISTORY as of 202609150001 — it was dropped to close
+// the Supabase Security Advisor's "Security Definer View" finding. This
+// assertion is kept because it is a true statement about the text of a
+// migration that is immutable by policy, and because the property it pins is
+// the reason the replacement had to be a definer FUNCTION rather than a
+// `security_invoker = true` view: activity_pings' only policy is
+// `user_id = auth.uid()`, so invoker semantics would have silently zeroed
+// every member's streak but the caller's own, on a surface where 0 is a
+// legitimate value and the breakage would not have looked like breakage.
+test("the original community_streaks view was not security_invoker, which is why it could aggregate across everyone's private activity_pings rows", () => {
   const viewStart = sql.indexOf("create or replace view public.community_streaks");
   assert.ok(viewStart > -1);
   const viewBlock = sql.slice(viewStart, sql.indexOf("grant select on public.community_streaks"));
   assert.ok(!/security_invoker/i.test(viewBlock), "this view must run with definer rights to see every user's streak, not just the caller's own");
+});
+
+// The pair that keeps the Advisor finding closed. Static text assertions
+// only — supabase/tests/0068 and 0093 are where the live-Postgres proof
+// lives (the view is gone, the function is still definer, and every privacy
+// boundary the view enforced is re-asserted through the function).
+test("the expand/contract pair replaced that view with a SECURITY DEFINER function and then actually dropped the view", () => {
+  assert.match(expandSql, /create or replace function public\.community_streaks\(p_limit int default 50\)/i);
+  assert.match(expandSql, /language plpgsql stable security definer set search_path = ''/i);
+  assert.match(expandSql, /revoke all on function public\.community_streaks\(int\) from public, anon/i);
+  assert.match(expandSql, /grant execute on function public\.community_streaks\(int\) to authenticated/i);
+
+  assert.match(contractSql, /drop view if exists public\.community_streaks/i);
+  // The contract migration must not resurrect what it just dropped — a
+  // re-created view is a reopened Advisor finding.
+  assert.ok(!/create (or replace )?view public\.community_streaks/i.test(contractSql),
+    "the contract migration must not re-create the view it exists to drop");
+  // And it re-stamps the function comment so the expand-phase promise
+  // ("the view is deliberately left in place") does not outlive the view.
+  assert.match(contractSql, /CONTRACT phase complete \(202609150001\)/);
 });
 
 test("coach_inactive_members self-gates to admins and is locked away from anon", () => {

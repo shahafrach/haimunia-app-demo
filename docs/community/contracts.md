@@ -7966,6 +7966,14 @@ fixable in the schema:
    local per-member data. A challenge set on coach A's custom WOD looks
    broken to coach B and invalid to every member. The database cannot help
    with this — a shared challenge needs a shared catalog.
+   **Closed 2026-09-07 by `fbf5a43`, confirmed still closed 2026-09-15.** The
+   fix was not a shared catalog for custom WODs but removing the ability to
+   name one: `challengeKeyChoices()` skips `category === "Custom"` for
+   movements and WODs alike, the field became a `<select>` over that list, and
+   `setWeeklyChallenge()` re-checks membership of the same list so the DOM
+   cannot be edited around it. Published club programming is the shared-catalog
+   half, and `202609060028` already covers it.
+   `test/community-weekly-challenge.test.mjs` is the regression test.
 
 ## The feed writes itself: club WOD sessions and boards (202609080001–202609080002)
 

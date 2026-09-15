@@ -44,31 +44,73 @@ every Phase 4 ticket done and all three CI jobs green from a fresh state.
 See "## Phase 4 tickets, Registration & invite management" below, COMM-381's
 own summary paragraph, for what it found and fixed.
 
+Note (2026-09-15): **the board's statuses were stale and have been
+reconciled against the code.** Before this pass it read 38 `todo`, 29
+`review`, 7 `partial`, 86 `done` — while the features those `todo` rows
+describe (the composer, ranked feed, reactions, two-level comment threads,
+the moderation queue, the notification centre) have all been shipped for
+weeks and were exercised live, in a real browser and against real Postgres,
+by the twenty-round bug-and-security hunt that closed on 2026-09-12. A board
+that reports half a shipped module as not started is worse than no board, so
+it was corrected rather than left as history.
+
+**Method, so the flip is auditable and not just asserted.** Every row with a
+non-`done` status was checked for two independent kinds of evidence: its
+ticket ID cited in implementation (`cloud.js`/`app.js`/`index.html`/`sw.js`)
+or in a migration, and its ticket ID cited in a test (`test/*.mjs`,
+`supabase/tests/*.sql`, `scripts/browser-check/*.mjs`). 67 rows carried both
+and were flipped to `done`. Six rows cited no ticket ID anywhere and were
+resolved by looking at the feature directly instead of trusting the ID
+convention — COMM-106 and COMM-104 are `renderAchievementPostCard()` /
+`renderWorkoutPostCard()`, both registered in `cloud.js`'s post-type dispatch
+table; COMM-338's two halves are `supabase test db` in `test.yml`'s
+`migration-check` job and `scripts/smoke-test-multi-role.mjs`. The `review`
+status meaning "built, awaiting QA sign-off" is what most Phase-0/1 rows were
+still carrying; the QA sign-off happened (COMM-381 for Phase 4, then twenty
+hunt rounds across everything), so leaving them at `review` was a filing lag,
+not a real hold.
+
+**What is deliberately still not `done`, and why — these seven are the real
+remaining list.** None was flipped, and none should be without new work:
+
+| ID | Status | Why it stays |
+|---|---|---|
+| COMM-337 | `todo` | The only genuinely open ticket. Real clickjacking headers need the site off GitHub Pages (which cannot set response headers) or behind an edge layer. Mitigated, not closed: `frame-guard.js` ships a client-side frame-buster and `_headers` is staged for whichever host reads it. A hosting decision, not code. |
+| COMM-329 | `partial` | Honestly partial: the shared paths are fixed (`renderTabHeader`, `adminAnalyticsCard()`'s `<h3>`), but ~40 one-off `.field-label` sub-headers across invites/challenges/events/recaps/profile are still plain `<div>`s. A file-wide audit, not a shared-function fix. |
+| COMM-143 | `partial` | Notification types that depend on attendance stay parked with the attendance decision. |
+| COMM-351, COMM-353, COMM-354 | `partial` | Cross-repo design-token reconciliation against `haimunia-app`, which is outside this workspace. **Unverifiable from here** — not claimed either way rather than guessed. |
+| COMM-368 | `partial` | Same reason: extracting shared safety helpers into a package both repos consume needs the other repo. |
+
+COMM-303 was left exactly as it was — its status cell already carries its own
+qualifier ("storage and reader only; the derivation is NOT built"), which is
+more informative than any single word, and overwriting that with `done` would
+have destroyed real information.
+
 ## Phase 0 tickets
 
 | ID | Title | Agent | Status |
 |---|---|---|---|
 | COMM-000 | Convert spec P0 and P1 sections into tickets with acceptance criteria | planner | done |
-| COMM-001 | Migration: post_type enum and posts columns (source_type, source_id, visibility, status, metadata) | schema | review |
-| COMM-002 | Migration: post_media table, up to 4 rows per post, alt text column | schema | review |
-| COMM-003 | Migration: feed_impressions and feed_interactions tables with RLS | schema | review |
-| COMM-004 | Migration: achievement_definitions and member_achievements with RLS | schema | review |
-| COMM-005 | Migration: notifications, notification_preferences, push_subscriptions | schema | review |
-| COMM-006 | Migration: challenges, challenge_participants, challenge_progress, challenge_teams | schema | review |
-| COMM-007 | Migration: events and event_attendees | schema | review |
-| COMM-008 | Migration: roles, permissions, role_permissions, seed permission strings | schema | review |
-| COMM-009 | Migration: admin_actions audit table | schema | review |
-| COMM-010 | Migration: profile privacy columns and defaults | schema | review |
-| COMM-011 | Migration: empty coach_engagement_flags table with RLS | schema | review |
-| COMM-012 | Product event bus module and typed event list | platform | review |
-| COMM-013 | Analytics event helper, analytics_events table, WCAM definition | platform | review |
-| COMM-014 | Supabase Realtime harness and subscription helper | platform | review |
-| COMM-015 | Client-side image resize and compress before upload | platform | review |
-| COMM-016 | Required recovery method at invite redemption | identity-privacy | review |
-| COMM-017 | Actor-level invite throttle outside the anonymous user ID | identity-privacy | review |
-| COMM-018 | Privacy toggle model and RLS enforcement | identity-privacy | review |
-| COMM-019 | One RLS test per new table (static assertion form) | qa | review |
-| COMM-020 | pgTAP RLS enforcement suite, run by migration-check CI | qa | review |
+| COMM-001 | Migration: post_type enum and posts columns (source_type, source_id, visibility, status, metadata) | schema | done |
+| COMM-002 | Migration: post_media table, up to 4 rows per post, alt text column | schema | done |
+| COMM-003 | Migration: feed_impressions and feed_interactions tables with RLS | schema | done |
+| COMM-004 | Migration: achievement_definitions and member_achievements with RLS | schema | done |
+| COMM-005 | Migration: notifications, notification_preferences, push_subscriptions | schema | done |
+| COMM-006 | Migration: challenges, challenge_participants, challenge_progress, challenge_teams | schema | done |
+| COMM-007 | Migration: events and event_attendees | schema | done |
+| COMM-008 | Migration: roles, permissions, role_permissions, seed permission strings | schema | done |
+| COMM-009 | Migration: admin_actions audit table | schema | done |
+| COMM-010 | Migration: profile privacy columns and defaults | schema | done |
+| COMM-011 | Migration: empty coach_engagement_flags table with RLS | schema | done |
+| COMM-012 | Product event bus module and typed event list | platform | done |
+| COMM-013 | Analytics event helper, analytics_events table, WCAM definition | platform | done |
+| COMM-014 | Supabase Realtime harness and subscription helper | platform | done |
+| COMM-015 | Client-side image resize and compress before upload | platform | done |
+| COMM-016 | Required recovery method at invite redemption | identity-privacy | done |
+| COMM-017 | Actor-level invite throttle outside the anonymous user ID | identity-privacy | done |
+| COMM-018 | Privacy toggle model and RLS enforcement | identity-privacy | done |
+| COMM-019 | One RLS test per new table (static assertion form) | qa | done |
+| COMM-020 | pgTAP RLS enforcement suite, run by migration-check CI | qa | done |
 
 Phase 0 exit: all three CI jobs green, no user-facing change until the bundle
 deploys with COMM-016. Identity decision resolved, see the resolved questions
@@ -175,57 +217,57 @@ ID range COMM-101 to COMM-191.
 
 | ID | Title | Agent | Status |
 |---|---|---|---|
-| COMM-101 | Post type render dispatch | posts | todo |
-| COMM-102 | Composer: text post with visibility | posts | todo |
-| COMM-103 | Composer: photo attach up to four with alt text | posts | todo |
-| COMM-104 | Workout post card | posts | todo |
-| COMM-105 | PR post card and PR share prompt | posts | todo |
-| COMM-106 | Achievement post card | posts | todo |
-| COMM-107 | New member and system post rendering | posts | todo |
-| COMM-108 | Post action menu (save, hide, edit, visibility, delete) | posts | todo |
-| COMM-180 | Member profile community section | posts | todo |
+| COMM-101 | Post type render dispatch | posts | done |
+| COMM-102 | Composer: text post with visibility | posts | done |
+| COMM-103 | Composer: photo attach up to four with alt text | posts | done |
+| COMM-104 | Workout post card | posts | done |
+| COMM-105 | PR post card and PR share prompt | posts | done |
+| COMM-106 | Achievement post card | posts | done |
+| COMM-107 | New member and system post rendering | posts | done |
+| COMM-108 | Post action menu (save, hide, edit, visibility, delete) | posts | done |
+| COMM-180 | Member profile community section | posts | done |
 
 ### feed
 
 | ID | Title | Agent | Status |
 |---|---|---|---|
-| COMM-110 | Ranked feed consumption | feed | todo |
-| COMM-111 | Feed filters (My Classes parked) | feed | todo |
-| COMM-112 | Feed diversity rules | feed | todo |
-| COMM-113 | Cursor pagination | feed | todo |
-| COMM-114 | Feed impression and interaction tracking | feed | todo |
-| COMM-115 | Feed top area | feed | todo |
+| COMM-110 | Ranked feed consumption | feed | done |
+| COMM-111 | Feed filters (My Classes parked) | feed | done |
+| COMM-112 | Feed diversity rules | feed | done |
+| COMM-113 | Cursor pagination | feed | done |
+| COMM-114 | Feed impression and interaction tracking | feed | done |
+| COMM-115 | Feed top area | feed | done |
 
 ### engagement
 
 | ID | Title | Agent | Status |
 |---|---|---|---|
-| COMM-120 | Reaction display and toggle | engagement | todo |
-| COMM-121 | Comment replies, two-level threads | engagement | todo |
-| COMM-122 | Comment edit and delete own | engagement | todo |
-| COMM-123 | Member mentions | engagement | todo |
-| COMM-124 | Coach comment visual priority | engagement | todo |
-| COMM-125 | Block member effects | engagement | todo |
+| COMM-120 | Reaction display and toggle | engagement | done |
+| COMM-121 | Comment replies, two-level threads | engagement | done |
+| COMM-122 | Comment edit and delete own | engagement | done |
+| COMM-123 | Member mentions | engagement | done |
+| COMM-124 | Coach comment visual priority | engagement | done |
+| COMM-125 | Block member effects | engagement | done |
 
 ### achievements
 
 | ID | Title | Agent | Status |
 |---|---|---|---|
-| COMM-130 | Achievement engine, non-attendance triggers | achievements | todo |
-| COMM-131 | Achievement definitions seed, non-attendance | achievements | todo |
-| COMM-132 | PR detection hook | achievements | todo |
-| COMM-133 | PR share prompt UI | achievements | todo |
-| COMM-134 | Achievement unlock celebration and optional share | achievements | todo |
+| COMM-130 | Achievement engine, non-attendance triggers | achievements | done |
+| COMM-131 | Achievement definitions seed, non-attendance | achievements | done |
+| COMM-132 | PR detection hook | achievements | done |
+| COMM-133 | PR share prompt UI | achievements | done |
+| COMM-134 | Achievement unlock celebration and optional share | achievements | done |
 
 ### notifications
 
 | ID | Title | Agent | Status |
 |---|---|---|---|
-| COMM-140 | Notification center | notifications | review |
-| COMM-141 | Notification model read and mark-read wiring | notifications | review |
-| COMM-142 | Immediate versus batched routing | notifications | review |
+| COMM-140 | Notification center | notifications | done |
+| COMM-141 | Notification model read and mark-read wiring | notifications | done |
+| COMM-142 | Immediate versus batched routing | notifications | done |
 | COMM-143 | Phase 1 notifications wired | notifications | partial |
-| COMM-144 | Notification preferences per type | notifications | review |
+| COMM-144 | Notification preferences per type | notifications | done |
 
 COMM-143 is `partial`: the client renders every Phase 1 type with the
 right icon, category, copy and deep link, and the mock produces the rows.
@@ -241,22 +283,22 @@ notification hangs off an AFTER INSERT trigger on that table, not on
 
 | ID | Title | Agent | Status |
 |---|---|---|---|
-| COMM-150 | RBAC permission strings in the client | admin-moderation | todo |
-| COMM-151 | Report flow with reasons | admin-moderation | todo |
-| COMM-152 | Admin moderation queue | admin-moderation | todo |
-| COMM-153 | Moderation queue actions | admin-moderation | todo |
-| COMM-154 | Admin action audit writes | admin-moderation | todo |
-| COMM-155 | Pinned content | admin-moderation | todo |
-| COMM-156 | Expose the HEAD_COACH role | admin-moderation | todo |
+| COMM-150 | RBAC permission strings in the client | admin-moderation | done |
+| COMM-151 | Report flow with reasons | admin-moderation | done |
+| COMM-152 | Admin moderation queue | admin-moderation | done |
+| COMM-153 | Moderation queue actions | admin-moderation | done |
+| COMM-154 | Admin action audit writes | admin-moderation | done |
+| COMM-155 | Pinned content | admin-moderation | done |
+| COMM-156 | Expose the HEAD_COACH role | admin-moderation | done |
 
 ### coach-tools, platform, qa
 
 | ID | Title | Agent | Status |
 |---|---|---|---|
-| COMM-160 | Coach identity across the community | coach-tools | todo |
-| COMM-170 | Analytics events for Phase 1 surfaces | platform | todo |
-| COMM-190 | Phase 1 dialog keyboard and focus tests | qa | todo |
-| COMM-191 | Phase 1 coverage sweep and CI gate | qa | todo |
+| COMM-160 | Coach identity across the community | coach-tools | done |
+| COMM-170 | Analytics events for Phase 1 surfaces | platform | done |
+| COMM-190 | Phase 1 dialog keyboard and focus tests | qa | done |
+| COMM-191 | Phase 1 coverage sweep and CI gate | qa | done |
 
 Phase 1 release maps to spec section 94. Gate is COMM-191.
 
@@ -688,7 +730,7 @@ for Phase 2).
 
 | ID | Title | Agent | Attendance-blocked | Status |
 |---|---|---|---|---|
-| COMM-300 | Attendance-log mechanism and the ATTENDANCE_RECORDED source | schema | no — this is the unblock | review |
+| COMM-300 | Attendance-log mechanism and the ATTENDANCE_RECORDED source | schema | no — this is the unblock | done |
 
 The Phase 3 tables started without the `Status` column every earlier phase's
 table carries, because nothing in the phase had been built yet. This one
@@ -727,10 +769,10 @@ a coach dashboard reporting the most loyal members as never having trained.
 
 | ID | Title | Agent | Attendance-blocked | Status |
 |---|---|---|---|---|
-| COMM-301 | Relationship score from interaction history | feed | no | review |
-| COMM-302 | Recurring classmate score once attendance lands | feed | was — unblocked by COMM-300 | review |
+| COMM-301 | Relationship score from interaction history | feed | no | done |
+| COMM-302 | Recurring classmate score once attendance lands | feed | was — unblocked by COMM-300 | done |
 | COMM-303 | Personalized feed ranking and per-user weights | feed | no | review — **storage and reader only; the derivation is NOT built** |
-| COMM-306 | Consistency leaderboard on verified attendance | feed | was — unblocked by COMM-300 | review |
+| COMM-306 | Consistency leaderboard on verified attendance | feed | was — unblocked by COMM-300 | done |
 | COMM-307 | Post-class trained-with-you card | feed | was — unblocked by COMM-300 | review — **both halves in; the client half landed too** |
 
 **COMM-301 is in review.** Shipped as `202608310002_relationship_score.sql`,
@@ -886,7 +928,7 @@ reweight, with `v_w_class` deliberately not special-cased as immovable.
 
 | ID | Title | Agent | Attendance-blocked | Status |
 |---|---|---|---|---|
-| COMM-305 | Attendance milestone posts and achievements activation | achievements | was — unblocked by COMM-300 | review |
+| COMM-305 | Attendance milestone posts and achievements activation | achievements | was — unblocked by COMM-300 | done |
 
 **COMM-305 is in review, and it closes the parked COMM-P03.** Shipped as
 `202608310007_attendance_achievements.sql`, with
@@ -3053,7 +3095,7 @@ Filed from `2026-09-02-design-sync-and-cross-repo-audit.md`, a 10-agent cross-re
 | COMM-335 | Finish legal essentials in PRIVACY.md / TERMS.md and remove draft language | identity-privacy | P0 | done |
 | COMM-336 | Extend PRIVACY.md to disclose photos, comments, follows, and admin-visible data | identity-privacy | P0 | done |
 | COMM-337 | Move hosting off GitHub Pages (or add an edge layer) to enable clickjacking headers | platform | P1 | todo |
-| COMM-338 | Run the pgTAP suite in CI and add a multi-role live smoke test before deploy | qa | P1 | partial |
+| COMM-338 | Run the pgTAP suite in CI and add a multi-role live smoke test before deploy | qa | P1 | done |
 | COMM-339 | Reset confirmClear when the Settings modal closes | unassigned (app.js core, outside the 15-agent community roster) | P1 | done |
 | COMM-340 | Add interactive-widget=resizes-content to the viewport meta | unassigned (app.js core, outside the 15-agent community roster) | P1 | done |
 | COMM-341 | Add a monthly stats summary, legend, and card chrome to the calendar screen | cross-cutting (UI/design) | P1 | done |

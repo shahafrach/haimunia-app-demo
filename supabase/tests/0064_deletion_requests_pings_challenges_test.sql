@@ -273,21 +273,25 @@ select results_eq(
 -- =====================================================================
 -- 6. activity_pings - the two deliberate ways across that boundary
 -- =====================================================================
--- community_streaks is deliberately NOT security_invoker: it runs with the
+-- community_streaks is deliberately SECURITY DEFINER: it runs with the
 -- migration owner's rights so it can aggregate every member's rows, and
--- re-applies the block/soft-delete checks by hand.
+-- re-applies the block/soft-delete checks by hand. It was a definer VIEW when
+-- this file was written and is a definer FUNCTION now (202609080005 expand,
+-- 202609150001 contract, which dropped the view to close the Security
+-- Advisor's security_definer_view finding). Same query, same boundary - only
+-- the call syntax below changed.
 select tests.set_auth(tests.uid('m1'));
 select results_eq(
-  $$ select current_streak from public.community_streaks where user_id = tests.uid('m2') $$,
+  $$ select current_streak from public.community_streaks(100) where user_id = tests.uid('m2') $$,
   $$ values (3) $$,
-  'the aggregate DOES cross the boundary: a member sees another member''s streak length through community_streaks, though the three raw dates behind it stayed hidden two blocks up');
+  'the aggregate DOES cross the boundary: a member sees another member''s streak length through community_streaks(), though the three raw dates behind it stayed hidden two blocks up');
 
 select tests.clear_auth();
 insert into public.blocks (blocker_id, blocked_id) values (tests.uid('m1'), tests.uid('m2'));
 select tests.set_auth(tests.uid('m1'));
 select is_empty(
-  $$ select user_id from public.community_streaks where user_id = tests.uid('m2') $$,
-  'and the definer view still honours blocks, which it has to check explicitly because definer mode bypasses the RLS that would otherwise do it');
+  $$ select user_id from public.community_streaks(100) where user_id = tests.uid('m2') $$,
+  'and the definer function still honours blocks, which it has to check explicitly because definer mode bypasses the RLS that would otherwise do it');
 select tests.clear_auth();
 delete from public.blocks where blocker_id = tests.uid('m1') and blocked_id = tests.uid('m2');
 

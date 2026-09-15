@@ -64,65 +64,66 @@ Supabase dashboard → **Authentication → Providers/Settings** for project
   a deliberate decision (`cloud-config.js:51-59`), not something to "fix"
   unless you're reversing that call.
 
-### 4. Confirm the two Vault-gated cron jobs (~5 minutes)
+### 4. ~~Confirm the two Vault-gated cron jobs~~ — **CLOSED 2026-09-08, nothing to do**
 
-**Do not check whether the two secret *names* exist** —
-`202609050005_scheduled_jobs.sql:170-181` creates both, with committed
-placeholder values, on every stack including a fresh local one, so their
-mere presence proves nothing. Check the *values* against the exact
-placeholders `cron_invoke_edge_function()` itself checks for
-(`:206-210`):
+**Resolved and verified — do not spend time on this row.** This section is
+kept (rather than deleted) because it names the three *wrong* ways to check
+this, each of which was tried and each of which silently reported success,
+and that reasoning is worth preserving. But the item itself is closed:
+`cron_invoke_edge_function('purge_abandoned_profiles')` returned **200**,
+recorded as `net._http_response` ids 14 and 15 at 10:20:44 and 10:21:09 UTC
+on 2026-09-08. That is the entire chain observed end to end rather than
+inferred from a proxy: the request left the database, resolved the host,
+passed the gateway, passed the Edge Function's *own* authorization check,
+and ran. `REMEDIATION_STATUS.md`'s VAULT-1 row is the authoritative record.
 
-```sql
-select name,
-       decrypted_secret not like '%PROJECT-REF-NOT-SET%' as base_url_set,
-       decrypted_secret <> 'SERVICE-ROLE-KEY-NOT-SET'    as key_set
-from vault.decrypted_secrets
-where name in ('edge_functions_base_url', 'edge_functions_service_role_key');
-```
+Corrected here on 2026-09-15: this section and `LAUNCH_CHECKLIST.md` row 19
+both still read `NOT VERIFIED` / "confirmed broken" for a week after that
+200 was observed, which sent a reader chasing a closed item. The earlier
+text claiming the service-role key is **invalid** (on the strength of a 401)
+is also wrong twice over and is retracted: the key works, and per
+`purge_abandoned_profiles/index.ts:122` a 401 from this path does not even
+prove the gateway rejected the token — the function timing-safe-compares the
+Authorization header against the service-role key itself, so the gateway can
+accept a valid key and the function still refuse it as the wrong one.
 
-Both columns must read `true` for the jobs to actually fire — one row with
-either column `false` means the gate is still refusing, silently, by
-design (a `NOTICE`, not an error).
+**Three closure attempts that each looked like proof and were not** — worth
+keeping, because the same traps apply to any Vault-gated job added later:
 
-**Update, 2026-09-08 evening — this is now confirmed broken, not just
-unverified, for two separate reasons:** (1) the service-role key in Vault
-has been proven **invalid** (a real `cron_invoke_edge_function()` call to a
-genuinely-deployed function returned 401), and (2) two of the three Edge
-Functions **had never been deployed at all** until roughly an hour before
-this was discovered — the nightly purge had been POSTing to a 404 for
-weeks, a more basic failure than the Vault-value question. `main` now has
-`scripts/check-edge-functions-deployed.mjs` as a hard CI gate plus a
-`deploy-edge-functions.yml` workflow to stop this recurring — not
-independently verified by this audit. **Action for whoever has production
-access: fix the service-role key in Vault (rotate/re-set it correctly),
-then confirm via the check below.**
+1. *Checking the secret names exist.* Useless:
+   `202609050005_scheduled_jobs.sql:170-181` creates both names, with
+   committed placeholder values, on every stack including a fresh local one.
+2. *Checking `scheduled_job_health()`.* Useless for this specific failure:
+   the gate inside `cron_invoke_edge_function()` refuses with `raise notice`,
+   not an exception, so the cron run records `succeeded` either way.
+3. *Reading a 404 as "the transport works".* Useless: Supabase's gateway
+   routes before it authorizes, so a wrong key against a deliberately
+   non-existent slug 404s exactly like a right one.
 
-Even a correct-looking value only proves it was *changed*, not that a
-request has actually gone out. The decisive, no-guessing check: after the
-next scheduled run (`purge-abandoned-profiles` fires daily at 03:31 UTC),
+The two genuine failures found underneath all that, both since fixed: the
+service-role key needed re-setting, and **two of the three Edge Functions had
+never been deployed at all** — the nightly purge had been POSTing to a 404
+for weeks. `main` now carries `scripts/check-edge-functions-deployed.mjs` as
+a hard CI gate plus a `deploy-edge-functions.yml` workflow so that cannot
+recur silently.
+
+**Still useful as ongoing monitoring** (not as a launch gate) — after any
+scheduled run, `purge-abandoned-profiles` daily at 03:31 UTC and
+`recap-weekly` Mondays 05:11 UTC:
 
 ```sql
 select * from net._http_response order by created desc limit 20;
+
+select * from cron.job_run_details
+where jobid in (select jobid from cron.job
+                where jobname in ('recap-weekly','purge-abandoned-profiles'))
+order by start_time desc limit 5;
 ```
 
-A row here means the secrets are real and the transport works. Still
-empty after a scheduled run has passed means the gate is refusing —
-treat that as VAULT-1 still open, regardless of what the query above
-reported.
-
-- If confirmed live: `recap-weekly` and `purge-abandoned-profiles` are
-  actually running, not just scheduled. Also confirm via
-  `select * from cron.job_run_details where jobid in (select jobid from cron.job where jobname in ('recap-weekly','purge-abandoned-profiles')) order by start_time desc limit 5;`.
-- If not live: these two jobs currently report `succeeded` while doing
-  nothing (`docs/ops/MONITORING.md` §4 explains why — the cron job's SQL
-  genuinely succeeds even when the gate inside it refuses). This does
-  **not** block launch — recaps are a nice-to-have and the ghost-account
-  sweep is a quota nuisance, not a data risk — but decide and document
-  which state you're actually in, rather than leaving it ambiguous. If you
-  want them live, `vault.create_secret()` (or the dashboard's Vault UI) in
-  the SQL editor with the real values; the service-role key must never
-  enter the repository.
+An empty `net._http_response` after a scheduled run has passed means the gate
+started refusing again — that is a regression of VAULT-1, and
+`docs/ops/MONITORING.md` §4 explains why `job_run_details` alone will keep
+saying `succeeded` through it.
 
 ### 5. Wire an actual alert — drafted and locally tested, needs your secrets
 
@@ -242,8 +243,18 @@ know what it actually promises before you need it in an emergency.
   concurrent edit to `app.js` in the shared working tree.
 - ~~A restricted member having no UI surface for their restriction's
   reason/expiry~~ — **done**, see `PRE_LAUNCH_AUDIT.md`.
-- `challengeKeyExists()` being device-relative for unpublished custom WODs
-  — still open, unowned.
+- ~~`challengeKeyExists()` being device-relative for unpublished custom
+  WODs~~ — **done, and was already done when this line was written.** Closed
+  2026-09-07 by `fbf5a43` ("Stop asking a coach to type a database key"),
+  which replaced the free-text comparison-key field with a `<select>` built
+  from `challengeKeyChoices()`. That builder skips `category === "Custom"`
+  for both movements and WODs, so a per-device id cannot be offered;
+  `setWeeklyChallenge()` re-checks against the same list, so it cannot be
+  submitted by editing the DOM either. `test/community-weekly-challenge.test.mjs`
+  asserts exactly this ("the picker never offers a CUSTOM movement or WOD,
+  whose ids are per-device and could never match another member's post").
+  Verified 2026-09-15. The published-WOD half was closed separately by the
+  club WOD catalogue (`202609060028`).
 - ~~`PRIVACY.md`/`privacy.html` still describing the pre-fix
   abandoned-account purge behavior~~ — **done**, shipped in `60c7404`
   ("Stop promising the deletion the database no longer performs"),

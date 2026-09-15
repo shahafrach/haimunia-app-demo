@@ -1,3 +1,113 @@
+## Records hygiene: close the Advisor's last open object, and stop the docs lying about what is left — 2026-09-15
+
+No feature work and no bug fixes. This pass went after a different class of
+problem: the project's own records had drifted far enough from the code that
+reading them would send someone to do work that was already done, or leave
+them believing a shipped module had not been started.
+
+**The phase board was reporting half a shipped module as not started.**
+`docs/community/backlog.md` read 38 `todo`, 29 `review`, 7 `partial`, 86
+`done` - while the features those `todo` rows name (the composer, the ranked
+feed, reactions, two-level comment threads, the moderation queue, the
+notification centre) have been live for weeks and were exercised by hand, in
+a real browser and against real Postgres, by the twenty-round hunt that
+closed on 2026-09-12. Reconciled against the code rather than asserted:
+every non-`done` row was checked for its ticket ID cited in implementation or
+a migration AND cited in a test, and 67 rows carrying both were flipped. Six
+rows cited no ticket ID anywhere and were resolved by looking at the feature
+instead of trusting the ID convention - COMM-106 and COMM-104 are
+`renderAchievementPostCard()` / `renderWorkoutPostCard()`, both registered in
+cloud.js's post-type dispatch table, and COMM-338's two halves are
+`supabase test db` in test.yml's `migration-check` job plus
+`scripts/smoke-test-multi-role.mjs`. The board now reads 153 `done`, 6
+`partial`, 1 `todo`, and the method is written into the file so the flip can
+be audited rather than taken on faith. The seven rows deliberately NOT
+flipped are named individually with the reason - COMM-337 (real clickjacking
+headers need the site off GitHub Pages; mitigated by `frame-guard.js`, not
+closed), COMM-329 (~40 one-off `.field-label` sub-headers are still plain
+divs), COMM-143 (parked with the attendance decision), and COMM-351/353/354/
+368 (cross-repo, genuinely unverifiable from this workspace, so not claimed
+either way).
+
+**Two audit rows had been chasing already-closed items for a week.** VAULT-1
+was resolved on 2026-09-08 by an observed 200 - `net._http_response` ids 14
+and 15 at 10:20:44 and 10:21:09 UTC, the whole chain seen rather than
+inferred - and `REMEDIATION_STATUS.md` recorded it correctly. But
+`GO_LIVE_GUIDE.md` §A.4 and `LAUNCH_CHECKLIST.md` row 19 both still read NOT
+VERIFIED, and the guide additionally still asserted the service-role key was
+*invalid*. Both corrected, and that last claim explicitly retracted: the key
+works, and per `purge_abandoned_profiles/index.ts:122` a 401 from that path
+would not have proven the gateway rejected the token anyway, because the
+function timing-safe-compares the Authorization header against the
+service-role key itself. The section was rewritten rather than deleted -
+the three closure attempts that each looked like proof and were not
+(name-presence, `scheduled_job_health()`, a 404 on a non-existent slug) are
+kept, because the same traps apply to any Vault-gated job added later. The
+checklist score moves 15 PASS / 7 NOT VERIFIED to 16 PASS / 6 NOT VERIFIED,
+which is a correction to the record, not new verification.
+
+Same for `challengeKeyExists()` being "device-relative for unpublished custom
+WODs, still open, unowned" in three documents: it was closed on 2026-09-07 by
+`fbf5a43`, one day *before* two of those three documents repeated it as open.
+The picker is a `<select>` built from `challengeKeyChoices()`, which skips
+`category === "Custom"` for movements and WODs alike, and
+`setWeeklyChallenge()` re-checks the same list so the DOM cannot be edited
+around it. `test/community-weekly-challenge.test.mjs` already asserted
+exactly this. A coordination artifact - the bullet was filed while cloud.js
+was locked to another session's edit and the fix landed in that same file the
+same day - not an open gap.
+
+**The Security Advisor finding is now actually closed, not half-closed.**
+`202609080005` did the expand phase in September: it rebuilt
+`public.community_streaks` as a SECURITY DEFINER *function* (the shape
+`feed_leaderboard`, `chal_progress`, `coach_celebrate_feed` and
+`member_of_week_candidate_set` already use, which the Advisor's rule does not
+flag) and deliberately left the view in place, so a client behind a
+service-worker cache kept resolving its already-shipped
+`.from("community_streaks")` call instead of 404ing mid-deploy. The finding
+is on the view, so it stayed open the whole time the view existed.
+`202609150001` completes the contract, on three verified conditions rather
+than assumed ones: cloud.js has no `.from("community_streaks")` call left at
+all (the one read is `.rpc`, cloud.js:1892), nothing else in the database
+selects from the view (no view, function, trigger or Edge Function -
+checked), and the expand phase shipped a week and twenty-three version
+releases ago. A straggler client old enough to still call the view now gets
+a 404 on that one request and degrades to an empty streak strip, which is
+what that surface already renders for a member with no pings.
+
+Worth stating plainly, because it is the reason this took two migrations
+instead of a one-line settings change: flipping the view to
+`security_invoker = true` - the obvious fix, and the one the Advisor's
+wording nudges toward - would have been a silent data bug, not a fix.
+`activity_pings`' only policy is `user_id = auth.uid()`, and a streak is by
+definition an aggregate across every member's rows, so invoker semantics
+would have zeroed every member's streak except the caller's own, on a surface
+where 0 is a legitimate value and the breakage would not have looked like
+breakage.
+
+The pgTAP coverage was ported rather than dropped. `0068` was written
+entirely against the view; every one of its reads is now a function call, and
+its "the view is not security_invoker" check became two checks that matter
+more after the contract - that the view is gone (a re-created view is a
+reopened finding) and that its replacement is still definer. It was kept
+rather than deleted because two of its cases, `in_leaderboards` off on its
+own and `visible_to_club` off on its own, exist nowhere else: `0093` only
+tests all three toggles off together, and "the combination refuses" does not
+prove "each column refuses independently". `0093`'s own expand-phase
+assertion ("the view still exists - do not drop it in the same migration that
+adds the function") was inverted rather than removed, for the same reason.
+`0064` and `0067`'s reads were converted too.
+
+Verified: full suite 1646/1646, `supabase test db` Files=110 Tests=3429 PASS
+against a fresh `db reset` over all 148 migrations, full browser-check 44/44,
+version/vendor/migration-immutability checks all OK. The three hunt protocols
+that produced the twenty-round review (`LIVE_BUG_HUNT_PROTOCOL.md`,
+`LIVE_SECURITY_HUNT_PROTOCOL.md`, `ULTIMATE_CHECK_PROTOCOL.md`) were sitting
+untracked in the working tree and are committed here, so the next pass can
+re-run them instead of reconstructing them.
+
+---
+
 ## Security hunt, round 10 (final): full-application penetration-style sweep — 2026-09-12
 
 Three more independent agents for the closing round: admin/moderation-surface

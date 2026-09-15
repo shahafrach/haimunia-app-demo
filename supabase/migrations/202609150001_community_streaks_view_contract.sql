@@ -1,0 +1,51 @@
+-- Supabase Security Advisor, "Security Definer View", public.community_streaks.
+-- CONTRACT phase. The expand phase is 202609080005; this is the other half of
+-- it, and the Advisor finding does not actually close until this runs, because
+-- the flagged object is the view and the view is what still exists.
+--
+-- WHY A FUNCTION AND NOT security_invoker=true, restated here so nobody
+-- "simplifies" this back into the bug. activity_pings' only policy is
+-- activity_pings_self_select (`user_id = auth.uid()`) - there is no broader
+-- one. A streak is by definition an aggregate across every member's rows, so
+-- flipping the view to invoker semantics would not have tightened it; it would
+-- have silently zeroed every member's streak except the caller's own, on a
+-- surface where "0" is a legitimate value and so the breakage would not even
+-- look like breakage. 202609080005 therefore rebuilt the identical query as a
+-- SECURITY DEFINER *function*, which is the shape feed_leaderboard,
+-- chal_progress, coach_celebrate_feed and member_of_week_candidate_set already
+-- use and which the Advisor's rule does not flag.
+--
+-- WHY THE DROP IS SAFE NOW, which is the whole question this migration turns
+-- on. The expand migration deliberately left the view in place so that a
+-- client running an older build - served from GitHub Pages behind a service
+-- worker cache, so genuinely able to lag by days - kept resolving its
+-- `.from("community_streaks")` call instead of 404ing mid-deploy. Three things
+-- have since happened, all verifiable rather than assumed:
+--   1. cloud.js has no `.from("community_streaks")` call left at all; the one
+--      read is `.rpc("community_streaks", { p_limit: 50 })` (cloud.js:1892).
+--   2. Nothing else in the database selects from the view - no view, no
+--      function, no trigger, no Edge Function. Checked, not presumed.
+--   3. The expand phase shipped 2026-09-08 and APP_VERSION has moved from
+--      4.15.x to 4.38.0 across a week of normal releases, which is well past
+--      any plausible service-worker rollout window for this app.
+--
+-- WHAT A STRAGGLER CLIENT SEES, stated rather than hand-waved: a client old
+-- enough to still call `.from("community_streaks")` now gets a PostgREST 404
+-- on that one request. It degrades to an empty streak strip, which is exactly
+-- what that surface already renders for a member with no pings - it does not
+-- throw, and it does not touch any other read. That is the accepted cost of
+-- contracting, and it is bounded to a surface whose empty state is a designed
+-- state.
+--
+-- The immutability check (scripts/check-migration-immutability.mjs) is why
+-- this is a new file rather than an edit to 202608270001/202609060002/
+-- 202609080005: an applied migration is never rewritten in this repo.
+
+drop view if exists public.community_streaks;
+
+-- Re-stamp the function's comment so the EXPAND-phase sentence at the end of
+-- it ("the view is deliberately left in place ... a later migration drops the
+-- view") does not outlive the thing it describes and start misleading whoever
+-- reads it next. Same text otherwise, byte for byte.
+comment on function public.community_streaks(int) is
+  'Supabase Security Advisor remediation, security_definer_view finding on the view of the same name (202608270001/202609060002). Function form of the identical query: club activity streaks aggregated over activity_pings (days the member opened the app), one row per member, ordered by current_streak desc, capped at p_limit (clamped 1-100, default 50, matching feed_leaderboard''s own ceiling pattern). SECURITY DEFINER because activity_pings is owner-only RLS (activity_pings_self_select) and this has to aggregate across every member''s rows to compute a streak - every equivalent access check is re-applied by hand: deleted_at, both directions of blocks, is_community_member(), the subject''s visible_to_club/in_leaderboards (raw column AND can_view_profile_field so an admin''s own rank cannot decide what the club is told), and last_activity_on gated additionally on show_attendance (null unless the caller is the subject, an admin, or the subject opted in) - self always sees their own row and date regardless. CONTRACT phase complete (202609150001): the view public.community_streaks has been dropped, cloud.js reads this function via .rpc("community_streaks"), and this function is now the only way to read a streak. Do not re-create the view - the Advisor finding is on the view, and it only stays closed while the view stays gone.';

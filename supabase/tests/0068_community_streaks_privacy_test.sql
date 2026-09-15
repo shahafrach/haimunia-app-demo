@@ -1,6 +1,18 @@
 -- Launch-readiness audit, finding 2 (202609060002). community_streaks now
 -- applies the privacy toggles every sibling leaderboard surface applies.
 --
+-- PORTED TO THE FUNCTION 2026-09-15 (202609150001, contract phase). Every
+-- assertion below was written against the VIEW public.community_streaks,
+-- which no longer exists - the Security Advisor's security_definer_view
+-- finding is on the view, so closing it meant dropping it. The reads are now
+-- public.community_streaks(100) calls and the boundary being asserted is unchanged,
+-- which is the point: the finding was about the OBJECT SHAPE, never about
+-- these rules, and this file is the evidence that contracting cost none of
+-- them. Kept rather than deleted because two of its cases - in_leaderboards
+-- off on its own, and visible_to_club off on its own - are not covered
+-- anywhere else; 0093 only tests all three toggles off together, and "the
+-- combination refuses" does not prove "each column refuses independently".
+--
 -- THE VECTOR THIS FILE REPRODUCES, verified live before the fix: a member
 -- switches visible_to_club, in_leaderboards AND show_attendance all off and
 -- is still fully readable through this view - handle, display name, streak
@@ -31,8 +43,8 @@ values ('00000000-0000-0000-0000-000000000000', 'aaaaaaaa-0068-4000-8000-0000000
         '$2a$10$rlshelpersfixturehashaaaaaaaaaaaaaaaaaaaaaaaaaaaa', now(), now(), now())
 on conflict (id) do nothing;
 
--- m2 has a live three-day run ending today. m1 has one day, so the view has
--- something to show for the caller as well as for the subject.
+-- m2 has a live three-day run ending today. m1 has one day, so the function
+-- has something to show for the caller as well as for the subject.
 insert into public.activity_pings (user_id, activity_date) values
   (tests.uid('m2'), current_date),
   (tests.uid('m2'), current_date - 1),
@@ -40,30 +52,39 @@ insert into public.activity_pings (user_id, activity_date) values
   (tests.uid('m1'), current_date);
 
 -- =====================================================================
--- 1. The view is still a definer view
+-- 1. The view is GONE, and the function that replaced it is still definer
 -- =====================================================================
--- If it ever becomes security_invoker it stops being able to aggregate
--- activity_pings at all and every number below silently becomes the
--- caller's own. Pinned here because this file's whole premise is "definer,
--- therefore it must check by hand".
+-- This was a reloptions check proving the VIEW was not security_invoker.
+-- After 202609150001 there is no view to check, and the two things worth
+-- pinning instead are that the drop actually happened (or the Advisor finding
+-- silently reopens) and that its replacement kept the definer property - if
+-- that is ever lost the function can no longer aggregate activity_pings at
+-- all and every number below becomes the caller's own, which on a surface
+-- where 0 is a legitimate streak would not look like breakage.
 select is(
-  (select coalesce(array_to_string(c.reloptions, ','), '') ilike '%security_invoker%'
-   from pg_catalog.pg_class c where c.oid = 'public.community_streaks'::regclass),
-  false,
-  'community_streaks is still NOT security_invoker - it aggregates past activity_pings'' owner-only RLS, which is why it re-applies every access rule itself');
+  (select count(*)::int from pg_catalog.pg_class c
+   join pg_catalog.pg_namespace n on n.oid = c.relnamespace
+   where n.nspname = 'public' and c.relname = 'community_streaks' and c.relkind = 'v'),
+  0,
+  'the view public.community_streaks is dropped - the security_definer_view finding is ON the view, so it only stays closed while the view stays gone');
+select is(
+  (select p.prosecdef from pg_catalog.pg_proc p
+   where p.pronamespace = 'public'::regnamespace and p.proname = 'community_streaks'),
+  true,
+  'and the function that replaced it is still SECURITY DEFINER - without that it cannot aggregate activity_pings'' owner-only RLS and every streak below silently becomes the caller''s own');
 
 -- =====================================================================
 -- 2. The default club: visible, with the raw date withheld
 -- =====================================================================
 select tests.set_auth(tests.uid('m1'));
 select is(
-  (select current_streak from public.community_streaks where user_id = tests.uid('m2')), 3,
+  (select current_streak from public.community_streaks(100) where user_id = tests.uid('m2')), 3,
   'with the shipped defaults a member still reads another member''s streak length - visible_to_club and in_leaderboards both default to true, so the fix costs the club nothing');
 select is(
-  (select last_activity_on from public.community_streaks where user_id = tests.uid('m2')), null,
+  (select last_activity_on from public.community_streaks(100) where user_id = tests.uid('m2')), null,
   'but NOT the raw last_activity_on date: show_attendance defaults to false, and that date is the piece 202608270001 kept out of activity_pings'' own RLS and routed through the admin-gated coach_inactive_members() instead');
 select is(
-  (select last_activity_on from public.community_streaks where user_id = tests.uid('m1')), current_date,
+  (select last_activity_on from public.community_streaks(100) where user_id = tests.uid('m1')), current_date,
   'while the caller reads their OWN date unconditionally');
 
 -- =====================================================================
@@ -73,7 +94,7 @@ select tests.clear_auth();
 update public.profiles set show_attendance = true where id = tests.uid('m2');
 select tests.set_auth(tests.uid('m1'));
 select is(
-  (select last_activity_on from public.community_streaks where user_id = tests.uid('m2')), current_date,
+  (select last_activity_on from public.community_streaks(100) where user_id = tests.uid('m2')), current_date,
   'a member who opts into show_attendance publishes the date, which is what the toggle means everywhere else in the module');
 select tests.clear_auth();
 update public.profiles set show_attendance = false where id = tests.uid('m2');
@@ -85,11 +106,11 @@ select tests.clear_auth();
 update public.profiles set in_leaderboards = false where id = tests.uid('m2');
 select tests.set_auth(tests.uid('m1'));
 select is_empty(
-  $$ select user_id from public.community_streaks where user_id = tests.uid('m2') $$,
+  $$ select user_id from public.community_streaks(100) where user_id = tests.uid('m2') $$,
   'in_leaderboards off removes the member from the view entirely - this view IS a board, and contracts.md already calls that column "the real, server-enforced opt-out" for exactly this figure');
 select tests.set_auth(tests.uid('m2'));
 select is(
-  (select current_streak from public.community_streaks where user_id = tests.uid('m2')), 3,
+  (select current_streak from public.community_streaks(100) where user_id = tests.uid('m2')), 3,
   'and it still never hides them from themselves, the same rule feed_leaderboard follows');
 select tests.clear_auth();
 update public.profiles set in_leaderboards = true where id = tests.uid('m2');
@@ -97,7 +118,7 @@ update public.profiles set in_leaderboards = true where id = tests.uid('m2');
 update public.profiles set visible_to_club = false where id = tests.uid('m2');
 select tests.set_auth(tests.uid('m1'));
 select is_empty(
-  $$ select user_id from public.community_streaks where user_id = tests.uid('m2') $$,
+  $$ select user_id from public.community_streaks(100) where user_id = tests.uid('m2') $$,
   'visible_to_club off removes them too, on its own');
 select tests.clear_auth();
 update public.profiles set visible_to_club = true where id = tests.uid('m2');
@@ -112,11 +133,11 @@ where id = tests.uid('m2');
 select tests.set_auth(tests.uid('m1'));
 select is_empty(
   $$ select user_id, handle, display_name, current_streak, last_activity_on
-     from public.community_streaks where user_id = tests.uid('m2') $$,
+     from public.community_streaks(100) where user_id = tests.uid('m2') $$,
   'THE FIX: a member who opted out of all three is now unreadable through this view - before 202609060002 this returned their handle, display name, streak and raw last-activity date to any authenticated caller');
 select tests.set_auth(tests.uid('m2'));
 select is(
-  (select last_activity_on from public.community_streaks where user_id = tests.uid('m2')), current_date,
+  (select last_activity_on from public.community_streaks(100) where user_id = tests.uid('m2')), current_date,
   'and even then they still read their own row and their own date');
 
 -- An admin does not get to override this one. can_view_profile_field()
@@ -125,7 +146,7 @@ select is(
 -- club may be told. Same reasoning member_of_week_candidate_set spells out.
 select tests.set_auth(tests.uid('admin'));
 select is_empty(
-  $$ select user_id from public.community_streaks where user_id = tests.uid('m2') $$,
+  $$ select user_id from public.community_streaks(100) where user_id = tests.uid('m2') $$,
   'not even an admin reads an opted-out member here - the raw columns are checked alongside can_view_profile_field precisely so the admin short-circuit cannot decide this');
 select tests.clear_auth();
 update public.profiles
@@ -137,7 +158,7 @@ where id = tests.uid('m2');
 -- documented staff path to raw activity dates and it must keep working.
 select tests.set_auth(tests.uid('admin'));
 select is(
-  (select last_activity_on from public.community_streaks where user_id = tests.uid('m2')), current_date,
+  (select last_activity_on from public.community_streaks(100) where user_id = tests.uid('m2')), current_date,
   'while an admin still reads the raw date of a visible member, which is the staff path coach_inactive_members() also serves');
 
 -- =====================================================================
@@ -145,7 +166,7 @@ select is(
 -- =====================================================================
 select tests.set_auth('aaaaaaaa-0068-4000-8000-000000000001'::uuid);
 select is(
-  (select count(*)::int from public.community_streaks), 0,
+  (select count(*)::int from public.community_streaks(100)), 0,
   'a ghost session - a real authenticated JWT with no profile and no redemption - reads nothing here either; 202608270002 revoked the anon ROLE, which an anonymous SESSION is not');
 
 -- =====================================================================
@@ -155,7 +176,7 @@ select tests.clear_auth();
 insert into public.blocks (blocker_id, blocked_id) values (tests.uid('m1'), tests.uid('m2'));
 select tests.set_auth(tests.uid('m1'));
 select is_empty(
-  $$ select user_id from public.community_streaks where user_id = tests.uid('m2') $$,
+  $$ select user_id from public.community_streaks(100) where user_id = tests.uid('m2') $$,
   'the explicit block check from 202608270001 is still there and still cuts in both directions');
 select tests.clear_auth();
 delete from public.blocks where blocker_id = tests.uid('m1') and blocked_id = tests.uid('m2');
@@ -163,14 +184,14 @@ delete from public.blocks where blocker_id = tests.uid('m1') and blocked_id = te
 update public.profiles set deleted_at = now() where id = tests.uid('m3');
 select tests.set_auth(tests.uid('m1'));
 select is_empty(
-  $$ select user_id from public.community_streaks where user_id = tests.uid('m3') $$,
+  $$ select user_id from public.community_streaks(100) where user_id = tests.uid('m3') $$,
   'and so is the soft-delete check');
 select tests.clear_auth();
 update public.profiles set deleted_at = null where id = tests.uid('m3');
 
 select tests.set_auth(tests.uid('m1'));
 select is(
-  (select current_streak from public.community_streaks where user_id = tests.uid('m3')), 0,
+  (select current_streak from public.community_streaks(100) where user_id = tests.uid('m3')), 0,
   'a member with no pings is still 0 rather than absent, so "never active" and "streak broken" read the same way they always did');
 
 -- The raw rows behind the aggregate are still private, which is the whole

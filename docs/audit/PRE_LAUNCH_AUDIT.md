@@ -107,10 +107,20 @@ Two items the sibling session flagged as open on its own follow-up branch,
 noted here for completeness since they are genuine, undisputed, and not
 mine to fix (the file is locked to their in-flight edit):
 
-- Custom (unpublished) WODs remain device-relative for `challengeKeyExists()` —
+- ~~Custom (unpublished) WODs remain device-relative for `challengeKeyExists()` —
   a challenge built on an unpublished custom WOD looks broken to everyone
   else. The club WOD catalogue (`202609060028`) closes this for *published*
-  WODs only.
+  WODs only.~~ — **already closed when this was written; verified 2026-09-15.**
+  `fbf5a43` (2026-09-07) replaced the free-text comparison-key field with a
+  `<select>` built from `challengeKeyChoices()`, which skips
+  `category === "Custom"` for both movements and WODs — so a per-device id
+  cannot be offered, and `setWeeklyChallenge()` re-checks against the same
+  list, so it cannot be submitted by editing the DOM either.
+  `test/community-weekly-challenge.test.mjs` asserts it directly ("the picker
+  never offers a CUSTOM movement or WOD, whose ids are per-device and could
+  never match another member's post"). This bullet was filed while `cloud.js`
+  was locked to another session's edit, and the fix landed in that same file
+  the same day — a coordination artifact, not an open gap.
 - ~~A member under a posting restriction has no UI surface showing the
   restriction's reason or expiry~~ — **resolved 2026-09-07**, shipped in
   `84754ad`/merged `9549548`: `renderMyRestrictionPanel()` on the Account

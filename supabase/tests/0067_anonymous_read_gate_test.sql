@@ -86,8 +86,8 @@ select is(
   (select count(*)::int from public.announcements), 0,
   'and ZERO announcements');
 select is(
-  (select count(*)::int from public.community_streaks), 0,
-  'and ZERO rows from community_streaks, which publishes a handle and a display name per member and was the same surface');
+  (select count(*)::int from public.community_streaks(100)), 0,
+  'and ZERO rows from community_streaks(), which publishes a handle and a display name per member and was the same surface (a definer view when this was written, a definer function since 202609150001 dropped the view)');
 
 -- The same call a real member makes, to prove the rows genuinely exist and
 -- the four zeros above are a refusal rather than an empty database.

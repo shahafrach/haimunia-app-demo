@@ -1,11 +1,11 @@
 -- Supabase Security Advisor, security_definer_view finding on
 -- public.community_streaks (202609080005). Mirrors 0068's fixtures and
 -- boundary assertions against the new FUNCTION rather than the view, plus
--- two assertions specific to this being an EXPAND-phase migration: the
--- function is genuinely security definer (so it can still aggregate past
--- activity_pings' owner-only RLS), and the old view is untouched and still
--- serves cloud.js's existing .from("community_streaks") call identically -
--- that second guarantee is the whole point of not contracting yet.
+-- two assertions specific to the expand/contract sequencing: the function is
+-- genuinely security definer (so it can still aggregate past activity_pings'
+-- owner-only RLS), and - since 202609150001 landed the contract phase on
+-- 2026-09-15 - that the old view is now gone rather than untouched. Section 2
+-- below records why that assertion was inverted instead of removed.
 
 \set rls_helpers_included true
 create extension if not exists pgtap with schema extensions;
@@ -42,21 +42,23 @@ select is(
   'community_streaks(int) is SECURITY DEFINER - it aggregates past activity_pings'' owner-only RLS, which is why it re-applies every access rule itself');
 
 -- =====================================================================
--- 2. EXPAND phase: the old view is untouched and still works
+-- 2. CONTRACT phase: the old view is gone (this section was inverted)
 -- =====================================================================
--- This is the guarantee the whole expand/contract sequencing exists for:
--- cloud.js's already-shipped .from("community_streaks") call must keep
--- resolving, unchanged, for as long as any installed client might still
--- make it.
-select isnt(
-  (select c.oid from pg_catalog.pg_class c where c.oid = 'public.community_streaks'::regclass and c.relkind = 'v'),
-  null,
-  'the view public.community_streaks still exists - do not drop it in the same migration that adds the function');
-select tests.set_auth(tests.uid('m1'));
+-- Until 2026-09-15 this section asserted the opposite - "the view still
+-- exists - do not drop it in the same migration that adds the function" -
+-- which was correct for the expand phase and is the reason the two phases
+-- were separated at all: an installed client behind a service-worker cache
+-- had to keep resolving its already-shipped .from("community_streaks") call
+-- while the new .rpc() call rolled out. 202609150001 completed the contract
+-- once cloud.js had no .from() call left and a week of releases had shipped,
+-- so the assertion is inverted rather than deleted - a re-created view is a
+-- reopened Security Advisor finding, and this is what would catch it.
 select is(
-  (select current_streak from public.community_streaks where user_id = tests.uid('m2')), 3,
-  'the old view keeps returning exactly what it always did, byte for byte, during the expand phase');
-select tests.clear_auth();
+  (select count(*)::int from pg_catalog.pg_class c
+   join pg_catalog.pg_namespace n on n.oid = c.relnamespace
+   where n.nspname = 'public' and c.relname = 'community_streaks' and c.relkind = 'v'),
+  0,
+  'the view public.community_streaks is dropped (202609150001, contract phase) - the function below is now the only way to read a streak');
 
 -- =====================================================================
 -- 3. The default club: visible, with the raw date withheld
