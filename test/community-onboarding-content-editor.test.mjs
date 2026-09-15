@@ -40,7 +40,11 @@ function seeded(extra, role) {
 // Redesign, Phase 1: renderOnboardingContentEditor() moved from Community's
 // "account" sub-tab to the Manage tab's own "onboarding" sub-tab.
 async function openAccountTab(window) {
-  window.document.getElementById("tabManageBtn").click();
+  // The club panel (2026-09-15): the two management panels were made fully
+  // disjoint, so club surfaces live behind the head coach's row. An admin
+  // fixture gets BOTH rows and reaches this one by its own id; a coach
+  // fixture has only the one, under the shared id.
+  (window.document.getElementById("tabClubManageBtn") || window.document.getElementById("tabManageBtn")).click();
   await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
   // "onboarding" is no longer a sub-tab id. The operator-depth rework
   // collapsed Manage's seven sub-tabs into three, and the onboarding content

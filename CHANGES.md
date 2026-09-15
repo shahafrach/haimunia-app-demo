@@ -1,3 +1,69 @@
+## Two jobs, two screens: the admin and head-coach panels split apart for real — 2026-09-15 (eighth entry)
+
+The owner opened the admin panel on a phone and corrected the design in one
+sentence: **"head coach will add users and run the club, admin runs only
+app."** That is a cleaner division than the one shipped this morning, and it
+invalidates it.
+
+The first split made the admin panel a SUPERSET - every club area plus the
+admin ones - reasoning that an admin should never have to switch screens. The
+correction is better because a superset is invisible: a screen containing both
+jobs does not look like a separation, it looks like the old screen with more
+on it. Two named doors, each landing on the panel it names, is what makes the
+division legible.
+
+**The panels no longer overlap at all.** The head coach gets adding members,
+the roster and club health, moderation and restrictions, the club's own
+numbers, and the onboarding content a new member reads. The admin gets the bug
+inbox, the audit log, the module toggles that decide which features exist, and
+role/password control. The admin panel's third tab is renamed "האפליקציה",
+because that is what it now is. An admin who wants to invite someone goes
+through the club door - which they have, because an admin is also staff and
+gets both hamburger rows.
+
+**The bug inbox stopped hiding.** Reported directly after first use: "it need
+to tap טעינת דיווחים for seeing it, so its not good." It now loads itself when
+the panel renders and opens expanded. Lazy-loading behind a button was right
+while this sat among five collapsed areas on a screen shared with the head
+coach; it is wrong now that the admin panel exists largely to show it.
+
+**And admins are told when a report arrives** (202609150005). An AFTER INSERT
+trigger on bug_reports notifies every admin immediately - not batched, because
+a member telling you the app is broken for them is the wrong thing to sit on
+for six hours, and notif_create()'s own 1-hour de-dupe still collapses a
+burst. Deliberately admins ONLY and not mod_alert_recipients(), which includes
+coaches: closing a report is is_admin() gated, so alerting someone who cannot
+action it is an interruption with no available remedy. Three assertions cover
+exactly that - the admin is notified, a coach is not, and the reporter is not
+told about their own report.
+
+**The reconciliation cost, stated plainly because it was mis-reported once
+already.** The restructure broke **117 tests across 16 files**, not the six
+first reported here - six was the number visible in the first screenful of
+output, and counting before reporting would have been the right order. Most
+were mechanical: a test reaching a club surface now goes through the club row,
+resolved by one pattern that works for both fixture types. Six needed
+judgement:
+
+* **"every section is still reachable"** keeps its guarantee and now sweeps
+  BOTH panels. Sweeping one would report a false loss for sections that simply
+  moved.
+* **The audit-log tests** were first dragged onto the club row with the rest of
+  their file, which broke four of them, because the audit log is the ADMIN's -
+  a record of staff actions is not something the recorded staff should be the
+  ones to read. They have their own helper now, with that reasoning beside it.
+* **The jump row** is scoped per panel. A chip that scrolls to nothing is
+  exactly the "button that goes nowhere" that row was built to prevent.
+* **The "admin panel is a superset" test**, written hours earlier in this same
+  session on reasoning the owner then corrected, now asserts the opposite: the
+  admin panel carries the app areas and must NOT duplicate the club's,
+  including no invite or member tabs. The division is encoded where it cannot
+  quietly drift back.
+
+Verified: npm test 1683/1683, supabase test db Files=112 Tests=3455 PASS.
+
+---
+
 ## A scaled PR says so, and a recommendation that was wrong for this codebase — 2026-09-15 (seventh entry)
 
 **The PR flash now names the level.** `bestWodScore(id, excludeId, rx)` has

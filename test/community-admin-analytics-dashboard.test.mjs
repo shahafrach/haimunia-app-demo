@@ -47,7 +47,14 @@ function seeded(extra, role) {
 // call sites left alone (still "openAccountTab" throughout this file) -
 // only the navigation itself changed.
 async function openAccountTab(window) {
-  window.document.getElementById("tabManageBtn").click();
+  // THE CLUB PANEL, not the admin one (2026-09-15). The two panels were made
+  // fully disjoint at the owner's request - "head coach will add users and run
+  // the club, admin runs only app" - and the club's own numbers are about the
+  // club, so analytics lives with the head coach now. An admin still reaches
+  // it, because an admin is also staff and gets BOTH hamburger rows; they just
+  // go through the club door rather than finding it on their own panel.
+  const clubRow = window.document.getElementById("tabClubManageBtn") || window.document.getElementById("tabManageBtn");
+  clubRow.click();
   await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
   // "analytics" is no longer a sub-tab id. The operator-depth rework
   // collapsed Manage's seven sub-tabs into three; analytics is now an area

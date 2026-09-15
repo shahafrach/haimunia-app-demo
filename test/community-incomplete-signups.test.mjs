@@ -58,7 +58,11 @@ function ghost(extra) {
 }
 
 async function openMembersTab(window) {
-  window.document.getElementById("tabManageBtn").click();
+  // The club panel (2026-09-15): the two management panels were made fully
+  // disjoint, so club surfaces live behind the head coach's row. An admin
+  // fixture gets BOTH rows and reaches this one by its own id; a coach
+  // fixture has only the one, under the shared id.
+  (window.document.getElementById("tabClubManageBtn") || window.document.getElementById("tabManageBtn")).click();
   await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
   // The unfinished signups moved from the roster sub-tab to "הוספת חבר/ה"
   // (id "invites") in the operator-depth rework. Defect 3's reasoning is

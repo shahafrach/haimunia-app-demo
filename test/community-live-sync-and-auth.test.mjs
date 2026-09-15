@@ -130,7 +130,11 @@ test("an admin can search for a member and grant coach, executing for real throu
   const window = await bootCommunity(mock, { syncEnabled: false });
   // Redesign, Phase 1: renderMemberManagement() moved from Community's
   // "account" sub-tab to the Manage tab's own "members" sub-tab.
-  window.document.getElementById("tabManageBtn").click();
+  // The club panel (2026-09-15): the two management panels were made fully
+  // disjoint, so club surfaces live behind the head coach's row. An admin
+  // fixture gets BOTH rows and reaches this one by its own id; a coach
+  // fixture has only the one, under the shared id.
+  (window.document.getElementById("tabClubManageBtn") || window.document.getElementById("tabManageBtn")).click();
   await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
   window.document.querySelector('[data-community-action="set-manage-tab"][data-tab="members"]').click();
 

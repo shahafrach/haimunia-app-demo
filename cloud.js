@@ -9517,7 +9517,10 @@
   // the moderation area above it behaves. An empty inbox should not push the
   // audit log down the screen every time an admin opens this tab.
   function openBugReportsByDefault() {
-    return !!(state.admin.bugsLoaded && state.admin.bugs.some((b) => b.status === "open"));
+    // Always open on the admin panel now. It was conditional while this sat
+    // among five collapsed areas on a screen shared with the head coach;
+    // the admin panel's whole job is this queue plus the audit log.
+    return true;
   }
   async function loadBugReports(force) {
     if (!state.user || !isStaff()) return;
@@ -9559,7 +9562,7 @@
     let body;
     if (a.bugsLoading && !a.bugsLoaded) body = `<div class="empty">טוען דיווחים…</div>`;
     else if (a.bugsError) body = `<div class="empty">לא ניתן לטעון דיווחים.<div class="chip-row" style="justify-content:center;"><button class="chip-btn primary" data-community-action="bugs-retry">ניסיון חוזר</button></div></div>`;
-    else if (!a.bugsLoaded) body = `<div class="empty"><button class="chip-btn primary" data-community-action="bugs-retry">טעינת דיווחים</button></div>`;
+    else if (!a.bugsLoaded) body = `<div class="empty">טוען דיווחים…</div>`;
     else if (!a.bugs.length) body = `<div class="empty">${a.bugsStatus === "open" ? "אין דיווחים פתוחים." : "אין דיווחים בסטטוס הזה."}</div>`;
     else body = a.bugs.map((b) => {
       const who = b.reporter_display_name || b.reporter_handle || "חבר/ה שהחשבון שלו/ה נמחק";
@@ -16275,6 +16278,12 @@
     // the same way (see the new NOTIF_PREF_TYPES row).
     feed_activity:         { category: "community",  mode: "batched",   pref: "feed_activity",       icon: "📣", title: "פעילות חדשה בפיד" },
     new_report:            { category: "community",  mode: "immediate", pref: "new_report",          icon: "🚩", title: "דיווח חדש לבדיקה" },
+    // Admins only, by 202609150005's bug_report_alert_recipients() - the same
+    // no-server-pref-arm shape as new_report above. Immediate rather than
+    // batched on purpose: a bug report is a member telling you the app is
+    // broken for them, and a six-hour batch window is the wrong latency for
+    // that. notif_create()'s own 1-hour de-dupe still collapses a burst.
+    new_bug_report:        { category: "community",  mode: "immediate", pref: "new_bug_report",      icon: "🐞", title: "דיווח תקלה חדש" },
     achievement_unlocked:  { category: "training",   mode: "immediate", pref: "achievement_unlocked",icon: "🏅", title: "פתחת הישג חדש" },
     friend_achievement:    { category: "training",   mode: "batched",   pref: "friend_achievements", icon: "🎉", title: "חברים פתחו הישגים" },
     challenge_ending_soon: { category: "challenges", mode: "immediate", pref: "challenges",          icon: "⏳", title: "אתגר מסתיים בקרוב" },
@@ -18609,22 +18618,45 @@
     // nested inside itself (see that function's own comment).
     const [areaModeration, areaBugs, areaAudit, areaSettings, areaAnalytics, areaOnboarding] = MANAGE_ADMIN_AREAS;
     const adminAreas = [
-      manageAdminArea(areaModeration, renderRestrictionsPanel() + renderModeration(), true),
-      // Bug triage and the audit log are the admin panel's own. A head coach
-      // can READ every bug report (bug_report_list_all is is_staff()), but
-      // closing one and reading the record of staff actions both stay with
-      // the admin - so neither area is offered on the club panel at all.
-      isAdminMode ? manageAdminArea(areaBugs, renderBugReports(), openBugReportsByDefault()) : "",
+      // FULLY DISJOINT, not a superset (2026-09-15, second revision).
+      //
+      // The first split made the admin panel a superset of the club panel, on
+      // the reasoning that an admin should never have to switch screens. The
+      // owner's correction is a different and clearer division of labour:
+      //
+      //   HEAD COACH runs the CLUB - adds members, manages the roster,
+      //     moderates, edits what new members read, reads the club's numbers.
+      //   ADMIN runs the APP - bug reports, the audit log, who holds which
+      //     role, password resets, and which modules are switched on.
+      //
+      // So these two lists no longer overlap. An admin who wants to invite
+      // someone is doing a head coach's job and should hold that role too;
+      // the roles are additive on one account, and my_role_code() already
+      // resolves the highest one. That is a cleaner answer than one screen
+      // that quietly contains both jobs.
+      isAdminMode ? "" : manageAdminArea(areaModeration, renderRestrictionsPanel() + renderModeration(), true),
+      isAdminMode ? manageAdminArea(areaBugs, renderBugReports(), true) : "",
       isAdminMode ? manageAdminArea(areaAudit, renderAuditLog()) : "",
-      manageAdminArea(areaSettings, renderClubModulesPanel() || `<div class="empty">אין לך הרשאה לצפות בהגדרות המודולים.</div>`),
-      manageAdminArea(areaAnalytics, (renderAdminAnalyticsDashboard() + renderRetentionCorrelations()) || `<div class="empty">אין לך הרשאה לצפות באנליטיקס.</div>`),
-      manageAdminArea(areaOnboarding, renderOnboardingContentEditor() + renderIntroCarouselContentEditor()),
+      // Module toggles decide which FEATURES of the app exist for this club -
+      // that is app administration, not club running, so it moves to admin.
+      isAdminMode ? manageAdminArea(areaSettings, renderClubModulesPanel() || `<div class="empty">אין לך הרשאה לצפות בהגדרות המודולים.</div>`) : "",
+      // The club's own numbers are about the club, so they stay with the head
+      // coach.
+      isAdminMode ? "" : manageAdminArea(areaAnalytics, (renderAdminAnalyticsDashboard() + renderRetentionCorrelations()) || `<div class="empty">אין לך הרשאה לצפות באנליטיקס.</div>`),
+      // What a new member reads on their first open is club content.
+      isAdminMode ? "" : manageAdminArea(areaOnboarding, renderOnboardingContentEditor() + renderIntroCarouselContentEditor()),
     ].join("");
     // The "I know where this used to be" row. Old sub-tab names, one tap,
     // scrolls to the section. Every button here is a real destination - the
     // areas are unconditionally in the DOM above, including the two
     // permission notices, so none of these can scroll to nothing.
-    const adminJumpRow = `<div class="chip-row" data-manage-jump-row="1" style="margin:0 0 12px;">${MANAGE_ADMIN_AREAS.filter((a) => !a.notInJumpRow).map((a) =>
+    // Only the areas THIS panel actually renders - a chip that scrolls to
+    // nothing is the "button that goes nowhere" the original jump-row comment
+    // was written to prevent.
+    const jumpAreaIds = isAdminMode
+      ? ["manageArea-audit", "manageArea-settings"]
+      : ["manageArea-moderation", "manageArea-analytics", "manageArea-onboarding"];
+    const adminJumpRow = `<div class="chip-row" data-manage-jump-row="1" style="margin:0 0 12px;">${MANAGE_ADMIN_AREAS.filter((a) => !a.notInJumpRow && jumpAreaIds.includes(a.id)).map((a) =>
       `<button class="chip-btn" data-community-action="set-manage-tab" data-tab="moderation" data-scroll="${esc(a.id)}">${esc(a.label)}</button>`).join("")}</div>`;
 
     const manageTabs = [
@@ -18640,17 +18672,22 @@
       // action), the QR panel second (its own empty state explains "a code
       // will appear here" - true once you look at the form right above it,
       // confusing when it was the first thing on the screen instead).
-      { id: "invites", label: "הוספת חבר/ה", html: renderInviteManagement() + renderInviteQrPanel() + renderIncompleteSignups() },
+      // "head coach will add users" - so the invite surface is theirs, and is
+      // absent from the admin panel entirely rather than duplicated onto it.
+      ...(isAdminMode ? [] : [{ id: "invites", label: "הוספת חבר/ה", html: renderInviteManagement() + renderInviteQrPanel() + renderIncompleteSignups() }]),
       // 2. The weekly read. renderCommunityHealthScore() came off the
       // retired dashboard sub-tab to sit at the top of it: the club's own
       // health number is the headline for "how is the club doing", which is
       // this tab's question, not an analytics card.
-      { id: "members", label: "המועדון", html: renderCommunityHealthScore() + renderMemberManagement() + manageArea("manageArea-roster", renderMemberRoster()) },
+      // The roster and the club's health are the club. renderMemberManagement()
+      // keeps its own isAdmin() gate for the role/password controls inside it,
+      // so a head coach sees the roster without the app-level controls.
+      ...(isAdminMode ? [] : [{ id: "members", label: "המועדון", html: renderCommunityHealthScore() + renderMemberManagement() + manageArea("manageArea-roster", renderMemberRoster()) }]),
       // 3. The rare and the administrative. Keeps the moderation badge: it
       // is the one number on this screen that means "someone is waiting",
       // and burying it inside a tab without it would have been the
       // regression this rework is supposed to fix.
-      { id: "moderation", label: "ניהול", html: adminJumpRow + adminAreas, badge: pendingModerationCount() },
+      { id: "moderation", label: isAdminMode ? "האפליקציה" : "ניהול", html: adminJumpRow + adminAreas, badge: isAdminMode ? 0 : pendingModerationCount() },
     ];
     // Same reconciliation renderCommunityApp() does for state.ui.tab, and
     // for the same reason: afterRenderManage() reads state.ui.manageTab to
@@ -19285,6 +19322,13 @@
     // (state.communityDataLoaded guards it), so calling it from both hooks
     // is exactly as safe as calling it from either one alone.
     ensureCommunityDataLoaded();
+    // The bug inbox loads itself (2026-09-15). Reported directly: "it need to
+    // tap טעינת דיווחים for seeing it, so its not good." An inbox that hides
+    // its contents behind a button is an inbox nobody reads, and the point of
+    // collecting reports at all is that somebody sees them without going
+    // looking. loadBugReports() is idempotent and guards on bugsLoading, so
+    // calling it from every Manage render costs one request per session.
+    if (document.getElementById("manageArea-bugs")) loadBugReports();
     const mt = state.ui.manageTab;
     const adminInput = document.getElementById("adminMemberSearch");
     if (adminInput) adminInput.addEventListener("input", () => searchMembers(adminInput.value));

@@ -81,7 +81,7 @@ test("a plain member who lands on ?tab=manage directly sees the denial state, no
 test("all 3 Manage sub-tabs render as the active pill with real content", async () => {
   const mock = seeded(null, "admin");
   const window = await bootCommunity(mock, { syncEnabled: false });
-  window.document.getElementById("tabManageBtn").click();
+  (window.document.getElementById("tabClubManageBtn") || window.document.getElementById("tabManageBtn")).click();
   await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
 
   const ids = ["invites", "members", "moderation"];
@@ -113,7 +113,7 @@ test("every section the seven-tab Manage rendered is still reachable from one of
   mock.onRpc("admin_invite_code_list", () => ({ data: [], error: null }));
   mock.onRpc("admin_invite_list", () => ({ data: [], error: null }));
   const window = await bootCommunity(mock, { syncEnabled: false });
-  window.document.getElementById("tabManageBtn").click();
+  (window.document.getElementById("tabClubManageBtn") || window.document.getElementById("tabManageBtn")).click();
   await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
 
   // heading -> the tab it now lives on.
@@ -140,35 +140,55 @@ test("every section the seven-tab Manage rendered is still reachable from one of
     ["moderation", "עריכת מסך פתיחה לחברים חדשים"],
     ["moderation", "עריכת תוכן היכרות"],
   ];
+  // BOTH PANELS ARE SWEPT (2026-09-15). The property this test defends -
+  // "no section was lost" - is unchanged and still worth defending. What
+  // changed is that the sections now live across TWO screens rather than one:
+  // the panels were made fully disjoint at the owner's request, so the audit
+  // log and the module toggles are the admin's while the rest stay with the
+  // head coach. Sweeping only one panel would now report a false loss.
   const seen = [];
-  for (const tab of ["invites", "members", "moderation"]) {
-    window.document.querySelector(`.subtabbtn[data-community-action="set-manage-tab"][data-tab="${tab}"]`).click();
-    await waitFor(() => {
-      const active = window.document.querySelector(".subtabbtn.active");
-      return !!active && active.dataset.tab === tab;
-    }, 3000);
-    await new Promise((r) => setTimeout(r, 40));
-    const text = window.document.body.textContent;
-    for (const [expectTab, heading] of expected) {
-      if (text.includes(heading)) seen.push([expectTab, heading]);
+  const sweep = async () => {
+    for (const tab of ["invites", "members", "moderation"]) {
+      const btn = window.document.querySelector(`.subtabbtn[data-community-action="set-manage-tab"][data-tab="${tab}"]`);
+      if (!btn) continue; // that tab is not on this panel
+      btn.click();
+      await waitFor(() => {
+        const active = window.document.querySelector(".subtabbtn.active");
+        return !!active && active.dataset.tab === tab;
+      }, 3000);
+      await new Promise((r) => setTimeout(r, 40));
+      const text = window.document.body.textContent;
+      for (const [, heading] of expected) if (text.includes(heading)) seen.push(heading);
     }
+  };
+  await sweep();
+  const adminRow = window.document.getElementById("tabManageBtn");
+  if (adminRow) {
+    adminRow.click();
+    await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
+    await sweep();
   }
-  for (const [tab, heading] of expected) {
-    assert.ok(seen.some((s) => s[1] === heading), `"${heading}" is not reachable from any Manage tab any more - a section was lost in the collapse`);
-    assert.ok(seen.some((s) => s[0] === tab && s[1] === heading), `"${heading}" rendered, but not on the "${tab}" tab it was re-homed to`);
+  for (const [, heading] of expected) {
+    assert.ok(seen.includes(heading),
+      `"${heading}" is reachable from NEITHER management panel - a section was lost in the split`);
   }
 });
 
 test('the "ניהול" tab carries a jump row labelled with the old sub-tab names, so a manager who knows where something was can still find it', async () => {
   const mock = seeded(null, "admin");
   const window = await bootCommunity(mock, { syncEnabled: false });
-  window.document.getElementById("tabManageBtn").click();
+  (window.document.getElementById("tabClubManageBtn") || window.document.getElementById("tabManageBtn")).click();
   await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
   window.document.querySelector('.subtabbtn[data-community-action="set-manage-tab"][data-tab="moderation"]').click();
   await waitFor(() => !!window.document.querySelector('[data-manage-jump-row="1"]'), 3000);
   const labels = [...window.document.querySelectorAll('[data-manage-jump-row="1"] button')].map((b) => b.textContent.trim());
-  assert.deepEqual(labels, ["מודרציה", "יומן פעולות", "הגדרות", "אנליטיקס", "קליטה"],
-    "the jump row must keep the OLD sub-tab wording - that is the whole point of it");
+  // SCOPED PER PANEL (2026-09-15). The row still carries the OLD sub-tab
+  // wording - that remains its whole point - but it can only offer the areas
+  // the panel it is on actually renders. A chip that scrolls to nothing is
+  // exactly the "button that goes nowhere" this row was built to avoid, and
+  // the panels are disjoint now. This is the CLUB panel's three.
+  assert.deepEqual(labels, ["מודרציה", "אנליטיקס", "קליטה"],
+    "the club panel's jump row offers the club areas, in the old wording");
   // Reaffirmed 2026-09-15 when a SIXTH admin area (דיווחי תקלות) was added:
   // it is deliberately absent from this row. The row is a "where it used to
   // be" affordance for the seven retired sub-tabs, not a table of contents -
@@ -176,9 +196,11 @@ test('the "ניהול" tab carries a jump row labelled with the old sub-tab name
   // sub-tab must not appear here. A future area is subject to the same rule
   // via MANAGE_ADMIN_AREAS' notInJumpRow flag.
   assert.ok(!labels.includes("דיווחי תקלות"),
-    "a NEW admin area must not be added to the old-sub-tab jump row");
-  assert.ok(window.document.getElementById("manageArea-bugs"),
-    "...but it must still be on the screen - absent from the jump row is not absent from the tab");
+    "a NEW area must not be added to the old-sub-tab jump row");
+  // And it is not on this panel at all any more: the bug inbox belongs to the
+  // admin, who runs the app, not to the head coach, who runs the club.
+  assert.equal(window.document.getElementById("manageArea-bugs"), null,
+    "the bug inbox is the admin panel's - the club panel must not carry it");
   // Never a button that goes nowhere: every chip names a section that is
   // genuinely in the DOM.
   for (const btn of window.document.querySelectorAll('[data-manage-jump-row="1"] button')) {
@@ -200,7 +222,7 @@ test("the four retired sub-tab ids are still mapped, so nothing navigating by an
 test("each of the three tabs says in one plain line what it is for", async () => {
   const mock = seeded(null, "admin");
   const window = await bootCommunity(mock, { syncEnabled: false });
-  window.document.getElementById("tabManageBtn").click();
+  (window.document.getElementById("tabClubManageBtn") || window.document.getElementById("tabManageBtn")).click();
   await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
   for (const tab of ["invites", "members", "moderation"]) {
     window.document.querySelector(`.subtabbtn[data-community-action="set-manage-tab"][data-tab="${tab}"]`).click();
@@ -220,7 +242,7 @@ test("the moderation badge survived the move and still draws attention on the ta
     reports: [{ id: "rep-1", reporter_id: "author-1", target_type: "post", target_id: "post-1", reason: "spam", note: "", status: "open", created_at: VERIFIED }],
   }, "coach");
   const window = await bootCommunity(mock, { syncEnabled: false });
-  window.document.getElementById("tabManageBtn").click();
+  (window.document.getElementById("tabClubManageBtn") || window.document.getElementById("tabManageBtn")).click();
   await waitFor(() => !!window.document.querySelector("#manageTab-moderation .tab-badge"), 3000);
   const badge = window.document.querySelector("#manageTab-moderation .tab-badge");
   assert.equal(badge.textContent.trim(), "1");
@@ -242,7 +264,7 @@ test("dashboard: a moderator with genuinely open reports sees the red attention 
     reports: [{ id: "rep-1", reporter_id: "author-1", target_type: "post", target_id: "post-1", reason: "spam", note: "", status: "open", created_at: VERIFIED }],
   }, "coach");
   const window = await bootCommunity(mock, { syncEnabled: false });
-  window.document.getElementById("tabManageBtn").click();
+  (window.document.getElementById("tabClubManageBtn") || window.document.getElementById("tabManageBtn")).click();
   await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
   // Live bug hunt (2026-09-11): this fixture's real count IS 1, so the
   // correct render is the singular form - "1 דיווחים" was itself the bug.
@@ -266,7 +288,7 @@ test("dashboard: a moderator with zero open reports sees the green all-clear emp
   // unreachable. Fixed to gate on the real pendingReports count instead.
   const mock = seeded({ reports: [] }, "coach");
   const window = await bootCommunity(mock, { syncEnabled: false });
-  window.document.getElementById("tabManageBtn").click();
+  (window.document.getElementById("tabClubManageBtn") || window.document.getElementById("tabManageBtn")).click();
   await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
   await waitFor(() => window.document.body.textContent.includes("דורש תשומת לב"), 3000);
   assert.ok(window.document.body.textContent.includes("אין דבר שדורש תשומת לב כרגע"), "the green all-clear empty state renders");
@@ -285,7 +307,7 @@ test("dashboard: an inactive-members shortcut navigates to Members", async () =>
   // excluded lands with the client half of that change.
   mock.onRpc("coach_inactive_members", () => ({ data: [{ user_id: "u-someone", display_name: "מישהו", handle: "someone", last_activity_on: "2026-08-01", state: "lapsed", days_since_activity: 37, joined_on: "2026-05-01" }], error: null }));
   const window = await bootCommunity(mock, { syncEnabled: false });
-  window.document.getElementById("tabManageBtn").click();
+  (window.document.getElementById("tabClubManageBtn") || window.document.getElementById("tabManageBtn")).click();
   await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
   // Waits on the shortcut itself rather than on its Hebrew label: this test
   // is about the row navigating to Members, and pinning the copy here made
@@ -326,7 +348,7 @@ test("dashboard: members we have NO data about never produce an attention row", 
     error: null,
   }));
   const window = await bootCommunity(mock, { syncEnabled: false });
-  window.document.getElementById("tabManageBtn").click();
+  (window.document.getElementById("tabClubManageBtn") || window.document.getElementById("tabManageBtn")).click();
   await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
   // Wait on the RPC having actually been answered, not on a DOM node. The
   // dashboard renders its green all-clear immediately, before any data
@@ -358,7 +380,7 @@ test("dashboard: the attention row counts only genuinely lapsed members, not the
     error: null,
   }));
   const window = await bootCommunity(mock, { syncEnabled: false });
-  window.document.getElementById("tabManageBtn").click();
+  (window.document.getElementById("tabClubManageBtn") || window.document.getElementById("tabManageBtn")).click();
   await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
   // `button.log-row` and not the bare attribute pair - see the note in the
   // shortcut test above: the sub-tab BAR pill carries the same two
@@ -379,6 +401,8 @@ test("dashboard: the attention row counts only genuinely lapsed members, not the
 test("opening an admin area (audit log, closed by default) survives an unrelated rerender elsewhere on the same tab", async () => {
   const mock = seeded(null, "admin");
   const window = await bootCommunity(mock, { syncEnabled: false });
+  // The audit log is the ADMIN panel's area since the split, so this one
+  // deliberately goes through the admin row rather than the club row.
   window.document.getElementById("tabManageBtn").click();
   await waitFor(() => !!window.document.getElementById("manageTab-moderation"), 3000);
   window.document.getElementById("manageTab-moderation").click();
@@ -401,7 +425,7 @@ test("opening an admin area (audit log, closed by default) survives an unrelated
 test("a jump-row tap opens its target and that stays open across a later unrelated rerender", async () => {
   const mock = seeded(null, "admin");
   const window = await bootCommunity(mock, { syncEnabled: false });
-  window.document.getElementById("tabManageBtn").click();
+  (window.document.getElementById("tabClubManageBtn") || window.document.getElementById("tabManageBtn")).click();
   await waitFor(() => !!window.document.getElementById("manageTab-moderation"), 3000);
   window.document.getElementById("manageTab-moderation").click();
   await waitFor(() => !!window.document.querySelector('[data-community-action="set-manage-tab"][data-scroll="manageArea-onboarding"]'), 3000);
@@ -440,7 +464,7 @@ test("booting straight into ?tab=manage (staff) triggers ensureCommunityDataLoad
 test("a coach gets the club panel, and it does NOT carry the admin-only areas", async () => {
   const mock = seeded(null, "coach");
   const window = await bootCommunity(mock, { syncEnabled: false });
-  window.document.getElementById("tabManageBtn").click();
+  (window.document.getElementById("tabClubManageBtn") || window.document.getElementById("tabManageBtn")).click();
   await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
   window.document.querySelector('.subtabbtn[data-community-action="set-manage-tab"][data-tab="moderation"]').click();
   await waitFor(() => !!window.document.getElementById("manageArea-moderation"), 3000);
@@ -456,19 +480,38 @@ test("a coach gets the club panel, and it does NOT carry the admin-only areas", 
   assert.ok(window.document.getElementById("manageArea-moderation"), "moderation IS the club panel's");
 });
 
-test("an admin gets the admin panel, and it is a superset - every club area plus the four that stay theirs", async () => {
+test("an admin gets the APP panel, and it is disjoint from the club panel", async () => {
+  // REWRITTEN 2026-09-15. This used to assert the admin panel was a SUPERSET
+  // containing every club area plus the admin ones, on the reasoning that an
+  // admin should never switch screens. The owner's correction was a cleaner
+  // division of labour: "head coach will add users and run the club, admin
+  // runs only app." So the two panels no longer overlap at all, and an admin
+  // who wants to invite someone goes through the club door - which they have,
+  // because an admin is also staff and gets both rows.
   const mock = seeded(null, "admin");
   const window = await bootCommunity(mock, { syncEnabled: false });
   window.document.getElementById("tabManageBtn").click();
   await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
   window.document.querySelector('.subtabbtn[data-community-action="set-manage-tab"][data-tab="moderation"]').click();
-  await waitFor(() => !!window.document.getElementById("manageArea-bugs"), 3000);
+  await waitFor(() => !!window.document.getElementById("manageArea-audit"), 3000);
 
   assert.match(window.document.querySelector(".page-title").textContent, /ניהול מערכת/);
-  for (const id of ["manageArea-moderation", "manageArea-bugs", "manageArea-audit", "manageArea-settings", "manageArea-analytics", "manageArea-onboarding"]) {
-    assert.ok(window.document.getElementById(id), `the admin panel must contain ${id} - it is a superset so an admin never switches screens for a club task`);
+  // The app is the admin's.
+  for (const id of ["manageArea-bugs", "manageArea-audit", "manageArea-settings"]) {
+    assert.ok(window.document.getElementById(id), `the admin panel must carry ${id}`);
+  }
+  // The club is not.
+  for (const id of ["manageArea-moderation", "manageArea-analytics", "manageArea-onboarding"]) {
+    assert.equal(window.document.getElementById(id), null,
+      `${id} belongs to the head coach - the admin panel must NOT duplicate it`);
+  }
+  // And neither do the club's own tabs.
+  for (const tab of ["invites", "members"]) {
+    assert.equal(window.document.querySelector(`.subtabbtn[data-community-action="set-manage-tab"][data-tab="${tab}"]`), null,
+      `"${tab}" is a club tab - adding members is the head coach's job`);
   }
 });
+
 
 test("management lives in the hamburger, not the bottom bar, so the bar stays at five member tabs", async () => {
   const mock = seeded(null, "admin");

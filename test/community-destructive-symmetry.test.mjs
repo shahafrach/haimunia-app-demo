@@ -64,7 +64,11 @@ function adminMock(overrides) {
 
 async function gotoManage(window, subtab) {
   await waitFor(() => !!window.document.getElementById("tabManageBtn"), 4000);
-  window.document.getElementById("tabManageBtn").click();
+  // The club panel (2026-09-15): the two management panels were made fully
+  // disjoint, so club surfaces live behind the head coach's row. An admin
+  // fixture gets BOTH rows and reaches this one by its own id; a coach
+  // fixture has only the one, under the shared id.
+  (window.document.getElementById("tabClubManageBtn") || window.document.getElementById("tabManageBtn")).click();
   await waitFor(() => !!window.document.querySelector(`[data-community-action="set-manage-tab"][data-tab="${subtab}"]`), 4000);
   window.document.querySelector(`[data-community-action="set-manage-tab"][data-tab="${subtab}"]`).click();
 }

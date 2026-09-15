@@ -87,14 +87,31 @@ async function openAccount(window) {
 // Redesign, Phase 1: renderModeration()/renderAuditLog() moved from
 // Community's "account" sub-tab to the Manage tab's own "moderation"
 // sub-tab; renderMemberManagement() moved to Manage's "members" sub-tab.
+// 2026-09-15: the two management panels were made fully disjoint - the head
+// coach runs the club, the admin runs the app. Every surface this file
+// reaches (the moderation queue, restrictions, member management) is a CLUB
+// surface, so this helper goes through the club row. An admin fixture has
+// both rows and reaches it by its own id; a coach fixture has only the one.
 async function gotoManage(window, subtab) {
-  await waitFor(() => !!window.document.getElementById("tabManageBtn"), 4000);
-  window.document.getElementById("tabManageBtn").click();
+  await waitFor(() => !!(window.document.getElementById("tabClubManageBtn") || window.document.getElementById("tabManageBtn")), 4000);
+  (window.document.getElementById("tabClubManageBtn") || window.document.getElementById("tabManageBtn")).click();
   await waitFor(() => !!window.document.querySelector(`[data-community-action="set-manage-tab"][data-tab="${subtab}"]`), 4000);
   window.document.querySelector(`[data-community-action="set-manage-tab"][data-tab="${subtab}"]`).click();
 }
 async function openManageModeration(window) { await gotoManage(window, "moderation"); }
 async function openManageMembers(window) { await gotoManage(window, "members"); }
+// The AUDIT LOG is the admin panel's, not the club's - the split put the app
+// with the admin and the club with the head coach, and a record of staff
+// actions is not something the staff being recorded should be the ones to
+// read. Its sub-tab id is still "moderation" (the admin panel's third tab,
+// labelled "האפליקציה"), so only the ROW differs.
+async function openManageAudit(window) {
+  await waitFor(() => !!window.document.getElementById("tabManageBtn"), 4000);
+  window.document.getElementById("tabManageBtn").click();
+  await waitFor(() => !!window.document.querySelector('[data-community-action="set-manage-tab"][data-tab="moderation"]'), 4000);
+  window.document.querySelector('[data-community-action="set-manage-tab"][data-tab="moderation"]').click();
+  await waitFor(() => !!window.document.getElementById("manageArea-audit"), 4000);
+}
 const bodyText = (window) => window.document.body.textContent;
 
 // ===== COMM-150 table-driven permissions ==============================
@@ -458,7 +475,7 @@ test("the audit view is gated on community.analytics.view and reads admin_action
   });
   mock2.setUser({ id: "adm-1", is_anonymous: false, email: "adm@members.haimuniya.invalid" });
   const w2 = await bootCommunity(mock2, { syncEnabled: false });
-  await openManageModeration(w2);
+  await openManageAudit(w2);
   await waitFor(() => /יומן פעולות ניהול/.test(w2.document.body.textContent), 3000);
   assert.ok(mock2.callsTo("admin_actions_page").length >= 1, "the view reads admin_actions_page()");
   assert.match(w2.document.body.textContent, /הצמדת תוכן/, "an audit row renders");
@@ -480,7 +497,7 @@ test("fresh-eyes audit: the audit log names the actual staff member who acted, n
   });
   mock.setUser({ id: "adm-1", is_anonymous: false, email: "mor@members.haimuniya.invalid" });
   const window = await bootCommunity(mock, { syncEnabled: false });
-  await openManageModeration(window);
+  await openManageAudit(window);
   const findAuditSection = () => Array.from(window.document.querySelectorAll(".ach-section")).find((s) => /יומן פעולות ניהול/.test(s.textContent));
   await waitFor(() => findAuditSection()?.querySelectorAll(".log-list .log-row").length === 2, 3000);
   const text = findAuditSection().textContent;
@@ -514,7 +531,7 @@ test("every admin_actions action_type and target_type the schema allows has a He
   });
   mock.setUser({ id: "adm-1", is_anonymous: false, email: "adm@members.haimuniya.invalid" });
   const window = await bootCommunity(mock, { syncEnabled: false });
-  await openManageModeration(window);
+  await openManageAudit(window);
   await waitFor(() => /יומן פעולות ניהול/.test(window.document.body.textContent), 3000);
   // The heading renders before loadAuditLog()'s admin_actions_page() round
   // trip resolves - wait for the real row list, not just the section shell.
@@ -575,7 +592,7 @@ test("consecutive repeats of the same action on the same target collapse into on
   });
   mock.setUser({ id: "adm-1", is_anonymous: false, email: "adm@members.haimuniya.invalid" });
   const window = await bootCommunity(mock, { syncEnabled: false });
-  await openManageModeration(window);
+  await openManageAudit(window);
   await waitFor(() => /יומן פעולות ניהול/.test(window.document.body.textContent), 3000);
   // The filter chips render their static label list before the log itself
   // loads, so "שינוי סטטוס קוד שיתוף" appears as a chip well before

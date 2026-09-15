@@ -57,7 +57,11 @@ function seeded(extra, role, opts) {
 // - a DIFFERENT sub-tab than health's now, where before all three sat on
 // the same Account-tab page together.
 async function openAccountTab(window) {
-  window.document.getElementById("tabManageBtn").click();
+  // The club panel (2026-09-15): the two management panels were made fully
+  // disjoint, so club surfaces live behind the head coach's row. An admin
+  // fixture gets BOTH rows and reaches this one by its own id; a coach
+  // fixture has only the one, under the shared id.
+  (window.document.getElementById("tabClubManageBtn") || window.document.getElementById("tabManageBtn")).click();
   await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
   // "dashboard" is no longer a sub-tab id. The operator-depth rework
   // collapsed Manage's seven sub-tabs into three and retired that tab: the
@@ -67,7 +71,11 @@ async function openAccountTab(window) {
   window.document.querySelector('[data-community-action="set-manage-tab"][data-tab="members"]').click();
 }
 async function openManageAnalytics(window) {
-  window.document.getElementById("tabManageBtn").click();
+  // The club panel (2026-09-15): the two management panels were made fully
+  // disjoint, so club surfaces live behind the head coach's row. An admin
+  // fixture gets BOTH rows and reaches this one by its own id; a coach
+  // fixture has only the one, under the shared id.
+  (window.document.getElementById("tabClubManageBtn") || window.document.getElementById("tabManageBtn")).click();
   await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
   // And "analytics" is an area inside the "ניהול" tab now - still a
   // different surface from the health score, which is what this pair of

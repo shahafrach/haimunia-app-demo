@@ -222,7 +222,9 @@ test("COMM-160: the admin member directory row shows the coach badge for a coach
   const window = await bootCommunity(mock, { syncEnabled: false });
   // Redesign, Phase 1: renderMemberManagement() moved from Community's
   // "account" sub-tab to the Manage tab's own "members" sub-tab.
-  window.document.getElementById("tabManageBtn").click();
+  // The member directory is a club surface, so it lives behind the head
+  // coach's row since the panels were split (2026-09-15).
+  (window.document.getElementById("tabClubManageBtn") || window.document.getElementById("tabManageBtn")).click();
   await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
   window.document.querySelector('[data-community-action="set-manage-tab"][data-tab="members"]').click();
   await waitFor(() => !!window.document.getElementById("adminMemberSearch"), 3000);

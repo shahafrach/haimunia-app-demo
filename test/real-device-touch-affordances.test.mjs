@@ -123,7 +123,11 @@ async function bootGhost(stalledDays) {
   mock.onRpc("admin_member_roster", () => ({ data: [], error: null }));
   mock.onRpc("admin_incomplete_signups", () => ({ data: [ghostRow(stalledDays)], error: null }));
   const window = await bootCommunity(mock, { syncEnabled: false });
-  window.document.getElementById("tabManageBtn").click();
+  // The club panel (2026-09-15): the two management panels were made fully
+  // disjoint, so club surfaces live behind the head coach's row. An admin
+  // fixture gets BOTH rows and reaches this one by its own id; a coach
+  // fixture has only the one, under the shared id.
+  (window.document.getElementById("tabClubManageBtn") || window.document.getElementById("tabManageBtn")).click();
   await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
   window.document.querySelector('[data-community-action="set-manage-tab"][data-tab="invites"]').click();
   await waitFor(() => !!window.document.querySelector('[data-incomplete-signups-section="1"]'), 3000);
