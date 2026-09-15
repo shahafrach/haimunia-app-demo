@@ -466,7 +466,7 @@
       // which would put it in every subsequent render's closure for no
       // reason.
       mgmtPasswordOpen: false, mgmtPasswordBusy: false, mgmtPasswordError: "",
-      auditLog: [], auditCursor: null, auditLoading: false, auditError: false, auditLoaded: false, auditEnd: false, auditFilters: {},
+      auditLog: [], auditCursor: null, auditCursorId: null, auditLoading: false, auditError: false, auditLoaded: false, auditEnd: false, auditFilters: {},
       // Fresh-eyes audit: admin_id -> {display_name,handle,avatar_url},
       // batched by loadAuditLog() so renderAuditLog() can name an actor
       // instead of printing a raw uuid fragment. Keyed by id so entries
@@ -5026,7 +5026,13 @@
       const skRow = `<div class="log-row" aria-hidden="true"><span style="height:12px;width:55%;background:var(--border);border-radius:6px;display:inline-block;"></span></div>`;
       list = `<div class="log-list" aria-busy="true" data-invite-codes-skeleton="1">${skRow.repeat(2)}</div>`;
     } else if (ic.error) {
-      list = `<div class="empty">לא ניתן היה לטעון את הקודים.</div>`;
+      // A RETRY, like the person-invites panel seventy lines below on the
+      // same screen. Live bug hunt, fresh round 7 (2026-09-15):
+      // loadInviteCodes() sets loaded = true even on failure and the tab's
+      // lazy-load guard only checks !loaded, so switching away and back never
+      // retried either - one failed request left an admin permanently stuck
+      // until a full app reload, while the sibling panel recovered in a tap.
+      list = `<div class="empty">לא ניתן היה לטעון את הקודים.<div class="chip-row" style="justify-content:center;"><button class="chip-btn primary" data-community-action="invite-codes-retry">ניסיון חוזר</button></div></div>`;
     } else if (!ic.items.length) {
       list = `<div class="empty">אין קודי הצטרפות משותפים עדיין</div>`;
     } else {
@@ -5099,7 +5105,13 @@
     if (iv.loading && !iv.items.length) {
       const skRow = `<div class="log-row" aria-hidden="true"><span style="height:12px;width:55%;background:var(--border);border-radius:6px;display:inline-block;"></span></div>`;
       list = `<div class="log-list" aria-busy="true" data-person-invites-skeleton="1">${skRow.repeat(3)}</div>`;
-    } else if (iv.error) {
+    // `&& !iv.items.length`: a failure while paging must not erase the rows
+    // already on screen. Live bug hunt, fresh round 7 (2026-09-15) - the same
+    // error flag serves the first load and every "load more", so one blip on
+    // page three replaced three pages of loaded invites with an error box.
+    // renderDirectorySection() has carried this guard since COMM-377 and its
+    // own comment explains why; these three paginated siblings never got it.
+    } else if (iv.error && !iv.items.length) {
       list = `<div class="empty">לא ניתן היה לטעון את ההזמנות.<div class="chip-row" style="justify-content:center;"><button class="chip-btn primary" data-community-action="invite-list-retry">ניסיון חוזר</button></div></div>`;
     } else if (!iv.items.length) {
       list = `<div class="empty">עדיין לא נוצרו הזמנות אישיות</div>`;
@@ -6249,18 +6261,25 @@
     if (!state.user || !hasPerm(PERM.ANALYTICS_VIEW)) { state.admin.auditLog = []; return; }
     if (state.admin.auditLoading) return;
     state.admin.auditLoading = true; state.admin.auditError = false;
-    if (reset) { state.admin.auditLog = []; state.admin.auditCursor = null; state.admin.auditEnd = false; }
+    if (reset) { state.admin.auditLog = []; state.admin.auditCursor = null; state.admin.auditCursorId = null; state.admin.auditCursorId = null; state.admin.auditEnd = false; }
     rerender();
     const filters = {};
     if (state.admin.auditFilters.action_type) filters.action_type = state.admin.auditFilters.action_type;
     if (state.admin.auditFilters.admin_id) filters.admin_id = state.admin.auditFilters.admin_id;
-    const { data, error } = await mgmtDb().rpc("admin_actions_page", { p_cursor: state.admin.auditCursor, p_limit: 25, p_filters: filters });
+    // The cursor is a ROW, not a moment. Live bug hunt, fresh round 7
+    // (2026-09-15): paging on created_at alone dropped every row sharing the
+    // last-shown row's timestamp - 300 seeded audit rows rendered 296. Ties
+    // are the normal case here, not an edge one: actioning a report writes
+    // report_review and content_delete in ONE transaction. feed_page's cursor
+    // already worked this way; these two never caught up.
+    const { data, error } = await mgmtDb().rpc("admin_actions_page", { p_cursor: state.admin.auditCursor, p_cursor_id: state.admin.auditCursorId, p_limit: 25, p_filters: filters });
     state.admin.auditLoading = false;
     state.admin.auditLoaded = true;
     if (error) { state.admin.auditError = true; rerender(); return; }
     const rows = data || [];
     state.admin.auditLog = reset ? rows : state.admin.auditLog.concat(rows);
     state.admin.auditCursor = rows.length ? rows[rows.length - 1].created_at : state.admin.auditCursor;
+    state.admin.auditCursorId = rows.length ? rows[rows.length - 1].id : state.admin.auditCursorId;
     state.admin.auditEnd = rows.length < 25;
     // Fresh-eyes audit: admin_actions_page() returns admin_id as a bare
     // uuid - renderAuditLog() used to print its first 8 characters
@@ -8316,7 +8335,16 @@
   // The exact characters the RPC strips server-side. Sanitizing here too is
   // not redundant: it is what makes the under-2-chars check agree with the
   // server's, so a query of only "%_,()" never costs a round trip.
-  function sanitizeSearchQuery(query) { return String(query || "").trim().replace(/[%_,()]/g, ""); }
+  // A LEADING "@" IS STRIPPED. Live bug hunt, fresh round 7 (2026-09-15).
+  //
+  // "@handle" is the form this app SHOWS a member everywhere their display
+  // name is missing - search rows, suggestion cards, a post byline. So it is
+  // the form they copy and type back. It found nothing: the ILIKE pattern
+  // became %@ritz% against a handle column that never contains an "@", so
+  // typing what was on screen returned zero results while typing the same
+  // handle without it matched. Only the LEADING one goes - an "@" inside a
+  // query is ordinary text and might be part of a name.
+  function sanitizeSearchQuery(query) { return String(query || "").trim().replace(/^@+/, "").replace(/[%_,()]/g, ""); }
   // COMM-233. One search_performed per search the member actually made,
   // not one per keystroke. Both boxes fire a request on every input event
   // (there is no debounce on the fetch itself - COMM-228 chose latency over
@@ -8531,7 +8559,20 @@
     const { error } = await client.from("blocks").upsert({ blocker_id: state.user.id, blocked_id: userId });
     if (error) { setMessage(failText("לא ניתן היה לחסום. נסו שוב", error)); return; }
     await client.from("follows").delete().eq("follower_id", state.user.id).eq("followed_id", userId);
+    // EVERY surface that renders a member row, not just the search array.
+    // Live bug hunt, fresh round 7 (2026-09-15): searchMemberRowHtml() is
+    // shared by community search AND the members directory, but block() only
+    // filtered state.members.people - so blocking someone from the directory
+    // left their row on screen with a live follow button. Tapping it failed
+    // server-side (the database refuses a follow across a block edge), so the
+    // harm was a stale, actionable row rather than a bad write; a row that
+    // still offers an action after you have blocked its owner is the bug.
     state.members.people = state.members.people.filter((person) => person.id !== userId);
+    const dir = state.members.directory;
+    if (dir) {
+      if (Array.isArray(dir.items)) dir.items = dir.items.filter((m) => m && m.id !== userId);
+      if (Array.isArray(dir.searchResults)) dir.searchResults = dir.searchResults.filter((m) => m && m.id !== userId);
+    }
     // COMM-125. Refresh the block set so comments and reaction avatars from
     // the newly blocked member drop out of the current view too.
     await loadBlockedIds();
@@ -9551,6 +9592,15 @@
   // substring filter over whatever page of the roster is already loaded,
   // per the ticket's own "falling back to the existing client-side filter"
   // clause. Clearing the box returns to the plain paginated roster.
+  let directorySearchTimer = null;
+  function directorySearchDebounced(query) {
+    state.members.directory.query = String(query || "");
+    if (directorySearchTimer) clearTimeout(directorySearchTimer);
+    directorySearchTimer = setTimeout(() => {
+      directorySearchTimer = null;
+      directorySearch(query);
+    }, SEARCH_DEBOUNCE_MS);
+  }
   async function directorySearch(query) {
     const d = state.members.directory;
     d.query = String(query || "");
@@ -9654,7 +9704,7 @@
     return { members: "חברים", events: "אירועים", challenges: "אתגרים" }[key] || key;
   }
   function searchMemberRowHtml(person) {
-    return `<div class="log-row"><div class="flex gap-10" style="align-items:center;">${avatarHtml(person.display_name || person.handle, 32, person.avatar_url)}<div><div style="font-weight:700;">${nameHtml(person.display_name, person.handle)}${isCoachRole(memberRole(person.id)) ? " " + coachBadgeHtml(memberRole(person.id)) : ""}</div><div style="color:var(--steel);font-size:12px;"><bdi>@${esc(person.handle)}</bdi> ${bidiText(person.bio || "")}</div></div></div><div class="chip-row" style="margin-top:0;"><button class="chip-btn" data-community-action="view-profile" data-id="${esc(person.id)}">פרופיל</button>${person.allow_follows === false ? "" : followButtonHtml(person.id)}<button class="chip-btn" data-community-action="block" data-id="${esc(person.id)}">חסימה</button></div></div>`;
+    return `<div class="log-row"><div class="flex gap-10" style="align-items:center;">${avatarHtml(person.display_name || person.handle, 32, person.avatar_url)}<div style="min-width:0;"><div class="member-name" style="font-weight:700;">${nameHtml(person.display_name, person.handle)}${isCoachRole(memberRole(person.id)) ? " " + coachBadgeHtml(memberRole(person.id)) : ""}</div><div style="color:var(--steel);font-size:12px;"><bdi>@${esc(person.handle)}</bdi> ${bidiText(person.bio || "")}</div></div></div><div class="chip-row" style="margin-top:0;"><button class="chip-btn" data-community-action="view-profile" data-id="${esc(person.id)}">פרופיל</button>${person.allow_follows === false ? "" : followButtonHtml(person.id)}<button class="chip-btn" data-community-action="block" data-id="${esc(person.id)}">חסימה</button></div></div>`;
   }
   function searchEventRowHtml(ev) {
     // No event detail surface exists yet (COMM-213 builds it), so the row
@@ -10485,7 +10535,7 @@
     let body;
     if (state.admin.auditLoading && !state.admin.auditLog.length) {
       body = `<div class="log-list" aria-busy="true">${`<div class="log-row" aria-hidden="true"><span style="height:12px;width:55%;background:var(--border);border-radius:6px;display:inline-block;"></span></div>`.repeat(4)}</div>`;
-    } else if (state.admin.auditError) {
+    } else if (state.admin.auditError && !state.admin.auditLog.length) {
       body = `<div class="empty">לא ניתן היה לטעון את היומן.<div class="chip-row" style="justify-content:center;"><button class="chip-btn primary" data-community-action="audit-retry">ניסיון חוזר</button></div></div>`;
     } else if (!state.admin.auditLog.length) {
       body = `<div class="empty">עדיין לא נרשמו פעולות ניהול.</div>`;
@@ -10639,7 +10689,7 @@
     if (r.loading && !r.items.length) {
       const skRow = `<div class="log-row" aria-hidden="true"><span style="height:12px;width:55%;background:var(--border);border-radius:6px;display:inline-block;"></span></div>`;
       body = `<div class="log-list" aria-busy="true" data-member-roster-skeleton="1">${skRow.repeat(4)}</div>`;
-    } else if (r.error) {
+    } else if (r.error && !r.items.length) {
       body = `<div class="empty">לא ניתן היה לטעון את רשימת החברים.<div class="chip-row" style="justify-content:center;"><button class="chip-btn primary" data-community-action="roster-retry">ניסיון חוזר</button></div></div>`;
     } else {
       const readOnly = !isAdmin();
@@ -17029,6 +17079,13 @@
     if (idx < 0) return;
     const removed = st.items[idx];
     st.items = st.items.slice(0, idx).concat(st.items.slice(idx + 1));
+    // The COUNT beside the list is part of the list. Live bug hunt, fresh
+    // round 7 (2026-09-15): following_count came from the one-shot
+    // viewCommunityProfile() payload and nothing updated it here, so the row
+    // vanished while the label above it still read the old number - "(2)"
+    // over a single row. Adjusted optimistically and restored below on the
+    // same failure path the row itself uses, so the two never disagree.
+    if (pv.data && typeof pv.data.following_count === "number") pv.data.following_count = Math.max(0, pv.data.following_count - 1);
     st.actionError = false;
     rerender();
     const result = await follow(userId); // same single toggle every follow control uses
@@ -17039,6 +17096,7 @@
       // "הפסקת מעקב" again on the restored row is the retry: no separate
       // control needed.
       st.items = st.items.slice(0, idx).concat([removed], st.items.slice(idx));
+      if (pv.data && typeof pv.data.following_count === "number") pv.data.following_count += 1;
       st.actionError = true;
     } else {
       st.actionError = false;
@@ -17055,7 +17113,17 @@
     const actionBtn = side === "following"
       ? `<button class="chip-btn" data-community-action="following-unfollow" data-id="${esc(m.id)}">הפסקת מעקב</button>`
       : (m.allow_follows === false ? "" : followButtonHtml(m.id));
-    return `<div class="log-row"><button class="link-btn" data-community-action="view-profile" data-id="${esc(m.id)}" style="padding:0;display:flex;gap:10px;align-items:center;color:inherit;text-align:right;">${avatarHtml(name, 32, m.avatar_url)}<span style="font-weight:700;">${esc(name)}${badge}</span></button><div class="chip-row" style="margin-top:0;">${actionBtn}</div></div>`;
+    // THE HANDLE, because two members can share a display name. Live bug hunt,
+    // fresh round 7 (2026-09-15): a search row and a suggestion card both show
+    // "@handle" beside the name; this row showed the bare name only. With two
+    // members called נועם - ordinary in a thirty-person club - there was no
+    // way to tell from this list which one you were about to unfollow.
+    // Suppressed when the name IS the handle fallback, so it cannot read
+    // "@ritz @ritz".
+    const handleLine = (m.handle && m.display_name)
+      ? `<span style="color:var(--steel);font-size:12px;"><bdi>@${esc(m.handle)}</bdi></span>`
+      : "";
+    return `<div class="log-row"><button class="link-btn" data-community-action="view-profile" data-id="${esc(m.id)}" style="padding:0;display:flex;gap:10px;align-items:center;color:inherit;text-align:right;min-width:0;">${avatarHtml(name, 32, m.avatar_url)}<span style="min-width:0;"><span class="member-name" style="font-weight:700;">${esc(name)}${badge}</span>${handleLine ? `<br>${handleLine}` : ""}</span></button><div class="chip-row" style="margin-top:0;">${actionBtn}</div></div>`;
   }
   function followListSectionHtml(pv, side, label, count) {
     if (count == null) return "";
@@ -17093,6 +17161,13 @@
     const pv = state.members.profileView;
     if (!pv) return "";
     const d = pv.data || {};
+    // "@handle" NEEDS nameHtml(). Live bug hunt, fresh round 7 (2026-09-15):
+    // this header built the same handle fallback nameHtml() builds, then
+    // rendered it with a bare esc() - so in this RTL document the "@" was
+    // painted to the RIGHT of the handle and a member with no display name
+    // saw their own title as "noam-cohen@". nameHtml() exists precisely to
+    // wrap that fallback in <bdi>, and the identical member rendered
+    // correctly in a search row, which does use it.
     const name = [d.first_name, d.last_name].filter(Boolean).join(" ") || d.display_name || (d.handle ? "@" + d.handle : "חבר/ה");
     const roleLabel = PROFILE_ROLE_LABELS[d.role] || (d.role ? esc(d.role) : "");
     const profileTabs = [
@@ -17164,7 +17239,7 @@
             <div class="flex gap-10" style="align-items:center;min-width:0;">
               ${avatarHtml(name, 44, d.avatar_url)}
               <div style="min-width:0;">
-                <h2 id="profileViewTitle" style="margin-top:0;font-weight:800;font-size:16px;margin-bottom:0;">${esc(name)}${isCoachRole(d.role) ? " " + coachBadgeHtml(d.role) : ""}</h2>
+                <h2 id="profileViewTitle" class="member-name" style="margin-top:0;font-weight:800;font-size:16px;margin-bottom:0;">${(!d.first_name && !d.last_name && !d.display_name) ? nameHtml(null, d.handle) : esc(name)}${isCoachRole(d.role) ? " " + coachBadgeHtml(d.role) : ""}</h2>
                 <div style="color:var(--steel);font-size:12px;">${profileRoleAndSince(roleLabel, d.member_since)}</div>
               </div>
             </div>
@@ -17588,7 +17663,10 @@
     if (!first && (c.loadingMore || c.end)) return;
     if (first) { c.loading = true; c.error = false; } else { c.loadingMore = true; c.moreError = false; }
     rerender();
-    const { data, error } = await client.rpc("notif_list", { p_cursor: c.cursor, p_limit: NOTIF_PAGE_SIZE });
+    // Same composite cursor as the audit log above, for the same reason -
+    // notif_create() fans one event out to every recipient in a loop, so rows
+    // sharing a timestamp are routine. 200 seeded rows rendered 199.
+    const { data, error } = await client.rpc("notif_list", { p_cursor: c.cursor, p_cursor_id: c.cursorId || null, p_limit: NOTIF_PAGE_SIZE });
     if (!state.notif.center || state.notif.center !== c) return;
     if (error) {
       if (first) { c.loading = false; c.error = true; } else { c.loadingMore = false; c.moreError = true; }
@@ -17605,7 +17683,7 @@
       rows = keep;
     }
     for (const r of rows) { r._wasUnread = !r.read_at; c.rows.push(r); }
-    if (rows.length) c.cursor = rows[rows.length - 1].created_at;
+    if (rows.length) { c.cursor = rows[rows.length - 1].created_at; c.cursorId = rows[rows.length - 1].id; }
     c.end = hitOld || raw.length < NOTIF_PAGE_SIZE;
     c.hasOlder = hitOld;
     c.loading = false; c.loadingMore = false;
@@ -20275,7 +20353,14 @@
     // COMM-231. Same restore-focus-and-caret pattern as communityPeopleSearch
     // above, for the directory's own search box.
     const dirInput = document.getElementById("communityDirectorySearch");
-    if (dirInput) dirInput.addEventListener("input", () => directorySearch(dirInput.value));
+    // Debounced, like the main search box beside it. Live bug hunt, fresh
+    // round 7: searchPeople() was explicitly debounced under PERF-3, with a
+    // comment noting a typed word "used to be 8 round trips... now costs
+    // one" - and this box, which calls the SAME community_search RPC, was
+    // never given the same treatment. Measured live: four characters cost one
+    // request through the main box and three through this one, each with its
+    // own full re-render.
+    if (dirInput) dirInput.addEventListener("input", () => directorySearchDebounced(dirInput.value));
     if (dirInput && dirInput.value && (!document.activeElement || document.activeElement === document.body)) {
       try { dirInput.focus(); dirInput.setSelectionRange(dirInput.value.length, dirInput.value.length); } catch (e) { /* not a text input in this browser */ }
     }
@@ -20835,6 +20920,10 @@
     else if (action === "dismiss-invite-created") dismissInviteCreated();
     else if (action === "invite-status-filter") setInviteStatusFilter(el.dataset.status);
     else if (action === "invite-list-retry") loadInvites(true);
+    // Its sibling's retry. loadInviteCodes() marks itself loaded even on
+    // failure, so the lazy-load guard will not re-fire: the reset has to be
+    // explicit or the button would do nothing.
+    else if (action === "invite-codes-retry") { state.admin.inviteCodes.loaded = false; loadInviteCodes(); }
     else if (action === "invite-list-more") loadInvites(false);
     else if (action === "invite-revoke") askConfirm({ title: "ביטול הזמנה", message: "לבטל את ההזמנה של {subject}? היא לא תהיה ניתנת עוד למימוש.", subject: inviteSubjectName(el.dataset.id), confirmLabel: "ביטול ההזמנה", destructive: true, action: "admin-invite-revoke", payload: { inviteId: el.dataset.id } });
     // COMM-377 member roster.

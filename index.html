@@ -1139,6 +1139,15 @@
      wraps the same kind of extreme input correctly; this brings .who-name
      in line with it. */
   .who-name{ font-weight:800; font-size:15px; overflow-wrap:anywhere; }
+  /* The same break rule .who-name carries, for the member rows that render a
+     name from the server. Live bug hunt, fresh round 7 (2026-09-15): the
+     overflow-wrap fix was added for one screen and scoped to that one
+     selector, so an 80-character unbroken Hebrew name in a SEARCH result or
+     the members directory still rendered as one 800px line inside a 354px
+     row - measured bleeding to -440px, off the edge of the viewport and
+     under the row's own buttons. A long single-token name is not exotic in
+     Hebrew, and these rows take their text from whatever a member typed. */
+  .member-name{ overflow-wrap:anywhere; min-width:0; }
   .who-sub{ color:var(--steel); font-size:12.5px; margin-top:2px; }
   .navrow{ width:100%; display:flex; align-items:center; gap:10px; padding:12px 10px; border-radius:14px; text-align:right; min-height:44px; }
   .navrow.active{ background:color-mix(in srgb, var(--energy) 10%, transparent); }
