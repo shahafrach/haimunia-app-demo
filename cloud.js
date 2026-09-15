@@ -9457,8 +9457,8 @@
       invite: "הזמנה", invite_code: "קוד הזמנה", onboarding_step: "שלב קליטה",
     }[t] || t;
   }
-  const AUDIT_ACTION_TYPES = ["content_delete", "content_hide", "member_restrict", "member_unrestrict", "role_change", "challenge_edit", "achievement_edit", "privacy_config", "content_pin", "content_unpin", "report_review", "member_of_week_publish", "monthly_recap_publish", "club_feature_toggle", "invite_created", "invite_revoked", "shared_code_created", "shared_code_status_changed", "onboarding_content_updated", "member_password_reset", "invite_reclaimed"];
-  // Usability pass: 21 chips plus "הכול" wrapped across several rows - noisy
+  const AUDIT_ACTION_TYPES = ["content_delete", "content_hide", "member_restrict", "member_unrestrict", "role_change", "challenge_edit", "achievement_edit", "privacy_config", "content_pin", "content_unpin", "report_review", "member_of_week_publish", "monthly_recap_publish", "club_feature_toggle", "invite_created", "invite_revoked", "shared_code_created", "shared_code_status_changed", "onboarding_content_updated", "member_password_reset", "invite_reclaimed", "bug_report_status"];
+  // Usability pass: 22 chips plus "הכול" wrapped across several rows - noisy
   // for a tool staff open occasionally, not weekly. These four stay visible
   // (what a moderator's actual filtering reaches for: a report decision, a
   // deletion, a restriction, a role change); the rest sit behind the same
@@ -9587,7 +9587,15 @@
     return `<div class="chip-row" style="margin:0 0 10px;">${filters}</div>${body}`;
   }
   function renderAuditLog() {
-    if (!hasPerm(PERM.ANALYTICS_VIEW)) return "";
+    // is_admin(), not ANALYTICS_VIEW. 202609150004 re-gated admin_actions_page()
+    // from has_perm('community.analytics.view') to is_admin(), because the audit
+    // log is not analytics and leaving it on that permission meant granting
+    // head_coach analytics handed them the record of their own actions. This
+    // client check was left on the old permission - latent rather than live,
+    // since the audit AREA is only rendered in admin mode, but a client gate
+    // that disagrees with its server gate is a trap for whoever renders this
+    // function somewhere else. Matched to the server deliberately.
+    if (!isAdmin()) return "";
     const selected = state.admin.auditFilters.action_type;
     const restTypes = AUDIT_ACTION_TYPES.filter((t) => !AUDIT_COMMON_TYPES.includes(t));
     const auditChip = (t) => `<button class="chip-btn${selected === t ? " selected" : ""}" data-community-action="audit-filter" data-type="${t}">${auditActionLabel(t)}</button>`;

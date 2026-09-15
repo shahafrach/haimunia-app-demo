@@ -105,7 +105,15 @@ test("no community staff gate reads is_admin or a role literal; every one goes t
   assert.match(src, /function hasPerm\(code\)\s*\{\s*return[^\n]*state\.permissions/);
   // The queue, audit view and pin controls are permission-gated.
   assert.match(src, /function renderModeration\(\)\s*\{\s*if \(!\(hasPerm\(PERM\.COMMENT_MODERATE\) \|\| isAdmin\(\)\)\) return "";/);
-  assert.match(src, /function renderAuditLog\(\)\s*\{\s*if \(!hasPerm\(PERM\.ANALYTICS_VIEW\)\) return "";/);
+  // Updated 2026-09-15. This asserted ANALYTICS_VIEW, which was correct while
+  // the SERVER gated admin_actions_page() on that permission. 202609150004
+  // re-gated the server on is_admin(), because the audit log is not analytics
+  // and leaving it there meant granting head_coach analytics handed them the
+  // record of their own actions. The client now mirrors that - which is not an
+  // exception to this test's rule but an instance of the exception the comment
+  // below already states: isAdmin() belongs exactly where the server checks
+  // the real is_admin column.
+  assert.match(src, /function renderAuditLog\(\)[\s\S]{0,700}?if \(!isAdmin\(\)\) return "";/);
   assert.match(src, /if \(!state\.user \|\| !hasPerm\(PERM\.CONTENT_PIN\)\) return;/);
   // isAdmin() stays only where a server function still checks the real
   // is_admin column: the audit posts bypass and the admin_* member RPCs.
