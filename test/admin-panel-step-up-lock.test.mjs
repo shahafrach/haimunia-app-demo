@@ -207,7 +207,14 @@ test("a head coach opens the club panel but NOT the app panel", async () => {
     "and admitted to the club panel, where the roster and invites live");
 });
 
-test("the club panel knows which gate it is, and unlocking one does not open the other", async () => {
+test("one login opens every panel that account may use - and only those", async () => {
+  // Changed deliberately (2026-09-15, fourth pass). This used to demand a
+  // second login for the second panel, on reasoning that belonged to the old
+  // step-up design, where the lock was the member's own password and two
+  // people could share one account. Against a SEPARATE identity it protects
+  // nothing: the session already proves who this is, so a second prompt has
+  // exactly one possible answer - the one just given - and on a phone that is
+  // friction on a security control, which is how controls get worked around.
   const mock = separateIdentitiesMock();
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openPanel(window, "tabClubManageBtn");
@@ -219,12 +226,102 @@ test("the club panel knows which gate it is, and unlocking one does not open the
   assert.ok(window.document.querySelector('.subtabbtn[data-community-action="set-manage-tab"][data-tab="invites"]'),
     "the club panel opens");
 
-  // The load-bearing property of keying the unlock by panel: one account may
-  // well hold both jobs, but opening the club must not silently hand over the
-  // app. Same account, same credentials - still asked again.
+  await openPanel(window, "tabManageBtn");
+  assert.equal(window.document.getElementById("panelUnlock"), null,
+    "and the app panel opens too - this account holds admin, and it just proved it");
+  assert.ok(window.document.getElementById("manageArea-audit"), "really open, not merely ungated");
+});
+
+test("an account entitled to one panel does not slide into the other", async () => {
+  // The entitlement is what decides, not which door was knocked on. A head
+  // coach signing into the club gets the club - and the app panel stays shut,
+  // because the separation that matters is between the two JOBS.
+  const mock = separateIdentitiesMock({ mgmtRole: "head_coach", mgmtIsAdmin: false });
+  const window = await bootCommunity(mock, { syncEnabled: false });
+  await openPanel(window, "tabClubManageBtn");
+  submitGate(window, MGMT_EMAIL, ADMIN_STEP_UP_PASSWORD);
+  await waitFor(() => !window.document.getElementById("panelUnlock"), 4000);
+
   await openPanel(window, "tabManageBtn");
   assert.ok(window.document.getElementById("panelUnlock"),
-    "the app panel is still locked - the two unlocks are independent");
+    "the app panel is still locked for an account that is not an admin");
+  assert.equal(window.document.getElementById("manageArea-audit"), null, "and renders nothing");
+});
+
+test("the panel says which account is managing, and can be locked in one tap", async () => {
+  // Both were missing. The app is signed in as one person while the panel
+  // acts as another, and nothing said so - on a club where the owner holds
+  // both logins, "which of my two accounts is this" is a real question, and
+  // every action here is recorded against the answer. The lock button is the
+  // gate's missing counterpart: before it, the only ways out were to wait,
+  // reload, or sign out of the app entirely, so handing the phone to someone
+  // meant leaving the panel open.
+  const mock = separateIdentitiesMock();
+  const window = await bootCommunity(mock, { syncEnabled: false });
+  await openPanel(window, "tabManageBtn");
+  submitGate(window, MGMT_EMAIL, ADMIN_STEP_UP_PASSWORD);
+  await waitFor(() => !window.document.getElementById("panelUnlock"), 4000);
+  assert.match(window.document.body.textContent, /מנהלים כרגע כ-ניהול/,
+    "the panel names the management account it is acting as");
+
+  const lock = window.document.querySelector('[data-community-action="panel-lock"]');
+  assert.ok(lock, "a lock control is offered");
+  lock.click();
+  await waitFor(() => !!window.document.getElementById("panelUnlock"), 4000);
+  assert.equal(window.document.getElementById("manageArea-bugs"), null, "one tap and the panel is shut");
+  assert.equal(mock.getUser().id, "member-1", "and the member is still signed in, as always");
+});
+
+test("the account is remembered on this device; the password never is", async () => {
+  // Retyping haimuniya@gmail.com on a phone keyboard, in an LTR field inside
+  // an RTL app, every single time, is the friction that stops an owner using
+  // the panel at all. The account name is remembered; the password is not,
+  // and the fields are marked so the phone's own password manager can offer
+  // to save and fill them - autocomplete="off" was what blocked that.
+  const mock = separateIdentitiesMock();
+  const window = await bootCommunity(mock, { syncEnabled: false });
+  await openPanel(window, "tabManageBtn");
+  const form = window.document.getElementById("panelUnlock");
+  assert.equal(form.elements.email.getAttribute("autocomplete"), "username",
+    "the phone may fill the account");
+  assert.equal(form.elements.password.getAttribute("autocomplete"), "current-password",
+    "and the password");
+  submitGate(window, MGMT_EMAIL, ADMIN_STEP_UP_PASSWORD);
+  await waitFor(() => !window.document.getElementById("panelUnlock"), 4000);
+
+  assert.equal(window.localStorage.getItem("haimunia-demo:mgmtAccount"), MGMT_EMAIL,
+    "the account is remembered for next time");
+  const stored = JSON.stringify(window.localStorage);
+  assert.ok(!stored.includes(ADMIN_STEP_UP_PASSWORD),
+    "and the password is nowhere in this device's storage");
+
+  window.document.querySelector('[data-community-action="panel-lock"]').click();
+  await waitFor(() => !!window.document.getElementById("panelUnlock"), 4000);
+  assert.equal(window.document.getElementById("panelUnlock").elements.email.value, MGMT_EMAIL,
+    "so the next unlock only needs the password");
+});
+
+test("the window measures idle time, not total time", () => {
+  // A fixed window is wrong for the job people actually do here - triage the
+  // inbox, cross-check the audit log, fix a role, answer a member - which
+  // runs past any fixed cutoff routinely. Being asked to retype a password
+  // mid-task is what makes an owner stop using the panel. Sliding keeps the
+  // property that matters: what this guards is an UNATTENDED phone, and an
+  // unattended phone is by definition not being touched.
+  const at = cloudJs.indexOf("function mgmtTouch()");
+  assert.ok(at > -1, "there is a touch that extends the window");
+  const body = cloudJs.slice(at, cloudJs.indexOf("\n  }", at));
+  assert.match(body, /if \(u\.admin\) u\.admin = until;/, "extends the app window if it is open");
+  assert.match(body, /if \(u\.club\) u\.club = until;/, "and the club window if it is open");
+  // The load-bearing half: a zero stays zero. Otherwise a session entitled
+  // only to the club would slide its way into the app panel just by sitting
+  // on screen.
+  for (const line of body.split("\n").filter((l) => l.includes("= until"))) {
+    assert.match(line, /^\s*if \(u\.(admin|club)\) u\.\1 = until;\s*$/,
+      `every extension must be guarded by the window already being open, got:\n  ${line.trim()}`);
+  }
+  const render = cloudJs.slice(cloudJs.indexOf("function renderManagePanel"), cloudJs.indexOf("function renderManagePanel") + 3600);
+  assert.match(render, /mgmtTouch\(\);/, "every render of an open panel counts as activity");
 });
 
 test("the management session is memory-only and dies with the member's", () => {

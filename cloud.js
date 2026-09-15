@@ -9720,7 +9720,25 @@
   // so a backgrounded app is locked the moment it is looked at again - and
   // when the last panel's window runs out, mgmtExpireIfStale() drops the
   // management session with it, so an idle phone stops holding one at all.
-  const ADMIN_UNLOCK_MINUTES = 15;
+  // 30 minutes, and it SLIDES - see mgmtTouch(). Was a fixed 15, which is
+  // fine for "read one thing and leave" and wrong for the job people actually
+  // do here: triage the bug inbox, cross-check the audit log, fix a role,
+  // answer a member. That runs past fifteen minutes routinely, and being
+  // asked to retype a password mid-task - on a phone, in an LTR field, in an
+  // RTL app - is the kind of friction that makes an owner stop using the
+  // panel. Sliding means the clock measures IDLE time, not total time: it is
+  // the unattended phone this guards against, and an unattended phone is by
+  // definition not being touched.
+  const ADMIN_UNLOCK_MINUTES = 30;
+  // Where this device remembers WHICH management account was last used. The
+  // account name only - never the password, which lives in Supabase Auth and
+  // in the phone's own password manager, and nowhere else. Saves retyping
+  // "haimuniya@gmail.com" on a phone keyboard every time, and lets the
+  // password manager match a filled-in username to its saved entry.
+  const MGMT_ACCOUNT_KEY = "haimunia-demo:mgmtAccount";
+  function rememberedMgmtAccount() {
+    try { return localStorage.getItem(MGMT_ACCOUNT_KEY) || ""; } catch (e) { return ""; }
+  }
   function panelUnlocked(panel) {
     // Both halves must hold. The timer alone is not enough: a management
     // session that failed to load, or was torn down by a sign-out, must
@@ -9750,6 +9768,18 @@
   // session down with it once NEITHER panel is still open. Called from the
   // render path, so a backgrounded phone re-locks the moment it is looked at
   // again rather than on a timer that a sleeping tab would not fire.
+  // Extends every unlock this session already holds. Called from the panel's
+  // render path, which is to say on every interaction with it - so the window
+  // measures time since the manager last did something, not time since they
+  // signed in. Never GRANTS a panel: a zero stays zero, so a session that was
+  // only ever entitled to the club cannot slide its way into the app panel.
+  function mgmtTouch() {
+    if (!state.admin.mgmt) return;
+    const until = Date.now() + ADMIN_UNLOCK_MINUTES * 60 * 1000;
+    const u = state.admin.panelUnlockedUntil;
+    if (u.admin) u.admin = until;
+    if (u.club) u.club = until;
+  }
   function mgmtExpireIfStale() {
     if (!state.admin.mgmt) return;
     const now = Date.now();
@@ -9784,12 +9814,23 @@
     const a = state.admin;
     const copy = PANEL_UNLOCK_COPY[panel];
     const busy = a.panelUnlockBusy === panel;
+    // AUTOCOMPLETE username / current-password, not "off".
+    //
+    // "off" was a mistake, and the expensive kind: it is what tells iOS and
+    // Android NOT to offer to save these credentials and not to fill them
+    // back in. The reasoning behind it was sound - do not prefill the
+    // signed-in MEMBER's details, because this is not their password being
+    // asked for - but the fix for that is to not prefill the member, which
+    // this does by seeding the field from the remembered MANAGEMENT account
+    // instead. Blocking the password manager just meant typing a long address
+    // and a long password by hand, on a phone, every single time.
+    const remembered = rememberedMgmtAccount();
     return `<div class="chart-card">
       <div style="font-weight:800;font-size:16px;margin-bottom:6px;">${esc(copy.title)}</div>
       <div style="color:var(--steel);font-size:13px;line-height:1.7;margin-bottom:12px;">${bidiText(copy.body)}</div>
       <form id="panelUnlock" data-panel="${esc(panel)}">
-        ${field("panelUnlock", "email", "שם משתמש או אימייל של חשבון הניהול", `<input class="text-input" name="email" type="text" dir="ltr" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off" placeholder="headcoach" required/>`)}
-        ${field("panelUnlock", "password", "סיסמה", `<input class="text-input" name="password" type="password" dir="ltr" autocomplete="off" placeholder="סיסמה" required/>`)}
+        ${field("panelUnlock", "email", "שם משתמש או אימייל של חשבון הניהול", `<input class="text-input" name="email" type="text" dir="ltr" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="username" placeholder="headcoach" value="${esc(remembered)}" required/>`)}
+        ${field("panelUnlock", "password", "סיסמה", `<input class="text-input" name="password" type="password" dir="ltr" autocomplete="current-password" placeholder="סיסמה" required/>`)}
         <button class="save-btn" type="submit"${busy ? " disabled" : ""} style="margin-top:12px;">${busy ? "בודקים…" : esc(copy.cta)}</button>
       </form>
       ${a.panelUnlockError ? `<div class="field-error" role="alert" style="margin-top:10px;">${esc(a.panelUnlockError)}</div>` : ""}
@@ -9883,9 +9924,33 @@
     };
     state.admin.panelUnlockBusy = "";
     state.admin.panelUnlockError = "";
-    // Only the panel that was asked for. One management account may well hold
-    // both jobs, but unlocking the club must not silently hand over the app.
-    state.admin.panelUnlockedUntil[panel] = Date.now() + ADMIN_UNLOCK_MINUTES * 60 * 1000;
+    try { localStorage.setItem(MGMT_ACCOUNT_KEY, typed); } catch (e) {}
+    // EVERY PANEL THIS ACCOUNT MAY OPEN, not only the one that was asked for.
+    //
+    // This was per-panel, on the reasoning that unlocking the club must not
+    // silently hand over the app. That reasoning belonged to the OLD design,
+    // where the lock was a step-up on the member's own password and the two
+    // panels could be held by two different people on one account.
+    //
+    // It does not survive the move to a separate identity. What stands here
+    // now is a real authentication as a specific account, and that account's
+    // entitlements are not a matter of which door it happened to knock on.
+    // Asking the same person for the same credentials a second time, to reach
+    // a panel the session already proves they may use, protects nothing - it
+    // is a second password prompt whose only possible answer is the one just
+    // given. On a phone it is pure friction, and friction on a security
+    // control is how the control ends up disabled.
+    //
+    // The entitlement still decides: an account that is staff but not admin
+    // gets the club window and a zero for the app, so the app panel stays
+    // locked and says why. The separation that matters - between the two
+    // JOBS - is preserved exactly; what is gone is a second login for one
+    // person who has already proved who they are.
+    const until = Date.now() + ADMIN_UNLOCK_MINUTES * 60 * 1000;
+    state.admin.panelUnlockedUntil = {
+      admin: acctIsAdmin ? until : 0,
+      club: acctIsStaff ? until : 0,
+    };
     rerender();
   }
   function renderBugReports() {
@@ -18959,6 +19024,9 @@
     if (!panelUnlocked(panelKey)) {
       return `<h1 class="page-title">${esc(panelTitle)}</h1>${renderPanelUnlockGate(panelKey)}`;
     }
+    // Every render of an unlocked panel is a sign somebody is still working in
+    // it, so the idle clock starts again here.
+    mgmtTouch();
     // Belt and braces. panelUnlock() will not set the unlock for a panel the
     // account may not run, so this is unreachable by the normal path - but it
     // means the rendered panel states its own requirement rather than relying
@@ -19065,7 +19133,30 @@
     // member who now lives primarily on Manage had no unread indicator at
     // all while there, even though the underlying realtime count kept
     // updating correctly the whole time.
+    // WHO IS MANAGING, and a way to stop. Two small things that were missing
+    // and that both matter more here than on any other screen.
+    //
+    // Naming the account answers a question the separation itself creates: the
+    // app is signed in as one person and this panel is acting as another, and
+    // nothing on screen said so. On a club where the owner holds both logins,
+    // "which of my two accounts is this" is a real question with real
+    // consequences - every action taken here is recorded against whoever this
+    // says it is.
+    //
+    // The lock button is the missing counterpart to the gate. Before this the
+    // only ways out were to wait for the idle window, reload, or sign out of
+    // the app entirely - so somebody handing their phone to a member had no
+    // way to close the panel first. A control that takes one tap is the
+    // difference between a lock people use and one they work around.
+    const mgmtWho = state.admin.mgmt ? (state.admin.mgmt.displayName || state.admin.mgmt.email) : "";
+    const mgmtBar = mgmtWho
+      ? `<div class="chart-card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;margin-bottom:12px;">
+           <div style="color:var(--steel);font-size:12px;line-height:1.5;">${bidiText(`מנהלים כרגע כ-${mgmtWho}`)}</div>
+           <button class="chip-btn" data-community-action="panel-lock">נעילה</button>
+         </div>`
+      : "";
     return `<h1 class="page-title" style="display:flex;align-items:center;justify-content:space-between;gap:10px;"><span>${esc(panelTitle)}</span>${renderNotificationBell()}</h1>`
+      + mgmtBar
       + renderManageAttention()
       + manageTabBar
       + manageTabIntro(activeManageTab.id)
@@ -20018,6 +20109,11 @@
     else if (action === "retention-onboarding-step") setRetentionOnboardingStep(el.dataset.step);
     // COMM-312 community health score.
     else if (action === "community-health-retry") loadCommunityHealth();
+    // Closes the management session by hand - see the lock button in
+    // renderManagePanel(). Tears down BOTH panels and the second Supabase
+    // client with them, because the session is the thing being ended, not one
+    // screen's view of it.
+    else if (action === "panel-lock") { mgmtTeardown(); setMessage("ננעל"); rerender(); }
     // COMM-379 registration funnel analytics.
     else if (action === "registration-funnel-retry") loadRegistrationFunnel();
     // COMM-378 onboarding step content editor.

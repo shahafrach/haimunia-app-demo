@@ -115,6 +115,48 @@ Credentials live only in Supabase Auth, as bcrypt hashes. Nothing in this
 repository contains either password, and nothing should: GitHub Pages serves
 every file in it to anyone who asks.
 
+## Living with it on a phone
+
+The first version worked and was unpleasant to use, which on a security
+control is a defect: friction is how a lock ends up worked around. Four
+things changed after the owner used it.
+
+**The password manager was blocked.** Both fields carried
+`autocomplete="off"`. The intent was right — do not prefill the signed-in
+member, because it is not their password being asked for — but the effect was
+that iOS and Android would neither save these credentials nor fill them back
+in, so a long address and a long password had to be typed by hand, in an LTR
+field inside an RTL app, every time. They are now `username` and
+`current-password`, and the member is kept out of the field by seeding it from
+the remembered management account instead.
+
+**The account is remembered on this device**, in
+`haimunia-demo:mgmtAccount`. The account name only. The password lives in
+Supabase Auth and in the phone's own password manager, and nowhere else — a
+test asserts it appears nowhere in local storage.
+
+**One login opens every panel that account may use.** It used to ask again for
+the second panel. That reasoning belonged to the step-up design, where the
+lock was the member's own password and two people could share one account.
+Against a separate identity it protects nothing: the session already proves
+who this is, so the second prompt has exactly one possible answer. The
+entitlement still decides — a head coach gets the club and the app panel stays
+shut — so the separation between the two *jobs* is untouched.
+
+**The window is 30 minutes and slides.** It measures idle time, not total
+time, because the job here (triage the inbox, cross-check the audit log, fix a
+role) runs past any fixed cutoff routinely, and being asked to retype a
+password mid-task is what makes an owner stop using the panel. What this
+guards is an unattended phone, and an unattended phone is not being touched.
+A zero stays zero, so a session can never slide into a panel it was not
+entitled to.
+
+**There is a lock button**, and a line naming the account currently managing.
+Before, the only ways out were to wait, reload, or sign out of the app — so
+handing the phone to a member meant leaving the panel open. And since the app
+is signed in as one person while the panel acts as another, with every action
+recorded against the latter, the screen now says which is which.
+
 ## What is still the real boundary
 
 None of this is the security boundary. `is_admin()` in the database is, and it
@@ -122,9 +164,17 @@ is re-checked on every action regardless of anything on the client. What the
 lock adds is that management credentials are needed at all, and that an
 unattended phone in a gym is not an open admin panel.
 
-## Outstanding
+## The admin column belongs to the management account
 
-`שלומי` and `shahaf` — the owner's own training accounts — still carry
-`profiles.is_admin = true`. Until that is cleared the separation is
-client-side only: those accounts' JWTs still authorise admin RPCs directly.
-Clearing it is a one-line production change and is the last step of this work.
+`202609150006_admin_is_its_own_account.sql` clears `profiles.is_admin` from
+every account except the bootstrap management one. Until it ran, the
+separation was client-side only: `public.is_admin()` reads that column and RLS
+reads `is_admin()`, so the owner's personal accounts authorised every admin
+RPC directly, whatever the client rendered.
+
+It is written as a rule rather than as two names — the column is reserved for
+the bootstrap account, and everyone else who needs admin authority holds a
+redeemed `admin`/`owner` role, which `is_admin()` already honours through
+`role_rank() >= 50`. It refuses to run at all on a database with no management
+account, so a fresh CI instance is a no-op rather than one that de-admins an
+entire fixture set.
