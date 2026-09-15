@@ -21,7 +21,7 @@
 // regression in the shared layer fails one obvious test.
 import { test } from "node:test";
 import assert from "node:assert";
-import { bootCommunity, waitFor } from "./helpers/boot.mjs";
+import { bootCommunity, waitFor, seedAdminStepUp, unlockAdminPanel } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
 
 const VERIFIED = new Date().toISOString();
@@ -118,6 +118,7 @@ test("post composer: focus-in, trap, Escape restores focus, backdrop closes", as
     community_feed: [],
   });
   mock.setUser({ id: "u1", is_anonymous: false, email: "dana@members.haimuniya.invalid" });
+  seedAdminStepUp(mock, "u1", "dana@members.haimuniya.invalid");
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openCommunity(window);
 
@@ -139,6 +140,7 @@ test("PR share prompt: focus-in, trap, Escape restores focus, backdrop closes", 
     community_feed: [],
   });
   mock.setUser({ id: "u1", is_anonymous: false, email: "dana@members.haimuniya.invalid" });
+  seedAdminStepUp(mock, "u1", "dana@members.haimuniya.invalid");
   mock.onRpc("pr_share", () => ({ data: "pr-post-1", error: null }));
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openCommunity(window);
@@ -185,6 +187,7 @@ test("achievement celebration: focus-in, trap, Escape restores focus, backdrop c
     member_achievements: [],
   });
   mock.setUser({ id: "u1", is_anonymous: false, email: "dana@members.haimuniya.invalid" });
+  seedAdminStepUp(mock, "u1", "dana@members.haimuniya.invalid");
   mock.onRpc("ach_share", () => ({ data: "ach-post-1", error: null }));
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openCommunity(window);
@@ -213,6 +216,7 @@ test("profile overlay: focus-in, trap, Escape restores focus, backdrop closes", 
     community_feed: [],
   });
   mock.setUser({ id: "u1", is_anonymous: false, email: "dana@members.haimuniya.invalid" });
+  seedAdminStepUp(mock, "u1", "dana@members.haimuniya.invalid");
   mock.onRpc("community_profile", () => ({
     data: { display_name: "רון לוי", role: "member", member_since: "2023-04-01", training_frequency: "3 בשבוע" },
     error: null,
@@ -252,6 +256,7 @@ test("notification centre: focus-in, trap, Escape restores focus, backdrop close
     follows: [], hidden_posts: [], saved_posts: [],
   });
   mock.setUser({ id: "u1", is_anonymous: false, email: "dana@members.haimuniya.invalid" });
+  seedAdminStepUp(mock, "u1", "dana@members.haimuniya.invalid");
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openCommunity(window);
 
@@ -295,6 +300,7 @@ test("report sheet: focus-in, trap, Escape restores focus, backdrop closes", asy
     reports: [],
   });
   mock.setUser({ id: "u1", is_anonymous: false, email: "dana@members.haimuniya.invalid" });
+  seedAdminStepUp(mock, "u1", "dana@members.haimuniya.invalid");
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openCommunity(window);
 
@@ -332,6 +338,7 @@ function modMock() {
     follows: [], hidden_posts: [], saved_posts: [], notifications: [],
   });
   mock.setUser({ id: "mod-1", is_anonymous: false, email: "mod@members.haimuniya.invalid" });
+  seedAdminStepUp(mock, "mod-1", "mod@members.haimuniya.invalid");
   return mock;
 }
 
@@ -340,6 +347,9 @@ function modMock() {
 async function openQueue(window) {
   await waitFor(() => !!window.document.getElementById("tabManageBtn"), 4000);
   window.document.getElementById("tabManageBtn").click();
+  // The moderation queue is a CLUB surface and the club panel is behind a
+  // step-up password now - submit the real gate rather than bypassing it.
+  await unlockAdminPanel(window);
   await waitFor(() => !!window.document.querySelector('[data-community-action="set-manage-tab"][data-tab="moderation"]'), 4000);
   window.document.querySelector('[data-community-action="set-manage-tab"][data-tab="moderation"]').click();
   await waitFor(() => !!window.document.querySelector('[data-community-action="mod-action"]'), 4000);
@@ -469,6 +479,7 @@ test("challengeView: focus-in, trap, Escape restores focus, backdrop closes", as
     challenge_participants: [{ challenge_id: "c1", user_id: "u1", club_id: "club-1", team_id: null, joined_at: iso(-1), status: "active", progress_value: 4, completed_at: null }],
   });
   mock.setUser({ id: "u1", is_anonymous: false, email: "dana@members.haimuniya.invalid" });
+  seedAdminStepUp(mock, "u1", "dana@members.haimuniya.invalid");
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openCommunity(window);
   window.document.querySelector('[data-community-action="set-tab"][data-tab="boards"]').click();
@@ -499,6 +510,7 @@ test("eventView: focus-in, trap, Escape restores focus, backdrop closes", async 
     events: [{ id: "e1", event_type: "workshop", title: "סדנת גמישות", description: "", status: "published", start_at: iso(24), end_at: null, location: "אולם 1", capacity: null, registration_deadline: null, created_by: "u1" }],
   });
   mock.setUser({ id: "u1", is_anonymous: false, email: "dana@members.haimuniya.invalid" });
+  seedAdminStepUp(mock, "u1", "dana@members.haimuniya.invalid");
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openCommunity(window);
   window.document.querySelector('[data-community-action="set-tab"][data-tab="boards"]').click();
@@ -527,6 +539,7 @@ test("recapView: focus-in, trap, Escape restores focus, backdrop closes", async 
     }],
   });
   mock.setUser({ id: "u1", is_anonymous: false, email: "dana@members.haimuniya.invalid" });
+  seedAdminStepUp(mock, "u1", "dana@members.haimuniya.invalid");
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openCommunity(window);
   window.document.querySelector('[data-community-action="set-tab"][data-tab="account"]').click();
@@ -562,6 +575,7 @@ test("confirm sheet: focus-in, trap, Escape restores focus, backdrop closes", as
     community_feed: [],
   });
   mock.setUser({ id: "u1", is_anonymous: false, email: "dana@members.haimuniya.invalid" });
+  seedAdminStepUp(mock, "u1", "dana@members.haimuniya.invalid");
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openCommunity(window);
 

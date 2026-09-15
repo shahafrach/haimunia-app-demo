@@ -31,7 +31,7 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import fs from "node:fs";
-import { bootCommunity, waitFor } from "./helpers/boot.mjs";
+import { bootCommunity, waitFor, seedAdminStepUp, unlockAdminPanel } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
 
 const src = fs.readFileSync(new URL("../cloud.js", import.meta.url), "utf8");
@@ -59,6 +59,7 @@ function adminMock(overrides) {
     saved_posts: [], notifications: [],
   }, overrides || {}));
   mock.setUser({ id: "adm-1", is_anonymous: false, email: "yael@members.haimuniya.invalid" });
+  seedAdminStepUp(mock, "adm-1", "yael@members.haimuniya.invalid");
   return mock;
 }
 
@@ -69,6 +70,7 @@ async function gotoManage(window, subtab) {
   // fixture gets BOTH rows and reaches this one by its own id; a coach
   // fixture has only the one, under the shared id.
   (window.document.getElementById("tabClubManageBtn") || window.document.getElementById("tabManageBtn")).click();
+  await unlockAdminPanel(window);
   await waitFor(() => !!window.document.querySelector(`[data-community-action="set-manage-tab"][data-tab="${subtab}"]`), 4000);
   window.document.querySelector(`[data-community-action="set-manage-tab"][data-tab="${subtab}"]`).click();
 }

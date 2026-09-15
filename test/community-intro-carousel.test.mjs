@@ -13,7 +13,7 @@
 // paths.
 import { test } from "node:test";
 import assert from "node:assert";
-import { bootCommunity, waitFor, waitForCommunityGate } from "./helpers/boot.mjs";
+import { bootCommunity, waitFor, waitForCommunityGate, seedAdminStepUp, unlockAdminPanel } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
 import fs from "node:fs";
 
@@ -125,6 +125,7 @@ test("a returning member on a brand-new device goes straight to the club, never 
     clubs: [{ id: "club-1", name: "חיימוניה" }],
   });
   mock.setUser({ id: "u1", is_anonymous: false, email: "dana@members.haimuniya.invalid" });
+  seedAdminStepUp(mock, "u1", "dana@members.haimuniya.invalid");
   // The device has never seen the carousel - a new phone, or cleared data.
   const window = await bootCommunity(mock, { syncEnabled: false, localStorage: { "haimunia-demo:seenIntroCarousel": "0" } });
   window.document.getElementById("tabCommunityBtn").click();
@@ -187,6 +188,7 @@ function seededStaff(extra, role) {
     clubs: [{ id: "club-1", name: "חיימוניה" }],
   }, extra || {}));
   mock.setUser({ id: "u1", is_anonymous: false, email: "dana@members.haimuniya.invalid" });
+  seedAdminStepUp(mock, "u1", "dana@members.haimuniya.invalid");
   return mock;
 }
 async function openManageOnboarding(window) {
@@ -195,6 +197,7 @@ async function openManageOnboarding(window) {
   // fixture gets BOTH rows and reaches this one by its own id; a coach
   // fixture has only the one, under the shared id.
   (window.document.getElementById("tabClubManageBtn") || window.document.getElementById("tabManageBtn")).click();
+  await unlockAdminPanel(window);
   await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
   // See community-onboarding-content-editor.test.mjs: "onboarding" stopped
   // being a sub-tab id when Manage collapsed to three tabs. The carousel

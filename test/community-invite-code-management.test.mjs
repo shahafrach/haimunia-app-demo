@@ -14,7 +14,7 @@
 // assert.
 import { test } from "node:test";
 import assert from "node:assert";
-import { bootCommunity, waitFor } from "./helpers/boot.mjs";
+import { bootCommunity, waitFor, seedAdminStepUp, unlockAdminPanel } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
 
 const VERIFIED = new Date().toISOString();
@@ -34,6 +34,7 @@ function seeded(extra, role) {
     monthly_club_recaps: [], reports: [], challenges: [], onboarding_step_content: [],
   }, extra || {}));
   mock.setUser({ id: "u1", is_anonymous: false, email: "dana@members.haimuniya.invalid" });
+  seedAdminStepUp(mock, "u1", "dana@members.haimuniya.invalid");
   return mock;
 }
 
@@ -45,6 +46,7 @@ async function openAccountTab(window) {
   // fixture gets BOTH rows and reaches this one by its own id; a coach
   // fixture has only the one, under the shared id.
   (window.document.getElementById("tabClubManageBtn") || window.document.getElementById("tabManageBtn")).click();
+  await unlockAdminPanel(window);
   await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
   window.document.querySelector('[data-community-action="set-manage-tab"][data-tab="invites"]').click();
 }

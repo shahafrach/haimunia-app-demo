@@ -29,7 +29,19 @@ function seeded(extra, role) {
   const mock = createMockSupabase(Object.assign({
     profiles,
     invite_redemptions: [
-      { user_id: "u1", invite_id: "inv-1", role: role === "admin" ? "member" : (role || "member"), redeemed_at: VERIFIED },
+      // "admin" now redeems head_coach as well as carrying is_admin (2026-09-15).
+      //
+      // The monthly club recap publishes from the COACH BOARD, and that board
+      // was narrowed to isCoachTier() - a redeemed coach/head_coach role, not
+      // the is_admin flag - because "coach area will be visible only for
+      // coach" and an admin's job is now the app, not the floor. An
+      // admin-flag-only account genuinely does not see this control any more,
+      // which is correct: a club recap is club content.
+      //
+      // So the fixture models the real person who publishes one - someone who
+      // runs the club AND administers the app - rather than asserting a
+      // capability the product no longer grants.
+      { user_id: "u1", invite_id: "inv-1", role: role === "admin" ? "head_coach" : (role || "member"), redeemed_at: VERIFIED },
     ],
     clubs: [{ id: "club-1", name: "חיימוניה" }],
     community_streaks: [], workout_posts: [], feed_page_rows: [], member_contact_log: [],

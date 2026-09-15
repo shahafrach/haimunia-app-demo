@@ -11,7 +11,7 @@
 // gates, real async auth handlers.
 import { test } from "node:test";
 import assert from "node:assert";
-import { bootCommunity, waitFor, waitForCommunityGate, openCommunityLogin } from "./helpers/boot.mjs";
+import { bootCommunity, waitFor, waitForCommunityGate, openCommunityLogin, seedAdminStepUp, unlockAdminPanel } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
 
 test("a queued local edit reaches the mock server before a stale remote copy would be pulled back - the exact scenario the sync-ordering bug corrupted", async () => {
@@ -20,6 +20,7 @@ test("a queued local edit reaches the mock server before a stale remote copy wou
     invite_redemptions: [{ user_id: "u1", invite_id: "inv-1", role: "member", redeemed_at: new Date().toISOString() }],
   });
   mock.setUser({ id: "u1", is_anonymous: false, email: "dana@members.haimuniya.invalid" });
+  seedAdminStepUp(mock, "u1", "dana@members.haimuniya.invalid");
 
   const window = await bootCommunity(mock, { syncEnabled: true });
   window.document.getElementById("tabCommunityBtn").click();
@@ -112,6 +113,7 @@ test("an admin can search for a member and grant coach, executing for real throu
     ],
   });
   mock.setUser({ id: "admin-1", is_anonymous: false, email: "coach_admin@members.haimuniya.invalid" });
+  seedAdminStepUp(mock, "admin-1", "coach_admin@members.haimuniya.invalid");
   mock.onRpc("admin_search_members", (args, ctx) => ({
     data: ctx.db.profiles
       .filter((p) => p.id === args.p_query || p.handle.includes(args.p_query))
@@ -135,6 +137,7 @@ test("an admin can search for a member and grant coach, executing for real throu
   // fixture gets BOTH rows and reaches this one by its own id; a coach
   // fixture has only the one, under the shared id.
   (window.document.getElementById("tabClubManageBtn") || window.document.getElementById("tabManageBtn")).click();
+  await unlockAdminPanel(window);
   await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
   window.document.querySelector('[data-community-action="set-manage-tab"][data-tab="members"]').click();
 

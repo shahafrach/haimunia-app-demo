@@ -83,6 +83,7 @@ test("all 3 Manage sub-tabs render as the active pill with real content", async 
   const mock = seeded(null, "admin");
   const window = await bootCommunity(mock, { syncEnabled: false });
   (window.document.getElementById("tabClubManageBtn") || window.document.getElementById("tabManageBtn")).click();
+  await unlockAdminPanel(window);
   await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
 
   const ids = ["invites", "members", "moderation"];
@@ -115,6 +116,7 @@ test("every section the seven-tab Manage rendered is still reachable from one of
   mock.onRpc("admin_invite_list", () => ({ data: [], error: null }));
   const window = await bootCommunity(mock, { syncEnabled: false });
   (window.document.getElementById("tabClubManageBtn") || window.document.getElementById("tabManageBtn")).click();
+  await unlockAdminPanel(window);
   await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
 
   // heading -> the tab it now lives on.
@@ -183,6 +185,7 @@ test('the "ניהול" tab carries a jump row labelled with the old sub-tab name
   const mock = seeded(null, "admin");
   const window = await bootCommunity(mock, { syncEnabled: false });
   (window.document.getElementById("tabClubManageBtn") || window.document.getElementById("tabManageBtn")).click();
+  await unlockAdminPanel(window);
   await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
   window.document.querySelector('.subtabbtn[data-community-action="set-manage-tab"][data-tab="moderation"]').click();
   await waitFor(() => !!window.document.querySelector('[data-manage-jump-row="1"]'), 3000);
@@ -228,6 +231,7 @@ test("each of the three tabs says in one plain line what it is for", async () =>
   const mock = seeded(null, "admin");
   const window = await bootCommunity(mock, { syncEnabled: false });
   (window.document.getElementById("tabClubManageBtn") || window.document.getElementById("tabManageBtn")).click();
+  await unlockAdminPanel(window);
   await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
   for (const tab of ["invites", "members", "moderation"]) {
     window.document.querySelector(`.subtabbtn[data-community-action="set-manage-tab"][data-tab="${tab}"]`).click();
@@ -248,6 +252,7 @@ test("the moderation badge survived the move and still draws attention on the ta
   }, "coach");
   const window = await bootCommunity(mock, { syncEnabled: false });
   (window.document.getElementById("tabClubManageBtn") || window.document.getElementById("tabManageBtn")).click();
+  await unlockAdminPanel(window);
   await waitFor(() => !!window.document.querySelector("#manageTab-moderation .tab-badge"), 3000);
   const badge = window.document.querySelector("#manageTab-moderation .tab-badge");
   assert.equal(badge.textContent.trim(), "1");
@@ -270,6 +275,7 @@ test("dashboard: a moderator with genuinely open reports sees the red attention 
   }, "coach");
   const window = await bootCommunity(mock, { syncEnabled: false });
   (window.document.getElementById("tabClubManageBtn") || window.document.getElementById("tabManageBtn")).click();
+  await unlockAdminPanel(window);
   await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
   // Live bug hunt (2026-09-11): this fixture's real count IS 1, so the
   // correct render is the singular form - "1 דיווחים" was itself the bug.
@@ -294,6 +300,7 @@ test("dashboard: a moderator with zero open reports sees the green all-clear emp
   const mock = seeded({ reports: [] }, "coach");
   const window = await bootCommunity(mock, { syncEnabled: false });
   (window.document.getElementById("tabClubManageBtn") || window.document.getElementById("tabManageBtn")).click();
+  await unlockAdminPanel(window);
   await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
   await waitFor(() => window.document.body.textContent.includes("דורש תשומת לב"), 3000);
   assert.ok(window.document.body.textContent.includes("אין דבר שדורש תשומת לב כרגע"), "the green all-clear empty state renders");
@@ -313,6 +320,7 @@ test("dashboard: an inactive-members shortcut navigates to Members", async () =>
   mock.onRpc("coach_inactive_members", () => ({ data: [{ user_id: "u-someone", display_name: "מישהו", handle: "someone", last_activity_on: "2026-08-01", state: "lapsed", days_since_activity: 37, joined_on: "2026-05-01" }], error: null }));
   const window = await bootCommunity(mock, { syncEnabled: false });
   (window.document.getElementById("tabClubManageBtn") || window.document.getElementById("tabManageBtn")).click();
+  await unlockAdminPanel(window);
   await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
   // Waits on the shortcut itself rather than on its Hebrew label: this test
   // is about the row navigating to Members, and pinning the copy here made
@@ -354,6 +362,7 @@ test("dashboard: members we have NO data about never produce an attention row", 
   }));
   const window = await bootCommunity(mock, { syncEnabled: false });
   (window.document.getElementById("tabClubManageBtn") || window.document.getElementById("tabManageBtn")).click();
+  await unlockAdminPanel(window);
   await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
   // Wait on the RPC having actually been answered, not on a DOM node. The
   // dashboard renders its green all-clear immediately, before any data
@@ -386,6 +395,7 @@ test("dashboard: the attention row counts only genuinely lapsed members, not the
   }));
   const window = await bootCommunity(mock, { syncEnabled: false });
   (window.document.getElementById("tabClubManageBtn") || window.document.getElementById("tabManageBtn")).click();
+  await unlockAdminPanel(window);
   await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
   // `button.log-row` and not the bare attribute pair - see the note in the
   // shortcut test above: the sub-tab BAR pill carries the same two
@@ -432,6 +442,7 @@ test("a jump-row tap opens its target and that stays open across a later unrelat
   const mock = seeded(null, "admin");
   const window = await bootCommunity(mock, { syncEnabled: false });
   (window.document.getElementById("tabClubManageBtn") || window.document.getElementById("tabManageBtn")).click();
+  await unlockAdminPanel(window);
   await waitFor(() => !!window.document.getElementById("manageTab-moderation"), 3000);
   window.document.getElementById("manageTab-moderation").click();
   await waitFor(() => !!window.document.querySelector('[data-community-action="set-manage-tab"][data-scroll="manageArea-onboarding"]'), 3000);
@@ -471,6 +482,7 @@ test("a coach gets the club panel, and it does NOT carry the admin-only areas", 
   const mock = seeded(null, "coach");
   const window = await bootCommunity(mock, { syncEnabled: false });
   (window.document.getElementById("tabClubManageBtn") || window.document.getElementById("tabManageBtn")).click();
+  await unlockAdminPanel(window);
   await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
   window.document.querySelector('.subtabbtn[data-community-action="set-manage-tab"][data-tab="moderation"]').click();
   await waitFor(() => !!window.document.getElementById("manageArea-moderation"), 3000);

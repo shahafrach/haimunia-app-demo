@@ -16,7 +16,7 @@
 //   single lookup.
 import { test } from "node:test";
 import assert from "node:assert";
-import { bootCommunity, waitFor } from "./helpers/boot.mjs";
+import { bootCommunity, waitFor, seedAdminStepUp, unlockAdminPanel } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
 
 const VERIFIED = new Date().toISOString();
@@ -55,6 +55,7 @@ function seeded(opts) {
     blocks: [], reactions: [], post_comments: [],
   }, opts || {}));
   mock.setUser({ id: "u1", is_anonymous: false, email: "dana@members.haimuniya.invalid" });
+  seedAdminStepUp(mock, "u1", "dana@members.haimuniya.invalid");
   return mock;
 }
 
@@ -225,6 +226,7 @@ test("COMM-160: the admin member directory row shows the coach badge for a coach
   // The member directory is a club surface, so it lives behind the head
   // coach's row since the panels were split (2026-09-15).
   (window.document.getElementById("tabClubManageBtn") || window.document.getElementById("tabManageBtn")).click();
+  await unlockAdminPanel(window);
   await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
   window.document.querySelector('[data-community-action="set-manage-tab"][data-tab="members"]').click();
   await waitFor(() => !!window.document.getElementById("adminMemberSearch"), 3000);

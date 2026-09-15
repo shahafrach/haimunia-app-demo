@@ -360,7 +360,12 @@
       // look at a photo. Saying that plainly matters, because a lock that is
       // described as more than it is becomes the reason nobody adds the real
       // one later.
-      adminUnlockedUntil: 0, adminUnlockBusy: false, adminUnlockError: "",
+      // Keyed by panel ("admin" | "club"), because the two are different jobs
+      // held by different people: unlocking the club panel must not hand over
+      // the app panel, and an account that holds both roles should still be
+      // asked twice if it wants both. One shared flag would have made the
+      // weaker of the two the effective lock on both.
+      panelUnlockedUntil: { admin: 0, club: 0 }, panelUnlockBusy: "", panelUnlockError: "",
       auditLog: [], auditCursor: null, auditLoading: false, auditError: false, auditLoaded: false, auditEnd: false, auditFilters: {},
       // Fresh-eyes audit: admin_id -> {display_name,handle,avatar_url},
       // batched by loadAuditLog() so renderAuditLog() can name an actor
@@ -938,6 +943,22 @@
   // review_report(), the posts_select_admin_review RLS bypass, and the
   // admin_* member-management RPCs. Every other gate uses hasPerm().
   function isAdmin() { return !!(state.profile && state.profile.is_admin); }
+  // COACH-TIER, deliberately narrower than isStaff() (2026-09-15): "coach area
+  // will be visible only for coach."
+  //
+  // isStaff() means "coach and above", which includes an admin - and since the
+  // panels were split, an admin's job is the app, not the floor. The coach
+  // board is a working surface for whoever actually coaches the classes:
+  // congratulate this member, welcome that one, chase the one who has not been
+  // in. Showing it to an account that runs the app is clutter at best and an
+  // invitation to act on people you are not coaching at worst.
+  //
+  // head_coach counts - a head coach is a coach. An admin who ALSO redeemed a
+  // coach role counts too, because then they really are one; what does not
+  // count is the is_admin flag on its own.
+  function isCoachTier() {
+    return !!(state.redemption && (state.redemption.role === "coach" || state.redemption.role === "head_coach"));
+  }
   // COMM-152, consolidated. The one place this count is computed - it used
   // to be duplicated inline at the old Community "חשבון" badge and at
   // getCommunityNavPreview(), which is exactly how the badge staying on
@@ -9580,37 +9601,59 @@
   // anyone wanders past. Re-checked on every render rather than on a timer,
   // so a backgrounded app is locked the moment it is looked at again.
   const ADMIN_UNLOCK_MINUTES = 15;
-  function adminUnlocked() {
-    return Date.now() < (Number(state.admin.adminUnlockedUntil) || 0);
+  // Both management panels are locked (2026-09-15, second pass). The admin
+  // panel got it first; the owner then asked for the club panel too, which is
+  // right - adding and removing members, lifting restrictions and editing what
+  // every new member reads is not a smaller responsibility than reading the
+  // audit log, it is just a different one.
+  const PANEL_UNLOCK_COPY = Object.freeze({
+    admin: {
+      title: "אזור ניהול האפליקציה",
+      body: "כאן נמצאים דיווחי התקלות, יומן הפעולות, ההרשאות ואיפוס הסיסמאות. כדי להיכנס צריך להזין שוב את הסיסמה — גם אם כבר התחברתם. זה מגן על האזור הזה אם הטלפון נשאר פתוח.",
+      cta: "כניסה לאזור הניהול",
+    },
+    club: {
+      title: "אזור ניהול המועדון",
+      body: "כאן מוסיפים ומסירים חברים, מנהלים את רשימת המועדון, את המודרציה ואת מה שחברים חדשים רואים. כדי להיכנס צריך להזין שוב את הסיסמה — גם אם כבר התחברתם. זה מגן על האזור הזה אם הטלפון נשאר פתוח.",
+      cta: "כניסה לניהול המועדון",
+    },
+  });
+  function panelUnlocked(panel) {
+    return Date.now() < (Number(state.admin.panelUnlockedUntil[panel]) || 0);
   }
-  function renderAdminUnlockGate() {
+  function renderPanelUnlockGate(panel) {
     const a = state.admin;
-    // The account is named, because an admin who also holds a personal member
-    // account needs to know WHICH password is being asked for.
+    const copy = PANEL_UNLOCK_COPY[panel];
+    // The account is named, because someone who also holds a personal member
+    // account needs to know WHICH password is being asked for. Only shown for
+    // a real address - a synthetic @members.haimuniya.invalid one is an
+    // implementation detail the member never typed and would not recognise.
     const who = (state.user && state.user.email) ? state.user.email : "";
     const whoLine = who && !/@members\.haimuniya\.invalid$/.test(who)
       ? `<div class="footer-note" style="margin:0 0 10px;" dir="ltr">${esc(who)}</div>`
       : "";
+    const busy = a.panelUnlockBusy === panel;
     return `<div class="chart-card">
-      <div style="font-weight:800;font-size:16px;margin-bottom:6px;">אזור ניהול האפליקציה</div>
-      <div style="color:var(--steel);font-size:13px;line-height:1.7;margin-bottom:12px;">${bidiText("כאן נמצאים דיווחי התקלות, יומן הפעולות, ההרשאות ואיפוס הסיסמאות. כדי להיכנס צריך להזין שוב את הסיסמה — גם אם כבר התחברתם. זה מגן על האזור הזה אם הטלפון נשאר פתוח.")}</div>
+      <div style="font-weight:800;font-size:16px;margin-bottom:6px;">${esc(copy.title)}</div>
+      <div style="color:var(--steel);font-size:13px;line-height:1.7;margin-bottom:12px;">${bidiText(copy.body)}</div>
       ${whoLine}
-      <form id="adminUnlock">
-        ${field("adminUnlock", "password", "סיסמה", `<input class="text-input" name="password" type="password" dir="ltr" autocomplete="current-password" placeholder="סיסמה" required/>`)}
-        <button class="save-btn" type="submit"${a.adminUnlockBusy ? " disabled" : ""} style="margin-top:12px;">${a.adminUnlockBusy ? "בודקים…" : "כניסה לאזור הניהול"}</button>
+      <form id="panelUnlock" data-panel="${esc(panel)}">
+        ${field("panelUnlock", "password", "סיסמה", `<input class="text-input" name="password" type="password" dir="ltr" autocomplete="current-password" placeholder="סיסמה" required/>`)}
+        <button class="save-btn" type="submit"${busy ? " disabled" : ""} style="margin-top:12px;">${busy ? "בודקים…" : esc(copy.cta)}</button>
       </form>
-      ${a.adminUnlockError ? `<div class="field-error" role="alert" style="margin-top:10px;">${esc(a.adminUnlockError)}</div>` : ""}
+      ${a.panelUnlockError ? `<div class="field-error" role="alert" style="margin-top:10px;">${esc(a.panelUnlockError)}</div>` : ""}
       <div class="footer-note" style="margin:12px 0 0;">${bidiText(`הכניסה נשמרת ל-${ADMIN_UNLOCK_MINUTES} דקות, ומתאפסת בכל פתיחה מחדש של האפליקציה.`)}</div>
     </div>`;
   }
-  async function adminUnlock(form) {
+  async function panelUnlock(form) {
     if (!client || !state.user) return;
+    const panel = form.dataset.panel === "club" ? "club" : "admin";
     const password = String(form.elements.password.value || "");
-    if (!password) { state.admin.adminUnlockError = "יש להזין סיסמה"; rerender(); return; }
-    state.admin.adminUnlockBusy = true; state.admin.adminUnlockError = ""; rerender();
+    if (!password) { state.admin.panelUnlockError = "יש להזין סיסמה"; rerender(); return; }
+    state.admin.panelUnlockBusy = panel; state.admin.panelUnlockError = ""; rerender();
     // Verified by signing in again as the SAME account. Supabase has no
     // "check this password without a session" call, and this is the standard
-    // step-up shape: same user, same tokens refreshed, no session swap and no
+    // step-up shape: same user, tokens refreshed, no session swap and no
     // sign-out on failure. Deliberately NOT a stored hash or a client-side
     // comparison - the password never leaves auth.users, and this app has no
     // business holding a second copy of it anywhere.
@@ -9619,17 +9662,19 @@
       const { error } = await client.auth.signInWithPassword({ email: state.user.email, password });
       ok = !error;
     } catch (e) { ok = false; }
-    state.admin.adminUnlockBusy = false;
+    state.admin.panelUnlockBusy = "";
     if (!ok) {
       // One message for a wrong password and for a failed request alike: an
       // error that distinguishes them tells someone probing the device which
       // half they got right.
-      state.admin.adminUnlockError = "הסיסמה שגויה";
+      state.admin.panelUnlockError = "הסיסמה שגויה";
       rerender();
       return;
     }
-    state.admin.adminUnlockError = "";
-    state.admin.adminUnlockedUntil = Date.now() + ADMIN_UNLOCK_MINUTES * 60 * 1000;
+    state.admin.panelUnlockError = "";
+    // Only the panel that was asked for. Unlocking the club must not hand over
+    // the app, and vice versa.
+    state.admin.panelUnlockedUntil[panel] = Date.now() + ADMIN_UNLOCK_MINUTES * 60 * 1000;
     rerender();
   }
   function renderBugReports() {
@@ -18374,7 +18419,9 @@
     // Redesign, Phase 2: also requires isModuleEnabled("coach_tools") - the
     // mockup's "לוח מאמנים (הכל)" master switch. Off removes the whole
     // sub-tab for every coach, same as a role downgrade would.
-    if (staff && isModuleEnabled("coach_tools")) tabs.push({ id: "coach", label: "לוח מאמנים", html: renderCoachTab() });
+    // isCoachTier(), not `staff`: an admin who does not coach has no use for
+    // this board and should not be offered it.
+    if (isCoachTier() && isModuleEnabled("coach_tools")) tabs.push({ id: "coach", label: "לוח מאמנים", html: renderCoachTab() });
     const activeTab = tabs.find((t) => t.id === state.ui.tab) || tabs[0];
     // Redesign, Phase 2 fix: a module toggled off (or a stale value from
     // getCommunityNavPreview()'s desktop-sidebar preview drifting from this
@@ -18683,9 +18730,10 @@
     if (isAdminMode ? !isAdmin() : !isStaff()) {
       return `<h1 class="page-title">${esc(panelTitle)}</h1><div class="empty">אין הרשאה לצפות בעמוד זה.</div>`;
     }
-    // The admin panel asks for the password again before it will render.
-    if (isAdminMode && !adminUnlocked()) {
-      return `<h1 class="page-title">${esc(panelTitle)}</h1>${renderAdminUnlockGate()}`;
+    // BOTH panels ask for the password again before they will render.
+    const panelKey = isAdminMode ? "admin" : "club";
+    if (!panelUnlocked(panelKey)) {
+      return `<h1 class="page-title">${esc(panelTitle)}</h1>${renderPanelUnlockGate(panelKey)}`;
     }
     // Tab 3's five areas, each still self-gated exactly as it was. The two
     // permission fallbacks below are the same strings the retired "הגדרות"
@@ -18843,7 +18891,7 @@
   // the coach_tools module switched on - the same pair renderCommunityApp()
   // uses to decide whether to build the tab), and how to land on it.
   window.communityCoachBoardEnabled = function () {
-    return !!(state.user && isStaff() && isModuleEnabled("coach_tools"));
+    return !!(state.user && isCoachTier() && isModuleEnabled("coach_tools"));
   };
   window.communityOpenCoachBoard = function () {
     if (!window.communityCoachBoardEnabled()) return false;
@@ -20075,7 +20123,7 @@
     tabs.push({ id: "boards", label: "לוחות", badge: boardsBadgeCount || undefined });
     if (isModuleEnabled("directory")) tabs.push({ id: "directory", label: "חברים" });
     tabs.push({ id: "account", label: "חשבון" });
-    if (staff && isModuleEnabled("coach_tools")) tabs.push({ id: "coach", label: "לוח מאמנים" });
+    if (isCoachTier() && isModuleEnabled("coach_tools")) tabs.push({ id: "coach", label: "לוח מאמנים" });
     return tabs;
   };
   document.addEventListener("submit", (event) => {
@@ -20089,7 +20137,7 @@
     else if (event.target.id === "communityClubWodSession") { event.preventDefault(); publishClubWodSession(event.target); }
     else if (event.target.id === "communityInviteCode") { event.preventDefault(); redeemCode(event.target); }
     else if (event.target.id === "communityLogin") { event.preventDefault(); login(event.target); }
-    else if (event.target.id === "adminUnlock") { event.preventDefault(); adminUnlock(event.target); }
+    else if (event.target.id === "panelUnlock") { event.preventDefault(); panelUnlock(event.target); }
     else if (event.target.id === "communityCredentials") { event.preventDefault(); setCredentials(event.target); }
     else if (event.target.id === "backupCredentials") { event.preventDefault(); setCredentials(event.target); }
     else if (event.target.dataset && event.target.dataset.commentPostId) {
@@ -20181,7 +20229,7 @@
         // The admin step-up unlock dies with the session. Leaving it set would
         // hand the next person to sign in on this device an already-unlocked
         // admin panel, which is precisely the case the lock exists for.
-        state.admin.adminUnlockedUntil = 0; state.admin.adminUnlockError = ""; state.admin.adminUnlockBusy = false;
+        state.admin.panelUnlockedUntil = { admin: 0, club: 0 }; state.admin.panelUnlockError = ""; state.admin.panelUnlockBusy = "";
         state.ui.fieldErrors = {}; state.ui.confirmDialog = null;
         // Back to the neutral choice screen, not to whichever gate screen the
         // member happened to be on before. Signing out on a shared phone and

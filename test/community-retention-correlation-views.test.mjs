@@ -19,7 +19,7 @@
 // own handlers.
 import { test } from "node:test";
 import assert from "node:assert";
-import { bootCommunity, waitFor } from "./helpers/boot.mjs";
+import { bootCommunity, waitFor, seedAdminStepUp, unlockAdminPanel } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
 
 const VERIFIED = new Date().toISOString();
@@ -49,6 +49,7 @@ function seeded(extra, role, opts) {
     monthly_club_recaps: [], reports: [],
   }, extra || {}));
   mock.setUser({ id: "u1", is_anonymous: false, email: "dana@members.haimuniya.invalid" });
+  seedAdminStepUp(mock, "u1", "dana@members.haimuniya.invalid");
   if (opts && opts.analyticsViewOnly) {
     mock.onRpc("my_permissions", () => ({ data: ["community.analytics.view"], error: null }));
   }
@@ -63,6 +64,7 @@ async function openAccountTab(window) {
   // fixture gets BOTH rows and reaches this one by its own id; a coach
   // fixture has only the one, under the shared id.
   (window.document.getElementById("tabClubManageBtn") || window.document.getElementById("tabManageBtn")).click();
+  await unlockAdminPanel(window);
   await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
   // "analytics" is no longer a sub-tab id. The operator-depth rework
   // collapsed Manage's seven sub-tabs into three; analytics is now an area

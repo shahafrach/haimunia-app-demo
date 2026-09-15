@@ -32,7 +32,7 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import fs from "node:fs";
-import { bootCommunity, waitFor, seedAdminStepUp, unlockAdminPanel } from "./helpers/boot.mjs";
+import { bootCommunity, waitFor, seedAdminStepUp, unlockAdminPanel, ADMIN_STEP_UP_PASSWORD } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
 
 const src = fs.readFileSync(new URL("../cloud.js", import.meta.url), "utf8");
@@ -95,6 +95,7 @@ async function openAccount(window) {
 async function gotoManage(window, subtab) {
   await waitFor(() => !!(window.document.getElementById("tabClubManageBtn") || window.document.getElementById("tabManageBtn")), 4000);
   (window.document.getElementById("tabClubManageBtn") || window.document.getElementById("tabManageBtn")).click();
+  await unlockAdminPanel(window);
   await waitFor(() => !!window.document.querySelector(`[data-community-action="set-manage-tab"][data-tab="${subtab}"]`), 4000);
   window.document.querySelector(`[data-community-action="set-manage-tab"][data-tab="${subtab}"]`).click();
 }
@@ -761,9 +762,14 @@ test("migration: real admin still gets the reported-post visibility bypass, not 
 async function signInAsModerator(mock) {
   // seedCredentials is the mock's documented way to have a real session
   // without driving the whole anonymous->credentials upgrade first.
-  mock.seedCredentials("mod-1", "mod@members.haimuniya.invalid", "pw123456");
+  // ONE password for both the session and the panel's step-up gate
+  // (2026-09-15). This fixture used a local "pw123456", which the step-up
+  // helper could not satisfy - and as a bonus that value was 8 characters,
+  // below the 10 the real app enforces, so it was never a realistic password
+  // anyway. The shared constant keeps sign-in and re-auth in agreement.
+  mock.seedCredentials("mod-1", "mod@members.haimuniya.invalid", ADMIN_STEP_UP_PASSWORD);
   await mock.client.auth.signOut();
-  const { error } = await mock.client.auth.signInWithPassword({ email: "mod@members.haimuniya.invalid", password: "pw123456" });
+  const { error } = await mock.client.auth.signInWithPassword({ email: "mod@members.haimuniya.invalid", password: ADMIN_STEP_UP_PASSWORD });
   assert.equal(error, null, "the moderator session must be real - these tests are about what a signed-in moderator can do");
 }
 

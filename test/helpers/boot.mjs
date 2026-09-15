@@ -241,10 +241,13 @@ export function seedAdminStepUp(mock, userId, email) {
   return mock;
 }
 export async function unlockAdminPanel(window) {
-  const form = window.document.getElementById("adminUnlock");
+  // Both management panels are locked now (2026-09-15) and share one form id;
+  // the panel it belongs to is in data-panel. Callers do not need to care -
+  // this submits whichever gate is on screen.
+  const form = window.document.getElementById("panelUnlock");
   if (!form) return false; // not the admin panel, or already unlocked
   form.elements.password.value = ADMIN_STEP_UP_PASSWORD;
   form.dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
-  await waitFor(() => !window.document.getElementById("adminUnlock"), 4000);
+  await waitFor(() => !window.document.getElementById("panelUnlock"), 4000);
   return true;
 }
