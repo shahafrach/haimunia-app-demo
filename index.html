@@ -1043,6 +1043,27 @@
      the way, instead of reverting to a flat rule with no cloud-awareness. */
   .settings-warn{ display:flex; align-items:flex-start; gap:8px; background:color-mix(in srgb, var(--yellow) 14%, transparent); border:1px solid var(--yellow); border-radius:12px; padding:10px 12px; margin-bottom:10px; font-size:12.5px; color:var(--chalk); }
   .modal-overlay{ position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:50; display:none; align-items:flex-end; overflow:hidden; }
+  /* THE CONFIRM SHEET MUST WIN EVERY TIE. Live bug hunt, fresh round 5
+     (2026-09-15) - HIGH, reproduced live.
+
+     appConfirmOverlay is not a permanent top-level overlay like the others.
+     renderAppConfirmSheet() injects it INSIDE #content, which is inside #app
+     (this file, line ~2287) - while settingsOverlay, wodPickerOverlay,
+     supportOverlay and the rest are declared AFTER #app closes. With every
+     one of them at the same z-index:50, DOM order decides paint order, and
+     the nested one loses that tie to every later sibling.
+
+     So a confirm raised from inside another dialog - the delete-custom-WOD
+     confirm opened from the WOD picker - was VISIBLE but not clickable:
+     elementFromPoint at the "מחיקה" button resolved to a WOD row behind it,
+     and a real tap either did nothing or fired pick-wod on whatever row sat
+     at that pixel, while the sheet stayed open and dead. Only Escape, the
+     backdrop and the back button still worked.
+
+     55, not 60: above every .modal-overlay, still below the update banner
+     (z-index:60) and the install dock (59), which are page-level chrome
+     rather than dialogs and should not be buried by a confirm. */
+  #appConfirmOverlay{ z-index:55; }
   .modal-overlay.open{ display:flex; }
   /* Fresh-eyes audit, trainee persona: the first-log arrival card (app.js's
      showCelebration({arrival:true}), fires exactly once per member) used

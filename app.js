@@ -15,7 +15,7 @@ let barWeight = 20;
 // Single source of truth for the app version. After bumping this, run
 // `npm run sync-version` to copy it into SW_VERSION in sw.js — `npm test`
 // fails if the two drift apart.
-const APP_VERSION = "4.55.0";
+const APP_VERSION = "4.56.0";
 
 // A movement typed into the WOD builder that isn't in the built-in list
 // above - persisted (see WODTAGSTORE), same "custom X" pattern as
@@ -1714,9 +1714,12 @@ function openSupport() {
   setTimeout(() => focusFirstAppDialogEl("supportOverlay"), 50);
 }
 function closeSupport() {
-  document.body.style.overflow = "";
   nudgeViewportAfterModalClose();
   document.getElementById("supportOverlay").classList.remove("open");
+  // After the class is removed, so this dialog no longer counts as open.
+  // Support is reachable from a row INSIDE the still-open Settings sheet, and
+  // clearing the lock unconditionally let the page scroll behind it.
+  releaseScrollLockIfLastDialog();
   if (supportOpenerEl && typeof supportOpenerEl.focus === "function") supportOpenerEl.focus();
   supportOpenerEl = null;
 }
@@ -2487,7 +2490,10 @@ function restoreAppConfirmFocus() {
 }
 function closeAppConfirm() {
   appConfirmDialog = null;
-  document.body.style.overflow = "";
+  // appConfirmDialog is already null, so this dialog no longer counts as open.
+  // A confirm raised from inside another dialog (askDeleteCustomWod from the
+  // WOD picker, say) must not unlock the page that dialog is still covering.
+  releaseScrollLockIfLastDialog();
   render();
   restoreAppConfirmFocus();
 }
@@ -2495,7 +2501,7 @@ function runAppConfirm() {
   const c = appConfirmDialog;
   appConfirmDialog = null;
   appConfirmOpener = null;
-  document.body.style.overflow = "";
+  releaseScrollLockIfLastDialog();
   if (!c) { render(); return; }
   if (c.action === "delete-entry") deleteEntry(c.payload.id);
   else if (c.action === "delete-wod-entry") deleteWodEntry(c.payload.id);
@@ -6445,6 +6451,27 @@ function currentAppDialog() {
   for (const key in APP_DIALOGS) { if (APP_DIALOGS[key].isOpen()) return APP_DIALOGS[key]; }
   return null;
 }
+// RELEASE THE BACKGROUND SCROLL LOCK ONLY WHEN THE LAST DIALOG CLOSES.
+//
+// Live bug hunt, fresh round 5 (2026-09-15). Every dialog's open routine sets
+// body.style.overflow = "hidden" and every close routine cleared it
+// unconditionally - which is correct for one dialog and wrong the moment one
+// is opened from inside another. Support opens from a row INSIDE the still
+// open Settings sheet; closing Support unlocked the page while Settings was
+// still on screen, and the background then scrolled behind it. The same holds
+// for any confirm raised from inside another dialog.
+//
+// This is the same shape as round 4's focus bug - a nested close that only
+// handled the "everything is closed now" case - found in a different shared
+// resource. That fix was scoped to focus in the community layer; this is the
+// app layer's scroll lock, and it was never revisited.
+//
+// Called AFTER the closing dialog's own isOpen() has already gone false, so
+// it asks a simple question: is anything still open?
+function releaseScrollLockIfLastDialog() {
+  if (currentAppDialog()) return;
+  document.body.style.overflow = "";
+}
 function appDialogFocusables(overlayId) {
   const el = document.getElementById(overlayId);
   if (!el) return [];
@@ -6832,6 +6859,11 @@ let pendingWorker = null;
 // for it was wiping out whatever someone had just started typing, every
 // single first visit).
 let swapRequested = false;
+// True once this tab's controller has changed for ANY reason - including a
+// sibling tab applying the update and clients.claim() swapping us too. See the
+// controllerchange listener: without this, a banner in the non-acting tab
+// becomes a button that can never do anything.
+let controllerAlreadySwapped = false;
 // Live bug hunt (2026-09-11): showUpdateBanner() never cleared/marked
 // pendingWorker, so the SAME visibilitychange listener that legitimately
 // auto-applies an update arriving while hidden ALSO fired on the very NEXT
@@ -6847,6 +6879,11 @@ function applyUpdate() {
   const worker = pendingWorker;
   pendingWorker = null; // guard against a second trigger firing before the reload lands
   updateBannerShowing = false;
+  // If the controller already changed under us - another tab tapped its own
+  // banner and clients.claim() swapped this one too - there is nothing left to
+  // ask for and no second controllerchange coming. Reload straight away, which
+  // is the whole of what the handshake would have achieved.
+  if (controllerAlreadySwapped) { location.reload(); return; }
   if (worker) {
     swapRequested = true;
     try { worker.postMessage({ type: "SKIP_WAITING" }); return; } catch (e) { swapRequested = false; }
@@ -7615,7 +7652,34 @@ async function init() {
     }).catch((e) => console.warn("sw registration failed:", e));
 
     let reloading = false;
+    // Whether this tab was ALREADY under a service worker when it booted.
+    // Read once, before any controllerchange can fire.
+    const hadControllerAtBoot = !!navigator.serviceWorker.controller;
     navigator.serviceWorker.addEventListener("controllerchange", () => {
+      // ANOTHER TAB APPLIED THE UPDATE. Live bug hunt, fresh round 5
+      // (2026-09-15). sw.js's activate handler calls self.clients.claim(),
+      // which reassigns the controller of EVERY open tab - not just the one
+      // that tapped the banner. So this fires here with swapRequested still
+      // false, and returning was right (we must not reload out from under an
+      // active session) but INCOMPLETE: the swap had already happened, and
+      // nothing recorded that.
+      //
+      // The consequence was a permanently dead control. This tab's own banner
+      // stayed up, and tapping it posted SKIP_WAITING to a worker that had
+      // already activated - a no-op - and then waited for a controllerchange
+      // that could never fire again, because the controller had already
+      // changed once, here, silently. The banner could not be applied or
+      // dismissed for the life of the tab, while the tab ran old app.js code
+      // against the new worker's cache: precisely the inconsistent state the
+      // "never swap out from under an active session" rule exists to avoid.
+      // ONLY a genuine swap, never the first-ever claim. A page with no prior
+      // controller gets one controllerchange the moment the first worker
+      // claims it; treating that as "already swapped" made applyUpdate()
+      // reload WITHOUT posting SKIP_WAITING, so the waiting worker never
+      // activated and the reload served the old version again - caught
+      // immediately by update-flow.mjs's "banner does NOT show while hidden".
+      // hadControllerAtBoot is what tells the two apart.
+      if (hadControllerAtBoot) controllerAlreadySwapped = true;
       if (!swapRequested) return; // e.g. the first-ever clients.claim() — nothing to reload for
       if (reloading) return;
       reloading = true;
