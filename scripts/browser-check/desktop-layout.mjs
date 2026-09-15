@@ -341,11 +341,24 @@ async function colGeometry(page) {
   const memberWidth = await page.evaluate(() => Math.round(document.getElementById("app").getBoundingClientRect().width));
   check("a member-facing tab keeps the 560px column at 1440", memberWidth === 560, `#app w=${memberWidth}`);
 
-  // getNavItems() only emits the manage row for a staff viewer, so reaching
+  // getNavItems() only emits a management row for a staff viewer, so reaching
   // it from the sidebar is itself the permission check.
-  await page.waitForSelector("#desktopSidebar .navrow[data-tab='manage']", { timeout: 10000 });
-  await page.click("#desktopSidebar .navrow[data-tab='manage']");
+  //
+  // data-tab='clubmanage', not 'manage' (2026-09-15): the two panels were
+  // split apart, and THIS FIXTURE IS A HEAD COACH (is_admin false, role
+  // head_coach just above), so the row it gets is the club panel. An admin
+  // fixture would emit data-tab='manage' instead. Asserting the specific one
+  // is stronger than accepting either - it proves the split actually routes
+  // by role rather than always falling back to one panel.
+  await page.waitForSelector("#desktopSidebar .navrow[data-tab='clubmanage']", { timeout: 10000 });
+  check("a head coach's sidebar row opens the CLUB panel, not the admin one",
+    (await page.locator("#desktopSidebar .navrow[data-tab='manage']").count()) === 0,
+    "no admin-panel row is offered to a non-admin");
+  await page.click("#desktopSidebar .navrow[data-tab='clubmanage']");
   await page.waitForSelector("#content .subtabbar[aria-label='ניווט בניהול']", { timeout: 10000 });
+  const clubTitle = await page.textContent("#content .page-title");
+  check("and the panel it lands on names itself as the club panel",
+    /ניהול המועדון/.test(clubTitle || ""), `title=${JSON.stringify((clubTitle || "").trim())}`);
 
   const manage = await colGeometry(page);
   check("the real ניהול tab widens #app to the ~940px table area at 1440",
