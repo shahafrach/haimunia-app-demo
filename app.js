@@ -15,7 +15,7 @@ let barWeight = 20;
 // Single source of truth for the app version. After bumping this, run
 // `npm run sync-version` to copy it into SW_VERSION in sw.js — `npm test`
 // fails if the two drift apart.
-const APP_VERSION = "4.40.0";
+const APP_VERSION = "4.41.0";
 
 // A movement typed into the WOD builder that isn't in the built-in list
 // above - persisted (see WODTAGSTORE), same "custom X" pattern as
@@ -160,12 +160,38 @@ function getNavItems() {
   // entirely for anyone else, not just disabled - matching the mockup's own
   // "showManageTab: isAdmin" behaviour (here: coach and up, see cloud.js's
   // isStaff(), the same access these tools already had inside Account).
+  // SPLIT INTO TWO DESTINATIONS, BOTH HAMBURGER-ONLY (2026-09-15).
+  //
+  // Two changes here, both requested directly. First, admin and head coach
+  // are separate screens for separate people rather than one shared "ניהול"
+  // with half of it inert - see cloud.js's renderManagePanel(). Second, both
+  // are main:false, which is what puts them in the hamburger: this registry
+  // feeds BOTH the bottom bar (main:true only) and the hamburger
+  // (renderNavRows(true, true), non-main only), so flipping the flag moves
+  // them from one to the other with no second navigation mechanism. That
+  // also hands the 6th bottom slot back to the five member tabs, which is
+  // where a phone-sized bottom bar wants to be.
+  //
+  // An ADMIN gets one row, not two: their panel is a superset that already
+  // contains every club area, so a second row would be a second door into
+  // the same screen.
   if (typeof window.communityIsStaff === "function" && window.communityIsStaff()) {
     // Redesign, Phase 3 fix: the moderation-queue badge used to live only
     // on Community's own "חשבון" pill, which stopped meaning anything once
     // moderation moved to Manage - see cloud.js's pendingModerationCount().
     const badge = typeof window.communityPendingModerationCount === "function" ? window.communityPendingModerationCount() : 0;
-    items.push({ id: "manage", tab: "manage", rowId: "tabManageBtn", label: "ניהול", tint: "steel", icon: ICONS.manageTabIcon, main: true, badge });
+    const isClubAdmin = typeof window.communityIsAdmin === "function" && window.communityIsAdmin();
+    if (isClubAdmin) {
+      items.push({ id: "manage", tab: "manage", rowId: "tabManageBtn", label: "ניהול מערכת", tint: "steel", icon: ICONS.manageTabIcon, main: false, badge });
+    } else {
+      // Same rowId as the admin row above, deliberately. Exactly one of the
+      // two is ever in the registry - they are the same DESTINATION SLOT
+      // ("the management screen for whoever this is"), differing only in
+      // which panel it opens, so one stable id is the honest description and
+      // keeps every existing reference to it valid. The panels are told
+      // apart by `tab` (manage vs clubmanage), not by the id.
+      items.push({ id: "clubmanage", tab: "clubmanage", rowId: "tabManageBtn", label: "ניהול המועדון", tint: "steel", icon: ICONS.manageTabIcon, main: false, badge });
+    }
   }
   return items;
 }
@@ -344,42 +370,6 @@ function photoHeaderHtml(assetPath, altText, opts) {
 // here on purpose - firing one before state.ui.tab is updated would just
 // be a wasted extra render.
 window.switchToCommunityTopTab = function () { tab = "community"; };
-// The staff section of the hamburger (2026-09-15).
-//
-// WHY IT HAS TO EXIST SEPARATELY. renderNavMenuList() renders
-// renderNavRows(true, true) - onlyOther=true - which by design lists only the
-// items that are NOT in the bottom tab bar. "ניהול" is main:true, so on a
-// phone it appeared in the bottom bar and NOWHERE in the hamburger, which is
-// where a manager looks for management. The desktop sidebar already shows
-// every item (onlyOther=false), so this is a mobile-only gap and these rows
-// are deliberately not added there - they would be a second copy of a row
-// already on screen.
-//
-// Two destinations, not one, because they answer different questions and are
-// owned by different people: "ניהול" is the admin panel (invites, roster,
-// moderation, bug reports, audit, analytics), and "לוח מאמנים" is the coach's
-// own daily board. Both are gated by the same communityIsStaff() the tab
-// itself uses - this is navigation, and the real boundary is enforced by
-// is_staff()/is_admin() in the database on every action either screen offers.
-function renderNavStaffRows() {
-  if (typeof window.communityIsStaff !== "function" || !window.communityIsStaff()) return "";
-  const badge = typeof window.communityPendingModerationCount === "function" ? window.communityPendingModerationCount() : 0;
-  const coachRow = (typeof window.communityCoachBoardEnabled === "function" && window.communityCoachBoardEnabled())
-    ? `<button class="navrow" data-action="open-coach-board">
-        <span class="icon-chip icon-chip-teal">${ICONS.communityIcon}</span>
-        <span class="nav-label">לוח מאמנים</span>
-        <span style="transform:scaleX(-1); display:inline-flex; color:var(--steel);" aria-hidden="true">${ICONS.chevron}</span>
-      </button>` : "";
-  return `
-    <div class="divider-label">ניהול המועדון</div>
-    <button class="navrow" data-action="open-manage">
-      <span class="icon-chip icon-chip-steel">${ICONS.manageTabIcon}</span>
-      <span class="nav-label">ניהול</span>
-      ${badge ? `<span class="tab-badge" aria-hidden="true">${badge}</span>` : ""}
-      <span style="transform:scaleX(-1); display:inline-flex; color:var(--steel);" aria-hidden="true">${ICONS.chevron}</span>
-    </button>
-    ${coachRow}`;
-}
 function renderNavSettingsRow() {
   // Fresh-eyes audit: on the desktop sidebar (renderDesktopSidebar below)
   // this section header renders in the same persistent column as
@@ -404,7 +394,7 @@ function renderNavMenuList() {
   // link + a full screen of empty navy below it - not a bug, but not a
   // finished screen either. A footer line gives the space a reason to be
   // there without inventing a duplicate action Settings already owns.
-  return renderNavWho() + `<div class="nav-destinations" role="tablist" aria-label="מסכים נוספים">${renderNavRows(true, true)}</div>` + renderNavStaffRows() + renderNavSettingsRow()
+  return renderNavWho() + `<div class="nav-destinations" role="tablist" aria-label="מסכים נוספים">${renderNavRows(true, true)}</div>` + renderNavSettingsRow()
     + `<div class="footer-note" style="text-align:center; margin-top:auto; padding-top:24px;">האימוניה · v${APP_VERSION}</div>`;
 }
 // Desktop / wide-viewport sidebar (Phase 4) - same registry, same rows,
@@ -5570,6 +5560,8 @@ function render() {
       syncWodSaveCta(wodSubTab === "log" ? wodById(selectedWodId) : null);
     } else if (tab === "manage") {
       content = typeof renderManageApp === "function" ? renderManageApp() : `<div class="empty">בטעינה</div>`;
+    } else if (tab === "clubmanage") {
+      content = typeof renderClubManageApp === "function" ? renderClubManageApp() : `<div class="empty">בטעינה</div>`;
     } else {
       content = typeof renderCommunityApp === "function" ? renderCommunityApp() : `<div class="empty">הקהילה בטעינה</div>`;
       // Signed-out, loading and recovery branches share the same scene as
@@ -5679,7 +5671,7 @@ function render() {
     // Redesign, Phase 1: the Manage tab's own after-render hook, same
     // "runs once per actual render of this tab" convention as Community's
     // above - see afterRenderManage()'s own comment in cloud.js.
-    if (tab === "manage" && typeof afterRenderManage === "function") afterRenderManage();
+    if ((tab === "manage" || tab === "clubmanage") && typeof afterRenderManage === "function") afterRenderManage();
     // COMM-190. The composer and PR/achievement prompts render in the global
     // cloud overlay and can show on any tab, so their focus management runs
     // after every render, not only Community's.
@@ -7215,7 +7207,6 @@ document.addEventListener("click", (e) => {
   // second tab-switching mechanism: set `tab`, close the menu, rerender at
   // the top. Written out because these two rows carry an extra action
   // afterwards and are not plain destinations.
-  else if (action === "open-manage") { tab = "manage"; closeNavMenu(); render(); window.scrollTo(0, 0); }
   else if (action === "open-coach-board") {
     tab = "community"; closeNavMenu();
     if (typeof window.communityOpenCoachBoard === "function") window.communityOpenCoachBoard();

@@ -427,3 +427,60 @@ test("booting straight into ?tab=manage (staff) triggers ensureCommunityDataLoad
   await waitFor(() => mock.callsTo("my_permissions").length > 0, 3000);
   assert.ok(mock.callsTo("my_permissions").length > 0, "the deferred data cascade ran from Manage's own boot, not just Community's");
 });
+
+// ===========================================================================
+// The admin / head-coach split (2026-09-15)
+// ===========================================================================
+// Two separate destinations for two separate people, at the club owner's
+// request - not one shared screen with half of it inert. What these pin is
+// the part that is easy to get wrong later: that the CLUB panel does not
+// quietly grow the four areas that stay with the admin, and that both live in
+// the hamburger rather than the bottom bar.
+
+test("a coach gets the club panel, and it does NOT carry the admin-only areas", async () => {
+  const mock = seeded(null, "coach");
+  const window = await bootCommunity(mock, { syncEnabled: false });
+  window.document.getElementById("tabManageBtn").click();
+  await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
+  window.document.querySelector('.subtabbtn[data-community-action="set-manage-tab"][data-tab="moderation"]').click();
+  await waitFor(() => !!window.document.getElementById("manageArea-moderation"), 3000);
+
+  assert.match(window.document.querySelector(".page-title").textContent, /ניהול המועדון/,
+    "a coach lands on the club panel, titled as such");
+  // The two areas that belong to the admin panel alone.
+  assert.equal(window.document.getElementById("manageArea-bugs"), null,
+    "bug triage is the admin's - a head coach can READ every report via the RPC, but closing one is not theirs");
+  assert.equal(window.document.getElementById("manageArea-audit"), null,
+    "and the audit log records staff actions, so the staff being recorded are not the ones who read it");
+  // The club side is genuinely there, or the panel would be pointless.
+  assert.ok(window.document.getElementById("manageArea-moderation"), "moderation IS the club panel's");
+});
+
+test("an admin gets the admin panel, and it is a superset - every club area plus the four that stay theirs", async () => {
+  const mock = seeded(null, "admin");
+  const window = await bootCommunity(mock, { syncEnabled: false });
+  window.document.getElementById("tabManageBtn").click();
+  await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
+  window.document.querySelector('.subtabbtn[data-community-action="set-manage-tab"][data-tab="moderation"]').click();
+  await waitFor(() => !!window.document.getElementById("manageArea-bugs"), 3000);
+
+  assert.match(window.document.querySelector(".page-title").textContent, /ניהול מערכת/);
+  for (const id of ["manageArea-moderation", "manageArea-bugs", "manageArea-audit", "manageArea-settings", "manageArea-analytics", "manageArea-onboarding"]) {
+    assert.ok(window.document.getElementById(id), `the admin panel must contain ${id} - it is a superset so an admin never switches screens for a club task`);
+  }
+});
+
+test("management lives in the hamburger, not the bottom bar, so the bar stays at five member tabs", async () => {
+  const mock = seeded(null, "admin");
+  const window = await bootCommunity(mock, { syncEnabled: false });
+  await waitFor(() => !!window.document.getElementById("tabManageBtn"), 3000);
+  // The registry feeds both surfaces off one `main` flag: main:true goes to
+  // the bottom bar, main:false to the hamburger. Management is main:false.
+  const bottomIds = [...window.document.querySelectorAll("#bottomTabBar .tabbtn")].map((b) => b.id);
+  assert.ok(!bottomIds.includes("tabManageBtn"),
+    "the management row must NOT be in the bottom tab bar");
+  assert.equal(bottomIds.length, 5, `the bottom bar is back to the five member tabs, got ${bottomIds.length}: ${bottomIds.join(", ")}`);
+  // And it IS reachable - absent from the bar must not mean absent entirely.
+  assert.ok(window.document.querySelector('#navMenuList #tabManageBtn, #desktopSidebar #tabManageBtn'),
+    "...but it must be present in the hamburger/sidebar, which is where it moved to");
+});

@@ -223,7 +223,26 @@ select tests.set_auth(tests.uid('m1'));
 select throws_ok(
   $$ select * from public.admin_actions_page(null, 25, '{}'::jsonb) $$,
   'P0001', 'not authorized',
-  'reading the log still needs community.analytics.view - the new columns did not widen who may read it');
+  'reading the log still needs a real admin - the new columns did not widen who may read it');
+
+-- Re-gated 2026-09-15 (202609150004). This used to say "still needs
+-- community.analytics.view", which was true and turned out to be the defect:
+-- the audit log is not analytics, so the moment analytics was granted to
+-- head_coach (so the head-coach panel could show the club's own numbers) the
+-- record of every staff action went with it - and the staff being recorded
+-- became the staff who could read the record. The gate is is_admin() now,
+-- which is behaviour-preserving for admin and owner, the only roles that had
+-- analytics.view before. This assertion proves the head coach specifically is
+-- shut out, which is the case the re-gate exists for.
+select tests.set_auth(tests.uid('coach'));
+select throws_ok(
+  $$ select * from public.admin_actions_page(null, 25, '{}'::jsonb) $$,
+  'P0001', 'not authorized',
+  'staff below admin cannot read the audit log, even now that they hold community.analytics.view for the club panel');
+select tests.set_auth(tests.uid('admin'));
+select lives_ok(
+  $$ select * from public.admin_actions_page(null, 25, '{}'::jsonb) $$,
+  'and an admin still can - the control proving the re-gate did not simply close the door on everyone');
 
 select * from finish();
 rollback;

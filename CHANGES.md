@@ -1,3 +1,88 @@
+## Two panels, not one: the admin screen and the head-coach screen split apart — 2026-09-15 (fourth entry)
+
+The club owner asked for an admin panel and a head-coach panel in the
+hamburger, each with its own login, and for bug reports to be collected in
+the admin one. The research finding first, because it shaped everything else:
+**most of it already existed.** "ניהול" was already a staff-gated tab with
+invites, roster, moderation, audit log, club modules, analytics and the
+onboarding editors; the RBAC already had six ranked roles with head_coach at
+30 holding announcements, challenges, comment moderation, pinning, events,
+member restriction and delete-any-post. What did not exist was somewhere for
+bug reports to land, a way to reach any of it from the hamburger, and a
+separation between the two audiences.
+
+**The hamburger genuinely did not have it.** `renderNavMenuList()` renders
+`renderNavRows(true, true)` - onlyOther=true, which by design lists only
+items NOT in the bottom tab bar - and the manage entry was `main: true`. So
+on a phone it sat in the bottom bar and appeared nowhere in the hamburger,
+which is where someone goes looking to manage things. Both panels are now
+`main: false`, which moves them into the hamburger through the existing
+registry rather than a second navigation mechanism, and hands the sixth
+bottom slot back to the five member tabs.
+
+**Bug reports now have somewhere to go.** New `bug_reports` table with a
+three-way boundary: any member files, a reporter reads back only their own,
+staff read all, and admin alone changes status. The reporter's read goes
+through a function whose RETURN TYPE has no `admin_note`/`handled_by`, so the
+column-exposure failure round 10 had to fix on two moderation tables cannot
+recur here by construction rather than by policy. The support sheet files to
+this inbox FIRST and falls back to the WhatsApp/mail handoff on any failure -
+never the reverse, because the handoff is the reliable path (it needs nothing
+but the device) and the inbox is the useful one (status, history, a second
+admin who can see it was handled). It never reports a success it did not get.
+
+**The split follows what the database already enforced, then widened it to
+match.** The head coach's panel is the club: invites, roster, moderation,
+club modules, onboarding content and the club's own numbers. The admin's is a
+superset - all of that plus bug triage, the audit log, role changes and
+password resets - so an admin never switches screens for a club task. Four
+permissions moved to head_coach so the panel's controls are backed by real
+grants instead of rendering and then failing on use. 202609030008's narrowing
+(minting a COACH-role invite needs is_admin specifically) is untouched and
+still enforced inside `invite_create`, not in the grants table.
+
+**And the widening caught a real defect that had nothing to do with this
+feature.** `admin_actions_page()` - the audit log - was gated on
+`has_perm('community.analytics.view')`, not on being an admin. This file's
+own header comment asserted the opposite when first written, and 0085's
+existing assertion is what proved it wrong: granting head_coach analytics so
+the club panel could show the club's numbers silently handed them the record
+of every staff action, including their own. An audit log the recorded staff
+can read is not an audit log. The permission was doing double duty - it
+legitimately gates five analytics readers plus the monthly recap, all
+club-running surfaces - so the fix re-gates the log itself on `is_admin()`
+rather than withholding analytics. Behaviour-preserving for everyone who had
+it before: `analytics.view` was seeded only to admin (rank 50) and owner
+(60), both of which `is_admin()`'s `role_rank >= 50` covers. The only caller
+that loses access is the head_coach grant added in the same migration, which
+had not shipped.
+
+**Accounts, created in Supabase and not in this repository.** The club's
+admin signs in with a real address so Supabase's own password-reset mail
+works for it - "ask an admin to reset it" has no answer when the locked-out
+person IS the only admin - and `login()` now accepts an email as well as a
+username to allow that. Account CREATION stays username-only on the
+non-routable `.invalid` domain, which is what lets this club hold no member
+email addresses at all; a test asserts that widening login did not leak into
+signup. A bootstrap migration grants the two roles, guarded by email match so
+it is a no-op on any stack where those accounts do not exist, and carrying no
+password - the accounts were made through the ordinary signup endpoint and
+their credentials live only in `auth.users`.
+
+Four defects were caught by verification rather than by review, three of them
+by simulating the accounts that do not exist locally (so "the migration
+applied cleanly" had been meaningless): `admin_actions.actor_id` does not
+exist (it is `admin_id`/`action_type`), both of that table's closed
+vocabularies needed the new values, `invite_redemptions.invite_id` references
+`invite_codes` while `person_invite_id` references `invites` - the names
+invert what you would guess - and there is no `community.pins` permission
+despite the string appearing in older migration prose, which failed the whole
+grant insert on a foreign key.
+
+Verified: supabase test db Files=111 Tests=3452 PASS, npm test 1670/1670.
+
+---
+
 ## A support inbox, and the loop guard that stopped sanitize_upload shipping broken — 2026-09-15 (second entry)
 
 Follow-up to the real-phone session earlier today. Three things were left

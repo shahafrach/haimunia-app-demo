@@ -18542,7 +18542,26 @@
       ? `<div class="ach-section" style="margin-top:0;">${sectionHead("var(--red)", "דורש תשומת לב")}<div class="log-list">${attentionRows.join("")}</div></div>`
       : `<div class="ach-section" style="margin-top:0;">${sectionHead("var(--green)", "דורש תשומת לב")}<div class="empty">אין דבר שדורש תשומת לב כרגע ✓</div></div>`;
   }
-  window.renderManageApp = function () {
+  // SPLIT INTO TWO PANELS (2026-09-15), at the club owner's request: the
+  // admin's screen and the head coach's screen are separate destinations for
+  // separate people, not one screen with things greyed out on it.
+  //
+  //   mode "admin" - is_admin() only. Everything the club panel has, PLUS the
+  //     four areas that stay with the account answering for the club: bug
+  //     report triage, the audit log, role changes and password resets. An
+  //     admin therefore never has to switch screens to do a club task.
+  //   mode "club"  - is_staff() (coach and head coach). Running the club:
+  //     invites, the roster, moderation, club modules, onboarding content and
+  //     the club's own numbers. 202609150004 granted head_coach the four
+  //     permissions this needs, so these controls are backed by real grants
+  //     rather than rendering and then failing on use.
+  //
+  // Every inner panel still self-gates exactly as it did - renderMemberManagement()
+  // is its own isAdmin() check, renderClubModulesPanel() its own hasPerm() -
+  // so this split decides what is OFFERED, never what is ALLOWED. The server
+  // is unchanged and remains the only real boundary.
+  function renderManagePanel(mode) {
+    const isAdminMode = mode === "admin";
     // Redesign, Phase 3 fix: renderTabHeader("manage") resolves through
     // getNavItems(), which omits the "manage" entry entirely for a
     // non-staff caller (by design - see app.js) - so this deny branch used
@@ -18550,7 +18569,10 @@
     // it. The label is stated directly here instead of round-tripping
     // through a registry that deliberately doesn't know this page exists
     // for them.
-    if (!isStaff()) return `<h1 class="page-title">ניהול</h1><div class="empty">אין הרשאה לצפות בעמוד זה.</div>`;
+    const panelTitle = isAdminMode ? "ניהול מערכת" : "ניהול המועדון";
+    if (isAdminMode ? !isAdmin() : !isStaff()) {
+      return `<h1 class="page-title">${esc(panelTitle)}</h1><div class="empty">אין הרשאה לצפות בעמוד זה.</div>`;
+    }
     // Tab 3's five areas, each still self-gated exactly as it was. The two
     // permission fallbacks below are the same strings the retired "הגדרות"
     // and "אנליטיקס" sub-tabs carried: a coach who is staff enough to be
@@ -18565,8 +18587,12 @@
     const [areaModeration, areaBugs, areaAudit, areaSettings, areaAnalytics, areaOnboarding] = MANAGE_ADMIN_AREAS;
     const adminAreas = [
       manageAdminArea(areaModeration, renderRestrictionsPanel() + renderModeration(), true),
-      manageAdminArea(areaBugs, renderBugReports(), openBugReportsByDefault()),
-      manageAdminArea(areaAudit, renderAuditLog()),
+      // Bug triage and the audit log are the admin panel's own. A head coach
+      // can READ every bug report (bug_report_list_all is is_staff()), but
+      // closing one and reading the record of staff actions both stay with
+      // the admin - so neither area is offered on the club panel at all.
+      isAdminMode ? manageAdminArea(areaBugs, renderBugReports(), openBugReportsByDefault()) : "",
+      isAdminMode ? manageAdminArea(areaAudit, renderAuditLog()) : "",
       manageAdminArea(areaSettings, renderClubModulesPanel() || `<div class="empty">אין לך הרשאה לצפות בהגדרות המודולים.</div>`),
       manageAdminArea(areaAnalytics, (renderAdminAnalyticsDashboard() + renderRetentionCorrelations()) || `<div class="empty">אין לך הרשאה לצפות באנליטיקס.</div>`),
       manageAdminArea(areaOnboarding, renderOnboardingContentEditor() + renderIntroCarouselContentEditor()),
@@ -18618,7 +18644,7 @@
     // member who now lives primarily on Manage had no unread indicator at
     // all while there, even though the underlying realtime count kept
     // updating correctly the whole time.
-    return `<h1 class="page-title" style="display:flex;align-items:center;justify-content:space-between;gap:10px;"><span>ניהול</span>${renderNotificationBell()}</h1>`
+    return `<h1 class="page-title" style="display:flex;align-items:center;justify-content:space-between;gap:10px;"><span>${esc(panelTitle)}</span>${renderNotificationBell()}</h1>`
       + renderManageAttention()
       + manageTabBar
       + manageTabIntro(activeManageTab.id)
@@ -18628,7 +18654,11 @@
       // for an unreachable-control one.
       + (state.ui.message ? `<div role="status" aria-live="polite" style="position:fixed;left:0;right:0;bottom:calc(var(--bottom-nav-reserve) - 118px);display:flex;justify-content:center;padding:0 16px;z-index:60;pointer-events:none;"><div style="max-width:448px;background:var(--surface);border:1px solid var(--brass);color:var(--brass);border-radius:14px;padding:11px 16px;font-size:13px;font-weight:700;line-height:1.45;box-shadow:var(--shadow-card);text-align:center;">${esc(state.ui.message)}</div></div>` : "")
       + activeManageTab.html;
-  };
+  }
+  // Two entry points, one builder. app.js's nav registry routes tab "manage"
+  // to the first and tab "clubmanage" to the second.
+  window.renderManageApp = function () { return renderManagePanel("admin"); };
+  window.renderClubManageApp = function () { return renderManagePanel("club"); };
   // Sharing (see renderShareControl) can now be triggered from the
   // Calendar and Progress tabs, not just the Community tab, so the
   // confirm dialog can no longer live only inside renderCommunityApp()'s
@@ -19824,6 +19854,11 @@
   // renderManageApp() itself re-checks internally (defense in depth against
   // a forced ?tab=manage), just exposed for the nav-item decision.
   window.communityIsStaff = function () { return isStaff(); };
+  // app.js's nav registry needs the admin/staff distinction to decide WHICH
+  // of the two management destinations to offer (2026-09-15). Navigation
+  // only - the real boundary is is_admin()/is_staff() in the database, which
+  // every action on either panel goes through regardless of what this says.
+  window.communityIsAdmin = function () { return isAdmin(); };
   // The club WOD catalogue's write surface. publishClubWod is what app.js's
   // staff affordance calls; the other three are the correction paths, exposed
   // the same way so the catalogue has one callable API rather than three
