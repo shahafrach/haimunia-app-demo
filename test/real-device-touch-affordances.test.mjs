@@ -152,3 +152,53 @@ test("an invite past the grace period offers the button with no waiting note", a
   assert.ok(!/אפשר לשחרר רק אחרי/.test(card.textContent),
     "the waiting note must disappear once the invite is actually releasable");
 });
+
+// ===========================================================================
+// Tap-to-prefill from the recent chips (2026-09-15)
+// ===========================================================================
+// The chips already existed and were read-only decoration: a member could SEE
+// they squatted 100x5 on Sunday, then had to dial 100 back in by hand - about
+// 32 taps of a 2.5kg stepper from the default. Hevy and Strong both build
+// their entire logging loop around a tappable "previous" column, and it is the
+// reason reviewers call those apps fast. Ours suits it even better, because we
+// log AFTER training: the member is reconstructing a session they have already
+// done, so a recent value is the most likely value.
+test("a recent-entry chip is a real button that fills weight, reps and sets", async () => {
+  const window = await bootApp();
+  await window.addMovement("Prefill Squat", "Squat");
+  window.applyFieldValue("step", "weight", 92.5);
+  window.applyFieldValue("step", "reps", 5);
+  window.applyFieldValue("step", "sets", 3);
+  await window.saveSet();
+  window.closeCelebration();
+
+  const chip = window.document.querySelector('[data-action="prefill-from-recent"]');
+  assert.ok(chip, "the recent entry should render as a tappable chip, not inert text");
+  assert.equal(chip.dataset.weight, "92.5");
+  assert.equal(chip.dataset.reps, "5");
+  assert.equal(chip.dataset.sets, "3");
+  assert.ok(Number(chip.style.minHeight.replace("px", "")) >= 44 || /min-height:44px/.test(chip.getAttribute("style") || ""),
+    "it carries a real touch target, since it is now a control rather than a label");
+
+  // Move the fields away from the saved values, then tap.
+  window.applyFieldValue("step", "weight", 20);
+  window.applyFieldValue("step", "reps", 1);
+  window.applyFieldValue("step", "sets", 1);
+  chip.click();
+  assert.equal(window.getFieldValue("step", "weight"), 92.5, "weight is filled from the chip");
+  assert.equal(window.getFieldValue("step", "reps"), 5, "reps too");
+  assert.equal(window.getFieldValue("step", "sets"), 3, "and sets, which is the part that saves the most taps");
+});
+
+test("the chip names what it filled, because 'filled' alone invites 'filled with what?'", async () => {
+  const window = await bootApp();
+  await window.addMovement("Prefill Press", "Press");
+  window.applyFieldValue("step", "weight", 45);
+  window.applyFieldValue("step", "reps", 8);
+  window.applyFieldValue("step", "sets", 1);
+  await window.saveSet();
+  window.closeCelebration();
+  window.document.querySelector('[data-action="prefill-from-recent"]').click();
+  assert.match(window.document.body.textContent, /45 ק״ג × 8/,
+    "the confirmation names the values, and uses the gershayim like the rest of the app");
+});

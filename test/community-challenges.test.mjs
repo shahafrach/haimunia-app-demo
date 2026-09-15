@@ -125,7 +125,7 @@ test("joining an individual_target challenge inserts a challenge_participants ro
   await waitFor(() => !!window.document.querySelector('[data-challenge-id="c1"]'), 3000);
   window.document.querySelector('[data-challenge-id="c1"] [data-community-action="join-challenge"]').click();
   await waitFor(() => mock.db.challenge_participants.some((p) => p.challenge_id === "c1" && p.user_id === "u1"), 3000);
-  await waitFor(() => !!window.document.querySelector('[data-challenge-id="c1"] [data-community-action="open-challenge"]') && window.document.querySelector('[data-challenge-id="c1"]').textContent.includes("נרשמת/ה"), 3000);
+  await waitFor(() => !!window.document.querySelector('[data-challenge-id="c1"] [data-community-action="open-challenge"]') && window.document.querySelector('[data-challenge-id="c1"]').textContent.includes("נרשמת") /* was "נרשמת/ה": the slash made it WRONG. Hebrew 2nd-person past is a homograph across gender, so נרשמת already covers both; appending /ה yields נרשמה, which is THIRD person feminine - a person mismatch, not a gender fix. */, 3000);
 });
 
 test("logging progress on an individual_target challenge bumps my progress and flips to completed at target, without removing the card", async () => {

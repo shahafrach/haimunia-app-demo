@@ -362,7 +362,7 @@
   button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, a:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:2px solid var(--brass); outline-offset:2px; }
   /* 'Rubik' before the generic for the same reason as .save-btn/.page-title
      (see the @font-face block's comment). .mono is not digits-only:
-     entrySummary()/ladderRoundSummary() render strings like `100 ק"ג × 5`
+     entrySummary()/ladderRoundSummary() render strings like `100 ק״ג × 5`
      through it, so the Hebrew unit label was landing on the device's
      default monospace while the digits used JetBrains Mono. */
   .mono{ font-family:'JetBrains Mono','Rubik',monospace; direction:ltr; unicode-bidi:isolate; }

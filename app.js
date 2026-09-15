@@ -15,7 +15,7 @@ let barWeight = 20;
 // Single source of truth for the app version. After bumping this, run
 // `npm run sync-version` to copy it into SW_VERSION in sw.js — `npm test`
 // fails if the two drift apart.
-const APP_VERSION = "4.42.0";
+const APP_VERSION = "4.43.0";
 
 // A movement typed into the WOD builder that isn't in the built-in list
 // above - persisted (see WODTAGSTORE), same "custom X" pattern as
@@ -634,6 +634,12 @@ function entriesFor(id, excludeId) { return entries.filter((e) => e.exerciseId =
 // Actual logged working sets from the last N days, most recent first, capped
 // so a movement trained daily doesn't flood the entry screen. No warm-up
 // concept anywhere here — every row is a real set someone saved.
+// One place that turns a weight/reps/sets triple into the app's own phrasing,
+// so the prefill toast and the chip it came from always read the same way.
+function entrySummaryFromParts(weight, reps, sets) {
+  const core = weight > 0 ? `${weight} ק״ג × ${reps}` : `${reps} חזרות`;
+  return sets > 1 ? `${core} × ${sets}` : core;
+}
 function recentEntriesFor(id, days = 14, cap = 5) {
   const cutoff = localISODate(new Date(Date.now() - days * 86400000));
   return entriesFor(id).filter((e) => e.date >= cutoff).slice(0, cap);
@@ -686,10 +692,10 @@ function bestLiftedSetFor(id, excludeId) {
     return (e.ts || 0) > (best.ts || 0) ? e : best;
   });
 }
-// Bodyweight movements (pull-ups, dips) are logged at 0 kg, where "0 ק"ג × 10"
+// Bodyweight movements (pull-ups, dips) are logged at 0 kg, where "0 ק״ג × 10"
 // would be a worse headline than the rep count on its own.
 function formatLiftedSet(e) {
-  return e.weight > 0 ? `${e.weight} ק"ג × ${e.reps}` : `${e.reps} חזרות`;
+  return e.weight > 0 ? `${e.weight} ק״ג × ${e.reps}` : `${e.reps} חזרות`;
 }
 function repRecordFor(id, repCount, excludeId) {
   const list = entriesFor(id, excludeId).filter((e) => e.reps === repCount);
@@ -2019,12 +2025,12 @@ function emitCommunityPrCreated(entry, mov, detail) {
   const bus = window.HaimuniaEvents;
   const events = window.PRODUCT_EVENTS;
   if (!bus || !events || !events.PR_CREATED) return;
-  const kg = (n) => `${Math.round(n * 10) / 10} ק"ג`;
+  const kg = (n) => `${Math.round(n * 10) / 10} ק״ג`;
   let newResult, prevResult = "", improvement = "";
   if (detail.repRecordPR) {
-    newResult = `${Math.round(detail.weight * 10) / 10} ק"ג × ${detail.reps}`;
+    newResult = `${Math.round(detail.weight * 10) / 10} ק״ג × ${detail.reps}`;
     if (detail.prevRepRecord) {
-      prevResult = `${Math.round(detail.prevRepRecord * 10) / 10} ק"ג × ${detail.reps}`;
+      prevResult = `${Math.round(detail.prevRepRecord * 10) / 10} ק״ג × ${detail.reps}`;
       improvement = `+${kg(detail.weight - detail.prevRepRecord)}`;
     }
   } else {
@@ -2041,7 +2047,7 @@ function emitCommunityPrCreated(entry, mov, detail) {
   // Launch-readiness audit item 1: onPrCreatedForChallenges (cloud.js) reads
   // a *numeric* value to drive an individual_performance challenge's
   // progress, and new_result/previous_result/improvement above are
-  // formatted DISPLAY STRINGS ('150 ק"ג × 5', '~150 ק"ג (1RM משוער)') that
+  // formatted DISPLAY STRINGS ('150 ק״ג × 5', '~150 ק״ג (1RM משוער)') that
   // must stay display strings for onPrCreated's share-prompt consumer. This
   // is the one raw number this event actually has before formatting -
   // detail.weight for a rep-record PR, detail.est (the estimated 1RM) for
@@ -2138,15 +2144,15 @@ async function saveSet(sanityConfirmed) {
       exerciseId: selectedId, type: "duration", weight, reps: 0, sets,
       durationSeconds, date, isPR, est1RM: 0, groupId, blockLabel,
     };
-    celebrationLabel = `${weight ? weight + ' ק"ג × ' : ""}${formatDuration(durationSeconds)}`;
+    celebrationLabel = `${weight ? weight + ' ק״ג × ' : ""}${formatDuration(durationSeconds)}`;
   } else {
     if (!isFinite(weight) || !isFinite(reps) || !isFinite(sets)) return;
     const reference = heaviestLoggedWeightFor(selectedId, editId);
     if (!sanityConfirmed && reference > 0 && weight >= reference * ABSURD_WEIGHT_MULTIPLE) {
       const mov = movementById(selectedId);
       askAppConfirm({
-        title: `${weight} ק"ג — לוודא?`,
-        message: `הסט הכי כבד שלך ב${mov ? "-" + mov.name : "תרגיל הזה"} עד היום הוא ${reference} ק"ג.`,
+        title: `${weight} ק״ג — לוודא?`,
+        message: `הסט הכי כבד שלך ב${mov ? "-" + mov.name : "תרגיל הזה"} עד היום הוא ${reference} ק״ג.`,
         confirmLabel: "כן, זה נכון", cancelLabel: "תיקון",
         action: "save-set",
       });
@@ -2163,7 +2169,7 @@ async function saveSet(sanityConfirmed) {
       exerciseId: selectedId, type: "reps", weight, reps, sets, date, isPR, est1RM: est,
       durationSeconds: 0, groupId, blockLabel,
     };
-    celebrationLabel = `${weight} ק"ג × ${reps}`;
+    celebrationLabel = `${weight} ק״ג × ${reps}`;
   }
   // Live bug hunt (2026-09-11): dbPut() used to run AFTER entries was
   // already mutated (unshift/sort) and nothing rolled that back on
@@ -2781,7 +2787,7 @@ function askDeleteMeasurementEntry(id) {
   const type = measureTypes.find((t) => t.id === entry.typeId);
   askAppConfirm({
     title: "מחיקת מדידה",
-    message: `${type ? type.name : "המדידה"} — ${entry.value} ס"מ, ${fmtDate(entry.date)}. המדידה תימחק מהמכשיר; אפשר יהיה לבטל למשך כמה שניות.`,
+    message: `${type ? type.name : "המדידה"} — ${entry.value} ס״מ, ${fmtDate(entry.date)}. המדידה תימחק מהמכשיר; אפשר יהיה לבטל למשך כמה שניות.`,
     confirmLabel: "מחיקה", destructive: true,
     action: "delete-measurement-entry", payload: { id },
     opener: { action: "delete-measurement-entry", id },
@@ -2793,7 +2799,7 @@ async function deleteMeasurementEntry(id) {
   try { await dbDeleteMeasurement(id); } catch (e) { noteStorageError(e); }
   if (removed) {
     const type = measureTypes.find((t) => t.id === removed.typeId);
-    offerUndo(`${type ? type.name : "המדידה"} — ${removed.value} ס"מ נמחקה`, () => restoreMeasurementEntry(removed));
+    offerUndo(`${type ? type.name : "המדידה"} — ${removed.value} ס״מ נמחקה`, () => restoreMeasurementEntry(removed));
   }
   // Full render(), not renderMeasureArea(): the undo toast just offered
   // above is part of #content's own outer shell (renderToastBar(), see
@@ -3554,8 +3560,8 @@ function formatWodEntry(e) {
   const base = e.scoreType === "time" ? formatClock(e.timeSeconds)
     : e.scoreType === "amrap" ? `${e.rounds}+${e.reps}`
     : e.scoreType === "emom" ? (e.emomReps || []).join(" · ")
-    : `${e.weight} ק"ג`;
-  return (!e.rx && e.scaledWeight) ? `${base} @ ${e.scaledWeight} ק"ג` : base;
+    : `${e.weight} ק״ג`;
+  return (!e.rx && e.scaledWeight) ? `${base} @ ${e.scaledWeight} ק״ג` : base;
 }
 function lastScaledAttempt(id) {
   const list = wodEntriesFor(id).filter((e) => !e.rx).sort((a, b) => (b.ts || 0) - (a.ts || 0));
@@ -3571,7 +3577,7 @@ function formatWodBest(id) {
   if (best === null) return "—";
   if (w.scoreType === "time") return formatClock(best);
   if (w.scoreType === "amrap") return `${Math.floor(best / 1000)}+${best % 1000}`;
-  return `${best} ק"ג`;
+  return `${best} ק״ג`;
 }
 
 async function addCustomWod(name, scoreType, desc, extra) {
@@ -3603,7 +3609,7 @@ function strengthShareCandidate(entry) {
   if (!movement) return null;
   const duration = entry.type === "duration";
   return { type: "strength_entry", id: entry.id, title: movement.name,
-    resultText: duration ? `${formatDuration(entry.durationSeconds)}${entry.weight ? ` @ ${entry.weight} ק"ג` : ""}` : `${entry.weight} ק"ג × ${entry.reps} × ${entry.sets}`,
+    resultText: duration ? `${formatDuration(entry.durationSeconds)}${entry.weight ? ` @ ${entry.weight} ק״ג` : ""}` : `${entry.weight} ק״ג × ${entry.reps} × ${entry.sets}`,
     comparisonKey: `movement:${entry.exerciseId}:${duration ? "duration" : "est1rm"}`,
     scoreValue: duration ? entry.durationSeconds : entry.est1RM, scoreDirection: "higher", occurredOn: entry.date, rx: null };
 }
@@ -4161,7 +4167,7 @@ function renderBarWeightRow() {
   return `<div id="barWeightRow">
     <div style="color:var(--steel); font-size:11px; font-weight:700; letter-spacing:.5px; margin-bottom:6px;" id="barWeightLabel">משקל המוט</div>
     <div class="flex gap-8" style="margin-bottom:12px;" role="radiogroup" aria-labelledby="barWeightLabel">
-      ${BAR_OPTIONS.map((kg) => `<button class="format-chip ${barWeight === kg ? "active" : ""}" data-action="set-bar-weight" data-kg="${kg}" role="radio" aria-checked="${barWeight === kg}">${kg} ק"ג</button>`).join("")}
+      ${BAR_OPTIONS.map((kg) => `<button class="format-chip ${barWeight === kg ? "active" : ""}" data-action="set-bar-weight" data-kg="${kg}" role="radio" aria-checked="${barWeight === kg}">${kg} ק״ג</button>`).join("")}
     </div>
   </div>`;
 }
@@ -4181,7 +4187,7 @@ function renderBarbell(w) {
         <div class="sleeve"></div><div class="collar"></div>
         ${renderSide(right)}
       </div>
-      <span class="bar-caption">${w < barWeight ? `מתחת למשקל המוט (${barWeight} ק"ג)` : `מוט ${barWeight} ק"ג + ${plates.length} משקולות`}</span>
+      <span class="bar-caption">${w < barWeight ? `מתחת למשקל המוט (${barWeight} ק״ג)` : `מוט ${barWeight} ק״ג + ${plates.length} משקולות`}</span>
     </div>`;
 }
 
@@ -4431,7 +4437,7 @@ function renderLogTab() {
 
     ${(est || bestHold || last) ? `
     <div class="stat-row">
-      ${est ? `<div class="stat-card stat-hero"><div class="stat-label">1RM משוער</div><div class="stat-value mono" style="color:var(--brass);">${est} ק"ג</div></div>` : ""}
+      ${est ? `<div class="stat-card stat-hero"><div class="stat-label">1RM משוער</div><div class="stat-value mono" style="color:var(--brass);">${est} ק״ג</div></div>` : ""}
       ${bestHold ? `<div class="stat-card stat-hero"><div class="stat-label">שיא החזקה</div><div class="stat-value mono" style="color:var(--brass);">${formatDuration(bestHold)}</div></div>` : ""}
       ${last ? `<button data-action="prefill-last" class="stat-card stat-hero" style="text-align:right;" aria-label="מילוי הנתונים מהאימון האחרון — ${isDuration ? formatDuration(last.durationSeconds) : `${last.weight} על ${last.reps}`}">
         <div class="flex items-center justify-between gap-6">
@@ -4449,11 +4455,11 @@ function renderLogTab() {
         <span style="display:inline-flex; transition:transform .2s; transform:rotate(${pctTableExpanded ? "90deg" : "180deg"});">${ICONS.chevron}</span>
       </button>
       ${pctTableExpanded ? `<div class="chart-card" style="margin-top:8px;">
-        <div class="footer-note" style="margin:0 0 10px;">מחושב מ־1RM משוער (${est} ק"ג) — הערכה מהסטים שרשמתם, לא מקס שנבדק. נקודת פתיחה להתאמה.</div>
+        <div class="footer-note" style="margin:0 0 10px;">מחושב מ־1RM משוער (${est} ק״ג) — הערכה מהסטים שרשמתם, לא מקס שנבדק. נקודת פתיחה להתאמה.</div>
         <div class="log-list">
-          ${PCT_STEPS.map((pct) => `<div class="log-row"><span style="color:var(--steel); font-weight:700;">${pct}%</span><span class="mono" style="font-weight:700; color:var(--brass);">${formatPlateKg(roundToPlate(est * pct / 100))} ק"ג</span></div>`).join("")}
+          ${PCT_STEPS.map((pct) => `<div class="log-row"><span style="color:var(--steel); font-weight:700;">${pct}%</span><span class="mono" style="font-weight:700; color:var(--brass);">${formatPlateKg(roundToPlate(est * pct / 100))} ק״ג</span></div>`).join("")}
         </div>
-        <div class="footer-note" style="margin:10px 0 0;">מעוגל ל־2.5 ק"ג — הקפיצה הקטנה ביותר שאפשר להעמיס על המוט.</div>
+        <div class="footer-note" style="margin:10px 0 0;">מעוגל ל־2.5 ק״ג — הקפיצה הקטנה ביותר שאפשר להעמיס על המוט.</div>
       </div>` : ""}
     </div>` : ""}
 
@@ -4464,7 +4470,27 @@ function renderLogTab() {
       <div style="margin-bottom:12px;">
         <div style="color:var(--steel); font-size:11px; font-weight:700; letter-spacing:.5px; margin-bottom:6px;">ב-14 הימים האחרונים</div>
         <div class="flex wrap gap-8">
-          ${recent.map((e) => `<span class="mono" style="background:var(--surface2); border-radius:10px; padding:6px 10px; font-size:12.5px; font-weight:700; color:var(--steel);">${esc(fmtDate(e.date))}: <span style="color:var(--chalk);">${esc(entrySummary(e))}</span></span>`).join("")}
+          ${recent.map((e) => {
+            // TAP TO PREFILL (2026-09-15). These chips existed already and were
+            // read-only decoration: the member could SEE that they squatted
+            // 100x5 on Sunday and then had to dial 100 back in by hand, which
+            // from the default is ~32 taps of a 2.5kg stepper.
+            //
+            // This is the one mechanic Hevy and Strong both build their whole
+            // logging loop around - a "previous" column you tap to copy
+            // forward - and the reason reviewers call those apps fast. Ours is
+            // strictly better suited to it: we log AFTER training, so the
+            // member is reconstructing a session they have already done, and
+            // the most likely value for today is a value from a recent day.
+            //
+            // Duration entries are deliberately not tappable: they carry no
+            // weight/reps/sets triple to copy, so a tap would silently do
+            // nothing, which is worse than a chip that plainly isn't a button.
+            const fillable = !isDuration && typeof e.weight === "number" && typeof e.reps === "number";
+            const label = `${esc(fmtDate(e.date))}: <span style="color:var(--chalk);">${esc(entrySummary(e))}</span>`;
+            if (!fillable) return `<span class="mono" style="background:var(--surface2); border-radius:10px; padding:6px 10px; font-size:12.5px; font-weight:700; color:var(--steel);">${label}</span>`;
+            return `<button type="button" class="mono" data-action="prefill-from-recent" data-weight="${esc(String(e.weight))}" data-reps="${esc(String(e.reps))}" data-sets="${esc(String(e.sets || 1))}" aria-label="${esc(`מילוי מהיר — ${entrySummary(e)} מ־${fmtDate(e.date)}`)}" style="background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:6px 10px; font-size:12.5px; font-weight:700; color:var(--steel); min-height:44px; cursor:pointer;">${label}</button>`;
+          }).join("")}
         </div>
       </div>`;
     })()}
@@ -4484,7 +4510,7 @@ function renderLogTab() {
 
     ${isDuration
       ? `<div class="est-line">‹ משך ההחזקה: <b id="durationLineValue">${formatDuration(durationSeconds)}</b></div>`
-      : `<div class="est-line">‹ הסט הזה מעריך 1RM של <b id="estLineValue">${estimate1RM(weight, reps)} ק"ג</b></div>`}
+      : `<div class="est-line">‹ הסט הזה מעריך 1RM של <b id="estLineValue">${estimate1RM(weight, reps)} ק״ג</b></div>`}
 
     ${(() => {
       const rounds = ladderMode ? currentLadderRounds() : [];
@@ -4612,7 +4638,7 @@ function renderDetailCard(m) {
       <div class="flex items-center justify-between" style="margin-bottom:12px;">
         <span style="font-weight:800; font-size:15px;">${bidiText(m.name)}</span>
         <div class="flex items-center gap-8">
-          ${trend !== null ? `<span class="flex items-center gap-6" style="font-weight:700; font-size:12px;">${trend > 0 ? ICONS.up : trend < 0 ? ICONS.down : ICONS.flat}<span class="mono">${trend > 0 ? "+" : ""}${trend} ק"ג</span> 1RM משוער</span>` : ""}
+          ${trend !== null ? `<span class="flex items-center gap-6" style="font-weight:700; font-size:12px;">${trend > 0 ? ICONS.up : trend < 0 ? ICONS.down : ICONS.flat}<span class="mono">${trend > 0 ? "+" : ""}${trend} ק״ג</span> 1RM משוער</span>` : ""}
           ${typeof window.renderShareControl === "function" ? window.renderShareControl("strength_entry", hEntries[0].id) : ""}
         </div>
       </div>
@@ -4623,7 +4649,7 @@ function renderDetailCard(m) {
           return `<div class="rep-cell"><div class="rep-cell-label">${r}RM</div><div class="rep-cell-val mono" style="color:${rec ? "var(--chalk)" : "var(--border)"};">${rec ?? "—"}</div></div>`;
         }).join("")}
       </div>
-      ${est1rm ? `<div class="footer-note" style="margin-top:10px; text-align:center;">1RM משוער: <span class="mono">${est1rm} ק"ג</span> — חישוב מהסט הטוב ביותר, לא הרמה שבוצעה</div>` : ""}
+      ${est1rm ? `<div class="footer-note" style="margin-top:10px; text-align:center;">1RM משוער: <span class="mono">${est1rm} ק״ג</span> — חישוב מהסט הטוב ביותר, לא הרמה שבוצעה</div>` : ""}
     </div>`;
 }
 
@@ -4695,7 +4721,7 @@ function renderHistoryListArea() {
           const headline = bestSet ? formatLiftedSet(bestSet) : hold ? formatDuration(hold) : "—";
           return `<span style="text-align:left;">
           <span class="mono" style="display:block; color:var(--brass); font-weight:700; font-size:14px;">${esc(headline)}</span>
-          ${bestSet && est ? `<span class="mono" style="display:block; color:var(--steel); font-weight:600; font-size:11px;">1RM משוער ${est} ק"ג</span>` : ""}
+          ${bestSet && est ? `<span class="mono" style="display:block; color:var(--steel); font-weight:600; font-size:11px;">1RM משוער ${est} ק״ג</span>` : ""}
         </span>`;
         })()}
       </button>`;
@@ -5069,7 +5095,7 @@ function renderBodyweightArea() {
         <span style="display:inline-flex; transition:transform .2s; transform:rotate(${bodyweightExpanded ? "90deg" : "180deg"});">${ICONS.chevron}</span>
         <span style="font-weight:700; font-size:14px;">משקל גוף</span>
       </div>
-      ${last ? `<span class="mono" style="color:var(--brass); font-weight:700; font-size:14px;">${last.weight} ק"ג</span>` : `<span style="color:var(--steel); font-size:12px;">אין עדיין מדידות</span>`}
+      ${last ? `<span class="mono" style="color:var(--brass); font-weight:700; font-size:14px;">${last.weight} ק״ג</span>` : `<span style="color:var(--steel); font-size:12px;">אין עדיין מדידות</span>`}
     </button>`;
   const detail = bodyweightExpanded ? `
     <div class="chart-card" style="margin-top:-4px; border-top-left-radius:0; border-top-right-radius:0; border-top:none;">
@@ -5113,7 +5139,7 @@ function renderMeasureArea() {
           <span style="display:inline-flex; transition:transform .2s; transform:rotate(${expanded ? "90deg" : "180deg"});">${ICONS.chevron}</span>
           <span style="font-weight:700; font-size:14px;">${bidiText(t.name)}</span>
         </div>
-        ${last ? `<span class="mono" style="color:var(--brass); font-weight:700; font-size:14px;">${last.value} ס"מ</span>` : `<span style="color:var(--steel); font-size:12px;">אין עדיין מדידות</span>`}
+        ${last ? `<span class="mono" style="color:var(--brass); font-weight:700; font-size:14px;">${last.value} ס״מ</span>` : `<span style="color:var(--steel); font-size:12px;">אין עדיין מדידות</span>`}
       </button>`;
     if (!expanded) return header;
 
@@ -5129,7 +5155,7 @@ function renderMeasureArea() {
         </div>
         ${chartData.length ? renderChart(chartData) : ""}
         <div class="steppers" style="margin-top:14px; margin-bottom:0;">
-          ${renderStepper(t.id, 'ס"מ', measureValues[t.id], 0.5, 0, "measure-step")}
+          ${renderStepper(t.id, 'ס״מ', measureValues[t.id], 0.5, 0, "measure-step")}
         </div>
         <button data-action="save-measurement" data-id="${esc(t.id)}" class="save-btn" style="max-width:none; margin-top:14px;"${measureValues[t.id] > 0 ? "" : " disabled"}>רישום מדידה — היום</button>
         ${recent.length ? `
@@ -5138,7 +5164,7 @@ function renderMeasureArea() {
             <div class="log-row">
               <span style="color:var(--steel); font-size:12px;">${fmtDate(e.date)}</span>
               <div class="flex items-center gap-10">
-                <span class="mono" style="font-size:13px;">${e.value} ס"מ</span>
+                <span class="mono" style="font-size:13px;">${e.value} ס״מ</span>
                 <button data-action="delete-measurement-entry" data-id="${esc(e.id)}" aria-label="מחיקת מדידה" class="icon-btn-sm">${ICONS.trash}</button>
               </div>
             </div>`).join("")}
@@ -5386,7 +5412,7 @@ function updateLogQuickUI(field) {
   }
   if (logEntryType === "reps") {
     const estEl = document.getElementById("estLineValue");
-    if (estEl) estEl.textContent = estimate1RM(weight, reps) + ' ק"ג';
+    if (estEl) estEl.textContent = estimate1RM(weight, reps) + ' ק״ג';
   } else if (field === "durationSeconds") {
     const durEl = document.getElementById("durationLineValue");
     if (durEl) durEl.textContent = formatDuration(durationSeconds);
@@ -7221,6 +7247,15 @@ document.addEventListener("click", (e) => {
     if (typeof window.communityOpenCoachBoard === "function") window.communityOpenCoachBoard();
     render(); window.scrollTo(0, 0);
   }
+  else if (action === "prefill-from-recent") {
+    const w = Number(el.dataset.weight), r = Number(el.dataset.reps), st = Number(el.dataset.sets);
+    if (isFinite(w)) applyFieldValue("step", "weight", w);
+    if (isFinite(r)) applyFieldValue("step", "reps", r);
+    if (isFinite(st) && st > 0) applyFieldValue("step", "sets", st);
+    // Named, because "filled" alone invites "filled with what?" from someone
+    // who has just finished training and is not reading carefully.
+    showToast(`מולא: ${entrySummaryFromParts(w, r, st)}`);
+  }
   else if (action === "open-support") { openSupport(); }
   else if (action === "close-support") {
     // THE BACKDROP GUARD, missing when this shipped and reported from a real
@@ -7318,7 +7353,7 @@ document.addEventListener("input", (e) => {
   if (action === "step") {
     if (logEntryType === "reps") {
       const estEl = document.getElementById("estLineValue");
-      if (estEl) estEl.textContent = estimate1RM(weight, reps) + ' ק"ג';
+      if (estEl) estEl.textContent = estimate1RM(weight, reps) + ' ק״ג';
     } else if (field === "durationSeconds") {
       const durEl = document.getElementById("durationLineValue");
       if (durEl) durEl.textContent = formatDuration(durationSeconds);

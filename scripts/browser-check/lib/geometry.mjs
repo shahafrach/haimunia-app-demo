@@ -115,7 +115,7 @@ export async function paintedTextOfUnisolatedControl(page, selector, text) {
 // `paintedTextOfUnisolatedControl` is trustworthy.
 //
 // `html` is inserted as innerHTML on purpose: these fragments ARE markup
-// (<bdi>, <bdi dir="ltr">), and every one of them is built in this repo from
+// (<bdi>, <bdi dir="ltr" lang="en">), and every one of them is built in this repo from
 // literals or from the shipped helper's own output. No untrusted value
 // reaches it.
 export async function paintedTextOfHtmlSibling(page, selector, html) {

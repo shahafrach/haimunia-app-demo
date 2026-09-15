@@ -249,7 +249,7 @@ test("a failed reassignment shows the documented generic error copy, and a mappe
   const select2 = window.document.querySelector('[data-challenge-team-reassign-select="u2"]');
   select2.value = "t-morning";
   select2.dispatchEvent(new window.Event("change", { bubbles: true }));
-  await waitFor(() => window.document.querySelector('[data-team-mgmt]').textContent.includes("המשתתפ/ת אינו/ה פעיל/ה באתגר."), 3000);
+  await waitFor(() => window.document.querySelector('[data-team-mgmt]').textContent.includes("המשתתף/ת אינו/ה פעיל/ה באתגר."), 3000);
 });
 
 test("a team-management mutation shows its own skeleton while the detail re-reads, distinct from the dialog's first-open loading text", async () => {

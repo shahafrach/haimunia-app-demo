@@ -11,6 +11,14 @@
 // the run boundaries fall, which lines are left alone, that no isolate ever
 // straddles a tag, and - the one that has nothing to do with bidi at all -
 // that every character of untrusted input still leaves through esc().
+// MARKUP NOTE (2026-09-15): the emitted wrapper gained lang="en" alongside
+// dir="ltr". The document is lang="he" and was the app's ONLY lang attribute,
+// so a screen reader spoke every Latin run - movement names, Rx, WOD, AMRAP,
+// benchmark names - through the Hebrew voice. This wrapper already locates
+// those runs, so tagging them costs nothing. Every assertion below is
+// otherwise unchanged: the run BOUNDARIES, the escaping guarantees and the
+// interior-neutral rule are exactly what they were, and those are the
+// properties this file exists to defend.
 import { test } from "node:test";
 import assert from "node:assert";
 import fs from "node:fs";
@@ -26,7 +34,7 @@ const { bidiText, bidiHtml, esc } = g.BoxLogSafe;
 // Undo esc() and drop the isolation markup, to compare against what was typed.
 const unesc = (s) =>
   s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&");
-const stripped = (html) => unesc(html.replace(/<\/?bdi(?: dir="ltr")?>/g, ""));
+const stripped = (html) => unesc(html.replace(/<\/?bdi(?: [^>]*)?>/g, ""));
 
 // ---------------------------------------------------------------------------
 // The promotion. This is the half that keeps the rest of the file honest: the
@@ -55,7 +63,7 @@ test("the booted app really has the shared module under it, behaving as asserted
   assert.equal(typeof S.bidiHtml, "function");
   // Same behaviour inside the booted app as in the standalone module — this is
   // what app.js's `const bidiText = SAFE.bidiText` resolves to at runtime.
-  assert.equal(S.bidiText("עשיתי 3×5 @ 60 היום"), '<bdi>עשיתי <bdi dir="ltr">3×5 @ 60</bdi> היום</bdi>');
+  assert.equal(S.bidiText("עשיתי 3×5 @ 60 היום"), '<bdi>עשיתי <bdi dir="ltr" lang="en">3×5 @ 60</bdi> היום</bdi>');
   //
   // WHY THE BINDING ITSELF IS ASSERTED AT THE SOURCE LEVEL ABOVE AND NOT HERE.
   // The obvious check — window.eval("bidiText") === S.bidiText, the way
@@ -104,7 +112,7 @@ test("escaping is untouched: every character of untrusted input still leaves thr
     const out = bidiText(raw);
     // No markup survives except the isolation this helper itself adds.
     assert.doesNotMatch(
-      out.replace(/<\/?bdi(?: dir="ltr")?>/g, ""),
+      out.replace(/<\/?bdi(?: [^>]*)?>/g, ""),
       /[<>]/,
       `bidiText must not leave a raw angle bracket in the output for ${JSON.stringify(raw)}`,
     );
@@ -119,7 +127,7 @@ test("run boundaries are computed BEFORE escaping, so an escape is never mistake
   // boundaries were found on the escaped string this would isolate it.
   const out = bidiText('הרמתי 100 ק"ג');
   assert.match(out, /ק&quot;ג/, "the quote must still be escaped");
-  assert.doesNotMatch(out, /<bdi dir="ltr">[^<]*quot/, "an HTML entity must never be isolated as if it were prose");
+  assert.doesNotMatch(out, /<bdi dir="ltr" lang="en">[^<]*quot/, "an HTML entity must never be isolated as if it were prose");
 });
 
 // ---------------------------------------------------------------------------
@@ -130,26 +138,26 @@ test("a neutral BETWEEN two anchors is interior - this is the whole defect", () 
   // `×` and `@` resolve to the paragraph's RTL direction (UBA N1 has European
   // numbers act as R for adjacent neutrals), splitting one logical run into
   // three number runs laid out right to left: `60 @ 5×3`.
-  assert.equal(bidiText("עשיתי 3×5 @ 60 היום"), '<bdi>עשיתי <bdi dir="ltr">3×5 @ 60</bdi> היום</bdi>');
+  assert.equal(bidiText("עשיתי 3×5 @ 60 היום"), '<bdi>עשיתי <bdi dir="ltr" lang="en">3×5 @ 60</bdi> היום</bdi>');
 });
 
 test("a neutral between Hebrew and an anchor stays OUTSIDE the run", () => {
   // The parentheses belong to the Hebrew paragraph. The bidi algorithm's own
   // bracket-pair rule (N0) plus mirroring (L4) already paint them correctly -
   // measured, see the geometry check. Swallowing them would be over-isolation.
-  assert.equal(bidiText("עם תווית בלוק (A/B/C/D)"), '<bdi>עם תווית בלוק (<bdi dir="ltr">A/B/C/D</bdi>)</bdi>');
+  assert.equal(bidiText("עם תווית בלוק (A/B/C/D)"), '<bdi>עם תווית בלוק (<bdi dir="ltr" lang="en">A/B/C/D</bdi>)</bdi>');
 });
 
 test("a sentence-final '.' is after the last anchor, so it stays outside too", () => {
   assert.equal(
     bidiText("נשבר לי ב-3×5 @ 60. המשך מחר"),
-    '<bdi>נשבר לי ב-<bdi dir="ltr">3×5 @ 60</bdi>. המשך מחר</bdi>',
+    '<bdi>נשבר לי ב-<bdi dir="ltr" lang="en">3×5 @ 60</bdi>. המשך מחר</bdi>',
   );
 });
 
 test("the run neither swallows the Hebrew word before it nor the one after it", () => {
   const out = bidiText("עשיתי 3×5 @ 60 היום");
-  const run = out.match(/<bdi dir="ltr">([^<]*)<\/bdi>/)[1];
+  const run = out.match(/<bdi dir="ltr" lang="en">([^<]*)<\/bdi>/)[1];
   assert.equal(run, "3×5 @ 60");
   assert.doesNotMatch(run, /[֐-ࣿ]/, "a run must contain no RTL character at all - that is what makes forcing it LTR safe");
 });
@@ -167,7 +175,7 @@ test("a stretch of CONTIGUOUS anchors is left alone: it cannot reorder against i
 
 test("every maximal run in a line is isolated, not just the first", () => {
   const out = bidiText("בשעה 7:30 - 8:30 ואז 3×5 @ 60");
-  assert.equal(out, '<bdi>בשעה <bdi dir="ltr">7:30 - 8:30</bdi> ואז <bdi dir="ltr">3×5 @ 60</bdi></bdi>');
+  assert.equal(out, '<bdi>בשעה <bdi dir="ltr" lang="en">7:30 - 8:30</bdi> ואז <bdi dir="ltr" lang="en">3×5 @ 60</bdi></bdi>');
 });
 
 // ---------------------------------------------------------------------------
@@ -201,7 +209,7 @@ test("the first strong character of a processed line is never moved inside an is
     const out = bidiText(line);
     // Everything before the first isolate must still contain the Hebrew that
     // the engine will resolve the line's direction from.
-    const beforeIsolate = out.split('<bdi dir="ltr">')[0];
+    const beforeIsolate = out.split('<bdi dir="ltr" lang="en">')[0];
     assert.match(beforeIsolate, /[֐-׿]/, `the line's own first strong character must stay outside every isolate: ${line}`);
   }
 });
@@ -219,7 +227,7 @@ test("isolation is per LINE, and rejoining reproduces the original text exactly"
   const [a, b, c] = out.split("\n");
   assert.equal(a, "<bdi>שורה ראשונה</bdi>");
   assert.equal(b, "<bdi>21-15-9 Thrusters</bdi>");
-  assert.equal(c, '<bdi>עשיתי <bdi dir="ltr">3×5 @ 60</bdi></bdi>');
+  assert.equal(c, '<bdi>עשיתי <bdi dir="ltr" lang="en">3×5 @ 60</bdi></bdi>');
 });
 
 test("null/undefined are the empty string, as before", () => {
@@ -235,11 +243,11 @@ test("null/undefined are the empty string, as before", () => {
 test("bidiHtml isolates runs without ever straddling a tag", () => {
   const input = 'תודה <button class="mention" data-id="x">@noam</button> על 3×5 @ 60';
   const out = bidiHtml(input);
-  assert.equal(out, '<bdi>תודה <button class="mention" data-id="x">@noam</button> על <bdi dir="ltr">3×5 @ 60</bdi></bdi>');
+  assert.equal(out, '<bdi>תודה <button class="mention" data-id="x">@noam</button> על <bdi dir="ltr" lang="en">3×5 @ 60</bdi></bdi>');
   // Well-formed by construction: a tag BREAKS a run, so an isolate can never
   // contain half of one. Assert it directly rather than trusting the sample.
-  for (const run of out.match(/<bdi dir="ltr">[\s\S]*?<\/bdi>/g) || []) {
-    assert.doesNotMatch(run.slice('<bdi dir="ltr">'.length, -"</bdi>".length), /[<>]/, "no isolate may contain markup");
+  for (const run of out.match(/<bdi dir="ltr" lang="en">[\s\S]*?<\/bdi>/g) || []) {
+    assert.doesNotMatch(run.slice('<bdi dir="ltr" lang="en">'.length, -"</bdi>".length), /[<>]/, "no isolate may contain markup");
   }
 });
 
@@ -251,7 +259,7 @@ test("bidiHtml treats an entity as one neutral character, not as the Latin word 
   assert.doesNotMatch(out, /dir="ltr"/);
   // And the entity is still passed through untouched when a run IS isolated
   // elsewhere in the same string.
-  assert.equal(bidiHtml("הרמתי 3×5 @ 60 ק&quot;ג"), '<bdi>הרמתי <bdi dir="ltr">3×5 @ 60</bdi> ק&quot;ג</bdi>');
+  assert.equal(bidiHtml("הרמתי 3×5 @ 60 ק&quot;ג"), '<bdi>הרמתי <bdi dir="ltr" lang="en">3×5 @ 60</bdi> ק&quot;ג</bdi>');
 });
 
 test("bidiHtml never alters the HTML it was handed beyond adding isolates", () => {
@@ -263,7 +271,7 @@ test("bidiHtml never alters the HTML it was handed beyond adding isolates", () =
   ];
   for (const input of inputs) {
     const out = bidiHtml(input);
-    assert.equal(out.replace(/<bdi(?: dir="ltr")?>/g, "").replace(/<\/bdi>/g, ""), input);
+    assert.equal(out.replace(/<bdi(?: [^>]*)?>/g, "").replace(/<\/bdi>/g, ""), input);
   }
 });
 
@@ -275,7 +283,7 @@ test("a stray bidi control character breaks a run instead of being swallowed by 
   // A forced-LTR isolate holding half of an unbalanced RLI/PDI pair is a worse
   // string than the one we started with.
   const out = bidiText("עשיתי 3⁧×5 @ 60 היום");
-  for (const run of out.match(/<bdi dir="ltr">[\s\S]*?<\/bdi>/g) || []) {
+  for (const run of out.match(/<bdi dir="ltr" lang="en">[\s\S]*?<\/bdi>/g) || []) {
     assert.doesNotMatch(run, /[‎-‏‪-‮⁦-⁩]/, "a run must never contain a bidi formatting control");
   }
 });

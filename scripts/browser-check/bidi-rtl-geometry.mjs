@@ -256,7 +256,7 @@ await checkRunReadsForward("a time range inside a Hebrew sentence", "האימו�
 // The isolate had to go around the RUN, not the line. Forcing the whole line
 // LTR — the obvious wrong fix, and the one that would wreck every Hebrew
 // string in the app — does not even repair this case.
-const forcedLine = await paintedOf(`<bdi dir="ltr">${await escaped("עשיתי 3×5 @ 60 היום")}</bdi>`);
+const forcedLine = await paintedOf(`<bdi dir="ltr" lang="en">${await escaped("עשיתי 3×5 @ 60 היום")}</bdi>`);
 check(
   "forcing the whole LINE ltr does not fix it either — the isolate genuinely had to go around the run",
   forcedLine.includes("60 @ 5×3"),
@@ -275,7 +275,7 @@ check(
 const PAREN = "עם תווית בלוק (A/B/C/D)";
 const parenReal = await paintedOf(await shipped(PAREN));
 const parenPrefix = await paintedOf(`<bdi>${await escaped(PAREN)}</bdi>`);
-const parenOver = await paintedOf(`<bdi>עם תווית בלוק <bdi dir="ltr">(A/B/C/D)</bdi></bdi>`);
+const parenOver = await paintedOf(`<bdi>עם תווית בלוק <bdi dir="ltr" lang="en">(A/B/C/D)</bdi></bdi>`);
 check("the block labels read A/B/C/D forward, not D/C/B/A", parenReal.includes("A/B/C/D") && !parenReal.includes("D/C/B/A"), `painted "${parenReal}"`);
 check("the run-level fix left the parentheses to the paragraph: identical paint before and after", parenReal === parenPrefix, `after "${parenReal}" vs before "${parenPrefix}"`);
 check(
@@ -300,7 +300,7 @@ check(
 // failure this file's header says to report rather than tolerate.
 const HEBREW = "היה קשה, אבל סיימתי.";
 const hebReal = await paintedOf(await shipped(HEBREW));
-const hebForced = await paintedOf(`<bdi dir="ltr">${await escaped(HEBREW)}</bdi>`);
+const hebForced = await paintedOf(`<bdi dir="ltr" lang="en">${await escaped(HEBREW)}</bdi>`);
 // Painted left to right, an RTL-resolved Hebrew line reads as its own reverse.
 check("a Hebrew-only line still resolves RTL (the fix isolates, it does not force LTR)", hebReal === [...HEBREW].reverse().join(""), `painted "${hebReal}"`);
 check("it was not isolated at all: there is no LTR run in it to isolate", !(await shipped(HEBREW)).includes('dir="ltr"'));
@@ -317,7 +317,7 @@ check(
 // further along — re-creating the exact bug 3a85c76 fixed.
 const LTR_LINE = '21-15-9 Thrusters + Pull-ups. Rx 43/30 ק"ג.';
 const ltrReal = await paintedOf(await shipped(LTR_LINE));
-const ltrUngated = await paintedOf(`<bdi><bdi dir="ltr">21-15-9 Thrusters + Pull-ups. Rx 43/30</bdi> ק&quot;ג.</bdi>`);
+const ltrUngated = await paintedOf(`<bdi><bdi dir="ltr" lang="en">21-15-9 Thrusters + Pull-ups. Rx 43/30</bdi> ק&quot;ג.</bdi>`);
 // NOTE for whoever revisits the line-level rule: this assertion is the thing
 // that would break. cloud.js's bidiIsolateProse() (the outward share card)
 // deliberately gives a sentence like `Rx 43/30 ק"ג. נשבר לי הראש` an RTL base
@@ -363,7 +363,7 @@ if (emptyFound > 0) {
   const e2eHtml = await page.evaluate((sel) => document.querySelector(sel).innerHTML, emptySel);
   check(
     "and it does so by emitting the shared helper's isolate, not a re-implementation of it",
-    e2eHtml.includes('<bdi dir="ltr">3×5 @ 60</bdi>'),
+    e2eHtml.includes('<bdi dir="ltr" lang="en">3×5 @ 60</bdi>'),
     `${e2eHtml} — ${WIRING_HINT}`,
   );
 }

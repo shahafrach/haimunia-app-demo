@@ -287,7 +287,21 @@
       }
       if (hasInteriorNeutral) {
         emit(i, first);
-        out += '<bdi dir="ltr">';
+        // lang="en" alongside dir="ltr" (2026-09-15). The document is
+        // lang="he" and it is the only lang attribute in the app, so a screen
+        // reader renders every Latin run - movement names, Rx, WOD, AMRAP,
+        // EMOM, benchmark names - through the Hebrew voice. This wrapper has
+        // already done the hard part of FINDING the run; telling the speech
+        // engine what language it found is free.
+        //
+        // PARTIAL BY CONSTRUCTION, stated so nobody records this as done: this
+        // branch only fires for runs that contain an interior neutral (e.g.
+        // "Back Squat 100", "43/30"). A bare single-word run like "Fran" or
+        // "WOD" takes the emit(i, j) path below, unwrapped, and is still
+        // untagged. Covering those means wrapping every Latin word in a span,
+        // which is a real DOM-cost change and belongs behind the render-cost
+        // trip-wire, not smuggled in here.
+        out += '<bdi dir="ltr" lang="en">';
         emit(first, last + 1);
         out += "</bdi>";
         emit(last + 1, j);

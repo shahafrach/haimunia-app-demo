@@ -255,7 +255,7 @@ test("fresh-eyes audit: the mock now simulates the real POST_NEW_MEMBER producer
   await openCoachTab(window);
   await waitFor(() => !!window.document.querySelector('[data-community-action="coach-welcome-member"]'), 3000);
   window.document.querySelector('[data-community-action="coach-welcome-member"]').click();
-  await waitFor(() => (mock.db.post_comments || []).some((c) => c.body.includes("ברוך")), 3000);
+  await waitFor(() => (mock.db.post_comments || []).some((c) => c.body.includes("שהגעת")), 3000);
 });
 
 test("View profile opens the community_profile overlay for the listed member", async () => {

@@ -1,3 +1,75 @@
+## Hebrew grammar the app had been getting wrong, and the recent chips become buttons — 2026-09-15 (sixth entry)
+
+Eleven research agents read eleven competitor products. The most valuable
+thing they produced was not a feature: it was **five defects in this app's own
+code**, four of which were verified directly before anything was changed. Two
+were regressions from this morning's own migrations and shipped in the
+previous commit. Three were Hebrew, and they had been wrong since the copy was
+first written.
+
+**`ברוך/ה הבא/ה` cannot be written that way.** Masculine `ברוך`, feminine
+`ברוכה` - the `ך` has to BECOME `כ`, so no slash can join them. It is a
+non-word in both directions, and it was the first string a new member ever
+read. Patching it to `ברוכ/ה` would still be wrong, so it is replaced with a
+construction that sidesteps gender entirely: `שמחים שהגעת למועדון`.
+
+**The general rule underneath it is the more useful finding.** In unvocalized
+Hebrew, 2nd-person past-tense verbs are homographs across gender - `נרשמת`,
+`סומנת`, `הגעת`, `בחרת` are each already both. This app was adding `/ה` to
+words that were already neutral, and the slash made them *wrong*: `נרשמת/ה`
+resolves to `נרשמה`, which is THIRD person feminine. A person mismatch, not a
+gender fix. Three of those removed.
+
+**Nineteen slash forms were missing the masculine final-form letter** -
+`משתתפ/ת` where the masculine is `משתתף`, and likewise `מעוניינ/ת`,
+`מפרסמ/ת`, `הצטרפ/ה`, `עודכנ/ה`. Spelling errors, not a compression
+convention.
+
+**And forty-five Hebrew abbreviations used an ASCII double quote** rather than
+the gershayim `״` (U+05F4). Three independent reasons this matters, only one
+of them typographic: U+05F4 is bidi class R (strong RTL) while `"` is a
+NEUTRAL, and a neutral inside a Hebrew word next to a number run is exactly
+what strands during bidi resolution; `esc()` turns `"` into `&quot;`, which
+makes the bidi run-finder see a Latin word `quot` inside a Hebrew word -
+`safe-helpers.js` documents computing run boundaries pre-escape specifically
+to route around that, and the gershayim removes the hazard instead of routing
+around it; and CLDR agrees, since `Intl.NumberFormat("he-IL")` emits `ק״ג`
+itself. A new test file fails the build if any wrong form reappears.
+
+**The recent-entry chips are now buttons.** They already existed and were
+read-only decoration: a member could see they squatted 100x5 on Sunday and
+then had to dial 100 back in by hand, about 32 taps of a 2.5kg stepper from
+the default. Tapping one now fills weight, reps and sets. This is the single
+mechanic Hevy and Strong both build their entire logging loop around, and it
+suits this app better than theirs - we log AFTER training, so the member is
+reconstructing a session they have already done, and a recent value is the
+most likely value. Duration entries stay inert on purpose: they carry no
+triple to copy, and a button that silently does nothing is worse than a label.
+
+**`lang="en"` on the bidi wrapper**, so a screen reader stops speaking `Rx`,
+`WOD`, `AMRAP` and every movement name through the Hebrew voice. Recorded
+honestly as PARTIAL rather than done: the research called this a one-string
+change, but the wrapper only fires for runs containing an interior neutral
+(`Back Squat 100`), so a bare `Fran` still takes the unwrapped path. Covering
+those means wrapping every Latin word in a span, which is a real DOM-cost
+change and belongs behind the render-cost trip-wire rather than smuggled in
+here. Twenty-one assertions pinned the old markup; their strip patterns are
+widened to accept any attributes, so they still check losslessness rather than
+exact markup.
+
+**The moderation sheet's destructive primary said `אישור`** - literally
+"Confirm", which makes the member re-read the title to learn what they are
+confirming at the moment they are deciding whether to. It now repeats the
+title's verb+noun, matching the sibling ghost-reclaim sheet in the same file
+that already did this correctly. Its dismissal moved from `ביטול` to `חזרה`
+for a reason English does not have: the restrictions panel beside it uses
+`ביטול ההגבלה` to mean REVOKE the restriction, so `ביטול` next to
+`הגבלת פרסום קבועה` genuinely reads two ways.
+
+Verified: npm test 1679/1679.
+
+---
+
 ## The support sheet closed the moment you tapped it — 2026-09-15 (fifth entry)
 
 Reported from the phone within hours of shipping: "trying to put text it

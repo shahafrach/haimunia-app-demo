@@ -1101,10 +1101,10 @@
   // human typed, and there the failure is far worse than a misplaced "@". A
   // coach's pinned announcement reading
   //
-  //     21-15-9 Thrusters + Pull-ups. Rx 43/30 ק"ג.
+  //     21-15-9 Thrusters + Pull-ups. Rx 43/30 ק״ג.
   //
   // rendered its rep scheme as 9-15-21, and in a second observed paint
-  // stranded the ק"ג at the opposite end of the line from the 43/30 it
+  // stranded the ק״ג at the opposite end of the line from the 43/30 it
   // belongs to. Two personas hit this independently. The cause is the LTR
   // runs a workout is made of - rep schemes, English movement names,
   // weights, times - being reordered against the RTL Hebrew paragraph they
@@ -2943,7 +2943,7 @@
   }
   // The programming itself - the half of this card WhatsApp cannot produce.
   // bidiText on every human string: a WOD is wall-to-wall mixed script
-  // (Hebrew beside `21-15-9`, `Fran`, `@ 30 ק"ג`), which is exactly the case
+  // (Hebrew beside `21-15-9`, `Fran`, `@ 30 ק״ג`), which is exactly the case
   // where an unisolated LTR run paints a DIFFERENT, plausible workout.
   function clubWodProgrammingHtml(wod) {
     if (!wod) return "";
@@ -9625,7 +9625,7 @@
   }
   function memberRoleLabel(m) {
     if (m.is_admin) return "מנהל/ת";
-    return roleCodeLabel(m.role) || (m.role === "member" ? "חבר/ה" : "לא הצטרפ/ה עדיין");
+    return roleCodeLabel(m.role) || (m.role === "member" ? "חבר/ה" : "לא הצטרף/ה עדיין");
   }
   // COMM-156. member -> coach and coach -> member keep the original
   // dedicated controls. head_coach is the added selectable role. `readOnly`
@@ -9677,7 +9677,7 @@
     const showRemove = opts.showRemove !== false;
     return `<div class="log-row" style="align-items:flex-start;flex-direction:column;gap:6px;">
       <div class="flex gap-10" style="align-items:center;">${avatarHtml(m.display_name || m.handle, 32, m.avatar_url)}<div><div style="font-weight:700;">${nameHtml(m.display_name, m.handle)}${isCoachRole(m.role) ? " " + coachBadgeHtml(m.role) : ""}</div><div style="color:var(--steel);font-size:11px;"><bdi>@${esc(m.handle)}</bdi> · ${memberRoleLabel(m)}</div></div></div>
-      <div style="color:var(--steel);font-size:11px;">הצטרפ/ה: ${m.redeemed_at ? esc(shortHebDate(m.redeemed_at)) : "—"} · פעילות אחרונה באפליקציה: ${m.last_activity_on ? esc(m.last_activity_on) : "אין נתונים"}</div>
+      <div style="color:var(--steel);font-size:11px;">הצטרף/ה: ${m.redeemed_at ? esc(shortHebDate(m.redeemed_at)) : "—"} · פעילות אחרונה באפליקציה: ${m.last_activity_on ? esc(m.last_activity_on) : "אין נתונים"}</div>
       <div class="footer-note" style="margin:0;font-size:10.5px;">${esc(m.id)}</div>
       ${m.is_admin ? "" : `<div class="chip-row" style="margin-top:0;">
         ${memberRoleButtonsHtml(m, readOnly)}
@@ -10450,7 +10450,7 @@
         + adminAnalyticsRow("בוטלו בתקופה", adminAnalyticsCount(pp.revoked_in_period))
         + adminAnalyticsRow("ממתינות כרגע", adminAnalyticsCount(pp.pending_now))
         + adminAnalyticsRow("פגות תוקף ולא מומשו, כרגע", adminAnalyticsCount(pp.expired_unredeemed_now)));
-      body = `<div class="footer-note" style="margin-bottom:8px;">״הזמנות שהופצו״ סופר רק הזמנות אישיות - מי שהצטרפ/ה דרך קוד משותף לא נספר/ת כאן, ולכן סה״כ המומשים יכול לעלות על מספר ההזמנות שהופצו.</div>`
+      body = `<div class="footer-note" style="margin-bottom:8px;">״הזמנות שהופצו״ סופר רק הזמנות אישיות - מי שהצטרף/ה דרך קוד משותף לא נספר/ת כאן, ולכן סה״כ המומשים יכול לעלות על מספר ההזמנות שהופצו.</div>`
         + adminAnalyticsCard("משפך הרשמה", funnelHtml)
         + sharedHtml + personHtml;
     }
@@ -11264,7 +11264,7 @@
     const memberId = m.member_id || post.author_id || "";
     const memberName = m.member_name || postAuthorName(post) || "חבר/ה חדש/ה";
     const joined = m.joined_on || post.occurred_on || postTimestamp(post);
-    const inner = `<div class="post-title">👋 ברוך/ה הבא/ה למועדון</div>
+    const inner = `<div class="post-title">👋 שמחים שהגעת למועדון</div>
       <div class="flex gap-10" style="align-items:center;margin-top:6px;">
         ${/* COMM-318: no avatar_url available here on purpose - post_new_member_on_join's metadata is stamped at redemption time, before the profile row usually even exists, so a photo could never be threaded through without a second live lookup for a rarely-seen card. Initials only, matching the club-logo exception. */ avatarHtml(memberName, 40)}
         <div>
@@ -11616,11 +11616,11 @@
     "challenge and target participant are required": "חסרים פרטים לביצוע ההעברה.",
     "challenge not found": "האתגר לא נמצא.",
     "not a team challenge": "האתגר הזה אינו אתגר קבוצתי.",
-    "not an active participant": "המשתתפ/ת אינו/ה פעיל/ה באתגר.",
+    "not an active participant": "המשתתף/ת אינו/ה פעיל/ה באתגר.",
     "team does not belong to this challenge": "הקבוצה אינה שייכת לאתגר הזה.",
     "team is required": "יש לבחור קבוצה.",
     "team not found": "הקבוצה לא נמצאה.",
-    "captain must be an active participant on this team": "הקפטן/ית חייב/ת להיות משתתפ/ת פעיל/ה בקבוצה.",
+    "captain must be an active participant on this team": "הקפטן/ית חייב/ת להיות משתתף/ת פעיל/ה בקבוצה.",
     "team not empty": "יש לפנות את הקבוצה מחברים לפני מחיקתה.",
   };
   function challengeTeamMgmtErrorText(error) {
@@ -11695,7 +11695,7 @@
     const { error } = await client.rpc("chal_reassign_team", { p_challenge_id: challengeId, p_user_id: userId, p_team_id: teamId || null });
     v.teamMgmt.reassignBusy[userId] = false;
     if (error) { v.teamMgmt.error = challengeTeamMgmtErrorText(error); return rerender(); }
-    setMessage("המשתתפ/ת הועבר/ה לקבוצה");
+    setMessage("המשתתף/ת הועבר/ה לקבוצה");
     await refreshAfterTeamMgmt(v.id);
   }
   async function setChallengeTeamCaptain(teamId, userId) {
@@ -11705,7 +11705,7 @@
     const { error } = await client.rpc("chal_set_captain", { p_team_id: teamId, p_user_id: userId || null });
     v.teamMgmt.captainBusy[teamId] = false;
     if (error) { v.teamMgmt.error = challengeTeamMgmtErrorText(error); return rerender(); }
-    setMessage(userId ? "הקפטן/ית עודכנ/ה" : "הקפטן/ית הוסר/ה");
+    setMessage(userId ? "הקפטן/ית עודכן/ה" : "הקפטן/ית הוסר/ה");
     await refreshAfterTeamMgmt(v.id);
   }
 
@@ -12146,7 +12146,7 @@
   }
   // Consumes the same PR_CREATED payload onPrCreated already reacts to. Only
   // a genuinely numeric result drives an individual_performance challenge -
-  // a formatted display string like '140 ק"ג" is deliberately never parsed
+  // a formatted display string like '140 ק״ג" is deliberately never parsed
   // here, so a malformed or unexpected payload silently no-ops instead of
   // writing a wrong progress delta.
   //
@@ -12240,7 +12240,7 @@
       <div class="chip-row" style="margin-top:8px;">
         <button class="chip-btn" data-community-action="open-challenge" data-id="${esc(c.id)}" data-source="boards">פרטים</button>
         ${!isPast && c.status === "active" && !part ? `<button class="chip-btn primary" data-community-action="join-challenge" data-id="${esc(c.id)}"${challengeJoinBusy[c.id] ? " disabled" : ""}>${challengeJoinBusy[c.id] ? "מצטרפ/ת…" : "הצטרפות"}</button>` : ""}
-        ${!isPast && part ? `<span class="tag tag-brass">נרשמת/ה</span>` : ""}
+        ${!isPast && part ? `<span class="tag tag-brass">נרשמת</span>` : ""}
       </div>
     </article>`;
   }
@@ -12373,7 +12373,7 @@
         ${avatarHtml(m.display_name || m.handle, 32, m.avatar_url)}
         <div>
           <div style="font-weight:700;">${nameHtml(m.display_name, m.handle)}</div>
-          <div style="color:var(--steel);font-size:12px;">${bidiText(`${days === 0 ? "הצטרפ/ה היום" : days === 1 ? "הצטרפ/ה לפני יום" : `לפני ${days} ימים`} · ${trained} · ${contacted ? "נוצר קשר" : "טרם נוצר קשר"}`)}</div>
+          <div style="color:var(--steel);font-size:12px;">${bidiText(`${days === 0 ? "הצטרף/ה היום" : days === 1 ? "הצטרף/ה לפני יום" : `לפני ${days} ימים`} · ${trained} · ${contacted ? "נוצר קשר" : "טרם נוצר קשר"}`)}</div>
           ${m.has_opened_app === false ? `<div style="color:var(--brass);font-size:12px;">${bidiText("עדיין לא נכנס/ה לאפליקציה")}</div>` : ""}
         </div>
       </div>
@@ -12449,7 +12449,7 @@
           <div style="color:var(--steel);font-size:12px;">${esc(memberOfWeekCandidateDetailText(category, c.detail))}</div>
         </div>
       </div>
-      <button class="chip-btn primary" data-community-action="coach-mow-publish-candidate" data-id="${esc(c.user_id)}"${state.coach.memberOfWeek.busy ? " disabled" : ""}>${busy ? "מפרסמ/ת…" : "פרסום"}</button>
+      <button class="chip-btn primary" data-community-action="coach-mow-publish-candidate" data-id="${esc(c.user_id)}"${state.coach.memberOfWeek.busy ? " disabled" : ""}>${busy ? "מפרסם/ת…" : "פרסום"}</button>
     </div>`;
   }
   // The free-selection ("coach's pick") form. Rendered whenever the week is
@@ -12478,7 +12478,7 @@
       <div data-mow-pick-counter style="text-align:left;font-size:11px;color:var(--steel);min-height:14px;">${s.pickReason.length}/500</div>
       ${s.publishErr ? `<div class="field-error" role="alert">${esc(s.publishErr)}</div>` : ""}
       ${prevNote}
-      <button class="chip-btn primary" data-community-action="coach-mow-publish-pick"${anyBusy ? " disabled" : ""}>${busy ? "מפרסמ/ת…" : "פרסום בחירת המאמן/ת"}</button>
+      <button class="chip-btn primary" data-community-action="coach-mow-publish-pick"${anyBusy ? " disabled" : ""}>${busy ? "מפרסם/ת…" : "פרסום בחירת המאמן/ת"}</button>
     </div>`;
   }
   // Once published is non-null the publish action is spent for the week -
@@ -12629,7 +12629,7 @@
     if (r.published_at) {
       control = `<div style="color:var(--steel);font-size:11px;margin-top:8px;">פורסם ${relativeTime(r.published_at)}</div>`;
     } else if (canPublish) {
-      control = `<div class="chip-row" style="margin-top:8px;"><button class="chip-btn primary" data-community-action="coach-monthly-recap-publish" data-id="${esc(r.id)}"${s.busy ? " disabled" : ""}>${busy ? "מפרסמ/ת…" : "פרסום"}</button></div>${s.publishErr ? `<div class="field-error" role="alert">${esc(s.publishErr)}</div>` : ""}`;
+      control = `<div class="chip-row" style="margin-top:8px;"><button class="chip-btn primary" data-community-action="coach-monthly-recap-publish" data-id="${esc(r.id)}"${s.busy ? " disabled" : ""}>${busy ? "מפרסם/ת…" : "פרסום"}</button></div>${s.publishErr ? `<div class="field-error" role="alert">${esc(s.publishErr)}</div>` : ""}`;
     } else {
       // A coach previewing a draft, per the asymmetry above - named rather
       // than simply omitted, so a coach understands why there is no button
@@ -13234,7 +13234,7 @@
     meta.push(participantsLabel(going));
     if (e.status === "draft") meta.push(eventStatusLabel(e));
     if (cancelled) meta.push("בוטל");
-    const mineLabel = mine === "going" ? "הולכ/ת" : mine === "interested" ? "מעוניינ/ת" : mine === "not_going" ? "לא הולכ/ת" : "";
+    const mineLabel = mine === "going" ? "הולכ/ת" : mine === "interested" ? "מעוניין/ת" : mine === "not_going" ? "לא הולכ/ת" : "";
     return `<article class="chart-card" data-event-id="${esc(e.id)}" data-event-status="${esc(e.status)}" style="margin-bottom:10px;${cancelled ? "opacity:.7;" : ""}">
       <div class="flex gap-10" style="align-items:flex-start;">
         ${eventCardImageHtml(e)}
@@ -13523,7 +13523,7 @@
     if (window.HaimuniaEvents && window.PRODUCT_EVENTS && window.PRODUCT_EVENTS.EVENT_REGISTERED) {
       try { window.HaimuniaEvents.emit(window.PRODUCT_EVENTS.EVENT_REGISTERED, { event_id: eventId, rsvp_status: response }); } catch (e) {}
     }
-    setMessage(response === "going" ? "נרשמת/ה לאירוע" : response === "interested" ? "סומנת/ה כמעוניינ/ת" : "עודכן כלא משתתפ/ת");
+    setMessage(response === "going" ? "נרשמת לאירוע" : response === "interested" ? "סומנת כמעוניין/ת" : "עודכן כלא משתתף/ת");
     await loadEvents();
     if (state.events.view && state.events.view.id === eventId) await refreshEventView(eventId);
     rerender();
@@ -13546,7 +13546,7 @@
     // already excludes that case).
     if (closed) notes.push("ההרשמה נסגרה");
     else if (full) notes.push("האירוע מלא");
-    return `<div class="chip-row" style="margin-bottom:6px;">${btn("going", "משתתפ/ת")}${btn("interested", "מעוניינ/ת")}${btn("not_going", "לא משתתפ/ת")}</div>
+    return `<div class="chip-row" style="margin-bottom:6px;">${btn("going", "משתתף/ת")}${btn("interested", "מעוניין/ת")}${btn("not_going", "לא משתתף/ת")}</div>
       ${notes.length ? `<div class="footer-note" style="margin-bottom:8px;">${notes.map(esc).join(" · ")}</div>` : ""}
       ${v.rsvpError ? `<div class="field-error" role="alert" style="margin-bottom:8px;">${esc(v.rsvpError)}</div>` : ""}`;
   }
@@ -13557,7 +13557,7 @@
     const rowHtml = (r) => {
       const prof = r.profiles || {};
       const name = prof.display_name || (prof.handle ? "@" + prof.handle : "חבר/ה");
-      const label = r.response === "going" ? "הולכ/ת" : r.response === "interested" ? "מעוניינ/ת" : "לא הולכ/ת";
+      const label = r.response === "going" ? "הולכ/ת" : r.response === "interested" ? "מעוניין/ת" : "לא הולכ/ת";
       return `<div class="log-row"><span>${esc(name)}</span><span style="color:var(--steel);font-size:12px;">${esc(label)}</span></div>`;
     };
     // Already scoped by event_attendees_read (202608280010) to rows the
@@ -13796,8 +13796,8 @@
         <div style="color:var(--steel);font-size:12px;margin-top:2px;">${esc(formatEventDate(e.start_at))} ${esc(formatEventTime(e.start_at))} · ${participantsLabel(going)}</div>
       </button>
       <div class="chip-row" style="margin-top:8px;">
-        <button class="chip-btn${mine === "going" ? " selected" : ""}" data-community-action="event-rsvp" data-id="${esc(e.id)}" data-response="going"${closed || full || eventRsvpBusy[e.id] ? " disabled" : ""}>משתתפ/ת</button>
-        <button class="chip-btn${mine === "interested" ? " selected" : ""}" data-community-action="event-rsvp" data-id="${esc(e.id)}" data-response="interested"${closed || eventRsvpBusy[e.id] ? " disabled" : ""}>מעוניינ/ת</button>
+        <button class="chip-btn${mine === "going" ? " selected" : ""}" data-community-action="event-rsvp" data-id="${esc(e.id)}" data-response="going"${closed || full || eventRsvpBusy[e.id] ? " disabled" : ""}>משתתף/ת</button>
+        <button class="chip-btn${mine === "interested" ? " selected" : ""}" data-community-action="event-rsvp" data-id="${esc(e.id)}" data-response="interested"${closed || eventRsvpBusy[e.id] ? " disabled" : ""}>מעוניין/ת</button>
       </div>
     </div>`;
   }
@@ -14571,7 +14571,7 @@
     setMessage("הפוסט נמחק");
     rerender();
   }
-  const WELCOME_TEMPLATE_BODY = "ברוך/ה הבא/ה למועדון! 💪";
+  const WELCOME_TEMPLATE_BODY = "שמחים שהגעת למועדון! 💪";
   // Live bug hunt (2026-09-11): two entry points share this write
   // (coachWelcomeMember() below, from the coach dashboard; and the direct
   // "welcome-member" tap on a new-member feed card) and NEITHER guarded
@@ -15171,10 +15171,10 @@
   // It is wrong for PROSE that merely STARTS with a Latin word. A caption
   // reading
   //
-  //     Rx 43/30 ק"ג. נשבר לי הראש בסיבוב האחרון.
+  //     Rx 43/30 ק״ג. נשבר לי הראש בסיבוב האחרון.
   //
   // resolves to an LTR base off that leading "Rx", which puts the whole
-  // Hebrew remainder in one reversed run and leaves the ק"ג at the far end of
+  // Hebrew remainder in one reversed run and leaves the ק״ג at the far end of
   // the line from the 43/30 it belongs to - the exact second symptom two
   // personas reported (see bidiText's own header). A sentence containing any
   // Hebrew is a Hebrew sentence in a Hebrew-first app, so it gets U+2067 RLI:
@@ -15192,17 +15192,17 @@
   //
   // The paragraph above is not just a note about the card, it is a live
   // DISAGREEMENT between the two surfaces about one shape: an LTR-first
-  // sentence with a long Hebrew tail, `Rx 43/30 ק"ג. נשבר לי הראש`. This
+  // sentence with a long Hebrew tail, `Rx 43/30 ק״ג. נשבר לי הראש`. This
   // function gives it an RTL base and keeps the unit beside its number. The
   // DOM path resolves first-strong, so the same sentence there resolves LTR
-  // off the leading `Rx` and paints the ק"ג about eight characters away from
+  // off the leading `Rx` and paints the ק״ג about eight characters away from
   // the 43/30 — the second symptom bidiText()'s own header documents, still
   // present on the DOM surfaces and NOT fixed by the run-level isolation
   // added alongside this note.
   //
   // Whether the app should adopt this function's rule everywhere is a product
   // decision, not a bug: doing so would flip
-  // `21-15-9 Thrusters + Pull-ups. Rx 43/30 ק"ג.` to an RTL base and break
+  // `21-15-9 Thrusters + Pull-ups. Rx 43/30 ק״ג.` to an RTL base and break
   // the assertion in scripts/browser-check/bidi-rtl-geometry.mjs that its rep
   // scheme paints at the start of the line. Left for the owner on purpose.
   function bidiIsolateProse(value) {
@@ -17420,8 +17420,23 @@
             <textarea class="text-input" data-mod-note maxlength="500" placeholder="נרשמת ביומן">${esc(a.note || "")}</textarea></label>
           ${a.error ? `<div class="footer-note" role="alert" style="color:var(--red-text);">${esc(a.error)}</div>` : ""}
           <div class="chip-row" style="margin-top:12px;">
-            <button class="chip-btn" data-community-action="mod-action-cancel">ביטול</button>
-            <button class="chip-btn primary${def.destructive ? " danger" : ""}" data-community-action="mod-action-run"${a.saving ? " disabled" : ""}>${a.saving ? "מבצע…" : "אישור"}</button>
+            <!-- "חזרה", not "ביטול" (2026-09-15). Every other dismissal in this
+                 app says ביטול and that consistency is normally right - but here
+                 it collides with the domain: the restrictions panel beside this
+                 one uses "ביטול ההגבלה" to mean REVOKE the restriction. So a
+                 button reading ביטול next to a title reading "הגבלת פרסום
+                 קבועה" genuinely reads two ways - dismiss this dialog, or undo
+                 the restriction. Hebrew has a collision English does not, and
+                 the dismissal is the one that has to move. -->
+            <button class="chip-btn" data-community-action="mod-action-cancel">חזרה</button>
+            <!-- The primary repeats the TITLE's verb+noun instead of saying
+                 "אישור". A destructive confirm labelled "Confirm" makes the
+                 member re-read the title to find out what they are confirming,
+                 at the exact moment they are deciding whether to. The sibling
+                 sheet in this file (renderGhostReclaimSheet) already does this
+                 correctly - its button says "שחרור ההזמנה" - so this was the
+                 odd one out rather than a house style. -->
+            <button class="chip-btn primary${def.destructive ? " danger" : ""}" data-community-action="mod-action-run"${a.saving ? " disabled" : ""}>${a.saving ? "מבצע…" : esc(def.label)}</button>
           </div>
         </div>
       </div>
@@ -17540,7 +17555,7 @@
           const days = Number(m.days_since_join);
           // Live bug hunt (2026-09-11): missing singular branches, same as
           // renderCoachWelcomeRow() above - both read the same server field.
-          const joined = !Number.isFinite(days) ? "" : days === 0 ? "הצטרפ/ה היום" : days === 1 ? "הצטרפ/ה לפני יום" : `לפני ${days} ימים`;
+          const joined = !Number.isFinite(days) ? "" : days === 0 ? "הצטרף/ה היום" : days === 1 ? "הצטרף/ה לפני יום" : `לפני ${days} ימים`;
           const sessions = Number(m.sessions_logged) || 0;
           // Says what the number IS. A count of workouts logged in the app is
           // not a count of classes attended, and a coach must not read it as
