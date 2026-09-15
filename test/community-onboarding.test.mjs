@@ -95,38 +95,51 @@ test("before 7 days have passed, no first-week step shows even though welcomed_a
   assert.equal(stepCard(window, "first_week"), null);
 });
 
-test("after the first month: the personal summary aggregates the member's own weekly_recaps over that period, not the club-wide rollup", async () => {
+test("after the first month: the summary counts the member's OWN rows, never another member's", async () => {
+  // REWRITTEN 2026-09-15. This used to seed weekly_recaps and assert the card
+  // aggregated them - which pinned the defect the round-6 hunt found.
+  //
+  // weekly_recaps is written by a Monday cron for the most recently COMPLETED
+  // ISO week, while this card fires the instant 30 days elapse - always
+  // inside an in-progress week. Up to six days of the member's most recent
+  // training was therefore invisible, and a member who had only started
+  // training in the last few days had no recap row at all and was told
+  // "0 אימונים ... כל הכבוד!". The card now reads the member's own
+  // attendance_log and member_achievements rows, which are complete to this
+  // instant.
+  //
+  // The property this test was written to protect is unchanged and still
+  // asserted: one member's own rows only. Another member's rows sit in the
+  // same tables and must never be counted.
   const mock = seeded({
     invite_redemptions: [{ user_id: "u1", invite_id: "inv-1", role: "member", redeemed_at: redeemedDaysAgo(35) }],
     onboarding_progress: [{ user_id: "u1", welcomed_at: redeemedDaysAgo(34), first_week_shown_at: redeemedDaysAgo(27), first_month_shown_at: null }],
-    weekly_recaps: [
-      // week_start values are relative to redeemed_at (35 days ago), the
-      // same wall-clock arithmetic as every other field in this file - not
-      // hardcoded calendar dates, which would drift out of the query's
-      // [redeemedAt, redeemedAt+30d] window depending on which real day the
-      // suite happens to run on.
-      { id: "wr1", user_id: "u1", week_start: redeemedDaysAgo(34).slice(0, 10), sessions_completed: 3, streak: 1, prs: [{ movement: "סקוואט", result: "100", achieved_on: redeemedDaysAgo(33) }], achievements: [], challenge_progress: [], club_challenge_progress: {}, upcoming_event: null, generated_at: redeemedDaysAgo(28) },
-      { id: "wr2", user_id: "u1", week_start: redeemedDaysAgo(27).slice(0, 10), sessions_completed: 2, streak: 2, prs: [], achievements: [{ title: "שיא ראשון", badge_icon: "⭐", code: "first_pr", unlocked_at: redeemedDaysAgo(26) }], challenge_progress: [], club_challenge_progress: {}, upcoming_event: null, generated_at: redeemedDaysAgo(21) },
-      // Another member's row in the same window must never leak into this
-      // member's own first-month summary - own-row RLS in production, and
-      // the client query is scoped by user_id regardless.
-      { id: "wr-other", user_id: "u2", week_start: redeemedDaysAgo(27).slice(0, 10), sessions_completed: 99, streak: 99, prs: [], achievements: [], challenge_progress: [], club_challenge_progress: {}, upcoming_event: null, generated_at: redeemedDaysAgo(21) },
+    attendance_log: [
+      { user_id: "u1", occurred_on: redeemedDaysAgo(34).slice(0, 10) },
+      { user_id: "u1", occurred_on: redeemedDaysAgo(30).slice(0, 10) },
+      { user_id: "u1", occurred_on: redeemedDaysAgo(27).slice(0, 10) },
+      { user_id: "u1", occurred_on: redeemedDaysAgo(20).slice(0, 10) },
+      { user_id: "u1", occurred_on: redeemedDaysAgo(9).slice(0, 10) },
+      // Another member's day in the same window - must never be counted.
+      { user_id: "u2", occurred_on: redeemedDaysAgo(20).slice(0, 10) },
+    ],
+    member_achievements: [
+      { id: "ma1", user_id: "u1", achievement_id: "a1", unlocked_at: redeemedDaysAgo(26), visibility: "club" },
+      { id: "ma-other", user_id: "u2", achievement_id: "a1", unlocked_at: redeemedDaysAgo(26), visibility: "club" },
     ],
   });
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openFeed(window);
   await waitFor(() => !!stepCard(window, "first_month"), 3000);
-  await waitFor(() => !stepCard(window, "first_month").textContent.includes("99"), 3000);
+  await waitFor(() => /אימונים|אימון אחד/.test(stepCard(window, "first_month").textContent), 3000);
   const text = stepCard(window, "first_month").textContent;
-  assert.match(text, /5 אימונים/, "3 + 2 sessions across the member's own two rows");
-  // Live bug hunt (2026-09-11): the count=1 case is grammatically singular
-  // ("שיא אחד"/"הישג חדש אחד"), not "1 שיאים"/"1 הישגים" - this seed's own
-  // prs/achievements totals are both 1, so it's exercising exactly the
-  // boundary the fix targets, not just re-asserting a rendered number.
-  assert.match(text, /שיא אחד/);
-  assert.match(text, /הישג חדש אחד/);
-  assert.doesNotMatch(text, /1 שיאים/);
-  assert.doesNotMatch(text, /1 הישגים/);
+  assert.match(text, /5 אימונים/, "five of the member's own days, not six");
+  assert.match(text, /הישג חדש אחד/, "one achievement, in the singular");
+  assert.doesNotMatch(text, /1 הישגים/, "never the plural beside the number one");
+  // The PR figure is deliberately gone: there is no complete client-side
+  // source for it, and a number that is right three weeks in four is worse
+  // than one that is absent.
+  assert.doesNotMatch(text, /שיא/, "no PR count is claimed any more");
 });
 
 // Live bug hunt, round 8 (2026-09-11): weekly_recaps.week_start is always
@@ -144,36 +157,36 @@ function nearestWednesdayAtLeast(minDays) {
   while (d.getUTCDay() !== 3) d = new Date(d.getTime() - DAY_MS); // 3 = Wednesday
   return d;
 }
-test("joining mid-week (not a Monday) still counts that join week's own sessions/PRs/achievements in the first-month summary", async () => {
+test("joining mid-week counts the join week's own training, with no Monday boundary to fall through", async () => {
+  // REWRITTEN 2026-09-15 for the same reason as the test above. The original
+  // defect this guarded was a weekly_recaps window that dropped the join
+  // week's row when week_start (a Monday) fell before redeemed_at (a
+  // Wednesday). Reading attendance_log by DAY removes the boundary entirely -
+  // there is no week to fall through - so this now asserts the outcome
+  // rather than the workaround.
   const redeemedAt = nearestWednesdayAtLeast(31);
-  const joinWeekMonday = new Date(redeemedAt.getTime() - 2 * DAY_MS); // Wed - 2 = Monday
+  const day = (offset) => new Date(redeemedAt.getTime() + offset * DAY_MS).toISOString().slice(0, 10);
   const mock = seeded({
     invite_redemptions: [{ user_id: "u1", invite_id: "inv-1", role: "member", redeemed_at: redeemedAt.toISOString() }],
     onboarding_progress: [{ user_id: "u1", welcomed_at: redeemedAt.toISOString(), first_week_shown_at: new Date(redeemedAt.getTime() + 7 * DAY_MS).toISOString(), first_month_shown_at: null }],
-    weekly_recaps: [
-      // The join week's own row - week_start (Monday) is BEFORE
-      // redeemedAt (Wednesday), which is exactly the shape the bug dropped.
-      {
-        id: "wr-join-week", user_id: "u1", week_start: joinWeekMonday.toISOString().slice(0, 10),
-        sessions_completed: 3, streak: 1,
-        prs: [{ movement: "סקוואט", result: "100", achieved_on: new Date(redeemedAt.getTime() + DAY_MS).toISOString() }],
-        achievements: [{ title: "שיא ראשון", badge_icon: "⭐", code: "first_pr", unlocked_at: new Date(redeemedAt.getTime() + DAY_MS).toISOString() }],
-        challenge_progress: [], club_challenge_progress: {}, upcoming_event: null, generated_at: new Date(redeemedAt.getTime() + 4 * DAY_MS).toISOString(),
-      },
+    attendance_log: [
+      // The two days immediately after joining, inside the join week - the
+      // exact days the old week_start window could drop.
+      { user_id: "u1", occurred_on: day(1) },
+      { user_id: "u1", occurred_on: day(2) },
+      { user_id: "u1", occurred_on: day(10) },
+    ],
+    member_achievements: [
+      { id: "ma1", user_id: "u1", achievement_id: "a1", unlocked_at: new Date(redeemedAt.getTime() + DAY_MS).toISOString(), visibility: "club" },
     ],
   });
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openFeed(window);
   await waitFor(() => !!stepCard(window, "first_month"), 3000);
-  // The card mounts immediately with a loading skeleton; the summary
-  // itself (the actual aggregation this test is about) resolves via a
-  // separate async fetch just after - poll for the real text directly
-  // rather than chaining a second waitFor off a substring of it.
-  await waitFor(() => /\d+ אימונ/.test(stepCard(window, "first_month").textContent), 3000);
+  await waitFor(() => /אימונים|אימון אחד/.test(stepCard(window, "first_month").textContent), 3000);
   const text = stepCard(window, "first_month").textContent;
-  assert.match(text, /3 אימונים/, "the join week's own 3 sessions must count, not be silently dropped");
-  assert.match(text, /שיא אחד/, "the join week's own PR must count");
-  assert.match(text, /הישג חדש אחד/, "the join week's own achievement must count");
+  assert.match(text, /3 אימונים/, "the join week's own days are counted, not dropped at a Monday boundary");
+  assert.match(text, /הישג חדש אחד/);
 });
 
 test("dismissing an earlier step never blocks a later one already due on the same load", async () => {

@@ -146,7 +146,12 @@ test("an invite that is still inside the grace period explains the wait on scree
   assert.ok(btn.disabled, "6 days against a 7-day grace period must stay disabled - that part was never the bug");
   assert.match(card.textContent, /אפשר לשחרר רק אחרי 7 ימים ללא השלמה/,
     "the reason must be readable without hovering");
-  assert.match(card.textContent, /עוד 1 ימים/, "and should say how much longer, so the admin knows to come back");
+  // "עוד יום אחד", not "עוד 1 ימים" - this assertion pinned the wrong Hebrew
+  // until the round-6 hunt found it (a plural noun beside the number one,
+  // right next to a helper in the same file that already handled the
+  // singular). Kept asserting the countdown exists; corrected to the form the
+  // app should have been rendering all along.
+  assert.match(card.textContent, /עוד יום אחד/, "and should say how much longer, so the admin knows to come back");
 });
 
 test("an invite past the grace period offers the button with no waiting note", async () => {

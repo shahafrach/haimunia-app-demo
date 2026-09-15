@@ -502,6 +502,10 @@ test("the own-post menu opens the sheet for a workout post, and offers nothing o
   assert.ok(!painted.includes("רון"), "the other member's post must not bleed into this card");
 });
 
+// The condition gained a second half on 2026-09-15: outward sharing is now a
+// club module an owner can switch off (CLUB_MODULE_TOGGLES). The only_me rule
+// this test exists for is unchanged - canShare still carries it - and both
+// halves must hold for the control to appear.
 test("an only_me achievement offers no outward control, matching the club control beside it", () => {
   // Unlike the profile-wide toggles, this is an item-level flag the member
   // set on this exact decoration, and it defaults to "club" - so honouring it
@@ -509,7 +513,7 @@ test("an only_me achievement offers no outward control, matching the club contro
   const section = src.slice(src.indexOf("function renderMyAchievements()"), src.indexOf("// OUTWARD SHARING"));
   assert.match(section, /const outward = r\.visibility === "only_me"\s*\n\s*\? ""/);
   const celebration = src.slice(src.indexOf("function renderAchievementUnlockCelebration()"), src.indexOf("function renderMyAchievements()"));
-  assert.match(celebration, /\$\{canShare \? `<button class="chip-btn" data-community-action="outward-ach">/);
+  assert.match(celebration, /\$\{canShare && isModuleEnabled\("outward_share"\) \? `<button class="chip-btn" data-community-action="outward-ach">/);
 });
 
 // ===== the guarantees that are easier to assert on the source ============

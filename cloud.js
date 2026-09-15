@@ -818,7 +818,7 @@
       // hold the free-text inputs for the assign-by-handle and mark-contacted
       // note fields, keyed by member id, read only at click time (no rerender
       // on input, so typing never loses focus).
-      welcome: { members: [], loading: false, loaded: false, error: false, contactedIds: {}, assignDrafts: {}, contactDrafts: {}, busy: null, welcomed: {} },
+      welcome: { members: [], loading: false, loaded: false, error: false, contactedIds: {}, assignDrafts: {}, contactDrafts: {}, busy: {}, welcomed: {} },
       // COMM-226/304. Gated on featureFlags.coachEngage (see the root).
       // profiles is a batched user_id -> {display_name,handle,avatar_url} map
       // for the open flags in .items, read the same way welcome.contactedIds
@@ -965,9 +965,27 @@
     { key: "events", label: "אירועים" },
     { key: "challenges", label: "אתגרים" },
     { key: "achievements", label: "הישגים ומדליות" },
-    { key: "feed", label: "פיד (כולל תגובות ותגובות חיזוק)" },
+    { key: "feed", label: "פיד (כולל תגובות חיזוק)" },
     { key: "leaderboards", label: "טבלאות מובילים" },
     { key: "directory", label: "ספריית חברים", clientOnly: true },
+    // Added 2026-09-15, on the owner's instruction that every function in the
+    // app should be switchable from the admin panel. Each of these ran with
+    // no off switch at all.
+    //
+    // weekly_recap is a straight sibling gap: the MONTHLY club recap has been
+    // switchable since it shipped, while the WEEKLY one - the more frequent
+    // of the two, and the one that reaches every member - never was.
+    //
+    // All five are clientOnly: they hide a control rather than being enforced
+    // by RLS, so the panel must not claim otherwise. A member who forges the
+    // request still reaches the same server-side permission checks these
+    // surfaces always had; what the toggle buys is that the club stops being
+    // OFFERED the feature, which is what an owner switching it off means.
+    { key: "weekly_recap", label: "סיכום שבועי לחברים", clientOnly: true },
+    { key: "comments", label: "תגובות על פוסטים", clientOnly: true },
+    { key: "post_photos", label: "תמונות בפוסטים", clientOnly: true },
+    { key: "mentions", label: "תיוג חברים (@)", clientOnly: true },
+    { key: "outward_share", label: "שיתוף מחוץ לאפליקציה", clientOnly: true },
     // Real device feedback: this whole feature (a coach schedules a
     // catalogue WOD for today; it gets one card on the feed and one board
     // members attach their own logged results to) had no toggle at all -
@@ -2314,19 +2332,47 @@
     state.onboarding.firstMonth = { loading: true, error: false, sessions: 0, prs: 0, achievements: 0 };
     const redeemedAt = new Date(state.redemption.redeemed_at);
     const monthEnd = new Date(redeemedAt.getTime() + 30 * 86400000);
-    const { data, error } = await client.from("weekly_recaps").select("sessions_completed,prs,achievements")
-      .eq("user_id", state.user.id)
-      .gte("week_start", mondayOnOrBeforeIso(redeemedAt.toISOString().slice(0, 10)))
-      .lte("week_start", monthEnd.toISOString().slice(0, 10));
+    // READ THE MEMBER'S OWN ROWS, not last week's recap.
+    //
+    // Live bug hunt, fresh round 6 (2026-09-15) - HIGH. This used to sum
+    // weekly_recaps, which the Monday cron writes for the most recently
+    // COMPLETED ISO week. The card fires the moment 30 days elapse, and that
+    // moment is always inside an in-progress week - so up to six days of the
+    // member's most recent and most relevant training was invisible to it.
+    //
+    // At its worst it was not an undercount but a falsehood: a member who
+    // started training three days ago, including that morning, had no recap
+    // row at all and was told "0 אימונים, 0 שיאים ו-0 הישגים חדשים. כל הכבוד!"
+    // That is the RECAP-1 failure this project already fixed once for the
+    // weekly push - congratulating someone for doing nothing - except here it
+    // also states something untrue, and it is the COMMON case rather than an
+    // edge one, since day 30 almost never lands on a freshly-recapped Monday.
+    //
+    // attendance_log and member_achievements are both the member's own rows,
+    // readable under their own self-select policies, and both are complete up
+    // to this instant.
+    //
+    // THE PR COUNT IS GONE, deliberately. There is no complete client-side
+    // source for it: weekly_recaps.prs is computed inside the recap Edge
+    // Function and carries the same completed-week-only cutoff. Reporting two
+    // true numbers is better than three where one is quietly wrong, and a
+    // figure that is right for three weeks out of four is the kind of thing
+    // nobody ever notices is broken.
+    const startIso = redeemedAt.toISOString().slice(0, 10);
+    const endIso = monthEnd.toISOString().slice(0, 10);
+    const [att, ach] = await Promise.all([
+      client.from("attendance_log").select("occurred_on").eq("user_id", state.user.id)
+        .gte("occurred_on", startIso).lte("occurred_on", endIso),
+      client.from("member_achievements").select("id").eq("user_id", state.user.id)
+        .gte("unlocked_at", redeemedAt.toISOString()).lte("unlocked_at", monthEnd.toISOString()),
+    ]);
     if (!state.onboarding.firstMonth) return; // dismissed/torn down mid-flight
-    if (error) { state.onboarding.firstMonth = { loading: false, error: true, sessions: 0, prs: 0, achievements: 0 }; return rerender(); }
-    const totals = (data || []).reduce((acc, r) => {
-      acc.sessions += Number(r.sessions_completed) || 0;
-      acc.prs += Array.isArray(r.prs) ? r.prs.length : 0;
-      acc.achievements += Array.isArray(r.achievements) ? r.achievements.length : 0;
-      return acc;
-    }, { sessions: 0, prs: 0, achievements: 0 });
-    state.onboarding.firstMonth = { loading: false, error: false, ...totals };
+    if (att.error || ach.error) { state.onboarding.firstMonth = { loading: false, error: true, sessions: 0, achievements: 0 }; return rerender(); }
+    state.onboarding.firstMonth = {
+      loading: false, error: false,
+      sessions: Array.isArray(att.data) ? att.data.length : 0,
+      achievements: Array.isArray(ach.data) ? ach.data.length : 0,
+    };
     rerender();
   }
   function renderOnboardingCard(title, bodyHtml, step, extraActionHtml) {
@@ -2394,7 +2440,12 @@
       // Live bug hunt (2026-09-11): missing singular branches - a real
       // 1-session/1-PR/1-achievement first month (test/community-
       // onboarding.test.mjs's own seed data) rendered "1 שיאים"/"1 הישגים".
-      : `החודש הראשון שלכם: ${summary.sessions === 1 ? "אימון אחד" : `${summary.sessions} אימונים`}, ${summary.prs === 1 ? "שיא אחד" : `${summary.prs} שיאים`} ו-${summary.achievements === 1 ? "הישג חדש אחד" : `${summary.achievements} הישגים חדשים`}. כל הכבוד!`;
+      // NOTHING TO CONGRATULATE IS NOT A REASON TO CONGRATULATE. A member who
+      // joined a month ago and has not trained gets an invitation, not praise
+      // for a zero - the same rule RECAP-1 established for the weekly push.
+      : summary.sessions === 0
+      ? `החודש הראשון שלכם במועדון עבר. עוד לא רשמתם אימון — האימון הראשון הוא תמיד הכי קשה להתחיל, ואנחנו כאן בשבילו.`
+      : `החודש הראשון שלכם: ${summary.sessions === 1 ? "אימון אחד" : `${summary.sessions} אימונים`}${summary.achievements ? ` ו-${summary.achievements === 1 ? "הישג חדש אחד" : `${summary.achievements} הישגים חדשים`}` : ""}. כל הכבוד!`;
     const leadRaw = onboardingStepBodyRaw("first_month");
     const lead = leadRaw ? bidiText(leadRaw) + " " : "";
     return renderOnboardingCard(onboardingStepTitle("first_month", "החודש הראשון שלכם במועדון"), lead + computed, "first_month");
@@ -3850,19 +3901,33 @@
     // this proactive check is what keeps the dashboard button from ever
     // reading "ברכה" for a member already welcomed in an earlier session,
     // same as congratulated/reachedOut elsewhere in this file.
-    if (!memberId || state.coach.welcome.busy || state.coach.welcome.welcomed[memberId]) return;
-    state.coach.welcome.busy = memberId;
+    // PER MEMBER, not one shared flag. Live bug hunt, fresh round 6
+    // (2026-09-15). busy held a single memberId and every guard tested it for
+    // truthiness, so while one member's action was in flight a tap on ANY
+    // other member returned silently - while renderCoachWelcomeRow() disabled
+    // only the row actually in flight, so the other buttons still looked
+    // live. A coach working down a list of new members, which is exactly what
+    // this section is for on a club onboarding a cohort, lost taps with no
+    // toast, no error and no visible change: they believed they had welcomed
+    // someone the app never touched.
+    //
+    // A map, matching resetPasswordBusy and challengeJoinBusy elsewhere in
+    // this file. A scalar could not be made correct here even with a matching
+    // guard: two members in flight at once would have one completion clear
+    // the other's flag.
+    if (!memberId || state.coach.welcome.busy[memberId] || state.coach.welcome.welcomed[memberId]) return;
+    state.coach.welcome.busy[memberId] = true;
     rerender();
     const post = await findNewMemberPost(memberId);
     if (!post) {
-      state.coach.welcome.busy = null;
+      delete state.coach.welcome.busy[memberId];
       setMessage("לא ניתן היה לבצע את הפעולה. נסו שוב.");
       rerender();
       return;
     }
     const welcomed = await welcomeNewMember(post.id);
     if (welcomed) state.coach.welcome.welcomed[memberId] = true;
-    state.coach.welcome.busy = null;
+    delete state.coach.welcome.busy[memberId];
     rerender();
   }
   // Assign coach (optional). Only write path is coach_assign_coach() -
@@ -3880,11 +3945,11 @@
   // mis-assigning. A real staff-directory RPC would turn this into an
   // actual dropdown; noted as a follow-up rather than invented here.
   async function coachAssignCoach(memberId, coachId) {
-    if (!memberId || state.coach.welcome.busy) return;
-    state.coach.welcome.busy = memberId;
+    if (!memberId || state.coach.welcome.busy[memberId]) return;
+    state.coach.welcome.busy[memberId] = true;
     rerender();
     const { error } = await client.rpc("coach_assign_coach", { p_user_id: memberId, p_coach_id: coachId || null });
-    state.coach.welcome.busy = null;
+    delete state.coach.welcome.busy[memberId];
     if (error) { setMessage(failText("לא ניתן היה לבצע את הפעולה. נסו שוב.", error)); rerender(); return; }
     const m = state.coach.welcome.members.find((x) => x.id === memberId);
     if (m) m.assigned_coach_id = coachId || null;
@@ -3901,12 +3966,12 @@
   // Mark contacted. Staff-only insert, contacted_by defaults to auth.uid()
   // server-side (202608290013), so the client sends only {user_id, note}.
   async function coachMarkContacted(memberId) {
-    if (!memberId || state.coach.welcome.busy) return;
-    state.coach.welcome.busy = memberId;
+    if (!memberId || state.coach.welcome.busy[memberId]) return;
+    state.coach.welcome.busy[memberId] = true;
     rerender();
     const note = String((state.coach.welcome.contactDrafts || {})[memberId] || "").trim().slice(0, 500);
     const { error } = await client.from("member_contact_log").insert({ user_id: memberId, note });
-    state.coach.welcome.busy = null;
+    delete state.coach.welcome.busy[memberId];
     if (error) { setMessage(failText("לא ניתן היה לבצע את הפעולה. נסו שוב.", error)); rerender(); return; }
     state.coach.welcome.contactedIds[memberId] = true;
     setMessage("סומן כנוצר קשר");
@@ -4153,6 +4218,24 @@
       state.coach.memberOfWeek.busy = null;
       state.coach.memberOfWeek.publishErr = memberOfWeekErrorText(error);
       setMessage(state.coach.memberOfWeek.publishErr);
+      // THE WEEK MOVED ON WITHOUT US - reload, do not just apologise.
+      //
+      // Live bug hunt, fresh round 6 (2026-09-15). The success path reloads
+      // the candidate list; this path did not, and loadCoachMemberOfWeek() is
+      // gated on `!loaded`, so nothing else would ever reload it either -
+      // switching sub-tabs and back does not. A second coach publishing first
+      // left this one looking at a live-looking list of candidates whose
+      // publish buttons were all still enabled, getting the same refusal on
+      // every tap, with no way to learn the week was settled short of a full
+      // page reload.
+      //
+      // Only for a conflict. A network failure should leave the list alone so
+      // the coach can simply try again - reloading there would replace a
+      // retryable state with a spinner and possibly a second failure.
+      if (/already published|כבר פורסם/i.test(String((error && error.message) || "") + state.coach.memberOfWeek.publishErr)) {
+        state.coach.memberOfWeek.loaded = false;
+        await loadCoachMemberOfWeek();
+      }
       rerender();
       return;
     }
@@ -6259,12 +6342,38 @@
   async function adminResetPassword(userId) {
     if (!state.user || !isAdmin()) return;
     if (resetPasswordBusy[userId]) return;
+    // AN UNREAD ONE-TIME SECRET IS NOT OVERWRITTEN WITHOUT ASKING. There is
+    // one reveal slot; resetting a second member while the first card is
+    // still up used to replace it silently, and the first password was then
+    // unrecoverable - the server had already rotated it. Stopping here is the
+    // conservative answer: the admin closes the card they have read, and only
+    // then resets the next member.
+    const pending = state.admin.passwordResetResult;
+    if (pending && pending.userId !== userId) {
+      setMessage(`יש סיסמה זמנית שעדיין לא נסגרה (${pending.name || "חבר/ה"}). סגרו אותה קודם.`);
+      return;
+    }
     resetPasswordBusy[userId] = true;
     rerender();
     const { data, error } = await mgmtDb().functions.invoke("admin_reset_password", { body: { target_user_id: userId } });
     resetPasswordBusy[userId] = false;
     if (error || !data || !data.temp_password) { rerender(); return setMessage("איפוס הסיסמה נכשל"); }
-    state.admin.passwordResetResult = { userId, tempPassword: data.temp_password };
+    // NAMED, and never silently replaced. Live bug hunt, fresh round 6
+    // (2026-09-15).
+    //
+    // The reveal card showed a bare temporary password and nothing else - not
+    // a name, not a handle, not even the id it already had in state. Reset a
+    // second member's password without closing the first card and the single
+    // slot silently flipped to the new secret: the first was gone forever,
+    // the server had already rotated it, and it had never been shown with any
+    // identifying context at all. Even a screenshot taken a moment too late
+    // was ambiguous about whose password it was, which is a direct route to
+    // sending the wrong one to the wrong person.
+    //
+    // subjectNameFor() is the same resolver the confirm dialog already used to
+    // name this member a moment earlier - the name was available the whole
+    // time and simply never carried across.
+    state.admin.passwordResetResult = { userId, name: subjectNameFor(userId), tempPassword: data.temp_password };
     rerender();
   }
   async function publishAchievement(achievementId, title, rule) {
@@ -7117,7 +7226,12 @@
     const key = input.dataset.commentKey;
     state.engagement.commentDrafts[key] = input.value;
     const caret = input.selectionStart == null ? input.value.length : input.selectionStart;
-    const m = /(?:^|\s)@([^\s@]{0,30})$/.exec(input.value.slice(0, caret));
+    // The "@" picker is switchable from the admin panel (2026-09-15). With
+    // mentions off, an @ is just a character: no picker, no lookup request,
+    // and nothing offering a member a feature their club has turned off.
+    // Already-stored markers in older comments still RENDER as names - hiding
+    // those would rewrite history rather than switch a feature off.
+    const m = isModuleEnabled("mentions") ? /(?:^|\s)@([^\s@]{0,30})$/.exec(input.value.slice(0, caret)) : null;
     if (m) {
       const q = m[1];
       const active = state.engagement.mentionPicker && state.engagement.mentionPicker.key === key;
@@ -10454,7 +10568,7 @@
     const results = state.members.results;
     const pr = state.admin.passwordResetResult;
     const passwordResetHtml = pr ? `<div class="chart-card" style="margin-bottom:10px;border:1px solid var(--brass);" data-password-reset-created="1">
-      <div class="field-label" style="margin-bottom:4px;">הסיסמה אופסה - זו הפעם היחידה שהיא תוצג. מסרו אותה לחבר/ה ישירות.</div>
+      <div class="field-label" style="margin-bottom:4px;">${bidiText(`הסיסמה של ${pr.name || "חבר/ה"} אופסה — זו הפעם היחידה שהיא תוצג. מסרו אותה ישירות.`)}</div>
       <div class="flex gap-10" style="align-items:center;flex-wrap:wrap;">
         <code class="mono" style="font-size:15px;">${esc(pr.tempPassword)}</code>
         <button class="chip-btn" data-community-action="copy-invite-code" data-code="${esc(pr.tempPassword)}">העתקה</button>
@@ -10671,7 +10785,7 @@
       : `<div class="chip-row" style="margin-top:10px;">
           <button class="chip-btn danger"${ready ? "" : ` disabled title="${esc(`אפשר לשחרר רק אחרי ${GHOST_GRACE_DAYS} ימים ללא השלמה`)}"`} data-community-action="ghost-reclaim" data-id="${esc(g.user_id)}">שחרור ההזמנה</button>
         </div>
-        ${ready ? "" : `<div class="footer-note" style="margin:6px 0 0;">${esc(`אפשר לשחרר רק אחרי ${GHOST_GRACE_DAYS} ימים ללא השלמה — עוד ${Math.max(1, GHOST_GRACE_DAYS - stalled)} ימים.`)}</div>`}`;
+        ${ready ? "" : `<div class="footer-note" style="margin:6px 0 0;">${esc(`אפשר לשחרר רק אחרי ${GHOST_GRACE_DAYS} ימים ללא השלמה — עוד ${Math.max(1, GHOST_GRACE_DAYS - stalled) === 1 ? "יום אחד" : `${Math.max(1, GHOST_GRACE_DAYS - stalled)} ימים`}.`)}</div>`}`;
     return `<div class="chart-card" style="margin-bottom:10px;" data-ghost-user-id="${esc(g.user_id)}">
       <div class="flex" style="justify-content:space-between;align-items:flex-start;gap:10px;">
         <div style="min-width:0;">
@@ -11822,7 +11936,7 @@
     const comments = Number((post && post.comment_count) || 0);
     return `<div class="chip-row post-actions">
       <button class="chip-btn" data-community-action="cheer" data-id="${id}" aria-label="עידוד, ${reactions} עידודים">🔥 ${reactions}</button>
-      <button class="chip-btn" data-community-action="toggle-comments" data-id="${id}" aria-label="תגובות, ${comments}">💬 ${comments}</button>
+      ${isModuleEnabled("comments") ? `<button class="chip-btn" data-community-action="toggle-comments" data-id="${id}" aria-label="תגובות, ${comments}">💬 ${comments}</button>` : ""}
       ${opts.extra || ""}
     </div>`;
   }
@@ -13138,7 +13252,7 @@
     const trained = sessions === 1 ? "אימון אחד באפליקציה" : sessions ? `${sessions} אימונים באפליקציה` : "לא רשמו אימון באפליקציה";
     const contacted = !!state.coach.welcome.contactedIds[m.id];
     const welcomed = !!state.coach.welcome.welcomed[m.id];
-    const busy = state.coach.welcome.busy === m.id;
+    const busy = !!state.coach.welcome.busy[m.id];
     const assignDraft = (state.coach.welcome.assignDrafts || {})[m.id] || "";
     const contactDraft = (state.coach.welcome.contactDrafts || {})[m.id] || "";
     return `<div class="log-row" style="align-items:flex-start;flex-direction:column;gap:8px;">
@@ -13205,10 +13319,16 @@
   function memberOfWeekCandidateDetailText(category, detail) {
     const d = detail || {};
     if (category === "consistency_streak") return `רצף של ${(Number(d.streak_weeks) || 0) === 1 ? "שבוע אחד" : `${Number(d.streak_weeks) || 0} שבועות`} · דירוג #${d.rank != null ? esc(d.rank) : "?"}`;
-    if (category === "most_prs") return `${Number(d.pr_count) || 0} שיאים אישיים השבוע`;
+    // Guarded like consistency_streak three lines up. Round 4 fixed that one
+    // branch and left its two siblings in the same function untouched - which
+    // is the drift shape this hunt keeps finding, here committed by the fix
+    // itself. A member's FIRST PR of the week is exactly the === 1 case.
+    if (category === "most_prs") return `${(Number(d.pr_count) || 0) === 1 ? "שיא אישי אחד השבוע" : `${Number(d.pr_count) || 0} שיאים אישיים השבוע`}`;
     if (category === "challenge_completion") {
       const titles = Array.isArray(d.titles) ? d.titles.filter(Boolean).join(", ") : "";
-      return `${Number(d.completions) || 0} השלמות אתגר${titles ? `: ${titles}` : ""}`;
+      // The third branch of the same trio - see most_prs above.
+      const n = Number(d.completions) || 0;
+      return `${n === 1 ? "השלמת אתגר אחת" : `${n} השלמות אתגר`}${titles ? `: ${titles}` : ""}`;
     }
     return "";
   }
@@ -15297,7 +15417,7 @@
           <div id="postComposerCounter" data-composer-counter style="text-align:left;font-size:11px;color:var(--steel);min-height:14px;">${bodyLen >= 900 ? `${bodyLen}/${POST_BODY_MAX}` : ""}</div>
           <div style="margin-top:8px;">${tiles}</div>
           ${c.photos.length < POST_MEDIA_MAX
-            ? `<label class="chip-btn" style="cursor:pointer;display:inline-block;">הוספת תמונה<input type="file" accept="image/*" data-composer-file class="file-input-hidden"/></label>`
+            ? (isModuleEnabled("post_photos") ? `<label class="chip-btn" style="cursor:pointer;display:inline-block;">הוספת תמונה<input type="file" accept="image/*" data-composer-file class="file-input-hidden"/></label>` : "")
             : `<div style="font-size:12px;color:var(--steel);">הגעתם למקסימום ${POST_MEDIA_MAX} תמונות</div>`}
           <label class="field" style="margin-top:12px;"><span class="field-label">מי רואה את הפוסט</span>
             <select class="text-input" data-composer-visibility>
@@ -15577,8 +15697,8 @@
           ${p.error ? `<div class="field-error" role="alert" style="margin-top:8px;">${esc(p.error)}</div>` : ""}
           <div class="chip-row" style="margin-top:14px;">
             <button class="chip-btn primary" data-community-action="pr-share"${p.publishing || (p.photo && p.photo.status === "processing") ? " disabled" : ""}>${p.publishing ? "משתף…" : "שיתוף למועדון"}</button>
-            <button class="chip-btn" data-community-action="outward-pr">שיתוף מחוץ לאפליקציה</button>
-            ${p.photo ? "" : `<label class="chip-btn" style="cursor:pointer;">הוספת תמונה<input type="file" accept="image/*" data-pr-file class="file-input-hidden"/></label>`}
+            ${isModuleEnabled("outward_share") ? `<button class="chip-btn" data-community-action="outward-pr">שיתוף מחוץ לאפליקציה</button>` : ""}
+            ${(p.photo || !isModuleEnabled("post_photos")) ? "" : `<label class="chip-btn" style="cursor:pointer;">הוספת תמונה<input type="file" accept="image/*" data-pr-file class="file-input-hidden"/></label>`}
             ${p.showNote ? "" : `<button class="chip-btn" data-community-action="pr-add-note">הוספת הערה</button>`}
             <button class="chip-btn" data-community-action="pr-not-now">לא עכשיו</button>
           </div>
@@ -15792,7 +15912,7 @@
                   decoration to mean "private". It defaults to "club", so
                   honouring it costs the feature nothing and is the reading
                   the audit's privacy note asks for. */ ""}
-            ${canShare ? `<button class="chip-btn" data-community-action="outward-ach">שיתוף מחוץ לאפליקציה</button>` : ""}
+            ${canShare && isModuleEnabled("outward_share") ? `<button class="chip-btn" data-community-action="outward-ach">שיתוף מחוץ לאפליקציה</button>` : ""}
             ${canShare && !a.showNote ? `<button class="chip-btn" data-community-action="ach-add-note">הוספת הערה</button>` : ""}
             <button class="chip-btn" data-community-action="ach-not-now">לא עכשיו</button>
           </div>
@@ -15826,7 +15946,7 @@
       // and withheld for only_me, matching the club control beside it.
       const outward = r.visibility === "only_me"
         ? ""
-        : `<button class="chip-btn" data-community-action="outward-ach-earned" data-id="${esc(r.id)}" data-code="${esc(code)}" aria-label="שיתוף המדליה מחוץ לאפליקציה">↗</button>`;
+        : (isModuleEnabled("outward_share") ? `<button class="chip-btn" data-community-action="outward-ach-earned" data-id="${esc(r.id)}" data-code="${esc(code)}" aria-label="שיתוף המדליה מחוץ לאפליקציה">↗</button>` : "");
       // data-achievement-id: the anchor a `target.achievement` notification
       // tap (navigateToNotifTarget) scrolls to and briefly highlights - the
       // same scrollIntoView pattern the `target.post` branch already uses
@@ -18918,7 +19038,7 @@
       ${post.photo_path && signedCacheGet(photoUrlCache, post.photo_path) ? `<img src="${signedCacheGet(photoUrlCache, post.photo_path)}" alt="" class="post-photo" onerror="window.__haimuniaEvictSignedUrl&&window.__haimuniaEvictSignedUrl('photo',this.dataset.k)" data-k="${esc(post.photo_path)}"/>` : ""}
       <div class="chip-row post-actions">
         <button class="chip-btn" data-community-action="cheer" data-id="${esc(post.id)}" aria-label="עידוד, ${Number(post.cheer_count || 0)} עידודים">🔥 ${Number(post.cheer_count || 0)}</button>
-        <button class="chip-btn" data-community-action="toggle-comments" data-id="${esc(post.id)}" aria-label="תגובות, ${Number(post.comment_count || 0)}">💬 ${Number(post.comment_count || 0)}</button>
+        ${isModuleEnabled("comments") ? `<button class="chip-btn" data-community-action="toggle-comments" data-id="${esc(post.id)}" aria-label="תגובות, ${Number(post.comment_count || 0)}">💬 ${Number(post.comment_count || 0)}</button>` : ""}
         ${post.comparison_key ? `<button class="chip-btn${state.posts.comparisonForPostId === post.id ? " selected" : ""}" data-community-action="compare" data-key="${esc(post.comparison_key)}" data-id="${esc(post.id)}">השוואה</button>` : ""}
         ${post.author_id === (state.user && state.user.id) ? `<button class="chip-btn" data-community-action="delete-post" data-id="${esc(post.id)}">הסרה</button>` : `<button class="chip-btn" data-community-action="report" data-id="${esc(post.id)}">דיווח</button>`}
       </div>
@@ -19087,7 +19207,9 @@
     </div>`;
 
     // COMM-221. The "View Week" entry point into the recap surface.
-    const recapEntry = `<div class="ach-section" style="margin-top:18px;">${sectionHead("var(--teal)", "הסיכום השבועי שלי")}<button class="chip-btn primary" data-community-action="open-recap">צפייה בשבוע</button></div>`;
+    const recapEntry = isModuleEnabled("weekly_recap")
+      ? `<div class="ach-section" style="margin-top:18px;">${sectionHead("var(--teal)", "הסיכום השבועי שלי")}<button class="chip-btn primary" data-community-action="open-recap">צפייה בשבוע</button></div>`
+      : "";
     // COMM-309. The monthly club recap's member-facing card, right beside
     // its weekly sibling above - see renderMonthlyRecapMemberSection's own
     // comment for why this is an inline card rather than a new dialog or a

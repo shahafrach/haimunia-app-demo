@@ -72,7 +72,11 @@ test("an admin sees one toggle row per module, all checked when every module is 
   // 4 plus "engagement_alerts") = 13. Real device feedback, same date: the
   // daily club-WOD strip (renderClubWodTodayStrip()) had no toggle at all -
   // "club_wod" is the 9th community-content row, bringing the total to 14.
-  assert.equal(rows.length, 14, "one row per module across both groups");
+  // 19 since 2026-09-15: the owner asked that every function in the app be
+  // switchable, and an audit found five that were not - weekly_recap (whose
+  // MONTHLY sibling had been switchable since it shipped), comments (bundled
+  // inside the feed toggle), post photos, mentions, and outward share.
+  assert.equal(rows.length, 19, "one row per module across both groups");
   rows.forEach((el) => assert.equal(el.checked, true, `${el.dataset.clubFeature} starts checked`));
 });
 
