@@ -92,6 +92,31 @@ argument is not re-run:
   multi-week programming calendar (which would turn this from a training log
   with a club layer into a box programming platform), and migrating the
   stylesheet to `rem` so system text-size reaches it.
+- **Web push has no sending half** (pre-launch review, 2026-09-15). `sw.js`
+  has a `push` handler, `push_subscriptions` stores subscriptions, and
+  `cloud-config.js` carries a VAPID **public** key — but nothing anywhere
+  sends a push. The four deployed Edge Functions are `admin_reset_password`,
+  `purge_abandoned_profiles`, `recap_weekly`, `sanitize_upload`; there is no
+  `notif_push_send`, no `web-push` dependency and no private key. The
+  committed public key is explicitly a *demo keypair* whose private half "is
+  NOT in this repo" and is not known to exist anywhere, so this needs a fresh
+  keypair, not just a sender.
+
+  The consequence at launch: **every notification is in-app only.** Weekly
+  recaps, streak-at-risk nudges, challenge-ending reminders and the admin's
+  own new-bug-report alert reach a member only if they open the app — which
+  is precisely the member a re-engagement nudge is aimed at. The whole layer
+  is built, scheduled and running nightly, and silently reaches nobody
+  outside the app. `state.featureFlags.notifPush` defaulting off is honest,
+  not an oversight: the config comment says it stays off "until that
+  provisioning happens".
+
+  Recommended AFTER launch, not before: shipping untested push crypto days
+  before a club arrives is the wrong risk, and thirty members will say
+  whether retention actually needs it. Provisioning the private key is the
+  owner's step regardless (`supabase secrets set`), as is the real-device
+  test — so this can never be finished from the repo alone.
+
 - **The two iOS checks** from the PWA pass, still unverified on a device:
   whether `window.open` returns null inside the installed PWA (which would
   break the support sheet's WhatsApp/mail handoff), and whether

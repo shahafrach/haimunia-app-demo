@@ -2248,7 +2248,13 @@
     return (c && typeof c.body === "string") ? c.body : "";
   }
   function renderOnboardingWelcomeStep() {
-    const bodyRaw = onboardingStepBodyRaw("welcome") || `כאן רואים מה קורה במועדון, ואפשר לשתף אימונים ושיאים ולהגיב לחברים אחרים. לחיצה על "כתיבת פוסט" למעלה פותחת את השיתוף הראשון שלכם.`;
+    // Names the composer by the label it ACTUALLY carries. This fallback and
+    // the seeded row (202609150007) both used to say "כתיבת פוסט", which the
+    // feed redesign had already replaced with the fake-input row below - so
+    // the first card a new member saw pointed at a button not on the screen.
+    // POST_COMPOSER_PLACEHOLDER is the single definition of that label, and
+    // first-run-copy.test.mjs asserts this sentence still contains it.
+    const bodyRaw = onboardingStepBodyRaw("welcome") || `כאן רואים מה קורה במועדון, ואפשר לשתף אימונים ושיאים ולהגיב לחברים אחרים. השורה "${POST_COMPOSER_PLACEHOLDER}" בראש הפיד פותחת את השיתוף הראשון שלכם.`;
     return renderOnboardingCard(onboardingStepTitle("welcome", "ברוכים הבאים לקהילה!"), bidiText(bodyRaw), "welcome");
   }
   function renderOnboardingFirstWeekStep() {
@@ -2321,6 +2327,33 @@
   // onboarding_step_content's own write policy exactly - a coach without
   // that permission never sees the entry point at all, per this ticket's
   // own criterion.
+  // The composer's own label, defined once because TWO screens say it: the
+  // fake-input row at the top of the feed, and the welcome onboarding card
+  // that tells a brand-new member to tap it. Those two drifted apart once
+  // already - the feed redesign renamed the control and the onboarding copy
+  // kept pointing at the old name - and the only thing that noticed was a
+  // pre-launch read-through. One constant, plus a test that the card's
+  // sentence contains it, is what keeps them honest.
+  const POST_COMPOSER_PLACEHOLDER = "מה קורה היום?";
+  // WHAT TO DO WHEN THE PASSWORD IS GONE. Pre-launch review, 2026-09-15.
+  //
+  // This screen offered a username, a password and a button, and nothing else
+  // - no "forgot my password", not even a sentence. There is no email reset
+  // and there is never going to be one: email delivery is permanently out of
+  // scope for this project, which is a deliberate decision and not a gap.
+  //
+  // But the consequence of that decision was never written down anywhere a
+  // member could read it. So a member who forgot their password met a form
+  // that refused them with no route out at all. With one member that never
+  // came up. With a club of thirty it happens in the first week, and the
+  // realistic outcome is not that they ask - it is that they quietly stop
+  // opening the app, and nobody ever learns why.
+  //
+  // The route exists and works: an admin resets the password from the roster
+  // and hands over the temporary one in person. That is a perfectly good
+  // answer for a gym, where the staff see these people twice a week. It only
+  // needed saying.
+  const LOGIN_RECOVERY_NOTE = `<div class="footer-note" style="margin-top:14px;">${bidiText("שכחתם את הסיסמה? פנו למאמן/ת או לצוות המועדון — אפשר לאפס אותה עבורכם ולקבל סיסמה חדשה ביד.")}</div>`;
   const ONBOARDING_STEPS_ORDER = ["welcome", "first_week", "first_month", "first_class", "third_class"];
   const ONBOARDING_STEP_LABELS = {
     welcome: "ברוכים הבאים", first_week: "השבוע הראשון", first_month: "החודש הראשון",
@@ -18236,6 +18269,7 @@
           <div style="color:var(--steel);font-size:14px;line-height:1.6;margin-bottom:14px;">${bidiText("התחברות מחזירה את הפרופיל שלך, את מי שאת/ה עוקב/ת אחריו ואת ההיסטוריה בקהילה — גם במכשיר חדש.")}</div>
           <form id="communityLogin">${field("communityLogin", "username", LOGIN_IDENTIFIER_LABEL, `<input class="text-input" name="username" dir="ltr" autocapitalize="off" autocomplete="username" placeholder="${esc(LOGIN_IDENTIFIER_LABEL)}" required/>`)}${field("communityLogin", "password", "סיסמה", `<input class="text-input" name="password" type="password" dir="ltr" autocomplete="current-password" placeholder="סיסמה" required/>`)}<button class="save-btn" type="submit" style="margin-top:12px;">התחברות</button></form>
           ${state.ui.message ? `<div class="footer-note" role="status" style="margin-top:10px;color:var(--brass);">${esc(state.ui.message)}</div>` : ""}
+          ${LOGIN_RECOVERY_NOTE}
         </div>`;
       }
       ensureAnonymousSession();
@@ -18544,7 +18578,7 @@
     // data-action, so open-composer's own handler is untouched.
     const composeBtn = `<button class="post-composer-trigger" data-community-action="open-composer">
       ${avatarHtml(selfDisplayName(), 40, state.profile && state.profile.avatar_url)}
-      <span class="post-composer-trigger-text">מה קורה היום?</span>
+      <span class="post-composer-trigger-text">${esc(POST_COMPOSER_PLACEHOLDER)}</span>
     </button>`;
     // classmatesTodayHtml and upcomingEventHtml are no longer concatenated
     // here. Both are now rail cards. The event card in particular used to
