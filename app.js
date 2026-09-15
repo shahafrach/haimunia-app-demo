@@ -15,7 +15,7 @@ let barWeight = 20;
 // Single source of truth for the app version. After bumping this, run
 // `npm run sync-version` to copy it into SW_VERSION in sw.js — `npm test`
 // fails if the two drift apart.
-const APP_VERSION = "4.54.0";
+const APP_VERSION = "4.55.0";
 
 // A movement typed into the WOD builder that isn't in the built-in list
 // above - persisted (see WODTAGSTORE), same "custom X" pattern as
@@ -2681,7 +2681,21 @@ async function restoreEntry(entry) {
 // in-memory state (same reasoning as saveSet()'s own fix above): a failed
 // write must have no visible side effect.
 async function saveBodyweight() {
-  if (!isFinite(bwWeight)) return;
+  // A bodyweight of zero is not a reading. Live bug hunt, fresh round 4
+  // (2026-09-15) - sibling drift, the shape this round went looking for.
+  //
+  // saveMeasurement() right below refuses `value <= 0` AND renders its own
+  // save button disabled until the value is positive. saveBodyweight()
+  // checked only isFinite(), and 0 is perfectly finite - so holding the minus
+  // stepper down to its floor and tapping save wrote a real row of 0 ק״ג for
+  // today, put "0 ק״ג" in the card header as the member's latest weight, and
+  // baked a zero point into the bodyweight trend chart. No warning, no undo
+  // prompt, nothing to suggest anything had gone wrong.
+  //
+  // Both halves of the guard are added here, matching the sibling exactly
+  // rather than approximately: the button now goes disabled at zero, and this
+  // function refuses it anyway in case the button is ever bypassed.
+  if (!isFinite(bwWeight) || bwWeight <= 0) return;
   const today = todayISO();
   let existing = bodyweightEntries.find((e) => e.date === today);
   try {
@@ -5144,7 +5158,7 @@ function renderBodyweightArea() {
       <div class="steppers" style="margin-top:14px; margin-bottom:0;">
         ${renderStepper("bwWeight", "משקל (ק\"ג)", bwWeight, 0.5, 0, "bw-step")}
       </div>
-      <button data-action="save-bw" class="save-btn" style="max-width:none; margin-top:14px;">רישום משקל גוף — היום</button>
+      <button data-action="save-bw" class="save-btn" style="max-width:none; margin-top:14px;"${bwWeight > 0 ? "" : " disabled"}>רישום משקל גוף — היום</button>
     </div>
     <div style="height:8px;"></div>` : "";
   el.innerHTML = header + detail;
@@ -5503,6 +5517,15 @@ const FIELD_ACTIONS = {
     sync: () => {
       const inp = document.querySelector(`.stepper-val[data-action="bw-step"][data-field="bwWeight"]`);
       if (inp) inp.value = bwWeight;
+      const bwBtn = document.querySelector(`[data-action="save-bw"]`);
+      if (bwBtn) bwBtn.disabled = !(bwWeight > 0);
+      // The save button's disabled state has to be patched here for the same
+      // reason the measurement sibling below spells out at length: this path
+      // patches the DOM in place and never calls render(), so an attribute
+      // decided at render time goes stale the moment the stepper moves. Added
+      // 2026-09-15 with the zero-bodyweight guard - without it the button
+      // would render enabled at 70, stay enabled all the way down to 0, and
+      // then stay disabled after the member stepped back up.
     },
   },
   "builder-movement-reps": {
@@ -6769,10 +6792,10 @@ function renderWodPickerList(query) {
   const list = document.getElementById("wodPickerList");
   const addRow = query.trim() && !exactMatch
     ? `<button class="movement-btn" data-action="open-wod-builder" data-name="${esc(query.trim())}" style="border-color:var(--energy); margin-top:4px;">
-         <span style="font-weight:700; font-size:14px; color:var(--energy);">+ בניית "${bidiText(query.trim())}" כאימון חדש</span>
+         <span style="font-weight:700; font-size:14px; color:var(--energy-text);">+ בניית "${bidiText(query.trim())}" כאימון חדש</span>
        </button>`
     : `<button class="movement-btn" data-action="open-wod-builder" data-name="" style="border-color:var(--energy); margin-top:4px;">
-         <span style="font-weight:700; font-size:14px; color:var(--energy);">+ בניית אימון מותאם אישית</span>
+         <span style="font-weight:700; font-size:14px; color:var(--energy-text);">+ בניית אימון מותאם אישית</span>
        </button>`;
   if (Object.keys(byCategory).length === 0) {
     list.innerHTML = addRow + `<div style="color:var(--steel); text-align:center; padding:16px 0; font-size:13px;">לא נמצא אימון</div>`;

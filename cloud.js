@@ -1188,7 +1188,19 @@
   // exact problem for challenges - reused rather than re-invented.
   function clubMembersLabel(n) {
     const count = Number(n) || 0;
-    return count === 1 ? "חבר/ה אחד/ת במועדון" : `${count} חברי מועדון`;
+    // The slash form of "one" was wrong here, and it was mine - introduced
+    // this same session while fixing "1 חברי מועדון". The feminine of אחד is
+    // the irregular אחת: the ד BECOMES ת, so the two cannot be joined by a
+    // slash without spelling a non-word. That is exactly the class this
+    // project already bans for the welcome-greeting pair (see
+    // test/hebrew-copy-rules.test.mjs), whose own note says the patched form
+    // is still wrong and the string has to be REPHRASED.
+    //
+    // So this drops the numeral rather than trying to gender it.
+    // "חבר/ה במועדון" is valid either way, reads naturally, and still says
+    // what the line needs to say. test/hebrew-copy-rules.test.mjs now blocks
+    // the bad form by name so it cannot come back.
+    return count === 1 ? "חבר/ה במועדון" : `${count} חברי מועדון`;
   }
   // Two more counts that render a plural noun beside the number one. Live bug
   // hunt, fresh round 3 (2026-09-15), found by looking for siblings of the
@@ -13192,7 +13204,7 @@
   // level enum above.
   function memberOfWeekCandidateDetailText(category, detail) {
     const d = detail || {};
-    if (category === "consistency_streak") return `רצף של ${Number(d.streak_weeks) || 0} שבועות · דירוג #${d.rank != null ? esc(d.rank) : "?"}`;
+    if (category === "consistency_streak") return `רצף של ${(Number(d.streak_weeks) || 0) === 1 ? "שבוע אחד" : `${Number(d.streak_weeks) || 0} שבועות`} · דירוג #${d.rank != null ? esc(d.rank) : "?"}`;
     if (category === "most_prs") return `${Number(d.pr_count) || 0} שיאים אישיים השבוע`;
     if (category === "challenge_completion") {
       const titles = Array.isArray(d.titles) ? d.titles.filter(Boolean).join(", ") : "";
@@ -14900,7 +14912,7 @@
       ? `<div data-recap-classmates="ready">${classmatesList.map((m) => {
           const name = m.display_name || (m.handle ? "@" + m.handle : "חבר/ה");
           return `<button class="link-btn" data-community-action="view-profile" data-id="${esc(m.user_id)}" style="padding:0;color:inherit;font-weight:700;text-decoration:underline;">${esc(name)}</button>`;
-        }).join(", ")} התאמנו איתכם השבוע.</div>`
+        }).join(", ")} ${classmatesList.length === 1 ? "התאמן/ה" : "התאמנו"} איתכם השבוע.</div>`
       : `<div class="empty" data-recap-classmates="empty">אין חברים משותפים השבוע</div>`;
     const club = row.club_challenge_progress && row.club_challenge_progress.title
       ? `<div class="chart-card" style="margin-bottom:10px;"><div class="field-label" style="margin-bottom:4px;">${esc(row.club_challenge_progress.title)}</div><div class="mono" style="color:var(--brass);">${esc(row.club_challenge_progress.total)}${row.club_challenge_progress.target != null ? ` / ${esc(row.club_challenge_progress.target)}` : ""}</div>${row.club_challenge_progress.participants != null ? `<div style="color:var(--steel);font-size:12px;">${participantsLabel(row.club_challenge_progress.participants)}</div>` : ""}</div>`
@@ -17654,7 +17666,22 @@
         // a node inside it lands on an invisible target. Open it first.
         const details = node && node.closest("details");
         if (details && !details.open) details.open = true;
-        if (node && node.scrollIntoView) node.scrollIntoView({ block: "center" });
+        // KEYED ON THE NODE'S EXISTENCE, not on whether it can be scrolled to.
+        // My first version wrote this as `else` on the scrollIntoView test,
+        // which conflates two different facts: a node that is present but
+        // whose environment has no scrollIntoView would have been reported as
+        // deleted. A regression test caught it immediately, which is the
+        // whole argument for writing the test before believing the fix.
+        if (!node) setMessage("ההודעה הזו כבר לא זמינה");
+        else if (node.scrollIntoView) node.scrollIntoView({ block: "center" });
+        // SAY SO WHEN IT IS GONE. Live bug hunt, fresh round 4 (2026-09-15) -
+        // sibling drift inside one function. target.post got exactly this
+        // fallback on 2026-09-11; the announcement and achievement branches
+        // below were written from the same scrollIntoView pattern and never
+        // given it. An announcement that has since been archived or deleted
+        // closed the notification centre, switched tabs, and then did
+        // nothing at all - indistinguishable, from the member's side, from a
+        // tap that simply did not register.
       }, 60);
     } else if (target.achievement) {
       // data-achievement-id on renderMyAchievements()'s own rows is the
@@ -17665,7 +17692,12 @@
       setTimeout(() => {
         const sel = '[data-achievement-id="' + String(target.achievement).replace(/"/g, '\\"') + '"]';
         const node = document.querySelector(sel);
-        if (node && node.scrollIntoView) node.scrollIntoView({ block: "center" });
+        // Same fallback as the announcement branch above, for the same
+        // reason: a medal can be revoked or edited away (achievement_edit is
+        // a real audit action here), and its notification outlives it. Keyed
+        // on the node's existence, not on scrollability - see there.
+        if (!node) setMessage("המדליה הזו כבר לא זמינה");
+        else if (node.scrollIntoView) node.scrollIntoView({ block: "center" });
       }, 60);
     } else if (target.recapWeek !== undefined) {
       openRecap(target.recapWeek || null, "notification");
@@ -20037,6 +20069,36 @@
       return;
     }
     const active = document.activeElement;
+    // A NESTED DIALOG JUST CLOSED, and its parent is still open.
+    //
+    // Live bug hunt, fresh round 4 (2026-09-15) - HIGH. The opener-restore
+    // path above only runs when openKey becomes NULL, i.e. when everything
+    // closed. Close a dialog that was opened from inside another - the share
+    // sheet on top of the PR celebration, say - and openKey becomes the
+    // PARENT's key instead, so this fell through to the "a dialog is freshly
+    // opening" branch below. The parent is already registered in
+    // cloudDialogOpeners, so that branch skipped re-registering and simply
+    // focused the parent's FIRST control.
+    //
+    // Which is not a cosmetic miss. On both surfaces where this stacking
+    // exists the first control is the PUBLISH action: dismissing the share
+    // sheet put focus on "שיתוף למועדון", so a keyboard or screen-reader user
+    // who pressed Enter out of reflex published their PR to the club feed
+    // without ever choosing to. Invisible to a mouse user, which is why it
+    // survived every prior round.
+    //
+    // Restoring the CLOSED dialog's own opener is what the member expects and
+    // what the all-closed branch above already does; this is the same rule
+    // applied one level in.
+    if (cloudOpenDialogKey && openKey !== cloudOpenDialogKey
+        && (openKey in cloudDialogOpeners) && !cloudDialogEl(cloudOpenDialogKey)) {
+      const closed = cloudOpenDialogKey;
+      const opener = cloudResolveOpener(cloudDialogOpeners[closed]);
+      delete cloudDialogOpeners[closed];
+      cloudOpenDialogKey = openKey;
+      if (opener && typeof opener.focus === "function") { try { opener.focus(); } catch (e) {} }
+      return;
+    }
     if (!(openKey in cloudDialogOpeners)) {
       // Prefer the control that was just clicked (re-resolved by selector,
       // since the render this same click triggered may already have

@@ -38,7 +38,14 @@ test("no slash gender form drops the masculine final-form letter", () => {
 // patched, because the patch (ברוכ/ה) is still wrong.
 test("the impossible slash forms are absent", () => {
   for (const { name, src } of files) {
-    for (const w of ["ברוך/ה", "הבא/ה", "ברוכ/ה"]) {
+    // "אחד/ת" joined the list 2026-09-15. Same rule, new instance: the
+    // feminine of אחד is the irregular אחת, so the ד must BECOME ת and no
+    // slash can join them. It was introduced that day by a fix for a
+    // DIFFERENT defect in the same string ("1 חברי מועדון" - a plural noun
+    // beside the number one), which is worth recording: correcting number
+    // agreement is exactly the kind of edit that reaches for a slash form,
+    // and this list is what stops the correction from shipping its own bug.
+    for (const w of ["ברוך/ה", "הבא/ה", "ברוכ/ה", "אחד/ת"]) {
       assert.ok(!src.includes(w), `${name} contains "${w}", which cannot be a valid slash form`);
     }
   }

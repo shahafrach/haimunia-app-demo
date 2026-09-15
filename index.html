@@ -1668,7 +1668,16 @@
   /* Community tab: real buttons and admin-only framing, instead of the
      11px underlined .link-btn (meant for a de-emphasized action like
      "delete account") standing in for every primary action. */
-  .chip-btn{ display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:9px 16px; border-radius:12px; border:1px solid var(--border); background:var(--surface2); color:var(--chalk); font-weight:700; font-size:13px; white-space:nowrap; }
+  /* min-height 44px: the same touch floor .icon-btn, .tabbtn, .stepper-btn and
+     the log-row icons already carry, and which this file elsewhere calls "the
+     44px touch target the accessibility-floor test pins". .chip-btn was the
+     one interactive class that never got it - measured live at 35px for an
+     RSVP chip and 37px for a dialog's close button, and still only ~43px at
+     the app's own large text setting. Live bug hunt, fresh round 4
+     (2026-09-15). Chips carry real actions in the Community dialogs (RSVP,
+     leave a challenge, share, and the X that closes challengeView and
+     eventView), so this is a thumb-accuracy floor, not decoration. */
+  .chip-btn{ display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:9px 16px; min-height:44px; border-radius:12px; border:1px solid var(--border); background:var(--surface2); color:var(--chalk); font-weight:700; font-size:13px; white-space:nowrap; }
   /* The primary action carries a tinted shadow so it reads as the one thing
      to press, matching .save-btn's existing treatment rather than inventing a
      second language for the same idea. Tinted with --energy, not black: a
