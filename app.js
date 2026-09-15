@@ -15,7 +15,7 @@ let barWeight = 20;
 // Single source of truth for the app version. After bumping this, run
 // `npm run sync-version` to copy it into SW_VERSION in sw.js — `npm test`
 // fails if the two drift apart.
-const APP_VERSION = "4.53.0";
+const APP_VERSION = "4.54.0";
 
 // A movement typed into the WOD builder that isn't in the built-in list
 // above - persisted (see WODTAGSTORE), same "custom X" pattern as
@@ -4003,7 +4003,17 @@ async function saveWod() {
   editingWodEntryId = null;
   wodLogDate = todayISO();
   wodLogDateExplicitlyChosen = false;
-  if (isPR) flashWodPR(entry.rx);
+  // NEVER on an edit. Live bug hunt, fresh round 3 (2026-09-15) - HIGH.
+  // bestWodScore() excludes the row being edited from its own comparison
+  // pool, so correcting a typo (59:00 down to a real 5:30) looked like a
+  // brand-new personal record and reopened the full-screen celebration.
+  //
+  // saveSet() has carried exactly this guard, and a comment describing
+  // exactly this bug, since the strength side hit it first: "Correcting the
+  // audit's 300 kg typo down to 30 fired 'שיא אישי חדש!' a second time".
+  // The WOD side was simply never given the same gate.
+  const celebratePR = isPR && !existing;
+  if (celebratePR) flashWodPR(entry.rx);
   // Same ordering rule as saveSet(): the debt is claimed before the render
   // that evaluates S5's consent card, never after it.
   const isFirstLogArrival = !firstLogCelebrated && totalLoggedEntries() === 1;
@@ -4014,7 +4024,7 @@ async function saveWod() {
   if (isFirstLogArrival) {
     celebrateFirstLog(`${w.name} — ${formatWodEntry(entry)}`);
   } else {
-    celebrateAfterSave(isPR ? `${w.name} — ${formatWodEntry(entry)}` : null);
+    celebrateAfterSave(celebratePR ? `${w.name} — ${formatWodEntry(entry)}` : null);
   }
   } finally { savingWod = false; }
 }
@@ -4561,7 +4571,7 @@ function renderLogTab() {
         <div class="flex items-center gap-8">
           <span style="display:inline-flex; color:var(--brass); flex-shrink:0;">${ICONS.ladder}</span>
           <div style="text-align:right;">
-            <div aria-live="polite" style="font-weight:700; font-size:14px; color:var(--brass);">${rounds.length ? `${modeLabel} פעיל — ${rounds.length} סטים נרשמו · הבא: ${nextNum}` : `${modeLabel} פעיל — קבעו את הסט הראשון למטה`}</div>
+            <div aria-live="polite" style="font-weight:700; font-size:14px; color:var(--brass);">${rounds.length ? `${modeLabel} פעיל — ${rounds.length === 1 ? "סט אחד נרשם" : `${rounds.length} סטים נרשמו`} · הבא: ${nextNum}` : `${modeLabel} פעיל — קבעו את הסט הראשון למטה`}</div>
           </div>
         </div>
         <span style="color:var(--brass); font-size:12px; font-weight:700; flex-shrink:0;">סיום</span>
@@ -6071,7 +6081,7 @@ function renderWodLogSection() {
 
     ${history.length > 0 ? `
     <div style="background:rgba(232,185,138,.12); border:1px solid var(--brass); border-radius:14px; padding:12px 14px; margin-bottom:16px;">
-      <div style="color:var(--brass); font-weight:800; font-size:13px; margin-bottom:8px;">↺ עשית את זה ${history.length} פעמים בעבר — השוואה למטה</div>
+      <div style="color:var(--brass); font-weight:800; font-size:13px; margin-bottom:8px;">↺ עשית את זה ${history.length === 1 ? "פעם אחת" : `${history.length} פעמים`} בעבר — השוואה למטה</div>
       <div class="flex items-center justify-between">
         <div>
           <div class="stat-label">שיא</div>
@@ -7392,6 +7402,29 @@ document.addEventListener("input", (e) => {
   const val = parseFloat(raw);
   if (!isFinite(val)) return;
   const action = el.dataset.action, field = el.dataset.field;
+  // "5 דקות 75 שניות" MEANS 6:15, and used to save as 5:59.
+  //
+  // Live bug hunt, fresh round 3 (2026-09-15) - silent data corruption.
+  // clampField() pinned seconds to LIMITS.seconds (59) in STATE on every
+  // keystroke, but nothing wrote that back into the input until blur - so the
+  // field went on showing "75" right up to save, and the entry stored 5:59.
+  // No warning, no rejection, a benchmark time permanently wrong by up to
+  // sixteen seconds. Writing "75 seconds" is a normal way to think for anyone
+  // who counts intervals, so this is an ordinary input, not an abuse case.
+  //
+  // Carried rather than clamped, and rather than written back mid-keystroke:
+  // clamping visibly as someone types turns "7" then "5" into "59" under the
+  // caret, which is its own defect. Carrying keeps exactly what they meant
+  // and loses nothing.
+  if (field === "wodSeconds" && val >= 60) {
+    const carry = Math.floor(val / 60);
+    const secs = val % 60;
+    setFieldState(action, "wodMinutes", clampField(action, "wodMinutes", (Number(wodMinutes) || 0) + carry, 0));
+    setFieldState(action, "wodSeconds", clampField(action, "wodSeconds", secs, 0));
+    const cfg = FIELD_ACTIONS[action];
+    if (cfg) { cfg.sync("wodMinutes", wodMinutes); cfg.sync("wodSeconds", wodSeconds); }
+    return;
+  }
   setFieldState(action, field, clampField(action, field, val, +el.dataset.min));
   if (action === "step" && field === "weight" && logEntryType === "reps") {
     const bv = document.getElementById("barbellVisual");

@@ -500,7 +500,17 @@ export function createMockSupabase(seedTables = {}) {
           let start = 0;
           if (args && args.p_cursor) {
             try {
-              const tok = JSON.parse(Buffer.from(String(args.p_cursor), "base64").toString("utf8"));
+              // btoa/atob, not Buffer. This exact source is injected into a
+              // REAL Chromium page by scripts/browser-check/lib/mockCloud.mjs,
+              // where Buffer does not exist - so the instant a scenario paged
+              // past the feed's first 20 items the mock threw
+              // "ReferenceError: Buffer is not defined". No browser scenario
+              // currently exercises feed-load-more, which is consistent with
+              // that: it would have hit this immediately. Live bug hunt, fresh
+              // round 3 (2026-09-15) - a harness defect that silently made a
+              // whole area untestable in the browser rather than failing
+              // loudly in one place.
+              const tok = JSON.parse(decodeURIComponent(escape(atob(String(args.p_cursor)))));
               // Same property the real cursor has: the boundary is a row
               // identity, not an offset, so a row inserted at the top while
               // paginating cannot shift a later page.
@@ -511,7 +521,7 @@ export function createMockSupabase(seedTables = {}) {
           const page = pool.slice(start, start + limit);
           const more = start + limit < pool.length;
           const next = more && page.length
-            ? Buffer.from(JSON.stringify({ a: tokenAnchor(), i: page[page.length - 1].id }), "utf8").toString("base64")
+            ? btoa(unescape(encodeURIComponent(JSON.stringify({ a: tokenAnchor(), i: page[page.length - 1].id }))))
             : null;
           return Promise.resolve({ data: page.map((r) => ({ ...r, next_cursor: next })), error: null });
         }

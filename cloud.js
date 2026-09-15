@@ -1190,6 +1190,24 @@
     const count = Number(n) || 0;
     return count === 1 ? "חבר/ה אחד/ת במועדון" : `${count} חברי מועדון`;
   }
+  // Two more counts that render a plural noun beside the number one. Live bug
+  // hunt, fresh round 3 (2026-09-15), found by looking for siblings of the
+  // club-header bug round 2 turned up - "1 ימים נותרו" on a cooperative
+  // challenge in its last day, and "1 אימונים בשבוע" on a consistency
+  // challenge a coach set to once a week, which the create form's own min="1"
+  // explicitly allows.
+  //
+  // Both are reachable by ordinary configuration, not edge cases: a challenge
+  // is in its final day exactly once, every time, and once-a-week is the
+  // gentlest setting a coach can pick.
+  function daysRemainingLabel(n) {
+    const count = Number(n) || 0;
+    return count === 1 ? "יום אחד נותר" : `${count} ימים נותרו`;
+  }
+  function sessionsPerWeekLabel(n) {
+    const count = Number(n) || 0;
+    return count === 1 ? "אימון אחד בשבוע" : `${count} אימונים בשבוע`;
+  }
   function participantsLabel(n) {
     const count = Number(n) || 0;
     return count === 1 ? "משתתף אחד" : `${count} משתתפים`;
@@ -6998,11 +7016,53 @@
     await loadCommentsFor(postId);
     await loadFeed();
   }
+  // A MEMBER EDITING A COMMENT MUST NOT BE SHOWN A STRANGER'S UUID.
+  //
+  // Live bug hunt, fresh round 3 (2026-09-15). A comment is STORED with
+  // mention markers - @[רון כהן](22222222-...-222222222222) - and rendered
+  // with them stripped, so it reads as "@רון כהן". The edit box was seeded
+  // from the raw stored body, so the moment a member tapped "עריכה" on a
+  // comment that mentioned anyone, they were looking at bracket-and-paren
+  // syntax with somebody's account id in the middle of their own sentence.
+  // Editing near those characters silently mangles the marker, too, because
+  // nothing repairs it.
+  //
+  // So the box shows the friendly form and the markers are rebuilt on save.
+  // resolveCommentMentions() cannot do that rebuilding itself - it only ever
+  // DOWNGRADES a marker to plain text when a mention is not permitted - so
+  // the name->id pairs are carried alongside the draft.
+  //
+  // Longest name first when re-encoding: with both "רון" and "רון כהן"
+  // mentioned, replacing the shorter one first would eat the prefix of the
+  // longer and produce a broken marker.
+  function commentMentionMap(body) {
+    const map = [];
+    MENTION_MARKER_RE.lastIndex = 0;
+    let m;
+    while ((m = MENTION_MARKER_RE.exec(String(body || "")))) map.push({ name: m[1], id: m[2] });
+    map.sort((a, b) => b.name.length - a.name.length);
+    return map;
+  }
+  function commentBodyForEditing(body) {
+    let out = String(body || "");
+    for (const { name, id } of commentMentionMap(out)) out = out.split(`@[${name}](${id})`).join(`@${name}`);
+    return out;
+  }
+  function reEncodeCommentMentions(body, map) {
+    let out = String(body || "");
+    for (const { name, id } of (map || [])) out = out.split(`@${name}`).join(`@[${name}](${id})`);
+    return out;
+  }
   function startCommentEdit(commentId, postId) {
     const list = state.engagement.comments[postId] || [];
     const c = list.find((x) => x.id === commentId);
     if (!c || c.author_id !== (state.user && state.user.id)) return;
-    state.engagement.commentEdit = { commentId: commentId, postId: postId, body: String(c.body || ""), saving: false, error: "" };
+    const raw = String(c.body || "");
+    state.engagement.commentEdit = {
+      commentId: commentId, postId: postId,
+      body: commentBodyForEditing(raw), mentionMap: commentMentionMap(raw),
+      saving: false, error: "",
+    };
     state.engagement.mentionPicker = null;
     rerender();
   }
@@ -7012,7 +7072,10 @@
     if (!e || e.saving) return;
     const body = String(e.body || "").replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "").trim().slice(0, COMMENT_BODY_MAX);
     if (!body) { e.error = "אי אפשר לשמור תגובה ריקה"; rerender(); return; }
-    const resolved = await resolveCommentMentions(body);
+    // Back into stored form before anything else looks at it. A mention the
+    // member left alone re-encodes exactly; one whose name they edited no
+    // longer matches and becomes ordinary text, which is the honest outcome.
+    const resolved = await resolveCommentMentions(reEncodeCommentMentions(body, e.mentionMap));
     e.saving = true; e.error = ""; rerender();
     const list = state.engagement.comments[e.postId] || [];
     const target = list.find((x) => x.id === e.commentId);
@@ -11779,8 +11842,20 @@
     return `<div class="post-inline-edit" style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px;">
       <label class="field"><span class="field-label">עריכת כיתוב</span>
         <textarea class="text-input" data-caption-edit maxlength="${POST_BODY_MAX}" rows="3">${esc(e.body || "")}</textarea></label>
-      <div class="chip-row"><button class="chip-btn" data-community-action="caption-cancel">ביטול</button><button class="chip-btn primary" data-community-action="caption-save">שמירה</button></div>
+      <div class="chip-row"><button class="chip-btn" data-community-action="caption-cancel">ביטול</button><button class="chip-btn primary" data-community-action="caption-save"${captionSaveBlocked() ? " disabled" : ""}>שמירה</button></div>
+      ${e.error ? `<div class="field-error" role="alert" style="margin-top:8px;">${esc(e.error)}</div>` : ""}
     </div>`;
+  }
+  // Emptying a text-only post is not a save. Mirrors the composer's own
+  // publish gate rather than letting the button look available and then fail
+  // - see postSaveCaption() for why the server's refusal is not enough on its
+  // own here.
+  function captionSaveBlocked() {
+    const e = state.posts.captionEdit;
+    if (!e) return true;
+    const post = findFeedPost(e.postId);
+    const hasPhoto = !!(post && Array.isArray(post.media) && post.media.length);
+    return !cleanPostBody(e.body) && !hasPhoto;
   }
   function visibilityEditPanel() {
     const e = state.posts.visibilityEdit;
@@ -12498,7 +12573,7 @@
     const attendedCount = Array.isArray(attendedRes.data) ? attendedRes.data.length : 0;
     if (!timesPerWeek || attendedCount < timesPerWeek) {
       v.consistencyCheck.busy = false;
-      v.consistencyCheck.error = `עדיין לא הגעת ${timesPerWeek} פעמים השבוע (${attendedCount} מתוך ${timesPerWeek}).`;
+      v.consistencyCheck.error = `עדיין לא הגעת ${timesPerWeek === 1 ? "פעם אחת" : `${timesPerWeek} פעמים`} השבוע (${attendedCount} מתוך ${timesPerWeek}).`;
       return rerender();
     }
     const { error } = await client.from("challenge_progress")
@@ -13597,7 +13672,7 @@
       <div class="field-label" style="margin-bottom:4px;">התקדמות המועדון</div>
       <div class="mono" style="color:var(--brass);font-size:18px;">${esc(p.club_total)}${c.target_value != null ? ` / ${esc(c.target_value)}` : ""}</div>
       ${challengeProgressBarHtml(pct)}
-      <div style="color:var(--steel);font-size:12px;margin-top:4px;">${Math.round(Math.min(100, pct))}% מהיעד${days != null ? ` · ${days} ימים נותרו` : ""}</div>
+      <div style="color:var(--steel);font-size:12px;margin-top:4px;">${Math.round(Math.min(100, pct))}% מהיעד${days != null ? ` · ${daysRemainingLabel(days)}` : ""}</div>
       <div class="field-label" style="margin:10px 0 4px;">תורמים אחרונים</div>
       ${contributorsHtml}
     </div>${v.myParticipant ? renderChallengeLogForm(v) : ""}`;
@@ -13705,13 +13780,13 @@
     // Live bug hunt (2026-09-11): weeksLabel closes the same missing-singular
     // gap for both renderConsistencyPanel strings below ("X שבועות").
     const weeksLabel = weeks === 1 ? "שבוע אחד" : `${weeks} שבועות`;
-    if (!part) return `<div style="color:var(--steel);font-size:12px;margin-bottom:10px;">${weeksLabel} · ${timesPerWeek} אימונים בשבוע</div>`;
+    if (!part) return `<div style="color:var(--steel);font-size:12px;margin-bottom:10px;">${weeksLabel} · ${sessionsPerWeekLabel(timesPerWeek)}</div>`;
     const hit = Number(part.progress_value || 0);
     const boxes = Array.from({ length: weeks }, (_, i) => `<span aria-hidden="true" style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:8px;margin:2px;font-size:11px;font-weight:800;${i < hit ? "background:var(--brass);color:#0c0c0c;" : "background:var(--border);color:var(--steel);"}">${i + 1}</span>`).join("");
     const emptyMsg = hit === 0 ? `<div class="empty">השבוע הראשון בעיצומו.</div>` : "";
     const completeMsg = part.status === "completed" ? `<div style="color:var(--brass);font-weight:800;margin-top:6px;">האתגר הושלם 🎉</div>` : "";
     return `<div class="chart-card" style="margin-bottom:10px;">
-      <div class="field-label" style="margin-bottom:6px;">${hit} מתוך ${weeksLabel} · ${timesPerWeek} אימונים בשבוע</div>
+      <div class="field-label" style="margin-bottom:6px;">${hit} מתוך ${weeksLabel} · ${sessionsPerWeekLabel(timesPerWeek)}</div>
       <div>${boxes}</div>
       ${emptyMsg}${completeMsg}
       ${part.status !== "completed" ? `<button class="chip-btn" data-community-action="challenge-log-week-hit" style="margin-top:8px;"${v.consistencyCheck.busy ? " disabled" : ""}>${v.consistencyCheck.busy ? "בודק/ת נוכחות…" : "בדיקת נוכחות ועדכון השבוע"}</button>` : ""}
@@ -13898,7 +13973,29 @@
     const row = eventAttendeeRows(id).find((r) => r.user_id === (state.user && state.user.id));
     return row ? row.response : null;
   }
-  function eventRegistrationClosed(e) { return !!(e && e.registration_deadline && new Date(e.registration_deadline).getTime() < Date.now()); }
+  // AN EVENT THAT HAS ALREADY HAPPENED IS CLOSED, deadline or not.
+  //
+  // Live bug hunt, fresh round 3 (2026-09-15) - HIGH, reproduced live: a
+  // published event that ended three days ago, with no registration_deadline
+  // set, rendered an enabled "משתתף/ת" button, and pressing it wrote a real
+  // event_attendees row saying the member was going to something that had
+  // already finished.
+  //
+  // registration_deadline is OPTIONAL and usually unset, so keying this on it
+  // alone meant most events never closed at all. The list view had it right
+  // the whole time - it uses isPastEvent() to file the event under "אירועים
+  // שהסתיימו" - and the detail view simply never asked the same question. Two
+  // computed states of one event that disagreed, which is why the list looked
+  // correct while the button underneath it was not.
+  //
+  // isPastEvent() covers cancelled and past-status events as well as a
+  // published one whose time has gone, so this closes all three with the
+  // signal the rest of the file already trusts.
+  function eventRegistrationClosed(e) {
+    if (!e) return false;
+    if (isPastEvent(e)) return true;
+    return !!(e.registration_deadline && new Date(e.registration_deadline).getTime() < Date.now());
+  }
   // A going->going update on a full event stays enabled (COMM-214's
   // idempotence rule): only disable Going for someone who is not already
   // going.
@@ -15248,9 +15345,25 @@
     const e = state.posts.captionEdit;
     if (!e) return;
     const body = cleanPostBody(e.body);
+    // A TEXT-ONLY POST CANNOT BE EMPTIED. Live bug hunt, fresh round 3
+    // (2026-09-15): the save button stayed enabled on an emptied caption and
+    // fired the RPC anyway. The server refuses it ("a post needs text or at
+    // least one photo", 202609060007), so today the member only sees a failed
+    // round trip - but this repo's own history includes production running
+    // twenty migrations behind the code, and a guard that exists only in a
+    // migration is a guard that can be absent in production. Every sibling
+    // editor already checks locally: saveCommentEdit() refuses an empty
+    // comment, and the composer disables Publish for empty text with no
+    // photo. This is the one that did not.
+    const post = findFeedPost(e.postId);
+    const hasPhoto = !!(post && Array.isArray(post.media) && post.media.length);
+    if (!body && !hasPhoto) {
+      e.error = "אי אפשר לשמור פוסט ריק";
+      rerender();
+      return;
+    }
     const { error } = await client.rpc("post_edit_caption", { post_id: e.postId, body });
     if (error) { setMessage(failText("עריכת הכיתוב נכשלה", error)); return; }
-    const post = findFeedPost(e.postId);
     if (post) post.body = body;
     state.posts.captionEdit = null;
     setMessage("הכיתוב עודכן");
