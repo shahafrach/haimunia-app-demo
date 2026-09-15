@@ -1511,6 +1511,25 @@ export function createMockSupabase(seedTables = {}) {
             secUser = { id: found.userId, is_anonymous: false, email };
             return Promise.resolve({ data: { user: secUser }, error: null });
           },
+          // PASSWORD-ONLY, unlike the primary client's updateUser() above,
+          // which is the account-CREATION step (it attaches an email as well).
+          // A management account changing its own password is the only thing
+          // that calls this, and every credential row for that account has to
+          // move - the account may be reachable by more than one address (the
+          // head coach's synthetic one and a management alias, say), and
+          // leaving an old row behind would keep the previous password working
+          // through the other address.
+          updateUser: ({ password }) => {
+            if (!secUser) return Promise.resolve({ data: null, error: { message: "no session" } });
+            const mine = rows("__credentials").filter((c) => c.userId === secUser.id);
+            if (!mine.length) return Promise.resolve({ data: null, error: { message: "no credentials" } });
+            if (mine.every((c) => c.password === password)) {
+              // Real Supabase refuses a password identical to the current one.
+              return Promise.resolve({ data: null, error: { message: "New password should be different from the old password." } });
+            }
+            for (const c of mine) c.password = password;
+            return Promise.resolve({ data: { user: secUser }, error: null });
+          },
           signOut: () => { secUser = null; return Promise.resolve({ error: null }); },
           getSession: () => Promise.resolve({ data: { session: secUser ? { user: secUser } : null }, error: null }),
           onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }),

@@ -157,6 +157,40 @@ handing the phone to a member meant leaving the panel open. And since the app
 is signed in as one person while the panel acts as another, with every action
 recorded against the latter, the screen now says which is which.
 
+## Changing a management password
+
+From the session bar, in either panel: **שינוי סיסמה**. New password, typed
+twice, held to the same rule as every other password in the app (10+
+characters, upper, lower, digit — `passwordRuleError()`, which mirrors
+`supabase/config.toml`'s own minimum). The panel stays open afterwards:
+`updateUser()` refreshes the tokens the client already holds rather than
+invalidating them, and there is no reason to re-ask someone who just proved
+who they are.
+
+It lives on the session bar rather than inside either panel's areas because
+rotating your own credential is neither app administration nor club
+administration — it is this session's business, and the head coach needs it as
+much as the admin. The bar renders in both panels, so both get it from one
+place.
+
+It calls `updateUser` on **`mgmtClient`**. On `client` the same call would
+change the password of the member using the app, which is the worst thing this
+feature could do; a source-level test pins it independently of any fixture.
+
+Two routes existed before and both were bad, which is why this was built:
+
+- The roster's **איפוס סיסמה** works on any account including this one, but
+  `admin_reset_password` generates the password server-side and refuses to
+  accept one from the client by design. It rotates a credential to a random
+  string you then have to keep, not to one you will remember.
+- The **Supabase dashboard**, in a browser, outside the app.
+
+Neither is acceptable for the credential guarding real database authority: a
+password nobody can comfortably change is a password nobody changes. The
+dashboard remains the recovery path if a password is lost, since email
+delivery is permanently out of scope for this project and there is no "forgot
+password" flow.
+
 ## What is still the real boundary
 
 None of this is the security boundary. `is_admin()` in the database is, and it

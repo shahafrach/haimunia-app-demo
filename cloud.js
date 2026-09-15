@@ -439,6 +439,12 @@
       // state.permissions keeps answering about the member, which is what
       // every one of those call sites means.
       mgmt: null,
+      // The management account changing its OWN password, from inside the
+      // panel it has just authenticated into. Open/busy/error only - the
+      // typed password lives in the form and is never copied into state,
+      // which would put it in every subsequent render's closure for no
+      // reason.
+      mgmtPasswordOpen: false, mgmtPasswordBusy: false, mgmtPasswordError: "",
       auditLog: [], auditCursor: null, auditLoading: false, auditError: false, auditLoaded: false, auditEnd: false, auditFilters: {},
       // Fresh-eyes audit: admin_id -> {display_name,handle,avatar_url},
       // batched by loadAuditLog() so renderAuditLog() can name an actor
@@ -9837,6 +9843,92 @@
       <div class="footer-note" style="margin:12px 0 0;">${bidiText(`הכניסה לכאן לא משנה את החשבון שאיתו אתם מחוברים באפליקציה — האימונים שלכם נשארים בחשבון שלכם. הכניסה נשמרת ל-${ADMIN_UNLOCK_MINUTES} דקות, ומתאפסת בכל פתיחה מחדש של האפליקציה.`)}</div>
     </div>`;
   }
+  // A MANAGEMENT ACCOUNT CHANGES ITS OWN PASSWORD.
+  //
+  // The gap this closes, asked about directly: "How I change the password?"
+  // The answer was two bad options. The roster's איפוס סיסמה works on any
+  // account including this one, but admin_reset_password generates the
+  // password server-side and refuses to accept one from the client by design
+  // - so it rotates a credential to a random string you then have to keep,
+  // rather than to one you will remember. The alternative was the Supabase
+  // dashboard, in a browser, outside the app entirely.
+  //
+  // Neither is acceptable for the credential that now guards real database
+  // authority. A password nobody can comfortably change is a password nobody
+  // changes, and this one has to be rotatable on demand.
+  //
+  // It lives on the session bar rather than inside either panel's areas,
+  // because it is not app administration or club administration - it is this
+  // SESSION's own business, and the head coach needs it exactly as much as the
+  // admin does. The bar renders in both panels, so both get it from one place.
+  //
+  // Re-authentication is already done: nothing reaches this without having
+  // just typed this account's current password into the gate, which is the
+  // check a change-password form would otherwise have to make for itself.
+  function renderMgmtPasswordChange() {
+    const a = state.admin;
+    if (!a.mgmtPasswordOpen) return "";
+    return `<div class="chart-card" style="margin-bottom:12px;">
+      <div style="font-weight:800;font-size:15px;margin-bottom:4px;">שינוי הסיסמה של חשבון הניהול</div>
+      <div style="color:var(--steel);font-size:12px;line-height:1.6;margin-bottom:10px;">${bidiText(`הסיסמה של ${esc(a.mgmt && (a.mgmt.displayName || a.mgmt.email) || "")} תתחלף מיד. החשבון שאיתו אתם מחוברים באפליקציה לא מושפע.`)}</div>
+      <form id="mgmtPassword">
+        ${field("mgmtPassword", "password", "סיסמה חדשה", `<input class="text-input" name="password" type="password" dir="ltr" autocomplete="new-password" placeholder="${esc(PASSWORD_RULE_TEXT)}" required/>`)}
+        ${field("mgmtPassword", "passwordConfirm", "אימות סיסמה", `<input class="text-input" name="passwordConfirm" type="password" dir="ltr" autocomplete="new-password" placeholder="שוב, לאימות" required/>`)}
+        <div class="chip-row" style="margin-top:12px;">
+          <button class="save-btn" type="submit"${a.mgmtPasswordBusy ? " disabled" : ""} style="flex:1;">${a.mgmtPasswordBusy ? "שומרים…" : "שמירת הסיסמה"}</button>
+          <button class="chip-btn" type="button" data-community-action="mgmt-password-cancel">ביטול</button>
+        </div>
+      </form>
+      ${a.mgmtPasswordError ? `<div class="field-error" role="alert" style="margin-top:10px;">${esc(a.mgmtPasswordError)}</div>` : ""}
+      <div class="footer-note" style="margin:10px 0 0;">${bidiText("אם שמרתם את הסיסמה במנהל הסיסמאות של הטלפון, עדכנו אותה גם שם.")}</div>
+    </div>`;
+  }
+  async function mgmtChangePassword(form) {
+    if (!mgmtClient || !state.admin.mgmt) return;
+    const password = String(form.elements.password.value || "");
+    const confirm = String(form.elements.passwordConfirm.value || "");
+    // The same two validators every other password in this app goes through,
+    // so the rule is stated once and the management account is held to it
+    // rather than being a quiet exception. passwordRuleError() mirrors
+    // supabase/config.toml's own minimum, so a member gets this message
+    // instead of a raw Supabase rejection.
+    const errors = {};
+    const ruleError = passwordRuleError(password);
+    if (ruleError) errors.password = ruleError;
+    if (password !== confirm) errors.passwordConfirm = "הסיסמאות לא תואמות";
+    if (Object.keys(errors).length) { state.admin.mgmtPasswordError = ""; return setFieldErrors("mgmtPassword", errors); }
+
+    state.admin.mgmtPasswordBusy = true; state.admin.mgmtPasswordError = ""; rerender();
+    // On mgmtClient, so it changes the MANAGEMENT account's password. On
+    // `client` it would change the password of the member using the app -
+    // which is the single worst thing this feature could do, and the reason
+    // the two clients are never interchangeable.
+    let error = null;
+    try {
+      const r = await withCaptcha((captchaToken) =>
+        mgmtClient.auth.updateUser({ password }, captchaToken ? { captchaToken } : undefined));
+      error = r && r.error ? r.error : null;
+    } catch (e) { error = { message: "failed" }; }
+    state.admin.mgmtPasswordBusy = false;
+    if (error) {
+      // Supabase refuses a password identical to the current one, which is a
+      // real thing someone will do and deserves its own message rather than a
+      // generic failure they cannot act on.
+      state.admin.mgmtPasswordError = /same|different from the old/i.test(error.message || "")
+        ? "הסיסמה החדשה זהה לנוכחית. בחרו סיסמה אחרת."
+        : "שינוי הסיסמה נכשל, נסו שוב";
+      rerender();
+      return;
+    }
+    state.admin.mgmtPasswordOpen = false;
+    state.admin.mgmtPasswordError = "";
+    setFieldErrors("mgmtPassword", {});
+    // The panel stays open. updateUser() refreshes the tokens this client
+    // already holds rather than invalidating them, so there is no reason to
+    // make someone sign in again immediately after proving who they are.
+    setMessage("הסיסמה של חשבון הניהול הוחלפה");
+    rerender();
+  }
   async function panelUnlock(form) {
     if (!configured || !window.supabase) return;
     const panel = form.dataset.panel === "club" ? "club" : "admin";
@@ -19150,10 +19242,13 @@
     // difference between a lock people use and one they work around.
     const mgmtWho = state.admin.mgmt ? (state.admin.mgmt.displayName || state.admin.mgmt.email) : "";
     const mgmtBar = mgmtWho
-      ? `<div class="chart-card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;margin-bottom:12px;">
+      ? `<div class="chart-card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;margin-bottom:12px;flex-wrap:wrap;">
            <div style="color:var(--steel);font-size:12px;line-height:1.5;">${bidiText(`מנהלים כרגע כ-${mgmtWho}`)}</div>
-           <button class="chip-btn" data-community-action="panel-lock">נעילה</button>
-         </div>`
+           <div class="chip-row" style="margin:0;">
+             <button class="chip-btn" data-community-action="mgmt-password-open">שינוי סיסמה</button>
+             <button class="chip-btn" data-community-action="panel-lock">נעילה</button>
+           </div>
+         </div>${renderMgmtPasswordChange()}`
       : "";
     return `<h1 class="page-title" style="display:flex;align-items:center;justify-content:space-between;gap:10px;"><span>${esc(panelTitle)}</span>${renderNotificationBell()}</h1>`
       + mgmtBar
@@ -20114,6 +20209,8 @@
     // client with them, because the session is the thing being ended, not one
     // screen's view of it.
     else if (action === "panel-lock") { mgmtTeardown(); setMessage("ננעל"); rerender(); }
+    else if (action === "mgmt-password-open") { state.admin.mgmtPasswordOpen = true; state.admin.mgmtPasswordError = ""; setFieldErrors("mgmtPassword", {}); }
+    else if (action === "mgmt-password-cancel") { state.admin.mgmtPasswordOpen = false; state.admin.mgmtPasswordError = ""; setFieldErrors("mgmtPassword", {}); }
     // COMM-379 registration funnel analytics.
     else if (action === "registration-funnel-retry") loadRegistrationFunnel();
     // COMM-378 onboarding step content editor.
@@ -20465,6 +20562,7 @@
     else if (event.target.id === "communityInviteCode") { event.preventDefault(); redeemCode(event.target); }
     else if (event.target.id === "communityLogin") { event.preventDefault(); login(event.target); }
     else if (event.target.id === "panelUnlock") { event.preventDefault(); panelUnlock(event.target); }
+    else if (event.target.id === "mgmtPassword") { event.preventDefault(); mgmtChangePassword(event.target); }
     else if (event.target.id === "communityCredentials") { event.preventDefault(); setCredentials(event.target); }
     else if (event.target.id === "backupCredentials") { event.preventDefault(); setCredentials(event.target); }
     else if (event.target.dataset && event.target.dataset.commentPostId) {

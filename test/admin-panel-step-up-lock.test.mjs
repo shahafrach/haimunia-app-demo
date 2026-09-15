@@ -324,6 +324,134 @@ test("the window measures idle time, not total time", () => {
   assert.match(render, /mgmtTouch\(\);/, "every render of an open panel counts as activity");
 });
 
+// ===========================================================================
+// A management account changes its own password (2026-09-15)
+// ===========================================================================
+// "How I change the password?" - and the answer was two bad options. The
+// roster's איפוס סיסמה works on any account including this one, but the edge
+// function generates the password server-side and refuses to take one from
+// the client, so it rotates a credential to a random string you then have to
+// keep. The alternative was the Supabase dashboard, in a browser, outside the
+// app. Neither is acceptable for the credential that guards real database
+// authority: a password nobody can comfortably change is one nobody changes.
+
+async function unlockedAdminPanel(mock) {
+  const window = await bootCommunity(mock, { syncEnabled: false });
+  await openPanel(window, "tabManageBtn");
+  submitGate(window, MGMT_EMAIL, ADMIN_STEP_UP_PASSWORD);
+  await waitFor(() => !window.document.getElementById("panelUnlock"), 4000);
+  return window;
+}
+function submitNewPassword(window, pw, confirm) {
+  const form = window.document.getElementById("mgmtPassword");
+  form.elements.password.value = pw;
+  form.elements.passwordConfirm.value = confirm === undefined ? pw : confirm;
+  form.dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
+}
+
+test("the management account can change its own password from inside the panel", async () => {
+  const mock = separateIdentitiesMock();
+  const window = await unlockedAdminPanel(mock);
+  window.document.querySelector('[data-community-action="mgmt-password-open"]').click();
+  await waitFor(() => !!window.document.getElementById("mgmtPassword"), 4000);
+
+  submitNewPassword(window, "NewManage2026x");
+  await waitFor(() => !window.document.getElementById("mgmtPassword"), 4000);
+  assert.ok(window.document.getElementById("manageArea-bugs"),
+    "the panel stays open - no reason to re-ask someone who just proved who they are");
+
+  // The MANAGEMENT account's credential moved, and the member's did not. This
+  // pair is the whole point: on the member client the same call would have
+  // changed the password of the person using the app, which is the single
+  // worst thing this feature could do.
+  const creds = mock.db.__credentials;
+  assert.equal(creds.find((c) => c.email === MGMT_EMAIL).password, "NewManage2026x",
+    "the management account's password is the new one");
+  assert.equal(creds.find((c) => c.email === MEMBER_EMAIL).password, ADMIN_STEP_UP_PASSWORD,
+    "and the member's is untouched");
+  assert.equal(mock.getUser().id, "member-1", "as is their session");
+});
+
+test("the new password is the one that works afterwards, and the old one stops", async () => {
+  const mock = separateIdentitiesMock();
+  const window = await unlockedAdminPanel(mock);
+  window.document.querySelector('[data-community-action="mgmt-password-open"]').click();
+  await waitFor(() => !!window.document.getElementById("mgmtPassword"), 4000);
+  submitNewPassword(window, "NewManage2026x");
+  await waitFor(() => !window.document.getElementById("mgmtPassword"), 4000);
+
+  window.document.querySelector('[data-community-action="panel-lock"]').click();
+  await waitFor(() => !!window.document.getElementById("panelUnlock"), 4000);
+  submitGate(window, MGMT_EMAIL, ADMIN_STEP_UP_PASSWORD);
+  await waitFor(() => /שם המשתמש או הסיסמה שגויים/.test(window.document.body.textContent), 4000);
+  assert.ok(window.document.getElementById("panelUnlock"), "the old password no longer opens it");
+
+  submitGate(window, MGMT_EMAIL, "NewManage2026x");
+  await waitFor(() => !window.document.getElementById("panelUnlock"), 4000);
+  assert.ok(window.document.getElementById("manageArea-bugs"), "the new one does");
+});
+
+test("it is held to the same password rule as every other password in the app", async () => {
+  const mock = separateIdentitiesMock();
+  const window = await unlockedAdminPanel(mock);
+  window.document.querySelector('[data-community-action="mgmt-password-open"]').click();
+  await waitFor(() => !!window.document.getElementById("mgmtPassword"), 4000);
+
+  // Too short, and no uppercase/digit. The management account is not a quiet
+  // exception to the rule the rest of the app states.
+  submitNewPassword(window, "short");
+  await waitFor(() => /הסיסמה קצרה מדי/.test(window.document.body.textContent), 4000);
+  assert.ok(window.document.getElementById("mgmtPassword"), "the form stays up");
+  assert.equal(mock.db.__credentials.find((c) => c.email === MGMT_EMAIL).password, ADMIN_STEP_UP_PASSWORD,
+    "and nothing was changed");
+
+  // Mistyped confirmation - caught before anything is sent.
+  submitNewPassword(window, "NewManage2026x", "NewManage2026y");
+  await waitFor(() => /הסיסמאות לא תואמות/.test(window.document.body.textContent), 4000);
+  assert.equal(mock.db.__credentials.find((c) => c.email === MGMT_EMAIL).password, ADMIN_STEP_UP_PASSWORD,
+    "still unchanged");
+});
+
+test("reusing the current password says so, rather than failing vaguely", async () => {
+  // Supabase refuses a password identical to the current one. Someone will do
+  // this, and a generic "failed" leaves them with nothing to act on.
+  const mock = separateIdentitiesMock();
+  const window = await unlockedAdminPanel(mock);
+  window.document.querySelector('[data-community-action="mgmt-password-open"]').click();
+  await waitFor(() => !!window.document.getElementById("mgmtPassword"), 4000);
+  submitNewPassword(window, ADMIN_STEP_UP_PASSWORD);
+  await waitFor(() => /זהה לנוכחית/.test(window.document.body.textContent), 4000);
+  assert.ok(window.document.getElementById("mgmtPassword"), "the form stays up to try again");
+});
+
+test("the head coach gets it too - it is the session's business, not the admin's", async () => {
+  // It sits on the session bar rather than inside either panel's areas,
+  // because rotating your own credential is not app administration or club
+  // administration. The head coach needs it exactly as much.
+  const mock = separateIdentitiesMock({ mgmtRole: "head_coach", mgmtIsAdmin: false });
+  const window = await bootCommunity(mock, { syncEnabled: false });
+  await openPanel(window, "tabClubManageBtn");
+  submitGate(window, MGMT_EMAIL, ADMIN_STEP_UP_PASSWORD);
+  await waitFor(() => !window.document.getElementById("panelUnlock"), 4000);
+  assert.ok(window.document.querySelector('[data-community-action="mgmt-password-open"]'),
+    "the club panel offers it as well");
+});
+
+test("the change never runs on the member's client", () => {
+  // Source-level, because the consequence is bad enough to be worth pinning
+  // independently of what any fixture happens to exercise: on `client` this
+  // would change the password of the person using the app.
+  const at = cloudJs.indexOf("async function mgmtChangePassword");
+  assert.ok(at > -1);
+  const body = cloudJs.slice(at, cloudJs.indexOf("\n  async function panelUnlock", at));
+  assert.match(body, /mgmtClient\.auth\.updateUser/, "it updates the MANAGEMENT account");
+  const code = body.split("\n").filter((l) => !/^\s*\/\//.test(l)).join("\n");
+  assert.ok(!/(?<!mgmt)(?<!\w)client\.auth/.test(code),
+    "and never touches the member client's auth");
+  assert.match(body, /if \(!mgmtClient \|\| !state\.admin\.mgmt\) return;/,
+    "and refuses outright without a management session");
+});
+
 test("the management session is memory-only and dies with the member's", () => {
   // Persisting it would defeat what it exists for: this guards an already
   // unlocked phone, and a management session that survived a reload would
