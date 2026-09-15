@@ -26,9 +26,49 @@ test("login() signs in with the synthetic email + typed password, and does not c
   assert.match(src, /async function login\(form\)/);
   // Wrapped in withCaptcha() (SEC-004): the credentials object is built the
   // same way and merged with { options: { captchaToken } } only when a site
-  // key is configured. Still the synthetic-email password grant, still no
-  // new session type.
-  assert.match(src, /client\.auth\.signInWithPassword\(Object\.assign\(\s*\n\s*\{ email: usernameToEmail\(username\), password \},/);
+  // key is configured. Still a password grant, still no new session type.
+  //
+  // WIDENED 2026-09-15. This used to pin the literal expression
+  // `{ email: usernameToEmail(username), password }`. login() now accepts a
+  // real email as well as a username, so the email argument is a conditional
+  // - but the two properties this test is actually about are unchanged and
+  // are what it now asserts: a USERNAME still resolves through
+  // usernameToEmail() (no real address is invented or collected for an
+  // ordinary member), and the call is still signInWithPassword.
+  assert.match(src, /client\.auth\.signInWithPassword\(Object\.assign\(/);
+  assert.match(src, /looksLikeEmail \? identifier : usernameToEmail\(identifier\)/);
+  // And nothing in login() reaches for a different session type.
+  const loginBody = src.slice(src.indexOf("async function login(form)"), src.indexOf("async function setCredentials(form)"));
+  assert.ok(!/signInAnonymously|signInWithOtp|signInWithOAuth/.test(loginBody),
+    "login() must stay a password grant - no other session type may appear in it");
+});
+
+test("a real email is accepted at login, so the one account that must be recoverable without another admin can be", () => {
+  // The club's own admin account is created with a real address precisely so
+  // Supabase's own password-reset mail works for it - "ask an admin to reset
+  // it" has no answer when the locked-out person IS the only admin. That
+  // account's email is not derivable from any username, so login has to
+  // accept it verbatim.
+  assert.match(src, /const looksLikeEmail = identifier\.includes\("@"\);/);
+  // Deliberately NOT a validating regex: the server is the authority on
+  // whether an address exists, and a stricter client test could only ever
+  // lock someone out of their own account over a technicality.
+  const loginBody = src.slice(src.indexOf("async function login(form)"), src.indexOf("async function setCredentials(form)"));
+  assert.ok(!/\[a-z\]\+@|EMAIL_RE|isValidEmail/.test(loginBody),
+    "login() must not second-guess the server on what a valid address looks like");
+});
+
+test("account CREATION stays username-only - accepting an email to log in did not start collecting them", () => {
+  // The whole point of the .invalid domain is that this club holds no email
+  // addresses for ordinary members. login() widening must not have leaked
+  // into setCredentials(), which is where an ordinary account is minted.
+  const start = src.indexOf("async function setCredentials(form)");
+  // +1 so indexOf does not match setCredentials' own declaration at offset 0.
+  const body = src.slice(start, src.indexOf("async function", start + 1));
+  assert.match(body, /usernameToEmail\(username\)/,
+    "signup still maps a username onto the synthetic domain");
+  assert.ok(!/includes\("@"\)/.test(body),
+    "and signup does NOT accept a real address - that path is deliberately not offered to members");
 });
 
 test("setCredentials() upgrades the anonymous session in place via updateUser, and refreshes state.user from the result", () => {

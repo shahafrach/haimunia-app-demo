@@ -15,7 +15,7 @@ let barWeight = 20;
 // Single source of truth for the app version. After bumping this, run
 // `npm run sync-version` to copy it into SW_VERSION in sw.js — `npm test`
 // fails if the two drift apart.
-const APP_VERSION = "4.39.0";
+const APP_VERSION = "4.40.0";
 
 // A movement typed into the WOD builder that isn't in the built-in list
 // above - persisted (see WODTAGSTORE), same "custom X" pattern as
@@ -344,6 +344,42 @@ function photoHeaderHtml(assetPath, altText, opts) {
 // here on purpose - firing one before state.ui.tab is updated would just
 // be a wasted extra render.
 window.switchToCommunityTopTab = function () { tab = "community"; };
+// The staff section of the hamburger (2026-09-15).
+//
+// WHY IT HAS TO EXIST SEPARATELY. renderNavMenuList() renders
+// renderNavRows(true, true) - onlyOther=true - which by design lists only the
+// items that are NOT in the bottom tab bar. "ניהול" is main:true, so on a
+// phone it appeared in the bottom bar and NOWHERE in the hamburger, which is
+// where a manager looks for management. The desktop sidebar already shows
+// every item (onlyOther=false), so this is a mobile-only gap and these rows
+// are deliberately not added there - they would be a second copy of a row
+// already on screen.
+//
+// Two destinations, not one, because they answer different questions and are
+// owned by different people: "ניהול" is the admin panel (invites, roster,
+// moderation, bug reports, audit, analytics), and "לוח מאמנים" is the coach's
+// own daily board. Both are gated by the same communityIsStaff() the tab
+// itself uses - this is navigation, and the real boundary is enforced by
+// is_staff()/is_admin() in the database on every action either screen offers.
+function renderNavStaffRows() {
+  if (typeof window.communityIsStaff !== "function" || !window.communityIsStaff()) return "";
+  const badge = typeof window.communityPendingModerationCount === "function" ? window.communityPendingModerationCount() : 0;
+  const coachRow = (typeof window.communityCoachBoardEnabled === "function" && window.communityCoachBoardEnabled())
+    ? `<button class="navrow" data-action="open-coach-board">
+        <span class="icon-chip icon-chip-teal">${ICONS.communityIcon}</span>
+        <span class="nav-label">לוח מאמנים</span>
+        <span style="transform:scaleX(-1); display:inline-flex; color:var(--steel);" aria-hidden="true">${ICONS.chevron}</span>
+      </button>` : "";
+  return `
+    <div class="divider-label">ניהול המועדון</div>
+    <button class="navrow" data-action="open-manage">
+      <span class="icon-chip icon-chip-steel">${ICONS.manageTabIcon}</span>
+      <span class="nav-label">ניהול</span>
+      ${badge ? `<span class="tab-badge" aria-hidden="true">${badge}</span>` : ""}
+      <span style="transform:scaleX(-1); display:inline-flex; color:var(--steel);" aria-hidden="true">${ICONS.chevron}</span>
+    </button>
+    ${coachRow}`;
+}
 function renderNavSettingsRow() {
   // Fresh-eyes audit: on the desktop sidebar (renderDesktopSidebar below)
   // this section header renders in the same persistent column as
@@ -368,7 +404,7 @@ function renderNavMenuList() {
   // link + a full screen of empty navy below it - not a bug, but not a
   // finished screen either. A footer line gives the space a reason to be
   // there without inventing a duplicate action Settings already owns.
-  return renderNavWho() + `<div class="nav-destinations" role="tablist" aria-label="מסכים נוספים">${renderNavRows(true, true)}</div>` + renderNavSettingsRow()
+  return renderNavWho() + `<div class="nav-destinations" role="tablist" aria-label="מסכים נוספים">${renderNavRows(true, true)}</div>` + renderNavStaffRows() + renderNavSettingsRow()
     + `<div class="footer-note" style="text-align:center; margin-top:auto; padding-top:24px;">האימוניה · v${APP_VERSION}</div>`;
 }
 // Desktop / wide-viewport sidebar (Phase 4) - same registry, same rows,
@@ -1608,6 +1644,21 @@ function supportDiagnostics() {
     `דפדפן: ${typeof navigator !== "undefined" ? String(navigator.userAgent || "").slice(0, 160) : "לא ידוע"}`,
   ].join("\n");
 }
+// The same facts supportDiagnostics() renders, as an object, for the database
+// column. Kept deliberately separate from the rendered string rather than
+// parsed back out of it: the screen text is for a human and may be reworded,
+// the payload is a schema and must not change when the wording does.
+function supportDiagnosticsPayload() {
+  const online = typeof navigator !== "undefined" && "onLine" in navigator ? !!navigator.onLine : null;
+  const community = (typeof window !== "undefined" && typeof window.cloudSyncActive === "function" && window.cloudSyncActive());
+  return {
+    version: APP_VERSION,
+    standalone: isStandalone(),
+    online: online,
+    community: !!community,
+    ua: typeof navigator !== "undefined" ? String(navigator.userAgent || "").slice(0, 160) : "",
+  };
+}
 function supportReportText() {
   const typed = (document.getElementById("supportMessage") || {}).value || "";
   return `דיווח על תקלה — האימוניה\n\n${typed.trim() || "(לא נכתב תיאור)"}\n\n--- פרטים טכניים ---\n${supportDiagnostics()}`;
@@ -1618,7 +1669,13 @@ function renderSupportContent() {
   // report and copies it, which is strictly better than a screen that says
   // "contact support" and offers no way to.
   const routes = [];
-  if (cfg.whatsapp) routes.push(`<button class="chip-btn primary" data-action="support-send-whatsapp">שליחה בוואטסאפ</button>`);
+  // Only offered when Community is actually live for this member - an
+  // offline-only member has no club inbox to send to, and a button that
+  // cannot work must not be on screen (the same rule the disabled-control
+  // fixes earlier today were about).
+  const clubInbox = typeof window.cloudSyncActive === "function" && window.cloudSyncActive();
+  if (clubInbox) routes.push(`<button class="chip-btn primary" data-action="support-send-club">שליחה לצוות המועדון</button>`);
+  if (cfg.whatsapp) routes.push(`<button class="chip-btn${clubInbox ? "" : " primary"}" data-action="support-send-whatsapp">שליחה בוואטסאפ</button>`);
   if (cfg.email) routes.push(`<button class="chip-btn" data-action="support-send-email">שליחה במייל</button>`);
   routes.push(`<button class="chip-btn" data-action="support-copy">העתקת הדיווח</button>`);
   return `
@@ -1665,6 +1722,32 @@ function supportHandoff(url, failText) {
     const w = window.open(url, "_blank");
     if (!w) supportNote(failText);
   } catch (e) { supportNote(failText); }
+}
+// Tries the club's own inbox FIRST, then falls back to the handoff. Order
+// matters and is the opposite of what it looks like: the handoff is the
+// reliable path (it needs nothing but the device), and the inbox is the
+// USEFUL one (status, history, a second admin who can see it was handled).
+// So the useful path is attempted while it can be, and the reliable one
+// catches everything else - an offline member, Community switched off, a
+// broken session, a failed write. It never reports success it did not get:
+// communitySubmitBugReport returns true only on a confirmed server write.
+async function supportSubmitToClub() {
+  if (typeof window.communitySubmitBugReport !== "function") return false;
+  const typed = (document.getElementById("supportMessage") || {}).value || "";
+  if (!typed.trim()) return false;
+  try { return await window.communitySubmitBugReport(typed.trim(), supportDiagnosticsPayload()); }
+  catch (e) { return false; }
+}
+async function supportSendToClub() {
+  supportNote("שולח…");
+  const ok = await supportSubmitToClub();
+  if (ok) {
+    const field = document.getElementById("supportMessage");
+    if (field) field.value = "";
+    supportNote("הדיווח נשלח לצוות המועדון. תודה! אפשר לעקוב אחרי הסטטוס שלו מול הצוות.");
+    return;
+  }
+  supportNote("לא הצלחנו לשלוח לצוות כרגע. אפשר לשלוח את הדיווח בוואטסאפ, במייל, או להעתיק אותו.");
 }
 function supportSendWhatsApp() {
   const cfg = supportConfig();
@@ -7128,8 +7211,19 @@ document.addEventListener("click", (e) => {
   // tapping it to read the changelog must not land in Community's
   // notification center just because they happen to have unread there.
   else if (action === "open-release-notes") { openNotifications(); }
+  // Same three steps the "switch-tab" branch below performs, rather than a
+  // second tab-switching mechanism: set `tab`, close the menu, rerender at
+  // the top. Written out because these two rows carry an extra action
+  // afterwards and are not plain destinations.
+  else if (action === "open-manage") { tab = "manage"; closeNavMenu(); render(); window.scrollTo(0, 0); }
+  else if (action === "open-coach-board") {
+    tab = "community"; closeNavMenu();
+    if (typeof window.communityOpenCoachBoard === "function") window.communityOpenCoachBoard();
+    render(); window.scrollTo(0, 0);
+  }
   else if (action === "open-support") { openSupport(); }
   else if (action === "close-support") { closeSupport(); }
+  else if (action === "support-send-club") { supportSendToClub(); }
   else if (action === "support-send-whatsapp") { supportSendWhatsApp(); }
   else if (action === "support-send-email") { supportSendEmail(); }
   else if (action === "support-copy") { supportCopyReport(); }

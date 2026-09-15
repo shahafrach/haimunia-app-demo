@@ -337,6 +337,12 @@
       // invites.created/inviteCodes.created above: { userId, tempPassword }
       // shown once, cleared by close-password-reset-result.
       passwordResetResult: null,
+      // Bug reports inbox (2026-09-15). Same lazy-load shape as modQueue
+      // above: loaded the first time the area is opened, never on boot -
+      // this is a rarely-read admin surface and paying for it on every
+      // Community load would be a real cost for every member who is not
+      // staff at all.
+      bugs: [], bugsStatus: "open", bugsLoading: false, bugsError: false, bugsLoaded: false, bugsSaving: "",
       auditLog: [], auditCursor: null, auditLoading: false, auditError: false, auditLoaded: false, auditEnd: false, auditFilters: {},
       // Fresh-eyes audit: admin_id -> {display_name,handle,avatar_url},
       // batched by loadAuditLog() so renderAuditLog() can name an actor
@@ -6856,6 +6862,11 @@
   // ("הקוד לא נוגע לרישום האימונים עצמו — הוא רק פותח את לשונית הקהילה"), and
   // each screen names the other name so neither reads as a duplicate.
   const LOGIN_NAME_LABEL = "שם לכניסה";
+  // The login field accepts an email too (see login()), and a field that
+  // silently accepts something its own label denies is a field people do not
+  // try. Only the LOGIN label says so - account CREATION still mints a
+  // username-only account, so the signup form keeps LOGIN_NAME_LABEL.
+  const LOGIN_IDENTIFIER_LABEL = "שם לכניסה או אימייל";
   const CLUB_NAME_LABEL = "השם שרואים במועדון";
   const CREDENTIALS_INTRO_TEXT = "שם וסיסמה לכניסה — כדי שתוכלו להיכנס לחשבון שוב מכל מכשיר. שם הכניסה הוא רק בשבילכם ואף אחד במועדון לא רואה אותו; את השם שחברי המועדון כן יראו בוחרים בשלב הבא, והוא יכול להיות אחר לגמרי.";
   const CLUB_NAME_HINT_TEXT = "זה השם שחברי המועדון יראו לידכם בפיד ובלוחות. הוא לא שם הכניסה לחשבון, ואפשר לכתוב אותו בעברית.";
@@ -7183,15 +7194,34 @@
   // anonymous-only sign-in structurally couldn't offer.
   async function login(form) {
     if (!client) return;
-    const username = String(form.elements.username.value || "").trim().toLowerCase();
+    const identifier = String(form.elements.username.value || "").trim().toLowerCase();
     const password = String(form.elements.password.value || "");
     const errors = {};
-    if (!USERNAME_RE.test(username)) errors.username = "שם הכניסה לא תקין";
+    // A REAL email address is accepted here as well as a username (2026-09-15).
+    //
+    // Every ordinary member's account is username-only: usernameToEmail()
+    // maps it onto <name>@members.haimuniya.invalid, a deliberately
+    // non-routable domain, which is what lets this club run with no email
+    // collection at all. That is unchanged and stays the default.
+    //
+    // The exception is an account that genuinely needs to be RECOVERABLE
+    // without another admin - the club's own owner/admin account most of all,
+    // because "an admin resets it for you" has no answer when the locked-out
+    // person IS the only admin. Such an account is created with a real
+    // address as its auth email, which makes Supabase's own password-reset
+    // mail work; this branch is what lets it sign in, since its email is not
+    // derivable from any username. Detection is deliberately just "contains
+    // @" rather than a validating regex: the server is the authority on
+    // whether an address exists, and a stricter client-side test could only
+    // ever lock someone out of their own account over a technicality.
+    const looksLikeEmail = identifier.includes("@");
+    if (!identifier) errors.username = "יש להזין שם כניסה או אימייל";
+    else if (!looksLikeEmail && !USERNAME_RE.test(identifier)) errors.username = "שם הכניסה לא תקין";
     if (!password) errors.password = "יש להזין סיסמה";
     if (Object.keys(errors).length) return setFieldErrors("communityLogin", errors);
     const { error } = await withCaptcha((captchaToken) =>
       client.auth.signInWithPassword(Object.assign(
-        { email: usernameToEmail(username), password },
+        { email: looksLikeEmail ? identifier : usernameToEmail(identifier), password },
         captchaToken ? { options: { captchaToken } } : {},
       )));
     if (error) {
@@ -9470,6 +9500,91 @@
     const p = state.admin.auditAdminProfiles[adminId];
     if (p) return (p.display_name || (p.handle ? "@" + p.handle : "")) || `מנהל/ת ${String(adminId || "").slice(0, 8)}`;
     return `מנהל/ת ${String(adminId || "").slice(0, 8)}`;
+  }
+  // =====================================================================
+  // Bug reports inbox (202609150002)
+  // =====================================================================
+  // The collection half of the support feature. app.js's openSupport() still
+  // composes a report locally and hands it to WhatsApp/mail - that path must
+  // never depend on a working session, because reporting a bug is exactly
+  // when the session may be what is broken - but when Community IS available
+  // the report is also filed here, so it gets a status, a history, and a
+  // second admin who can see it was handled.
+  const BUG_STATUS_LABELS = Object.freeze({
+    open: "פתוח", in_progress: "בטיפול", resolved: "טופל", wont_fix: "לא יטופל",
+  });
+  // Opened by default only while something is actually waiting, matching how
+  // the moderation area above it behaves. An empty inbox should not push the
+  // audit log down the screen every time an admin opens this tab.
+  function openBugReportsByDefault() {
+    return !!(state.admin.bugsLoaded && state.admin.bugs.some((b) => b.status === "open"));
+  }
+  async function loadBugReports(force) {
+    if (!state.user || !isStaff()) return;
+    if (state.admin.bugsLoading) return;
+    if (state.admin.bugsLoaded && !force) return;
+    state.admin.bugsLoading = true; state.admin.bugsError = false; rerender();
+    const { data, error } = await client.rpc("bug_report_list_all", {
+      p_status: state.admin.bugsStatus === "all" ? null : state.admin.bugsStatus,
+      p_limit: 100,
+    });
+    state.admin.bugsLoading = false;
+    if (error) { state.admin.bugsError = true; rerender(); return; }
+    state.admin.bugs = data || [];
+    state.admin.bugsLoaded = true;
+    rerender();
+  }
+  async function setBugReportStatus(id, status) {
+    if (!state.user || !isAdmin()) return;
+    state.admin.bugsSaving = id; rerender();
+    const { error } = await client.rpc("bug_report_set_status", { p_id: id, p_status: status, p_note: null });
+    state.admin.bugsSaving = "";
+    if (error) { setMessage(failText("עדכון הדיווח נכשל", error)); rerender(); return; }
+    await loadBugReports(true);
+  }
+  // The device block the member already saw before sending. Rendered as
+  // plain labelled lines rather than raw JSON: an admin reading this is
+  // triaging, not debugging a payload.
+  function bugDiagnosticsHtml(d) {
+    if (!d || typeof d !== "object") return "";
+    const rows = Object.keys(d).map((k) => `${k}: ${String(d[k])}`);
+    if (!rows.length) return "";
+    return `<pre class="mono" style="white-space:pre-wrap;word-break:break-word;font-size:11px;color:var(--steel);margin:6px 0 0;">${esc(rows.join("\n"))}</pre>`;
+  }
+  function renderBugReports() {
+    if (!isStaff()) return `<div class="empty">אין לך הרשאה לצפות בדיווחי תקלות.</div>`;
+    const a = state.admin;
+    const filters = ["open", "in_progress", "resolved", "wont_fix", "all"].map((st) =>
+      `<button class="chip-btn${a.bugsStatus === st ? " selected" : ""}" data-community-action="bugs-filter" data-status="${esc(st)}">${esc(st === "all" ? "הכול" : BUG_STATUS_LABELS[st])}</button>`).join("");
+    let body;
+    if (a.bugsLoading && !a.bugsLoaded) body = `<div class="empty">טוען דיווחים…</div>`;
+    else if (a.bugsError) body = `<div class="empty">לא ניתן לטעון דיווחים.<div class="chip-row" style="justify-content:center;"><button class="chip-btn primary" data-community-action="bugs-retry">ניסיון חוזר</button></div></div>`;
+    else if (!a.bugsLoaded) body = `<div class="empty"><button class="chip-btn primary" data-community-action="bugs-retry">טעינת דיווחים</button></div>`;
+    else if (!a.bugs.length) body = `<div class="empty">${a.bugsStatus === "open" ? "אין דיווחים פתוחים." : "אין דיווחים בסטטוס הזה."}</div>`;
+    else body = a.bugs.map((b) => {
+      const who = b.reporter_display_name || b.reporter_handle || "חבר/ה שהחשבון שלו/ה נמחק";
+      const saving = a.bugsSaving === b.id;
+      // Only an admin may act; a coach reads. Mirrors the server, which
+      // gates the read on is_staff() and the write on is_admin().
+      const actions = isAdmin() ? `<div class="chip-row" style="margin-top:8px;">${
+        ["open", "in_progress", "resolved", "wont_fix"].filter((st) => st !== b.status).map((st) =>
+          `<button class="chip-btn${st === "resolved" ? " primary" : ""}"${saving ? " disabled" : ""} data-community-action="bugs-set-status" data-id="${esc(b.id)}" data-status="${esc(st)}">${esc(BUG_STATUS_LABELS[st])}</button>`).join("")
+      }</div>` : "";
+      return `<div class="chart-card" style="margin-bottom:10px;" data-bug-report-id="${esc(b.id)}">
+        <div class="flex" style="justify-content:space-between;align-items:flex-start;gap:10px;">
+          <div style="min-width:0;">
+            <div style="font-weight:800;">${bidiText(who)}</div>
+            <div style="color:var(--steel);font-size:12px;margin-top:2px;">${esc(shortHebDate(b.created_at))}</div>
+          </div>
+          <span class="admin-tag"${b.status === "open" ? ` style="background:rgba(194,57,44,.12);border-color:var(--red);color:var(--red-text);"` : ""}>${esc(BUG_STATUS_LABELS[b.status] || b.status)}</span>
+        </div>
+        <div style="margin-top:8px;white-space:pre-wrap;word-break:break-word;">${bidiText(b.body || "")}</div>
+        ${bugDiagnosticsHtml(b.diagnostics)}
+        ${b.admin_note ? `<div class="footer-note" style="margin:8px 0 0;">${bidiText(`הערה פנימית: ${b.admin_note}`)}</div>` : ""}
+        ${actions}
+      </div>`;
+    }).join("");
+    return `<div class="chip-row" style="margin:0 0 10px;">${filters}</div>${body}`;
   }
   function renderAuditLog() {
     if (!hasPerm(PERM.ANALYTICS_VIEW)) return "";
@@ -17596,7 +17711,7 @@
           <button class="gate-back" data-community-action="gate-back">‹ חזרה</button>
           <div style="font-weight:800;font-size:20px;margin:6px 0 8px;">התחברות לקהילה</div>
           <div style="color:var(--steel);font-size:14px;line-height:1.6;margin-bottom:14px;">${bidiText("התחברות מחזירה את הפרופיל שלך, את מי שאת/ה עוקב/ת אחריו ואת ההיסטוריה בקהילה — גם במכשיר חדש.")}</div>
-          <form id="communityLogin">${field("communityLogin", "username", LOGIN_NAME_LABEL, `<input class="text-input" name="username" dir="ltr" autocapitalize="off" autocomplete="username" placeholder="${esc(LOGIN_NAME_LABEL)}" required/>`)}${field("communityLogin", "password", "סיסמה", `<input class="text-input" name="password" type="password" dir="ltr" autocomplete="current-password" placeholder="סיסמה" required/>`)}<button class="save-btn" type="submit" style="margin-top:12px;">התחברות</button></form>
+          <form id="communityLogin">${field("communityLogin", "username", LOGIN_IDENTIFIER_LABEL, `<input class="text-input" name="username" dir="ltr" autocapitalize="off" autocomplete="username" placeholder="${esc(LOGIN_IDENTIFIER_LABEL)}" required/>`)}${field("communityLogin", "password", "סיסמה", `<input class="text-input" name="password" type="password" dir="ltr" autocomplete="current-password" placeholder="סיסמה" required/>`)}<button class="save-btn" type="submit" style="margin-top:12px;">התחברות</button></form>
           ${state.ui.message ? `<div class="footer-note" role="status" style="margin-top:10px;color:var(--brass);">${esc(state.ui.message)}</div>` : ""}
         </div>`;
       }
@@ -18321,6 +18436,19 @@
   // jump row, so it must stay the old wording, not the new heading.
   const MANAGE_ADMIN_AREAS = [
     { id: "manageArea-moderation", label: "מודרציה" },
+    // Second, directly under moderation, because it is the other "someone is
+    // waiting for a human" queue on this screen and the two are read in the
+    // same sitting. Before the audit log, which is a record rather than a
+    // queue (2026-09-15).
+    //
+    // notInJumpRow: the jump row below exists for ONE reason - a manager who
+    // remembers where something lived when these were seven sub-tabs. This
+    // area was never a sub-tab, so nobody is looking for it under an old
+    // name, and adding it would dilute the row into a generic table of
+    // contents (which is what the <details> headings already are). It is
+    // discoverable instead by opening itself whenever a report is waiting -
+    // see openBugReportsByDefault().
+    { id: "manageArea-bugs", label: "דיווחי תקלות", notInJumpRow: true },
     { id: "manageArea-audit", label: "יומן פעולות" },
     { id: "manageArea-settings", label: "הגדרות" },
     { id: "manageArea-analytics", label: "אנליטיקס" },
@@ -18434,9 +18562,10 @@
     //
     // renderAdminAnalyticsDashboard() still includes renderRegistrationFunnel()
     // nested inside itself (see that function's own comment).
-    const [areaModeration, areaAudit, areaSettings, areaAnalytics, areaOnboarding] = MANAGE_ADMIN_AREAS;
+    const [areaModeration, areaBugs, areaAudit, areaSettings, areaAnalytics, areaOnboarding] = MANAGE_ADMIN_AREAS;
     const adminAreas = [
       manageAdminArea(areaModeration, renderRestrictionsPanel() + renderModeration(), true),
+      manageAdminArea(areaBugs, renderBugReports(), openBugReportsByDefault()),
       manageAdminArea(areaAudit, renderAuditLog()),
       manageAdminArea(areaSettings, renderClubModulesPanel() || `<div class="empty">אין לך הרשאה לצפות בהגדרות המודולים.</div>`),
       manageAdminArea(areaAnalytics, (renderAdminAnalyticsDashboard() + renderRetentionCorrelations()) || `<div class="empty">אין לך הרשאה לצפות באנליטיקס.</div>`),
@@ -18446,7 +18575,7 @@
     // scrolls to the section. Every button here is a real destination - the
     // areas are unconditionally in the DOM above, including the two
     // permission notices, so none of these can scroll to nothing.
-    const adminJumpRow = `<div class="chip-row" data-manage-jump-row="1" style="margin:0 0 12px;">${MANAGE_ADMIN_AREAS.map((a) =>
+    const adminJumpRow = `<div class="chip-row" data-manage-jump-row="1" style="margin:0 0 12px;">${MANAGE_ADMIN_AREAS.filter((a) => !a.notInJumpRow).map((a) =>
       `<button class="chip-btn" data-community-action="set-manage-tab" data-tab="moderation" data-scroll="${esc(a.id)}">${esc(a.label)}</button>`).join("")}</div>`;
 
     const manageTabs = [
@@ -18523,6 +18652,32 @@
   // app.js's stale-backup-export reminder (renderSettingsBody) reads this to
   // pick its threshold: someone already covered by automatic cloud sync
   // needs the local-export nudge far less urgently than someone who is not.
+  // app.js's support sheet files its report here when Community is available.
+  // Returns true only on a confirmed server write, so app.js can fall back to
+  // the WhatsApp/mail handoff on ANY failure rather than telling a member
+  // their report was received when it was not (2026-09-15).
+  window.communitySubmitBugReport = async function (body, diagnostics) {
+    if (!client || !state.user || !state.syncEnabled) return false;
+    try {
+      const { error } = await client.rpc("bug_report_submit", {
+        p_body: String(body || ""),
+        p_diagnostics: diagnostics && typeof diagnostics === "object" ? diagnostics : {},
+      });
+      return !error;
+    } catch (e) { return false; }
+  };
+  // app.js's hamburger staff section (2026-09-15). Two facts it cannot derive
+  // itself: whether the coach board exists for this member at all (staff AND
+  // the coach_tools module switched on - the same pair renderCommunityApp()
+  // uses to decide whether to build the tab), and how to land on it.
+  window.communityCoachBoardEnabled = function () {
+    return !!(state.user && isStaff() && isModuleEnabled("coach_tools"));
+  };
+  window.communityOpenCoachBoard = function () {
+    if (!window.communityCoachBoardEnabled()) return false;
+    setCommunityTab("coach");
+    return true;
+  };
   window.cloudSyncActive = function () { return !!(state.user && state.syncEnabled); };
   window.cloudStorageStatusText = function () {
     if (!configured) return "נשמר במכשיר הזה בלבד, ללא שרת";
@@ -19530,6 +19685,9 @@
     else if (action === "notif-load-more") loadMoreNotifs();
     else if (action === "notif-show-older") notifShowOlder();
     else if (action === "notif-mark-all") markAllNotifsRead();
+    else if (action === "bugs-retry") loadBugReports(true);
+    else if (action === "bugs-filter") { state.admin.bugsStatus = el.dataset.status || "open"; state.admin.bugsLoaded = false; loadBugReports(true); }
+    else if (action === "bugs-set-status") setBugReportStatus(el.dataset.id, el.dataset.status);
     else if (action === "notif-open") openNotif(el.dataset.id);
     else if (action === "notif-toggle-group") { const c = state.notif.center; if (c) { c.expanded[el.dataset.key] = !c.expanded[el.dataset.key]; rerender(); } }
     else if (action === "notif-pref") setNotifPref(el.dataset.type, el.dataset.channel);

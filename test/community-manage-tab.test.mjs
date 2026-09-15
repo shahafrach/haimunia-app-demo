@@ -169,6 +169,16 @@ test('the "ניהול" tab carries a jump row labelled with the old sub-tab name
   const labels = [...window.document.querySelectorAll('[data-manage-jump-row="1"] button')].map((b) => b.textContent.trim());
   assert.deepEqual(labels, ["מודרציה", "יומן פעולות", "הגדרות", "אנליטיקס", "קליטה"],
     "the jump row must keep the OLD sub-tab wording - that is the whole point of it");
+  // Reaffirmed 2026-09-15 when a SIXTH admin area (דיווחי תקלות) was added:
+  // it is deliberately absent from this row. The row is a "where it used to
+  // be" affordance for the seven retired sub-tabs, not a table of contents -
+  // the <details> headings already are that - so an area that was never a
+  // sub-tab must not appear here. A future area is subject to the same rule
+  // via MANAGE_ADMIN_AREAS' notInJumpRow flag.
+  assert.ok(!labels.includes("דיווחי תקלות"),
+    "a NEW admin area must not be added to the old-sub-tab jump row");
+  assert.ok(window.document.getElementById("manageArea-bugs"),
+    "...but it must still be on the screen - absent from the jump row is not absent from the tab");
   // Never a button that goes nowhere: every chip names a section that is
   // genuinely in the DOM.
   for (const btn of window.document.querySelectorAll('[data-manage-jump-row="1"] button')) {
