@@ -141,3 +141,52 @@ test("the shipped cloud-config.js actually routes somewhere - an empty one would
   // opening a chat with nobody - so the stored shape is worth pinning.
   if (whatsapp) assert.match(whatsapp, /^[0-9]{8,15}$/, "supportWhatsApp must be digits only, international format, no + and no spaces");
 });
+
+test("tapping inside the sheet does NOT close it - the backdrop guard the first release shipped without", async () => {
+  // Reported from a real phone the day this shipped: "trying to put text it
+  // closes page". #supportOverlay carries data-action="close-support" so the
+  // dim backdrop dismisses it, but the click handler resolves actions with
+  // e.target.closest("[data-action]"), which walks UP - so a tap on the
+  // textarea found the overlay and closed the dialog before a single
+  // character could be typed. The feature was unusable on a touch screen.
+  const window = await bootApp();
+  window.openSupport();
+  const overlay = window.document.getElementById("supportOverlay");
+  const field = window.document.getElementById("supportMessage");
+  assert.ok(field, "the description field should render");
+
+  // A real tap on the textarea bubbles to the overlay, exactly as on a phone.
+  field.dispatchEvent(new window.Event("click", { bubbles: true }));
+  assert.ok(overlay.classList.contains("open"),
+    "tapping the description field must NOT close the sheet");
+
+  // Typing then survives, which is the thing the member was trying to do.
+  field.value = "לחצתי על העלאת תמונה ולא קרה כלום";
+  assert.ok(overlay.classList.contains("open"), "and the sheet is still open after typing");
+  assert.match(window.supportReportText(), /לחצתי על העלאת תמונה/, "and the text reached the report");
+
+  // The control: the BACKDROP itself must still dismiss it, or the guard
+  // would have fixed one bug by removing the way out of the dialog.
+  overlay.dispatchEvent(new window.Event("click", { bubbles: true }));
+  assert.ok(!overlay.classList.contains("open"),
+    "a tap on the backdrop itself still closes the sheet");
+});
+
+test("every overlay-level close action in app.js carries the backdrop guard", () => {
+  // The defect above was a single missing line in one branch, while three
+  // sibling branches had it. A per-branch check is what catches the fourth
+  // one being written without it.
+  const src = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
+  for (const [action, overlayId] of [
+    ["close-support", "supportOverlay"],
+    ["close-settings", "settingsOverlay"],
+    ["close-notifications", "notificationsOverlay"],
+    ["close-nav-menu", "navMenuOverlay"],
+  ]) {
+    const at = src.indexOf(`action === "${action}"`);
+    assert.ok(at > -1, `${action} branch should exist`);
+    const branch = src.slice(at, at + 900);
+    assert.ok(branch.includes(`el.id === "${overlayId}" && e.target !== el`),
+      `${action} must return early unless the click was on the backdrop itself, or every tap inside the dialog closes it`);
+  }
+});

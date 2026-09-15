@@ -15,7 +15,7 @@ let barWeight = 20;
 // Single source of truth for the app version. After bumping this, run
 // `npm run sync-version` to copy it into SW_VERSION in sw.js — `npm test`
 // fails if the two drift apart.
-const APP_VERSION = "4.41.0";
+const APP_VERSION = "4.42.0";
 
 // A movement typed into the WOD builder that isn't in the built-in list
 // above - persisted (see WODTAGSTORE), same "custom X" pattern as
@@ -182,7 +182,16 @@ function getNavItems() {
     const badge = typeof window.communityPendingModerationCount === "function" ? window.communityPendingModerationCount() : 0;
     const isClubAdmin = typeof window.communityIsAdmin === "function" && window.communityIsAdmin();
     if (isClubAdmin) {
+      // BOTH rows for an admin, corrected 2026-09-15 on the owner's second
+      // look. The first pass gave an admin a single row on the reasoning that
+      // their panel is a superset, so a second row would be a second door into
+      // the same screen. On the actual phone that read as "there is no club
+      // owner section" - which is the honest reaction: a superset is invisible.
+      // Two named doors, each landing on the panel it names, is what makes the
+      // separation legible. The admin row keeps the moderation badge; the club
+      // row does not duplicate it, because it is the same queue counted once.
       items.push({ id: "manage", tab: "manage", rowId: "tabManageBtn", label: "ניהול מערכת", tint: "steel", icon: ICONS.manageTabIcon, main: false, badge });
+      items.push({ id: "clubmanage", tab: "clubmanage", rowId: "tabClubManageBtn", label: "ניהול המועדון", tint: "teal", icon: ICONS.communityIcon, main: false });
     } else {
       // Same rowId as the admin row above, deliberately. Exactly one of the
       // two is ever in the registry - they are the same DESTINATION SLOT
@@ -7213,7 +7222,20 @@ document.addEventListener("click", (e) => {
     render(); window.scrollTo(0, 0);
   }
   else if (action === "open-support") { openSupport(); }
-  else if (action === "close-support") { closeSupport(); }
+  else if (action === "close-support") {
+    // THE BACKDROP GUARD, missing when this shipped and reported from a real
+    // phone the same day: "trying to put text it closes page". #supportOverlay
+    // carries data-action="close-support" so a tap on the dim area behind the
+    // sheet dismisses it - but the handler above resolves an action with
+    // e.target.closest("[data-action]"), which walks UP from whatever was
+    // tapped. Nothing inside the sheet carries its own data-action, so a tap
+    // on the textarea found the overlay and closed the dialog the instant the
+    // member tried to type. Every other overlay-level close in this file
+    // already had this exact line (close-settings, close-notifications,
+    // close-nav-menu); this one was written without it.
+    if (el.id === "supportOverlay" && e.target !== el) return;
+    closeSupport();
+  }
   else if (action === "support-send-club") { supportSendToClub(); }
   else if (action === "support-send-whatsapp") { supportSendWhatsApp(); }
   else if (action === "support-send-email") { supportSendEmail(); }

@@ -1,3 +1,41 @@
+## The support sheet closed the moment you tapped it — 2026-09-15 (fifth entry)
+
+Reported from the phone within hours of shipping: "trying to put text it
+closes page." The support sheet dismissed itself the instant a member tapped
+the description field, which made the bug-report feature - the one built
+specifically so members could report bugs - impossible to use on a touch
+screen.
+
+**One missing line.** `#supportOverlay` carries
+`data-action="close-support"` so a tap on the dim backdrop dismisses it. The
+click handler resolves an action with `e.target.closest("[data-action]")`,
+which walks UP the tree from whatever was tapped. Nothing inside the sheet
+carries its own `data-action`, so a tap on the textarea walked up, found the
+overlay, and closed the dialog. Every other overlay-level close in this file
+already guards against exactly this - `close-settings`,
+`close-notifications` and `close-nav-menu` each carry
+`if (el.id === "<overlay>" && e.target !== el) return;` - and this one was
+written without it.
+
+Two regression tests, because a fourth missing guard is the obvious next
+instance of this: one behavioural (tap the textarea, the sheet stays open;
+tap the backdrop, it still closes - the control matters, or the fix could
+have removed the only way out of the dialog) and one structural, asserting
+that all four overlay-level close branches carry the guard by name.
+
+**Also, the admin now gets BOTH hamburger rows.** The first pass gave an
+admin a single row, reasoning that their panel is a superset so a second row
+would be a second door into the same screen. On the actual phone that read
+as "there is no club owner section" - which is the honest reaction, because
+a superset is invisible. Two named doors, each landing on the panel it
+names, is what makes the separation legible. The admin row keeps the
+moderation badge; the club row does not duplicate it, since it is the same
+queue counted once.
+
+Verified: npm test 1672/1672.
+
+---
+
 ## Two panels, not one: the admin screen and the head-coach screen split apart — 2026-09-15 (fourth entry)
 
 The club owner asked for an admin panel and a head-coach panel in the
