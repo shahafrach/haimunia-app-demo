@@ -1,3 +1,102 @@
+## The first real phone: four reports, one root cause, and a way to report the next one — 2026-09-15
+
+Every audit in this repository has said the same thing about its own biggest
+gap: no device has ever run this app outside Chromium. That finally happened
+today, on an installed iOS PWA, and it produced four "not working" reports in
+three minutes - more than the last several automated passes combined.
+
+**Three of the four were not broken.** That is the finding, not an excuse.
+Every one of them had its explanation parked in a `title` attribute, and a
+touch screen has no hover, so a correctly-disabled control and a dead control
+are the same object to the person holding the phone. A `title` is a desktop
+affordance and this is a phone-first app; the codebase already knew that -
+`renderMedal()` carries a comment saying so in as many words - and had simply
+only ever applied the lesson in one place.
+
+- **The medals screen.** Reported as the earned Squat bronze plate being lit
+  but unlabelled, next to a locked Deadlift bronze that explained itself in
+  full. The caption was `earned ? "" : rule`, so the one medal the athlete had
+  actually won was the only one on the page with no text under it. Exactly
+  backwards - the rule is the record of what you did to earn it, and it is
+  most worth reading once it is yours. Now printed for both states. A test
+  asserted the old behaviour ("an earned badge should not show its unlock rule
+  as a caption"), so the defect was the contract; that assertion is inverted
+  with a comment explaining what it used to require.
+- **"שחרור ההזמנה" in admin.** Correct: the invite had stalled 6 days against
+  a 7-day grace period, so `disabled` was right. The "עדיין בתהליך" tag said
+  the state but never the rule, and the rule - come back tomorrow - was
+  hover-only. It now says how many days are left, on screen.
+- **"סימון הכול כנקרא" in notifications.** Also correct: every loaded row was
+  already read. But a disabled `.link-btn` is a 13px steel underline at
+  opacity .45 sitting beside an identical-looking enabled "סגירה". The dead
+  control is gone; the fact ("הכול כבר סומן כנקרא") is there instead.
+
+**The fourth was real, and it was all four photo uploads, not one.** Every
+file input in the app - avatar, composer, PR photo, club WOD - hid itself with
+`display:none` inside a wrapping `<label>`. A `display:none` input is not
+rendered at all, and Safari, notably inside a standalone PWA, does not
+reliably forward a label activation to a control that is not in the layout:
+the picker never opens and nothing errors. Replaced with a `.file-input-hidden`
+helper that keeps the input in the layout and merely invisible (clipped, 1px,
+absolutely positioned), which is the portable form of this pattern. Pinned by
+a test that fails on any future `display:none` file input.
+
+**And the reason all four nearly went unrecorded: this app had no way to
+report a bug.** They reached a developer only because the person holding the
+phone was one. A new "תמיכה ודיווח על תקלה" row in Settings › עזרה opens a
+sheet where a member describes what happened, sees exactly which device facts
+will travel with it, and hands the report to WhatsApp, to mail, or to the
+clipboard.
+
+Three decisions worth stating, because each was a fork:
+
+1. **It lives in `app.js`, not `cloud.js`.** Community is opt-in and the
+   training log needs no account, no network and no Supabase. A member who
+   never joined is exactly as entitled to ask for help - more so, since the
+   offline log is the part they use daily. Putting it in the community layer
+   would have made "can I report a bug" depend on having said yes to a social
+   feed.
+2. **It hands off rather than writing to a table.** Reporting a bug is
+   precisely the moment the app may be the broken thing, and a table write
+   needs a live client, a network, a valid session and an intact RLS path -
+   four things a bug report must not be gated on. Composing locally costs none
+   of them, works in airplane mode, and leaves the member holding their own
+   copy. WhatsApp is also this club's real channel, by its own research.
+3. **The diagnostics carry the device and nothing else** - version, installed
+   -as-PWA, online/offline, whether Community is on, user agent. No name, no
+   handle, no training data. It is rendered on screen rather than attached
+   invisibly, because a report that quietly ships facts about someone's phone
+   without showing them is not something this app should do. A test seeds real
+   movements and weights and asserts none of it can reach the report.
+
+`supportWhatsApp` / `supportEmail` in `cloud-config.js` are both empty, so
+**no channel is wired up yet** - until one is set the sheet offers only the
+copy fallback, which is deliberate (a support screen with no route out would
+be worse than none) but is not the finished state. Setting the club's WhatsApp
+number is a one-line config change.
+
+**Found while checking whether the migration push had caused any of this:
+`sanitize_upload` is not deployed.** The trigger added by `202609110003` went
+live on production this morning and POSTs every avatar and post-photo write to
+an Edge Function that only three of four exist - the deploy workflow is
+`workflow_dispatch` only and was never run for it. Harmless in itself
+(`net.http_post` is fire-and-forget, so the 404 costs nothing), but the
+server-side EXIF/GPS stripping and magic-byte content-type check that
+migration exists to provide are not actually running, while the repository
+reads as though they are. Not deployed under this pass: the function *deletes*
+uploads it judges non-image, which makes deploying it a destructive-capable
+change that should be a deliberate decision rather than a footnote to a bug
+fix. Checked and worth recording for whoever does it: iPhone HEIC is not a
+hazard here, because `src/image.js` re-encodes every upload through a canvas
+to WebP or JPEG before it leaves the device.
+
+Verified: full suite 1658/1658, browser-check 43/44 in a shared-CPU run and 44/44 with the one failure re-run isolated (community-render-cost.mjs's 16 ms frame-budget trip-wire read 17.1 ms while the node suite was running on the same machine, and passes standalone - the exact contention artefact that check's own docs warn about, verified rather than assumed), version/vendor/
+migration-immutability checks OK. `test/app-innerhtml-sinks.test.mjs`'s sink
+pin moved 37 -> 38 for the support sheet, with the escaping audit written into
+the test rather than assumed.
+
+---
+
 ## Records hygiene: close the Advisor's last open object, and stop the docs lying about what is left — 2026-09-15
 
 No feature work and no bug fixes. This pass went after a different class of

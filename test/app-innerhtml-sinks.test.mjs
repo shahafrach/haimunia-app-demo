@@ -83,9 +83,19 @@ test("the sink count is pinned, so a new sink is a deliberate decision", () => {
   // Not a style rule - a review trigger. Adding an innerHTML sink to app.js
   // should require looking at this file and thinking about escaping, which
   // is exactly what SEC-018 found had not happened.
+  // 37 -> 38 on 2026-09-15: openSupport() writes renderSupportContent() into
+  // #supportBody, the same shape openAchievements()/renderNotificationsList()
+  // already use for their own overlays. Checked rather than waved through,
+  // since that is what this pin is for: the body interpolates exactly two
+  // things, a routes array built from string literals in this file, and
+  // esc(supportDiagnostics()). The diagnostics string is the only one
+  // carrying outside input at all (navigator.userAgent) and it is escaped.
+  // The member's own typed description is NEVER interpolated - it is read
+  // from the live textarea's .value at send time by supportReportText() and
+  // handed to encodeURIComponent(), so it never re-enters the DOM as markup.
   const count = sinkLines(appJs).length;
-  assert.equal(count, 37,
-    `app.js has ${count} innerHTML/outerHTML sinks, expected 37. If you added one, verify its interpolations are escaped and update this number; if you removed one, just update it.`);
+  assert.equal(count, 38,
+    `app.js has ${count} innerHTML/outerHTML sinks, expected 38. If you added one, verify its interpolations are escaped and update this number; if you removed one, just update it.`);
 });
 
 test("esc() is a single shared definition, so there is one escaping rule and not several", () => {

@@ -1741,6 +1741,19 @@
      pixel-identical to an enabled one, cursor:pointer included. One rule,
      every button/input/textarea in the app. */
   button:disabled, input:disabled, textarea:disabled, select:disabled{ opacity:.45; cursor:default; }
+  /* Real device report (2026-09-15, first real-phone session this app has
+     ever had): "העלאת תמונה" did nothing on an installed iOS PWA. All four
+     file inputs in this app (avatar, composer, PR photo, club WOD) hid
+     themselves with display:none inside a wrapping <label>. A
+     display:none input is not rendered, and Safari - notably inside a
+     standalone PWA - does not reliably forward a label activation to a
+     control that does not exist in the layout, so the picker never opens
+     and there is no error to see. The portable fix is to keep the input
+     rendered and merely invisible: it stays in the layout, stays
+     focusable, stays label-activatable, and is still impossible to see or
+     accidentally hit. Not display:none, never for a file input. */
+  .file-input-hidden{ position:absolute; width:1px; height:1px; padding:0; margin:-1px;
+    overflow:hidden; clip:rect(0 0 0 0); clip-path:inset(50%); white-space:nowrap; border:0; }
   input[type="checkbox"]{ accent-color:var(--energy); }
   .chip-row{ display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
   /* color:var(--energy-text), not --energy - found via axe while touching
@@ -2629,6 +2642,27 @@
       </button>
     </div>
     <div class="modal-list" id="notificationsList"></div>
+  </div>
+</div>
+
+<!-- Support and bug reporting (2026-09-15). Same shell as the notifications
+     overlay above - modal-overlay > modal-sheet > modal-head + modal-list,
+     backdrop click and close button both data-action="close-support" - so it
+     inherits the Escape/Tab-trap wiring from registerAppDialog() and the
+     history-anchor back-button handling every other app.js dialog already
+     gets, rather than inventing a fourth dialog shape. Body is rendered into
+     #supportBody by renderSupportContent() so the diagnostics block is
+     regenerated fresh on every open (a report composed from a stale snapshot
+     is worse than no diagnostics). -->
+<div class="modal-overlay" id="supportOverlay" data-action="close-support" role="dialog" aria-modal="true" aria-labelledby="supportTitle">
+  <div class="modal-sheet">
+    <div class="modal-head">
+      <span class="modal-title" id="supportTitle">תמיכה ודיווח על תקלה</span>
+      <button data-action="close-support" class="icon-btn" aria-label="סגירה" style="color:var(--steel);">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="modal-list" id="supportBody"></div>
   </div>
 </div>
 

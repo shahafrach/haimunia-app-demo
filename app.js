@@ -15,7 +15,7 @@ let barWeight = 20;
 // Single source of truth for the app version. After bumping this, run
 // `npm run sync-version` to copy it into SW_VERSION in sw.js — `npm test`
 // fails if the two drift apart.
-const APP_VERSION = "4.38.0";
+const APP_VERSION = "4.39.0";
 
 // A movement typed into the WOD builder that isn't in the built-in list
 // above - persisted (see WODTAGSTORE), same "custom X" pattern as
@@ -983,11 +983,23 @@ function renderMedal(ach, earned) {
       ? `<svg class="medal-shape ${tierClass}" viewBox="0 0 100 112"><use href="#medalShield"/>${glyphUse}</svg>`
       : `<svg class="medal-shape shape-circle ${tierClass}" viewBox="0 0 100 100"><use href="#medalCircle"/>${glyphUse}</svg>`;
   // title is a nice-to-have for desktop; it never shows on a touch screen,
-  // so locked badges also print the rule as a visible caption.
+  // so EVERY badge prints the rule as a visible caption.
+  //
+  // Real device report (2026-09-15, first time this app was ever opened on a
+  // phone): the caption used to be `earned ? "" : rule`, so the one medal the
+  // athlete had actually won was the only one on the screen with no text under
+  // it at all - "Squat — ברונזה" and nothing else, sitting next to a locked
+  // "Deadlift — ברונזה / 3 שיאים אישיים בקבוצת Deadlift" that explained
+  // itself fully. Exactly backwards: the earned medal is the one you want to
+  // read, because the rule is the record of what you did to get it. The
+  // desktop `title` above carried that text and a touch screen never shows a
+  // title, which is the same defect the comment directly above this one was
+  // already written about - the fix had simply only ever been applied to the
+  // locked half.
   return `<div class="medal-badge ${ach.group === "capstone" ? "capstone-badge" : ""} ${earned ? "earned" : "locked"}" style="--glow-color:${glow};" title="${esc(ach.rule)}">
     ${symbol}
     <div class="medal-name">${esc(ach.name)}</div>
-    ${earned ? "" : `<div class="medal-rule">${esc(ach.rule)}</div>`}
+    <div class="medal-rule">${esc(ach.rule)}</div>
   </div>`;
 }
 function renderAchievementsContent() {
@@ -1541,6 +1553,140 @@ function closeNotifications() {
   document.getElementById("notificationsOverlay").classList.remove("open");
   if (notificationsOpenerEl && typeof notificationsOpenerEl.focus === "function") notificationsOpenerEl.focus();
   notificationsOpenerEl = null;
+}
+
+// ---------- Support and bug reporting ----------
+// Added 2026-09-15, straight out of the first real-phone session this app
+// ever had. Four things were reported as "not working" that day, and the
+// only reason they reached anybody is that the person holding the phone was
+// also the person who could fix them. A member has no such channel: the app
+// has never had a single route for "this is broken" or "I need help", so
+// every one of those reports would have ended as a shrug, or as a message in
+// the club WhatsApp group that nobody with the code ever reads.
+//
+// WHY THIS LIVES IN app.js AND NOT cloud.js. Community is opt-in, and the
+// training log works with no account, no network and no Supabase at all. A
+// member who never joined Community is exactly as entitled to report a bug as
+// one who did - more so, since the offline log is the part they use daily.
+// Putting this in cloud.js would have made "can I ask for help" depend on
+// having said yes to a social feed.
+//
+// WHY IT HANDS OFF INSTEAD OF WRITING TO THE DATABASE. Reporting a bug is
+// precisely the moment the app might be the broken thing. A table write needs
+// a live client, a network, a valid session and an intact RLS path - four
+// things a bug report should never be gated on. Composing the text locally
+// and handing it to WhatsApp or mail costs none of them, works in airplane
+// mode, and leaves the member holding their own copy of what they sent.
+// See cloud-config.js's supportWhatsApp/supportEmail for the routing.
+function supportConfig() {
+  const c = (typeof window !== "undefined" && window.HAIMUNIA_CONFIG) || {};
+  const digits = String(c.supportWhatsApp || "").replace(/[^0-9]/g, "");
+  return { whatsapp: digits, email: String(c.supportEmail || "").trim() };
+}
+// What the developer needs and the member should not have to be asked for.
+// Deliberately contains nothing personal: no name, no handle, no training
+// data, no invite code. Version + platform + the three state bits that
+// change how the app behaves are what actually narrow a bug down, and every
+// one of them is about the DEVICE, not the person. The member can read the
+// whole block before sending it - it is rendered on screen, not attached
+// invisibly, because a report that quietly ships facts about someone's phone
+// without showing them is not something this app should do.
+function supportDiagnostics() {
+  const online = typeof navigator !== "undefined" && "onLine" in navigator ? (navigator.onLine ? "מקוון" : "לא מקוון") : "לא ידוע";
+  // cloudSyncActive() is cloud.js's own published answer to "is this member
+  // signed in AND syncing" (`state.user && state.syncEnabled`). Guarded by
+  // typeof because cloud.js is a separate deferred script and an offline-only
+  // member may have it loaded but never activated - a missing function here
+  // means "no community", not an error worth showing anybody.
+  const community = (typeof window !== "undefined" && typeof window.cloudSyncActive === "function" && window.cloudSyncActive())
+    ? "פעילה" : "כבויה";
+  return [
+    `גרסה: ${APP_VERSION}`,
+    `מותקן במסך הבית: ${isStandalone() ? "כן" : "לא"}`,
+    `חיבור: ${online}`,
+    `קהילה: ${community}`,
+    `דפדפן: ${typeof navigator !== "undefined" ? String(navigator.userAgent || "").slice(0, 160) : "לא ידוע"}`,
+  ].join("\n");
+}
+function supportReportText() {
+  const typed = (document.getElementById("supportMessage") || {}).value || "";
+  return `דיווח על תקלה — האימוניה\n\n${typed.trim() || "(לא נכתב תיאור)"}\n\n--- פרטים טכניים ---\n${supportDiagnostics()}`;
+}
+function renderSupportContent() {
+  const cfg = supportConfig();
+  // No configured channel is not a dead end: the member still writes the
+  // report and copies it, which is strictly better than a screen that says
+  // "contact support" and offers no way to.
+  const routes = [];
+  if (cfg.whatsapp) routes.push(`<button class="chip-btn primary" data-action="support-send-whatsapp">שליחה בוואטסאפ</button>`);
+  if (cfg.email) routes.push(`<button class="chip-btn" data-action="support-send-email">שליחה במייל</button>`);
+  routes.push(`<button class="chip-btn" data-action="support-copy">העתקת הדיווח</button>`);
+  return `
+    <div class="settings-block">
+      <div class="settings-block-title">מה קרה?</div>
+      <div class="footer-note" style="margin-bottom:8px;">כתבו מה ניסיתם לעשות ומה קרה בפועל. ככל שיהיה מדויק יותר, כך יהיה קל יותר לתקן.</div>
+      <label class="field"><span class="field-label">תיאור התקלה</span>
+        <textarea class="text-input" id="supportMessage" rows="5" dir="auto" placeholder="למשל: לחצתי על העלאת תמונה בפרופיל ולא נפתח כלום"></textarea>
+      </label>
+      <div class="chip-row">${routes.join("")}</div>
+      <div class="footer-note" id="supportSendNote" role="status" aria-live="polite" style="margin-bottom:0;"></div>
+    </div>
+    <div class="settings-block">
+      <div class="settings-block-title">פרטים טכניים שיישלחו</div>
+      <div class="footer-note" style="margin-bottom:6px;">אלה פרטים על המכשיר בלבד — בלי השם שלכם, בלי יומן האימונים ובלי שום נתון אישי.</div>
+      <pre class="mono" style="white-space:pre-wrap;word-break:break-word;font-size:11.5px;color:var(--steel);margin:0;">${esc(supportDiagnostics())}</pre>
+    </div>`;
+}
+let supportOpenerEl = null;
+function openSupport() {
+  closeNavMenu();
+  supportOpenerEl = document.activeElement;
+  document.getElementById("supportBody").innerHTML = renderSupportContent();
+  document.body.style.overflow = "hidden";
+  document.getElementById("supportOverlay").classList.add("open");
+  setTimeout(() => focusFirstAppDialogEl("supportOverlay"), 50);
+}
+function closeSupport() {
+  document.body.style.overflow = "";
+  nudgeViewportAfterModalClose();
+  document.getElementById("supportOverlay").classList.remove("open");
+  if (supportOpenerEl && typeof supportOpenerEl.focus === "function") supportOpenerEl.focus();
+  supportOpenerEl = null;
+}
+function supportNote(text) {
+  const el = document.getElementById("supportSendNote");
+  if (el) el.textContent = text;
+}
+// window.open(..., "_blank") rather than assigning location: a wa.me or
+// mailto: handoff that fails to resolve should leave the member on their
+// half-written report, not navigate the app away from it.
+function supportHandoff(url, failText) {
+  try {
+    const w = window.open(url, "_blank");
+    if (!w) supportNote(failText);
+  } catch (e) { supportNote(failText); }
+}
+function supportSendWhatsApp() {
+  const cfg = supportConfig();
+  if (!cfg.whatsapp) return supportNote("לא הוגדר מספר וואטסאפ לתמיכה. אפשר להעתיק את הדיווח ולשלוח אותו ידנית.");
+  supportHandoff(`https://wa.me/${cfg.whatsapp}?text=${encodeURIComponent(supportReportText())}`,
+    "לא הצלחנו לפתוח את וואטסאפ. אפשר להעתיק את הדיווח ולשלוח אותו ידנית.");
+}
+function supportSendEmail() {
+  const cfg = supportConfig();
+  if (!cfg.email) return supportNote("לא הוגדרה כתובת מייל לתמיכה. אפשר להעתיק את הדיווח ולשלוח אותו ידנית.");
+  supportHandoff(`mailto:${encodeURIComponent(cfg.email)}?subject=${encodeURIComponent("דיווח על תקלה — האימוניה")}&body=${encodeURIComponent(supportReportText())}`,
+    "לא הצלחנו לפתוח את אפליקציית המייל. אפשר להעתיק את הדיווח ולשלוח אותו ידנית.");
+}
+function supportCopyReport() {
+  const text = supportReportText();
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text)
+      .then(() => supportNote("הדיווח הועתק. אפשר להדביק אותו בוואטסאפ, במייל או בכל מקום אחר."))
+      .catch(() => supportNote("ההעתקה נכשלה. אפשר לסמן את הטקסט ולהעתיק ידנית."));
+    return;
+  }
+  supportNote("ההעתקה לא נתמכת בדפדפן הזה. אפשר לסמן את הטקסט ולהעתיק ידנית.");
 }
 
 // ---------- First-time onboarding ----------
@@ -5056,10 +5202,24 @@ function renderSettingsBody() {
           <span style="font-weight:700; font-size:13.5px;">התקנה במסך הבית</span>
           <span style="color:var(--steel); flex-shrink:0;">${ICONS.chevronsLeft}</span>
         </button>`}
-        <button class="exercise-row" data-action="edit-box-start-date" style="margin-bottom:0;">
+        <button class="exercise-row" data-action="edit-box-start-date" style="margin-bottom:8px;">
           <div style="text-align:right;">
             <div style="font-weight:700; font-size:13.5px;">מתי התחלתי להתאמן בבוקס</div>
             <div style="color:var(--steel); font-size:12px; margin-top:2px;">${boxStartDate ? esc(fmtDate(boxStartDate)) : "לא הוגדר — פותח את מדליות הוותק"}</div>
+          </div>
+          <span style="color:var(--steel); flex-shrink:0;">${ICONS.chevronsLeft}</span>
+        </button>
+        <!-- Real device report, 2026-09-15. Until this row existed the app
+             had no route at all for "this is broken" or "I need help" - the
+             four defects found in the first real-phone session reached a
+             developer only because the tester happened to be one. Filed
+             under עזרה rather than as its own block: a member looking for
+             help looks here first, and a fifth top-level settings card for
+             one row would bury it further down the same screen. -->
+        <button class="exercise-row" data-action="open-support" style="margin-bottom:0;">
+          <div style="text-align:right;">
+            <div style="font-weight:700; font-size:13.5px;">תמיכה ודיווח על תקלה</div>
+            <div style="color:var(--steel); font-size:12px; margin-top:2px;">משהו לא עובד? ספרו לנו</div>
           </div>
           <span style="color:var(--steel); flex-shrink:0;">${ICONS.chevronsLeft}</span>
         </button>
@@ -6130,6 +6290,13 @@ document.addEventListener("keydown", (e) => {
 // always a modal-on-modal - it can fire while the WOD picker or Settings is
 // still up. Escape has to close the confirm, not the thing underneath it.
 registerAppDialog("appConfirm", { overlayId: "appConfirmOverlay", isOpen: () => !!appConfirmDialog, close: closeAppConfirm });
+// Second, and for the same reason: support is opened FROM the Settings sheet
+// and sits on top of it, so while it is up BOTH are open. currentAppDialog()
+// returns the first open entry in insertion order, so registering support
+// after "settings" below would make Escape and the phone's back button close
+// the sheet underneath and leave the visible one - which is the exact defect
+// openAchievements()'s own comment above describes, reached a second way.
+registerAppDialog("support", { overlayId: "supportOverlay", isOpen: () => document.getElementById("supportOverlay").classList.contains("open"), close: closeSupport });
 
 // COMM-358. Every role="tablist" group in this app (the fixed bottom tab
 // bar, WOD's Rx/Scaled-style subtabbar, Community's feed-scope filter)
@@ -6961,6 +7128,11 @@ document.addEventListener("click", (e) => {
   // tapping it to read the changelog must not land in Community's
   // notification center just because they happen to have unread there.
   else if (action === "open-release-notes") { openNotifications(); }
+  else if (action === "open-support") { openSupport(); }
+  else if (action === "close-support") { closeSupport(); }
+  else if (action === "support-send-whatsapp") { supportSendWhatsApp(); }
+  else if (action === "support-send-email") { supportSendEmail(); }
+  else if (action === "support-copy") { supportCopyReport(); }
   else if (action === "close-notifications") {
     if (el.id === "notificationsOverlay" && e.target !== el) return;
     closeNotifications();

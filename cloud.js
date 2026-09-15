@@ -8061,7 +8061,7 @@
     const key = shareKey(type, id);
     if (!state.posts.openShare[key]) return `<button data-community-action="toggle-share" data-type="${esc(type)}" data-id="${esc(id)}" aria-label="שיתוף לקהילה" style="color:var(--steel);padding:4px;">📤</button>`;
     return `<div class="flex items-center gap-6" style="flex-wrap:wrap;">
-      <input type="file" id="photo-${esc(id)}" accept="image/jpeg,image/png,image/webp" style="display:none;"/>
+      <input type="file" id="photo-${esc(id)}" accept="image/jpeg,image/png,image/webp" class="file-input-hidden"/>
       <label class="chip-btn" for="photo-${esc(id)}" style="cursor:pointer;padding:5px 9px;font-size:11px;">📷</label>
       <button class="chip-btn" data-community-action="publish" data-type="${esc(type)}" data-id="${esc(id)}" data-visibility="followers" style="padding:5px 9px;font-size:11px;">לעוקבים</button>
       <button class="chip-btn primary" data-community-action="publish" data-type="${esc(type)}" data-id="${esc(id)}" data-visibility="public" style="padding:5px 9px;font-size:11px;">לכולם</button>
@@ -9525,6 +9525,12 @@
     } else {
       btns.push(`<button class="chip-btn"${dis} data-community-action="admin-set-role" data-id="${esc(m.id)}" data-role="coach">הורדה למאמן/ת</button>`);
     }
+    // Same touch-screen defect the ghost-reclaim button had (real device
+    // report, 2026-09-15): `dis` carries the only explanation in a `title`,
+    // which never appears on a phone, so a staff-but-not-admin viewer sees
+    // two greyed buttons and no reason. One note for the row, not one per
+    // button - the reason is identical for all of them.
+    if (readOnly) btns.push(`<div class="footer-note" style="margin:6px 0 0;width:100%;">שינוי הרשאה זמין למנהל/ת בלבד.</div>`);
     return btns.join("");
   }
   // COMM-377. The exact row shape and renderer admin_search_members'
@@ -9768,9 +9774,20 @@
     const meta = [ghostSourceLabel(g.invite_source), ghostStalledText(stalled), `מימש/ה ${shortHebDate(g.redeemed_at)}`];
     const control = !admin
       ? `<div class="footer-note" style="margin:10px 0 0;">שחרור ההזמנה שמור למנהל/ת.</div>`
+      // Real device report (2026-09-15): an admin tapped this button on a
+      // phone, nothing happened, and they reported it as broken. It was not
+      // broken - stalled was 6 and GHOST_GRACE_DAYS is 7, so `disabled` is
+      // exactly right. The defect is that the ONLY explanation lived in a
+      // `title`, and a touch screen has no hover, so the button read as dead
+      // rather than as not-yet. The "עדיין בתהליך" tag above says the state
+      // but not the rule, and the rule is the part that tells the admin to
+      // come back tomorrow instead of filing a bug. Printed as visible text
+      // now, the same way a locked medal prints its rule; the title stays for
+      // desktop hover, but nothing depends on it any more.
       : `<div class="chip-row" style="margin-top:10px;">
           <button class="chip-btn danger"${ready ? "" : ` disabled title="${esc(`אפשר לשחרר רק אחרי ${GHOST_GRACE_DAYS} ימים ללא השלמה`)}"`} data-community-action="ghost-reclaim" data-id="${esc(g.user_id)}">שחרור ההזמנה</button>
-        </div>`;
+        </div>
+        ${ready ? "" : `<div class="footer-note" style="margin:6px 0 0;">${esc(`אפשר לשחרר רק אחרי ${GHOST_GRACE_DAYS} ימים ללא השלמה — עוד ${Math.max(1, GHOST_GRACE_DAYS - stalled)} ימים.`)}</div>`}`;
     return `<div class="chart-card" style="margin-bottom:10px;" data-ghost-user-id="${esc(g.user_id)}">
       <div class="flex" style="justify-content:space-between;align-items:flex-start;gap:10px;">
         <div style="min-width:0;">
@@ -14338,7 +14355,7 @@
           <div id="postComposerCounter" data-composer-counter style="text-align:left;font-size:11px;color:var(--steel);min-height:14px;">${bodyLen >= 900 ? `${bodyLen}/${POST_BODY_MAX}` : ""}</div>
           <div style="margin-top:8px;">${tiles}</div>
           ${c.photos.length < POST_MEDIA_MAX
-            ? `<label class="chip-btn" style="cursor:pointer;display:inline-block;">הוספת תמונה<input type="file" accept="image/*" data-composer-file style="display:none;"/></label>`
+            ? `<label class="chip-btn" style="cursor:pointer;display:inline-block;">הוספת תמונה<input type="file" accept="image/*" data-composer-file class="file-input-hidden"/></label>`
             : `<div style="font-size:12px;color:var(--steel);">הגעתם למקסימום ${POST_MEDIA_MAX} תמונות</div>`}
           <label class="field" style="margin-top:12px;"><span class="field-label">מי רואה את הפוסט</span>
             <select class="text-input" data-composer-visibility>
@@ -14603,7 +14620,7 @@
           <div class="chip-row" style="margin-top:14px;">
             <button class="chip-btn primary" data-community-action="pr-share"${p.publishing || (p.photo && p.photo.status === "processing") ? " disabled" : ""}>${p.publishing ? "משתף…" : "שיתוף למועדון"}</button>
             <button class="chip-btn" data-community-action="outward-pr">שיתוף מחוץ לאפליקציה</button>
-            ${p.photo ? "" : `<label class="chip-btn" style="cursor:pointer;">הוספת תמונה<input type="file" accept="image/*" data-pr-file style="display:none;"/></label>`}
+            ${p.photo ? "" : `<label class="chip-btn" style="cursor:pointer;">הוספת תמונה<input type="file" accept="image/*" data-pr-file class="file-input-hidden"/></label>`}
             ${p.showNote ? "" : `<button class="chip-btn" data-community-action="pr-add-note">הוספת הערה</button>`}
             <button class="chip-btn" data-community-action="pr-not-now">לא עכשיו</button>
           </div>
@@ -16988,6 +17005,13 @@
     const olderHtml = c.end && c.hasOlder && !c.showOlder
       ? `<div class="chip-row" style="justify-content:center;margin-top:6px;"><button class="link-btn" data-community-action="notif-show-older">הצגת התראות ישנות יותר</button></div>`
       : "";
+    // Real device report (2026-09-15): tapped on a phone, nothing happened,
+    // reported as broken. `disabled` was correct - every loaded row already
+    // had a read_at - but a disabled .link-btn is a 13px steel underline at
+    // opacity .45 sitting next to an identical-looking enabled "סגירה", which
+    // on a phone is indistinguishable from a button that simply does not
+    // work. A control that can do nothing should say so rather than sit there
+    // looking tappable, so the dead button is replaced by the fact itself.
     const canMarkAll = c.rows.some((r) => !r.read_at);
     // Immersive club redesign, IMPLEMENTATION_SPEC.md §8 Notifications:
     // "reuse the Community scene, not a new photograph... club wall only in
@@ -17009,7 +17033,9 @@
             <h2 id="notifCenterTitle" style="margin-top:0;font-weight:800;font-size:16px;margin-bottom:0;">התראות</h2>
             <button class="link-btn" data-community-action="notif-close" aria-label="סגירה">סגירה</button>
           </div>
-          <div class="chip-row" style="margin-top:0;margin-bottom:4px;"><button class="link-btn" data-community-action="notif-mark-all"${canMarkAll ? "" : " disabled"}>סימון הכול כנקרא</button></div>
+          <div class="chip-row" style="margin-top:0;margin-bottom:4px;">${canMarkAll
+            ? `<button class="link-btn" data-community-action="notif-mark-all">סימון הכול כנקרא</button>`
+            : `<span class="footer-note" style="margin:0;">הכול כבר סומן כנקרא.</span>`}</div>
           ${body}
           ${moreHtml}
           ${olderHtml}
@@ -17959,7 +17985,7 @@
     const avatarControl = `<div class="flex gap-10" style="align-items:center;margin-bottom:14px;">
       ${avatarHtml(p.display_name || p.handle, 56, p.avatar_url)}
       <div class="flex gap-6" style="align-items:center;flex-wrap:wrap;">
-        <label class="chip-btn" style="cursor:pointer;display:inline-block;${avatarBusy ? "opacity:.6;pointer-events:none;" : ""}">${avatarBusy ? "מעלה…" : "העלאת תמונה"}<input type="file" accept="image/*" data-avatar-file style="display:none;"${avatarBusy ? " disabled" : ""}/></label>
+        <label class="chip-btn" style="cursor:pointer;display:inline-block;${avatarBusy ? "opacity:.6;pointer-events:none;" : ""}">${avatarBusy ? "מעלה…" : "העלאת תמונה"}<input type="file" accept="image/*" data-avatar-file class="file-input-hidden"${avatarBusy ? " disabled" : ""}/></label>
         ${p.avatar_url ? `<button class="chip-btn" type="button" data-community-action="avatar-remove"${avatarBusy ? " disabled" : ""}>הסרת תמונה</button>` : ""}
       </div>
     </div>

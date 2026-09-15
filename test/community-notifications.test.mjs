@@ -216,11 +216,20 @@ test("mark all read clears rows loaded after the first page", async () => {
   await openCenter(window);
   window.document.querySelector('[data-community-action="notif-load-more"]').click();
   await waitFor(() => window.document.querySelectorAll('[data-community-action="notif-open"]').length === 25, 4000);
-  assert.ok(!window.document.querySelector('[data-community-action="notif-mark-all"]').disabled, "mark-all is enabled while unread rows are loaded");
+  assert.ok(window.document.querySelector('[data-community-action="notif-mark-all"]'), "mark-all is offered while unread rows are loaded");
 
   window.document.querySelector('[data-community-action="notif-mark-all"]').click();
   await waitFor(() => mock.db.notifications.every((n) => n.read_at), 4000);
-  assert.ok(window.document.querySelector('[data-community-action="notif-mark-all"]').disabled, "mark-all disables once everything is read");
+  // Changed 2026-09-15 after the first real-phone session: the control used
+  // to stay in the DOM as a DISABLED .link-btn, which on a phone is a 13px
+  // steel underline at opacity .45 next to an identical-looking enabled
+  // "סגירה" - tapped, nothing happened, reported as broken. It now leaves
+  // and states the fact instead, so the assertion moves from "is disabled"
+  // to "is gone, and the reason is on screen".
+  await waitFor(() => !window.document.querySelector('[data-community-action="notif-mark-all"]'), 4000);
+  assert.ok(!window.document.querySelector('[data-community-action="notif-mark-all"]'), "mark-all stops being offered once everything is read");
+  assert.match(window.document.querySelector("[data-notif-center]").textContent, /הכול כבר סומן כנקרא/,
+    "and says so, rather than leaving a dead control the member will tap and report as broken");
 });
 
 test("mark read is optimistic and rolls back when the server rejects it", async () => {

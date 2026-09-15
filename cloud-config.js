@@ -59,4 +59,29 @@ window.HAIMUNIA_CONFIG = Object.freeze({
   // line. hCaptcha is the non-Cloudflare option if that ever changes.
   captchaProvider: "turnstile", // "turnstile" | "hcaptcha"
   captchaSiteKey: "",
+
+  // Support and bug reporting (2026-09-15), added after the first real-phone
+  // session produced four "not working" reports that had no route back into
+  // the app - they reached the developer only because the tester happened to
+  // be the owner. A member without that channel had nowhere to put them.
+  //
+  // WHY A HANDOFF AND NOT A TABLE. Reporting a bug is exactly the moment the
+  // app may be the broken thing: a Supabase insert needs a working client, a
+  // network, a session and an intact RLS path, which is a lot of machinery to
+  // trust while the member is telling you something is wrong. WhatsApp is
+  // this club's actual channel (99% penetration, its own research in
+  // docs/community/contracts.md) and it retries, queues offline and leaves
+  // the member holding a copy of what they sent. The report is composed
+  // locally, so it works with no network and with Community switched off
+  // entirely - which is most of this app's surface.
+  //
+  // Both are optional. Leave a value empty and the app simply does not offer
+  // that route; leave BOTH empty and the reporter still gets the "copy the
+  // report" fallback, so the feature is never a dead end.
+  //
+  // supportWhatsApp: international format, digits only, no + and no spaces
+  // (this is wa.me's own required shape). Israeli mobile 05X-XXX-XXXX becomes
+  // 9725XXXXXXXX.
+  supportWhatsApp: "",
+  supportEmail: "",
 });

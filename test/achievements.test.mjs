@@ -33,7 +33,7 @@ test("logging a set in every PR category earns the well-rounded badge and pops t
   assert.equal(window.document.getElementById("celebrationOverlay").classList.contains("open"), false);
 });
 
-test("the achievements modal shows the well-rounded badge as earned, with its rule hidden once unlocked", async () => {
+test("the achievements modal shows the well-rounded badge as earned, and still prints its rule as a visible caption", async () => {
   const window = await bootApp();
   for (const cat of ["Squat", "Deadlift", "Press", "Olympic", "Pull"]) {
     await window.addMovement(`Test Ach ${cat}`, cat);
@@ -53,7 +53,16 @@ test("the achievements modal shows the well-rounded badge as earned, with its ru
   const badge = [...window.document.querySelectorAll(".medal-badge")].find((el) => el.querySelector(".medal-name")?.textContent === "אתלט שלם");
   assert.ok(badge, "the well-rounded medal should be rendered in the achievements list");
   assert.ok(badge.classList.contains("earned"), "it should be marked earned, not locked");
-  assert.ok(!badge.querySelector(".medal-rule"), "an earned badge should not show its unlock rule as a caption");
+  // Inverted 2026-09-15 after the first real-phone session. This assertion
+  // used to require the OPPOSITE ("an earned badge should not show its unlock
+  // rule as a caption") and so encoded the defect as the contract: on a touch
+  // screen the earned medal was the only one on the page with no text under
+  // it, because its rule lived solely in a `title` and a phone never shows a
+  // title. The rule is the record of what the athlete did to earn it, which
+  // is exactly the text worth keeping once unlocked.
+  const rule = badge.querySelector(".medal-rule");
+  assert.ok(rule, "an earned badge must still print its rule - a title alone is invisible on a touch screen");
+  assert.ok(rule.textContent.trim().length > 0, "and the caption must not be empty");
 
   window.closeAchievements();
   assert.equal(window.document.getElementById("achievementsOverlay").classList.contains("open"), false);
