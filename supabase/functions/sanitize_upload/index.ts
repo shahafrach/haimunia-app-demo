@@ -120,6 +120,43 @@ Deno.serve(async (req: Request) => {
       });
     }
 
+    // RE-ENTRY GUARD - found 2026-09-15, before this function was ever
+    // deployed, while reviewing it for exactly this.
+    //
+    // THE LOOP. 202609110003's trigger is `after insert OR UPDATE on
+    // storage.objects` (UPDATE deliberately included, because an avatar
+    // re-upload uses upsert:true and so emits an UPDATE rather than an
+    // INSERT from the second upload onward). The .update() below is itself
+    // a write to storage.objects. So the unguarded sequence is: member
+    // uploads -> trigger -> sanitize -> update -> TRIGGER AGAIN -> sanitize
+    // -> update -> ... with no terminating condition, because a re-upload
+    // bumps the row whether or not the bytes changed. Every photo posted
+    // would have become an unbounded cycle of Edge Function invocations and
+    // Storage writes on production.
+    //
+    // THE FIX IS A FIXED POINT, not a flag. sanitizeImageBytes() is
+    // idempotent by construction - it strips metadata segments, and bytes
+    // with no metadata segments left come back unchanged - so the second
+    // pass over an object this function already wrote produces output
+    // identical to its input. Skipping the write in that case terminates
+    // the loop after exactly one extra invocation, with no marker to store,
+    // no metadata to keep in sync, and no way for the guard to drift out of
+    // agreement with the sanitizer: "already clean" is defined as whatever
+    // the sanitizer itself declines to change.
+    //
+    // Deliberately NOT done with a bucket/metadata flag or by narrowing the
+    // trigger to INSERT only: the flag can be forged by the same direct
+    // Storage write this function exists to backstop, and dropping UPDATE
+    // would reopen avatar re-uploads (the exact case the migration's own
+    // comment says UPDATE was added for).
+    const unchanged = result.bytes.length === bytes.length && result.bytes.every((b, i) => b === bytes[i]);
+    if (unchanged) {
+      console.log(`sanitize_upload v${SANITIZE_VERSION}: already clean, no write`, { bucket });
+      return new Response(JSON.stringify({ ok: true, action: "already-clean" }), {
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
     const { error: uploadErr } = await supabase.storage.from(bucket).update(path, result.bytes, {
       contentType: result.contentType,
       upsert: true,

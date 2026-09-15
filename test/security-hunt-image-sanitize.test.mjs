@@ -126,3 +126,46 @@ test("sanitizeImageBytes end-to-end: a real JPEG with GPS-shaped EXIF comes back
   }
   assert.ok(!sawExif, "the EXIF segment that would have carried GPS coordinates is gone from the object that gets re-uploaded");
 });
+
+// =====================================================================
+// Idempotence — the property the deployed function's loop guard rests on
+// =====================================================================
+// Added 2026-09-15, while reviewing sanitize_upload/index.ts before its first
+// deployment. 202609110003's trigger fires on `after insert OR UPDATE on
+// storage.objects`, and the function's own re-upload IS an update to
+// storage.objects - so without a terminating condition, one photo upload
+// becomes an unbounded cycle of Edge Function invocations and Storage writes.
+//
+// The guard chosen is a fixed point rather than a stored flag: the function
+// skips its write when sanitizing produced bytes identical to its input, so
+// the second pass over an object it already wrote is a no-op and the loop
+// ends. That is only true if sanitizeImageBytes() is genuinely idempotent,
+// which is what these tests establish. If any of them ever fails, the guard
+// silently stops terminating and the loop comes back - so they are load
+// bearing for availability and cost, not just for correctness.
+function sameBytes(a, b) {
+  return a.length === b.length && a.every((x, i) => x === b[i]);
+}
+
+for (const [label, build] of [
+  ["JPEG", buildJpegWithExif],
+  ["PNG", buildPngWithExif],
+  ["WebP", buildWebpWithExif],
+]) {
+  test(`sanitizeImageBytes is idempotent for ${label} - the second pass changes nothing, which is what stops the trigger loop`, () => {
+    const first = sanitizeImageBytes(new Uint8Array(build()));
+    assert.ok(first.ok, "the fixture should sanitize cleanly");
+    const second = sanitizeImageBytes(first.bytes);
+    assert.ok(second.ok, "already-sanitized bytes must still be recognised as a valid image");
+    assert.ok(sameBytes(second.bytes, first.bytes),
+      `${label}: a second sanitize pass changed the bytes - sanitize_upload's re-entry guard would never fire and the trigger would loop forever`);
+    assert.equal(second.contentType, first.contentType, "and the content type must be stable across passes");
+  });
+
+  test(`the ${label} fixture genuinely had something to strip, so the idempotence test above is not vacuous`, () => {
+    const raw = new Uint8Array(build());
+    const first = sanitizeImageBytes(raw);
+    assert.ok(!sameBytes(first.bytes, raw),
+      `${label}: the first pass changed nothing, so "the second pass changes nothing either" proves nothing`);
+  });
+}

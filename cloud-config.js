@@ -83,5 +83,10 @@ window.HAIMUNIA_CONFIG = Object.freeze({
   // (this is wa.me's own required shape). Israeli mobile 05X-XXX-XXXX becomes
   // 9725XXXXXXXX.
   supportWhatsApp: "",
-  supportEmail: "",
+  // Set 2026-09-15. A club address, deliberately not a personal one: this file
+  // is committed and served to every browser, so whatever is here is public by
+  // construction - the same way supabasePublishableKey above is. That is fine
+  // for an address whose whole purpose is to be written to, and is why the
+  // club inbox is the right one to put here.
+  supportEmail: "haimuniya@gmail.com",
 });

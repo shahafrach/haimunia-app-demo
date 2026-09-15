@@ -18,6 +18,7 @@
 //      worse than no support screen.
 import { test } from "node:test";
 import assert from "node:assert";
+import fs from "node:fs";
 import { bootApp } from "./helpers/boot.mjs";
 
 async function openSupportSheet(window) {
@@ -83,8 +84,12 @@ test("an empty description still produces a sendable report rather than a blank 
 
 test("with no support channel configured there is still a way out - the copy fallback", async () => {
   const window = await bootApp();
-  // cloud-config.js ships both channels empty by default, which is exactly
-  // the unconfigured-club case this asserts.
+  // This asserts the UNCONFIGURED-club case, using test/helpers/boot.mjs's
+  // own HAIMUNIA_CONFIG stub - which sets neither support channel - rather
+  // than the shipped cloud-config.js. Kept separate on purpose: the real
+  // config now routes to a club address (see the test below), and a club that
+  // has not filled one in yet must still get a working screen. Do not
+  // "fix" this by reading cloud-config.js; the two cases are both real.
   const cfg = window.supportConfig();
   assert.equal(cfg.whatsapp, "", "this fixture should have no WhatsApp number configured");
   assert.equal(cfg.email, "", "nor an email address");
@@ -117,4 +122,22 @@ test("support is registered ahead of settings, so Escape closes the sheet on top
   const current = window.currentAppDialog();
   assert.equal(current.overlayId, "supportOverlay",
     "with both open, the active dialog must be support - not the settings sheet behind it");
+});
+
+test("the shipped cloud-config.js actually routes somewhere - an empty one would make the whole feature decorative", () => {
+  // The one assertion in this file that is about the REAL config rather than
+  // the test stub. Everything above proves the sheet behaves correctly; this
+  // proves it is wired to a human. A support screen whose only route is
+  // "copy this text somewhere yourself" is a feature in name only, and the
+  // failure mode is silent - nobody notices an inbox that never receives.
+  const cfg = fs.readFileSync(new URL("../cloud-config.js", import.meta.url), "utf8");
+  const email = (cfg.match(/supportEmail:\s*"([^"]*)"/) || [])[1];
+  const whatsapp = (cfg.match(/supportWhatsApp:\s*"([^"]*)"/) || [])[1];
+  assert.ok(email !== undefined && whatsapp !== undefined, "both support keys must exist in cloud-config.js, even if empty");
+  assert.ok((email && email.length) || (whatsapp && whatsapp.length),
+    "at least one support channel must be configured, or every bug report dies in the member's clipboard");
+  if (email) assert.match(email, /^[^@\s]+@[^@\s]+\.[^@\s]+$/, "supportEmail must be a usable address");
+  // wa.me rejects +, spaces and dashes, and a wrong number fails silently by
+  // opening a chat with nobody - so the stored shape is worth pinning.
+  if (whatsapp) assert.match(whatsapp, /^[0-9]{8,15}$/, "supportWhatsApp must be digits only, international format, no + and no spaces");
 });

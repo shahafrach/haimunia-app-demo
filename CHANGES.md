@@ -1,3 +1,81 @@
+## A support inbox, and the loop guard that stopped sanitize_upload shipping broken — 2026-09-15 (second entry)
+
+Follow-up to the real-phone session earlier today. Three things were left
+open at the end of it; two are closed here and the third is a one-command
+handoff.
+
+**The support sheet now routes somewhere.** `supportEmail` is set to the club
+inbox, so "דיווח על תקלה" hands a composed report to the member's mail app
+instead of only offering the clipboard. Deliberately the CLUB address and not
+a personal one: `cloud-config.js` is committed and served to every browser, so
+anything in it is public by construction, exactly like the publishable key
+beside it - which is fine for an address whose entire job is to be written to.
+`supportWhatsApp` is still empty; setting it is one more line whenever the
+club wants that route too. A new test reads the shipped config directly and
+fails if BOTH channels are ever empty, because a support screen whose only
+route is "copy this somewhere yourself" is a feature in name only and its
+failure mode is silent - nobody notices an inbox that never receives.
+
+**sanitize_upload was about to be deployed with an unbounded trigger loop.**
+Found while reading it one last time before pushing it live, which is the only
+reason it was caught: `202609110003`'s trigger fires `after insert OR UPDATE on
+storage.objects`, and the function's own sanitized re-upload IS an update to
+storage.objects. So the real sequence was upload -> trigger -> sanitize ->
+update -> trigger -> sanitize -> update, with no terminating condition, since
+a re-upload bumps the row whether or not the bytes changed. Every photo posted
+to the club would have become an endless cycle of Edge Function invocations
+and Storage writes on production. The function had never run anywhere: it was
+never deployed, and the trigger is inert locally because the Vault secrets are
+placeholders on every local stack, so no test and no environment this repo has
+ever had could have surfaced it.
+
+The guard is a **fixed point, not a flag**: `sanitizeImageBytes()` strips
+metadata segments, and bytes with none left come back unchanged, so the second
+pass over an object this function already wrote produces output identical to
+its input. Skipping the write in that case ends the loop after exactly one
+extra invocation - no marker to store, no metadata to keep in sync, and no way
+for the guard to drift out of agreement with the sanitizer, because "already
+clean" is defined as whatever the sanitizer itself declines to change.
+Explicitly not done with a stored flag (forgeable by the same direct Storage
+write this function exists to backstop) and not by narrowing the trigger to
+INSERT only (that would reopen avatar re-uploads, the exact case the
+migration's own comment says UPDATE was added for).
+
+Idempotence is now asserted rather than assumed - six new tests in
+`test/security-hunt-image-sanitize.test.mjs`, one per format, each paired with
+a non-vacuity control proving the FIRST pass really did strip something, so
+"the second pass changes nothing" cannot pass by accident on a fixture with
+nothing to remove. Those tests are load-bearing for availability and cost, not
+just correctness: if idempotence ever breaks, the guard silently stops
+terminating and the loop returns.
+
+**`sanitize_upload` was also the only Edge Function in the repo with no
+`deno.lock`** - the other three have one and `test.yml`'s
+`edge-function-lockfiles` job runs `deno cache --frozen --lock=deno.lock`
+against every function directory, so that gate could not have passed for it.
+Added. All four lockfiles are byte-identical (same md5) because all four
+resolve the same single remote import, `@supabase/supabase-js@2.57.4`;
+sanitize_upload's second import is a local relative path, which is not locked.
+Copied rather than generated, because deno is not installed in this
+environment - the CI job is what will verify it independently.
+
+**Still not deployed.** The function is fixed, tested and lockfiled, but
+`supabase functions deploy sanitize_upload` was refused by this environment's
+permission layer, twice. Until someone runs it, the trigger added this morning
+keeps POSTing every avatar and post-photo write to a 404 - harmless in itself,
+since `net.http_post` is fire-and-forget, but the server-side EXIF/GPS
+stripping and magic-byte content-type check that migration exists to provide
+are not running while the repository reads as though they are.
+
+Verified: full suite 1665/1665, check-version / check-vendor-version /
+migration-immutability OK. Browser-check not re-run this pass and that is
+stated rather than glossed: nothing in `app.js`, `cloud.js`, `index.html` or
+`sw.js` changed here - the diff is `cloud-config.js`, one Edge Function, one
+lockfile and two test files - and the suite was 44/44 on the commit
+immediately before this one.
+
+---
+
 ## The first real phone: four reports, one root cause, and a way to report the next one — 2026-09-15
 
 Every audit in this repository has said the same thing about its own biggest
