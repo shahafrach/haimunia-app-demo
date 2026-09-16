@@ -21,7 +21,7 @@ CREATE OR REPLACE FUNCTION public.coach_new_members(p_within_days integer DEFAUL
  LANGUAGE plpgsql
  STABLE SECURITY DEFINER
  SET search_path TO ''
-AS $$function$$
+AS $$
 declare
   v_days integer;
 begin
@@ -98,7 +98,7 @@ begin
     m.joined_on desc,
     exists (select 1 from public.member_contact_log mcl where mcl.user_id = m.id) asc,
     m.handle asc;
-end $$function$$
+end $$
 ;
 revoke all on function public.coach_new_members(integer) from public, anon;
 grant execute on function public.coach_new_members(integer) to authenticated;
