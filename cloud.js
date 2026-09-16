@@ -16,6 +16,21 @@
   // always there - and an escape function is the one dependency that must
   // fail loudly rather than degrade to a no-op fallback that would ship XSS.
   const esc = window.BoxLogSafe.esc;
+  // The accessible name for a count badge. Kept as ONE function that both
+  // sub-tab bars call, rather than a string built inline at each bar: the
+  // visible badge text was singular-guarded long ago and these aria-labels were
+  // not, which is exactly what happens when the same rule lives in two places.
+  // Singular drops the numeral entirely — "דיווח אחד" reads naturally where
+  // "1 דיווחים" does not, and dropping it also sidesteps the slashed form of
+  // "one", which is not a word at all: the feminine is irregular, so a slash
+  // cannot build it from the masculine the way it can for a regular pair.
+  function badgeAria(t) {
+    const n = t && t.badge;
+    if (!n) return "";
+    const many = (t && t.badgeLabel) || "דיווחים ממתינים";
+    const one = (t && t.badgeLabelOne) || "דיווח אחד ממתין";
+    return n === 1 ? one : `${n} ${many}`;
+  }
   // Security hunt (2026-09-11): first real call site - navigateToNotifTarget()
   // below used a naive manual escape instead. See that call site's own comment.
   const cssSel = window.BoxLogSafe.cssSel;
@@ -1136,7 +1151,7 @@
     const unread = state.notif.unreadLoaded
       ? Number(state.notif.unread) || 0
       : Number((club && club.unread_notifications) || 0);
-    return `<button class="chip-btn" data-community-action="feed-notifications" aria-label="התראות${unread ? `, ${unread} חדשות` : ""}" aria-haspopup="dialog" style="position:relative;">🔔${unread ? `<span class="tab-badge" aria-hidden="true">${unread}</span>` : ""}</button>`;
+    return `<button class="chip-btn" data-community-action="feed-notifications" aria-label="התראות${unread ? (unread === 1 ? ", התראה אחת חדשה" : `, ${unread} חדשות`) : ""}" aria-haspopup="dialog" style="position:relative;">🔔${unread ? `<span class="tab-badge" aria-hidden="true">${unread}</span>` : ""}</button>`;
   }
   function rerender() { if (typeof window.render === "function") window.render(); }
   // WHERE A CONFIRMATION APPEARS DECIDES WHETHER IT IS SEEN.
@@ -1768,6 +1783,12 @@
     state.user = data.session ? data.session.user : null;
     if (state.user) {
       enableSyncIfAllowed();
+      // Bind the device's training log to this identity (round 10). Called on
+      // BOTH session paths, not just at sign-in, because the case that matters
+      // is the SECOND member to sign in on one phone - see app.js LOG_OWNER_KEY.
+      if (typeof window.haimuniaBindLogOwner === "function") {
+        window.haimuniaBindLogOwner(state.user.id);
+      }
       // COMM-170. First thing in the session-ready path, so every track()
       // below it writes instead of dropping.
       ensureAnalyticsConfigured();
@@ -4931,16 +4952,18 @@
   async function loadInvites(reset) {
     if (!state.user || !(hasPerm(PERM.MEMBER_INVITE) || isAdmin())) { state.admin.invites.items = []; return; }
     const iv = state.admin.invites;
-    if (reset) { iv.items = []; iv.cursor = null; iv.end = false; iv.loading = true; } else { iv.loadingMore = true; }
+    if (reset) { iv.items = []; iv.cursor = null; iv.cursorId = null; iv.end = false; iv.loading = true; } else { iv.loadingMore = true; }
     iv.error = false; rerender();
-    const { data, error } = await mgmtDb().rpc("admin_invite_list", { p_status: iv.status, p_cursor: iv.cursor, p_limit: 25 });
+    const { data, error } = await mgmtDb().rpc("admin_invite_list", { p_status: iv.status, p_cursor: iv.cursor, p_cursor_id: iv.cursorId || null, p_limit: 25 });
     iv.loading = false; iv.loadingMore = false; iv.loaded = true;
     if (error) { iv.error = true; rerender(); return; }
     const page = Array.isArray(data) ? data : [];
     iv.items = reset ? page : iv.items.concat(page);
     iv.end = page.length < 25;
     const last = page[page.length - 1];
-    if (last) iv.cursor = last.created_at;
+    // This list had no tie-break in its ORDER BY at all before 202609160002,
+    // so its page boundary was not even deterministic between two calls.
+    if (last) { iv.cursor = last.created_at; iv.cursorId = last.id || null; }
     rerender();
   }
   function setInviteStatusFilter(status) {
@@ -6537,12 +6560,28 @@
   // COMM-110/113. One page. The cursor is opaque: the client stores it and
   // hands it back, it never parses or derives one.
   async function fetchFeedPage() {
+    // THE SCOPE THIS PAGE WAS ASKED FOR, remembered before the request goes
+    // out. Live bug hunt, fresh round 9 (2026-09-16): rows were appended
+    // unconditionally, with no check that the member was still looking at the
+    // same filter. Boot fires a "for_you" load; tap "Following" before it
+    // resolves and the slow first response lands afterwards, so a post from
+    // someone the member does not follow appears under a Following chip that
+    // is still shown as selected. loadMoreFeed() had the same hole.
+    //
+    // Every other loader in this file already guards this way - the challenge
+    // board, the profile view and the event detail all check that the thing
+    // they were loading for is still the thing on screen before applying a
+    // response. The feed, the most-used surface of the lot, did not.
+    const requestedScope = state.feed.scope;
     const { data, error } = await client.rpc("feed_page", {
       p_cursor: state.feed.cursor,
       p_limit: FEED_PAGE_SIZE,
       p_scope: state.feed.scope,
     });
     if (error) return false;
+    // Moved on while this was in flight: drop it rather than mixing one
+    // filter's rows into another's list.
+    if (state.feed.scope !== requestedScope) return false;
     const rows = Array.isArray(data) ? data : (data ? [data] : []);
     // Appended in the order feed_page returned them. No sort, no filter, no
     // re-ordering of any kind on this side.
@@ -7291,7 +7330,20 @@
       restoreCommentFocus(key, caret);
     }
   }
+  // The same ordering token communitySearch() and directorySearch() already
+  // use. Live bug hunt, fresh round 9 (2026-09-16): this fired a lookup on
+  // every keystroke with no debounce and no token, and its only guard asked
+  // "is this still the same comment box" - never "is this response still for
+  // the text that is in it".
+  //
+  // So a fast typist correcting "@d" to "@z" could see the picker fill with
+  // the match for "@d", which had simply resolved second. Pressing Enter then
+  // inserted @[Daniel Levi](u-daniel) into a comment written while looking at
+  // "@z" - mentioning and NOTIFYING the wrong member, and attributing that
+  // mention publicly to someone who never typed it.
+  let mentionSearchToken = 0;
   async function searchMentionPeople(key, query) {
+    const token = ++mentionSearchToken;
     const q = String(query || "").trim().replace(/[%_,()]/g, "");
     let results = [];
     if (q.length >= 1 && state.user) {
@@ -7301,6 +7353,8 @@
         .neq("id", state.user.id).limit(6);
       results = (data || []).filter((p) => !isBlockedUser(p.id));
     }
+    // A response that is no longer the newest must not write anything back.
+    if (token !== mentionSearchToken) return;
     if (state.engagement.mentionPicker && state.engagement.mentionPicker.key === key) {
       state.engagement.mentionPicker.results = results;
       state.engagement.mentionPicker.loading = false;
@@ -7809,6 +7863,9 @@
     // profiles_insert_self, which requires recovery_verified_at to be null,
     // so a member who has completed account recovery could no longer edit
     // their own profile at all.
+    // Whether this is a FIRST profile or an edit of an existing one - read
+    // before the write, because the write is what makes state.profile exist.
+    const isFirstProfile = !state.profile;
     const { error } = state.profile
       ? (await client.from("profiles").update({ handle: payload.handle, display_name: payload.display_name, bio: payload.bio }).eq("id", state.user.id))
       : (await client.from("profiles").upsert(payload));
@@ -7834,6 +7891,33 @@
     // effectively unreachable from this, the most common path to it.
     let recoveryVerified = true;
     if (!state.user.is_anonymous && state.profile && !state.profile.recovery_verified_at) recoveryVerified = await verifyRecovery({ force: true });
+    // A BRAND-NEW MEMBER'S FIRST SCREEN OF THE CLUB IS THE FEED.
+    //
+    // Live bug hunt, fresh round 9 (2026-09-16): state.ui.tab is initialised
+    // once at script load, so one member could open their own חשבון tab, sign
+    // out, and the next person to complete a fresh signup on that device
+    // landed on the Account form as their first impression of the club. A
+    // coach handing over their phone to sign someone up is exactly how that
+    // happens.
+    //
+    // Reset HERE rather than on sign-out, which was my first attempt and was
+    // wrong: state.ui.tab surviving a sign-out is deliberate and documented -
+    // a member who signs out and back in returns to where they were, and
+    // community-state-namespaces.test.mjs enforces it by name. The bug is not
+    // that the tab persists; it is that it persisted across a change of
+    // PERSON. Completing a first profile is the one moment that is
+    // unambiguously a new member.
+    if (isFirstProfile) state.ui.tab = "feed";
+    // The member has just told us their name. Do not ask again.
+    //
+    // app.js keeps its own userName for the offline log and community signup
+    // never set it, so a member who joined by invite was destined to be asked
+    // "איך נקרא לך?" a second time for the same answer. Adopted here only if
+    // the local log has no name yet, so this can never overwrite a name
+    // someone deliberately chose for their private log.
+    if (typeof window.adoptCommunityDisplayName === "function") {
+      window.adoptCommunityDisplayName(payload.display_name || handle || "");
+    }
     if (recoveryVerified) setMessage("הפרופיל נשמר");
   }
   async function migrateLocalData() {
@@ -8657,13 +8741,24 @@
     if (state.posts.openShare[key]) delete state.posts.openShare[key]; else state.posts.openShare[key] = true;
     rerender();
   }
+  // THE THIRD PHOTO SURFACE. Live bug hunt, fresh round 9 (2026-09-16).
+  //
+  // post_photos was added to CLUB_MODULE_TOGGLES the day before and wired
+  // into the feed composer and the PR-share prompt - and missed here, in the
+  // inline share control that Calendar's day detail, the Add tab's
+  // today's-sets card and the WOD progress card all render. A club that
+  // switched photos off still had the camera offered on five call sites.
+  //
+  // These toggles only hide the offer (they are clientOnly by design), so a
+  // surface that keeps offering is the whole of the failure: the club said no
+  // and one of three places did not listen.
   window.renderShareControl = function (type, id) {
     if (!window.isCommunitySignedIn || !window.isCommunitySignedIn()) return "";
     const key = shareKey(type, id);
     if (!state.posts.openShare[key]) return `<button data-community-action="toggle-share" data-type="${esc(type)}" data-id="${esc(id)}" aria-label="שיתוף לקהילה" style="color:var(--steel);padding:4px;">📤</button>`;
     return `<div class="flex items-center gap-6" style="flex-wrap:wrap;">
-      <input type="file" id="photo-${esc(id)}" accept="image/jpeg,image/png,image/webp" class="file-input-hidden"/>
-      <label class="chip-btn" for="photo-${esc(id)}" style="cursor:pointer;padding:5px 9px;font-size:11px;">📷</label>
+      ${isModuleEnabled("post_photos") ? `<input type="file" id="photo-${esc(id)}" accept="image/jpeg,image/png,image/webp" class="file-input-hidden"/>
+      <label class="chip-btn" for="photo-${esc(id)}" style="cursor:pointer;padding:5px 9px;font-size:11px;">📷</label>` : ""}
       <button class="chip-btn" data-community-action="publish" data-type="${esc(type)}" data-id="${esc(id)}" data-visibility="followers" style="padding:5px 9px;font-size:11px;">לעוקבים</button>
       <button class="chip-btn primary" data-community-action="publish" data-type="${esc(type)}" data-id="${esc(id)}" data-visibility="public" style="padding:5px 9px;font-size:11px;">לכולם</button>
       <button class="link-btn" data-community-action="toggle-share" data-type="${esc(type)}" data-id="${esc(id)}" aria-label="ביטול שיתוף" style="padding:5px;">✕</button>
@@ -10668,9 +10763,9 @@
   async function loadRoster(reset) {
     if (!state.user || !isStaff()) { state.admin.roster.items = []; return; }
     const r = state.admin.roster;
-    if (reset) { r.items = []; r.cursor = null; r.end = false; r.loading = true; } else { r.loadingMore = true; }
+    if (reset) { r.items = []; r.cursor = null; r.cursorId = null; r.end = false; r.loading = true; } else { r.loadingMore = true; }
     r.error = false; rerender();
-    const { data, error } = await mgmtDb().rpc("admin_member_roster", { p_cursor: r.cursor, p_limit: ROSTER_PAGE_SIZE });
+    const { data, error } = await mgmtDb().rpc("admin_member_roster", { p_cursor: r.cursor, p_cursor_id: r.cursorId || null, p_limit: ROSTER_PAGE_SIZE });
     r.loading = false; r.loadingMore = false; r.loaded = true;
     if (error) { r.error = true; rerender(); return; }
     const page = Array.isArray(data) ? data : [];
@@ -10690,6 +10785,10 @@
     // club's legacy tail in one browsing session.
     r.end = page.length < ROSTER_PAGE_SIZE || !last || last.redeemed_at == null;
     r.cursor = last ? last.redeemed_at : r.cursor;
+    // 202609160002: the id half of the cursor. Without it the RPC pages on the
+    // join date alone and drops every member sharing the last-shown member's
+    // timestamp - the normal case for a club that onboarded in one sitting.
+    r.cursorId = last ? (last.id || null) : r.cursorId;
     rerender();
   }
   // Fresh-eyes audit: an admin-persona review scrolled a ~15-member roster
@@ -10776,9 +10875,9 @@
   async function loadIncompleteSignups(reset) {
     if (!state.user || !isStaff()) { state.admin.incompleteSignups.items = []; return; }
     const g = state.admin.incompleteSignups;
-    if (reset) { g.items = []; g.cursor = null; g.end = false; g.loading = true; } else { g.loadingMore = true; }
+    if (reset) { g.items = []; g.cursor = null; g.cursorId = null; g.end = false; g.loading = true; } else { g.loadingMore = true; }
     g.error = false; rerender();
-    const { data, error } = await mgmtDb().rpc("admin_incomplete_signups", { p_cursor: g.cursor, p_limit: GHOST_PAGE_SIZE });
+    const { data, error } = await mgmtDb().rpc("admin_incomplete_signups", { p_cursor: g.cursor, p_cursor_id: g.cursorId || null, p_limit: GHOST_PAGE_SIZE });
     g.loading = false; g.loadingMore = false; g.loaded = true;
     if (error) { g.error = true; rerender(); return; }
     const page = Array.isArray(data) ? data : [];
@@ -10792,6 +10891,7 @@
     // looping the same page forever rather than paging.
     g.end = page.length < GHOST_PAGE_SIZE || !last || last.redeemed_at == null;
     g.cursor = last ? last.redeemed_at : g.cursor;
+    g.cursorId = last ? (last.user_id || null) : g.cursorId; // see loadRoster (202609160002)
     rerender();
   }
   // The ONLY two identifying strings a ghost has, in the order they come to
@@ -14055,7 +14155,16 @@
     </div>`;
   }
   function renderChallengeParticipants(v) {
-    const list = (v.participants || []).filter((p) => p.status !== "withdrawn").slice(0, 30);
+    // visible_to_club is honoured here for the same reason COMM-203 honours it
+    // in the cooperative contributors list: a member who turned club visibility
+    // off still COUNTS (the count below is the server's participant_count over
+    // every row) but is never NAMED. The cooperative list got this filter and
+    // this one — every other challenge type — did not, even though both select
+    // the same visible_to_club column from the same query.
+    const list = (v.participants || [])
+      .filter((p) => p.status !== "withdrawn")
+      .filter((p) => !(p.profiles && p.profiles.visible_to_club === false))
+      .slice(0, 30);
     if (!list.length) return "";
     const count = (v.progress && v.progress.participant_count != null) ? v.progress.participant_count : list.length;
     return `<div style="margin-top:12px;">
@@ -19418,7 +19527,7 @@
     // loadChallenges() itself returns nothing to count.
     const boardsBadgeCount = (state.challenges.items || [])
       .filter((c) => c.status === "active" && daysRemaining(c.end_at) !== null && daysRemaining(c.end_at) <= 2).length;
-    tabs.push({ id: "boards", label: "לוחות", html: boardsTab, badge: boardsBadgeCount || undefined, badgeLabel: "אתגרים מסתיימים בקרוב" });
+    tabs.push({ id: "boards", label: "לוחות", html: boardsTab, badge: boardsBadgeCount || undefined, badgeLabel: "אתגרים מסתיימים בקרוב", badgeLabelOne: "אתגר אחד מסתיים בקרוב" });
     if (isModuleEnabled("directory")) tabs.push({ id: "directory", label: "חברים", html: directoryTab });
     // Redesign, Phase 1 fix: the pendingReports badge used to sit here
     // because moderation itself lived in this Account pill. It moved to
@@ -19471,7 +19580,7 @@
     // ever "pending reports" (Boards now carries "challenges ending soon"
     // too) - defaults to the original string so every existing badge-less
     // or unlabelled producer keeps reading exactly as before.
-    const tabBar = `<div class="subtabbar" role="tablist" aria-label="ניווט בקהילה">${tabs.map((t) => `<button class="subtabbtn${t.id === activeTab.id ? " active" : ""}" id="commTab-${t.id}" aria-controls="content" data-community-action="set-tab" data-tab="${t.id}" role="tab" aria-selected="${t.id === activeTab.id}" tabindex="${t.id === activeTab.id ? "0" : "-1"}">${t.label}${t.badge ? `<span class="tab-badge" aria-label="${t.badge} ${esc(t.badgeLabel || "דיווחים ממתינים")}">${t.badge}</span>` : ""}</button>`).join("")}</div>`;
+    const tabBar = `<div class="subtabbar" role="tablist" aria-label="ניווט בקהילה">${tabs.map((t) => `<button class="subtabbtn${t.id === activeTab.id ? " active" : ""}" id="commTab-${t.id}" aria-controls="content" data-community-action="set-tab" data-tab="${t.id}" role="tab" aria-selected="${t.id === activeTab.id}" tabindex="${t.id === activeTab.id ? "0" : "-1"}">${t.label}${t.badge ? `<span class="tab-badge" aria-label="${esc(badgeAria(t))}">${t.badge}</span>` : ""}</button>`).join("")}</div>`;
 
     // COMM-329 (remaining scope). The Community tab was the one solo tab
     // with no top-level <h1> of its own - it never calls renderTabHeader(),
@@ -19705,7 +19814,7 @@
           <span>${pendingReports === 1 ? "דיווח אחד ממתין למודרציה" : `${pendingReports} דיווחים ממתינים למודרציה`}</span><span aria-hidden="true">‹</span>
         </button>` : "",
       inactiveCount ? `<button class="log-row" data-community-action="set-manage-tab" data-tab="members" data-scroll="manageArea-roster" style="width:100%;text-align:right;border:1px solid var(--yellow);border-radius:10px;padding:10px 12px;background:transparent;cursor:pointer;">
-          <span>${bidiText(`${inactiveCount} חברים לא נכנסו לאפליקציה לאחרונה`)}</span><span aria-hidden="true">‹</span>
+          <span>${bidiText(inactiveCount === 1 ? "יש חבר/ה שלא נכנס/ה לאפליקציה לאחרונה" : `${inactiveCount} חברים לא נכנסו לאפליקציה לאחרונה`)}</span><span aria-hidden="true">‹</span>
         </button>` : "",
     ].filter(Boolean);
     // Moved out of the retired "דשבורד" sub-tab to sit above the tab bar,
@@ -19870,7 +19979,7 @@
     state.ui.manageTab = activeManageTab.id;
     // Same role="tablist"/"tab" convention as the Community sub-tab bar
     // above - see that bar's own comment (COMM-358).
-    const manageTabBar = `<div class="subtabbar" role="tablist" aria-label="ניווט בניהול">${manageTabs.map((t) => `<button class="subtabbtn${t.id === activeManageTab.id ? " active" : ""}" id="manageTab-${t.id}" aria-controls="content" data-community-action="set-manage-tab" data-tab="${t.id}" role="tab" aria-selected="${t.id === activeManageTab.id}" tabindex="${t.id === activeManageTab.id ? "0" : "-1"}">${t.label}${t.badge ? `<span class="tab-badge" aria-label="${t.badge} דיווחים ממתינים">${t.badge}</span>` : ""}</button>`).join("")}</div>`;
+    const manageTabBar = `<div class="subtabbar" role="tablist" aria-label="ניווט בניהול">${manageTabs.map((t) => `<button class="subtabbtn${t.id === activeManageTab.id ? " active" : ""}" id="manageTab-${t.id}" aria-controls="content" data-community-action="set-manage-tab" data-tab="${t.id}" role="tab" aria-selected="${t.id === activeManageTab.id}" tabindex="${t.id === activeManageTab.id ? "0" : "-1"}">${t.label}${t.badge ? `<span class="tab-badge" aria-label="${esc(badgeAria(t))}">${t.badge}</span>` : ""}</button>`).join("")}</div>`;
     // Redesign, Phase 3 fix: the notification bell used to live only inside
     // feedTab's club-strip - unreachable from Manage entirely. A staff
     // member who now lives primarily on Manage had no unread indicator at
@@ -21182,6 +21291,24 @@
     else if (action === "coach-monthly-recap-publish") publishMonthlyRecap(el.dataset.id);
   };
   window.isCommunitySignedIn = function () { return !!(state.user && state.profile); };
+  // IS THE MEMBER MID-INVITE RIGHT NOW? Live bug hunt, fresh round 9
+  // (2026-09-16). app.js's boot opens its own "what's your name" welcome sheet
+  // whenever the local log has no name, knowing nothing about the fact that
+  // cloud.js has just captured an invite deep link and routed the app to the
+  // invite-code screen. Both rendered, and the welcome sheet - a focus-
+  // trapping full-screen overlay - painted on top and INTERCEPTED the taps
+  // meant for the invite form's own submit button underneath it.
+  //
+  // That is the first thing every member arriving from a shared link or QR
+  // code would have hit: a gate about something else entirely, on top of the
+  // screen they came for. Recoverable by tapping "דילוג", but nobody should
+  // have to escape a modal to accept an invitation.
+  //
+  // cloud.js is deferred ahead of app.js, so captureInviteDeepLink() has
+  // already run by the time app.js asks this.
+  window.communityInviteFlowPending = function () {
+    return !!(state.ui.inviteCodeDraft && !state.redemption);
+  };
   // WHO OWNS A WRITE, at the moment it is made. app.js's queueSyncRecord()
   // needs this to stamp an outbox row with the member who created it - see
   // flushOutbox()'s identity check for why a row that does not know its own
@@ -21336,6 +21463,12 @@
       state.user = session ? session.user : null;
       if (state.user) {
         enableSyncIfAllowed();
+        // Bind the device's training log to this identity (round 10). Called on
+        // BOTH session paths, not just at sign-in, because the case that matters
+        // is the SECOND member to sign in on one phone - see app.js LOG_OWNER_KEY.
+        if (typeof window.haimuniaBindLogOwner === "function") {
+          window.haimuniaBindLogOwner(state.user.id);
+        }
         // COMM-170. Same reason as refreshSession: configure before the
         // first track(). Idempotent, so whichever path arrives first wins.
         ensureAnalyticsConfigured();
@@ -21655,30 +21788,30 @@
       return;
     }
     if (e.key !== "Escape") return;
-    // Launch-readiness audit, A3. Checked first, same reasoning as its
-    // CLOUD_DIALOGS position above: askConfirm() renders on top of whatever
-    // triggered it, so Escape must close IT, not the dialog underneath.
-    if (state.ui.confirmDialog) { e.preventDefault(); closeConfirm(); return; }
-    // Same position, same reason, as its CLOUD_DIALOGS entry: stacked over
-    // the PR prompt and the achievement celebration below.
-    if (state.posts.outwardShare) { e.preventDefault(); closeOutwardShare(); return; }
-    // Third, mirroring its CLOUD_DIALOGS position exactly: the term sheet can
-    // be opened from inside the challenge/event/recap/profile overlays below,
-    // so Escape must close IT and leave the one underneath open — a member
-    // who asked what a word meant has not asked to leave the challenge.
-    if (state.ui.termSheet) { e.preventDefault(); closeTermSheet(); return; }
-    if (state.admin.reportSheet) { e.preventDefault(); closeReportSheet(); return; }
-    if (state.admin.modAction) { e.preventDefault(); closeModAction(); return; }
-    if (state.admin.reclaim) { e.preventDefault(); closeGhostReclaim(); return; }
-    if (state.admin.modContext) { e.preventDefault(); closeModContext(); return; }
-    if (state.notif.center) { e.preventDefault(); closeNotifCenter(); return; }
-    if (state.achievements.unlock) { e.preventDefault(); dismissAchievementUnlock(); return; }
-    if (state.posts.prPrompt) { e.preventDefault(); dismissPrPrompt(); return; }
-    if (state.posts.composer) { e.preventDefault(); tryCloseComposer(); return; }
-    if (state.members.profileView) { e.preventDefault(); closeCommunityProfile(); return; }
-    if (state.challenges.view) { e.preventDefault(); closeChallengeView(); return; }
-    if (state.events.view) { e.preventDefault(); closeEventView(); return; }
-    if (state.recaps.view) { e.preventDefault(); closeRecapView(); return; }
+    // DERIVED FROM CLOUD_DIALOGS, not a second copy of it.
+    //
+    // Live bug hunt, fresh round 9 (2026-09-16). This was a hand-maintained
+    // if/else chain listing fifteen dialogs in the same order as the registry
+    // - the comments on the first three even said so, explaining that
+    // confirmSheet, outwardShare and termSheet must come first because each
+    // stacks on top of the dialog below it. The backdrop-click handler forty
+    // lines down ALREADY read the registry directly.
+    //
+    // So when clubWodBoard was added to the registry (202609080002, with its
+    // own long comment about why it must sit last), clicking the backdrop
+    // closed it and Escape did nothing. Every other dialog in the app closes
+    // on Escape; that one silently did not, for keyboard and screen-reader
+    // users only.
+    //
+    // Iterating the registry in order reproduces the old behaviour exactly -
+    // same list, same order, same first-match-wins - and a dialog added later
+    // is covered by existing in the registry rather than by someone
+    // remembering there are two lists. The ORDER of CLOUD_DIALOGS is now
+    // load-bearing for Escape as well as for paint order, which is what its
+    // own comments already assumed.
+    for (const d of CLOUD_DIALOGS) {
+      if (d.isOpen()) { e.preventDefault(); d.close(); return; }
+    }
     if (state.posts.openMenu) { state.posts.openMenu = null; rerender(); }
   });
   // COMM-190. A click on the dim backdrop - the overlay element itself, not

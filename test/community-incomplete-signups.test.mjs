@@ -280,8 +280,13 @@ test("BIDI: the username and the stalled-day count are isolated, so Hebrew aroun
 test("the reclaim sheet is a first-class dialog: registered, Escape-closable, and rendered last", () => {
   assert.match(cloudJs, /\{ key: "reclaimInvite", isOpen: \(\) => state\.admin\.reclaim, close: function \(\) \{ closeGhostReclaim\(\); \} \}/,
     "in CLOUD_DIALOGS, or the Tab trap and the backdrop click do not know it exists");
-  assert.match(cloudJs, /if \(state\.admin\.reclaim\) \{ e\.preventDefault\(\); closeGhostReclaim\(\); return; \}/,
-    "and in the Escape chain");
+  // Escape used to be a hand-maintained if/else chain listing each dialog
+  // separately. Round 9 (2026-09-16) made it walk CLOUD_DIALOGS instead,
+  // because clubWodBoard had been added to the registry and never to the
+  // chain - so the backdrop closed it and Escape did not. Being in the
+  // registry, asserted above, is now what makes a dialog Escape-closable.
+  assert.match(cloudJs, /for \(const d of CLOUD_DIALOGS\) \{\s*\n\s*if \(d\.isOpen\(\)\) \{ e\.preventDefault\(\); d\.close\(\); return; \}/,
+    "and Escape walks the registry, so registration is what makes it closable");
   assert.match(cloudJs, /renderGhostReclaimSheet\(\)/);
 });
 

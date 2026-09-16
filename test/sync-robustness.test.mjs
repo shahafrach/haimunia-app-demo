@@ -34,8 +34,15 @@ test("shouldApplyRemote compares timestamps for the four record types that actua
   for (const type of ["strength_entry", "wod_entry", "bodyweight", "measurement"]) {
     assert.match(body, new RegExp(`recordType === "${type}"`));
   }
-  assert.match(body, /return !existing \|\| incomingTs >= existing\.ts;/);
-  assert.match(appJs, /if \(!deleted && clean && !shouldApplyRemote\(row\.record_type, row\.record_id, clean\.ts\)\) return;/);
+  // Compares LAST-MODIFIED (updatedAt), falling back to ts only for records
+  // saved before that stamp existed. It used to compare existing.ts outright,
+  // which was a no-op for strength/WOD entries: saveSet/saveWod freeze ts at
+  // creation so History keeps its order, so two devices editing the same entry
+  // both sent the identical ts and the >= test always passed.
+  assert.match(body, /if \(!existing\) return true;/);
+  assert.match(body, /isFinite\(existing\.updatedAt\) \? existing\.updatedAt : existing\.ts/);
+  assert.match(body, /return incomingTs >= existingMod;/);
+  assert.match(appJs, /!shouldApplyRemote\(row\.record_type, row\.record_id, isFinite\(clean\.updatedAt\) \? clean\.updatedAt : clean\.ts\)/);
 });
 
 test("a real second pull only fetches records newer than the cursor left by the first one", async () => {

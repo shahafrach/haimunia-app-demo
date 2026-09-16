@@ -297,7 +297,17 @@ test("the sheet is in the dialog registry, so Escape, the Tab trap and the backd
   // The exact defect the launch-readiness audit's A3 found in the confirm
   // sheet: an overlay that is not registered here is reachable by mouse only.
   assert.match(src, /\{ key: "termSheet", isOpen: \(\) => state\.ui\.termSheet, close: function \(\) \{ closeTermSheet\(\); \} \}/);
-  assert.match(src, /if \(state\.ui\.termSheet\) \{ e\.preventDefault\(\); closeTermSheet\(\); return; \}/);
+  // Escape walks CLOUD_DIALOGS since round 9 (2026-09-16) rather than naming
+  // each dialog in a second, hand-maintained list - registration above is
+  // what makes it closable. The term sheet's POSITION in that registry is
+  // what still matters here, and is asserted below: it stacks over the
+  // challenge/event/recap/profile overlays, so Escape must close it and leave
+  // the one underneath open.
+  assert.match(src, /for \(const d of CLOUD_DIALOGS\) \{\s*\n\s*if \(d\.isOpen\(\)\) \{ e\.preventDefault\(\); d\.close\(\); return; \}/);
+  const regAt = src.indexOf("const CLOUD_DIALOGS");
+  const dialogKeys = [...src.slice(regAt, regAt + 6000).matchAll(/key: "([a-zA-Z]+)"/g)].map((m) => m[1]);
+  assert.ok(dialogKeys.indexOf("termSheet") < dialogKeys.indexOf("challengeView"),
+    "the term sheet must come before the overlays it can be opened from");
   assert.match(src, /data-cloud-dialog="termSheet"/);
   // Third, behind confirmSheet and outwardShare and ahead of every overlay a
   // marker can be rendered inside - see the ordering pin and its reasoning in

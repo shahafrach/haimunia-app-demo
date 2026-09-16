@@ -111,7 +111,8 @@ function sanitizeEntry(e) {
     return {
       id, exerciseId, date, type, weight, reps: 0, sets: Math.round(sets),
       durationSeconds: Math.round(durationSeconds),
-      ts: cleanTs(e.ts, date), isPR: e.isPR === true, groupId, blockLabel, est1RM: 0,
+      ts: cleanTs(e.ts, date), updatedAt: modTs(e, date),
+      isPR: e.isPR === true, groupId, blockLabel, est1RM: 0,
     };
   }
   const weight = cleanNum(e.weight, 0, LIMITS.weight, null);
@@ -120,13 +121,25 @@ function sanitizeEntry(e) {
   return {
     id, exerciseId, date, type, weight, reps, sets: Math.round(sets),
     durationSeconds: 0,
-    ts: cleanTs(e.ts, date), isPR: e.isPR === true,
+    ts: cleanTs(e.ts, date), updatedAt: modTs(e, date), isPR: e.isPR === true,
     // Links several rows saved as one working-set ladder or superset (same
     // groupId, one or two exerciseIds, same day) so the calendar day view
     // can group them — see renderCalDetail. null for an ordinary single set.
     groupId, blockLabel,
     est1RM: cleanNum(e.est1RM, 0, LIMITS.weight * 2, estimate1RM(weight, reps)),
   };
+}
+// The last-modified stamp, kept apart from ts (first saved, and the History
+// sort key — bumping ts on an edit would jump an old workout to the top of the
+// list). Returns undefined when the record has never carried one, so
+// shouldApplyRemote can fall back to ts rather than compare against a
+// fabricated time. See sanitizeWodEntry for the same rule.
+function modTs(e, date) {
+  if (e && e.updatedAt != null && isFinite(Number(e.updatedAt))) {
+    const u = cleanTs(e.updatedAt, date);
+    if (u) return u;
+  }
+  return undefined;
 }
 function sanitizeWodEntry(e) {
   if (!e || typeof e !== "object") return null;
@@ -151,9 +164,22 @@ function sanitizeWodEntry(e) {
   if (!out.rx) {
     const sw = cleanNum(e.scaledWeight, 0, LIMITS.weight, 0);
     if (sw) out.scaledWeight = sw;
-    const notes = cleanStr(e.notes, LIMITS.notesLen);
-    out.notes = notes || null;
   }
+  // Notes apply regardless of Rx, because saveWod() WRITES them regardless of
+  // Rx — and nothing clears the notes field when a member switches back to Rx.
+  // Gating this on !out.rx silently destroyed hand-typed text on the next
+  // reload (every stored row is re-sanitized by reloadFromDb and by
+  // applyRemotePrivateRecord), which is the one kind of loss a training log
+  // must never have: the member typed a sentence and the app ate it.
+  // scaledWeight above stays gated — an Rx entry has no scaled weight by
+  // definition — so the difference is deliberate, not an oversight.
+  const notes = cleanStr(e.notes, LIMITS.notesLen);
+  out.notes = notes || null;
+  // updatedAt is the LAST-MODIFIED stamp, distinct from ts (first saved).
+  // Preserved only when genuinely present: cleanTs() would invent one from the
+  // date or the clock, and a fabricated modification time is worse than none.
+  const wodMod = modTs(e, date);
+  if (wodMod !== undefined) out.updatedAt = wodMod;
   // Applies regardless of Rx/Scaled — a partner WOD is a partner WOD either way.
   out.partnerTag = cleanStr(e.partnerTag, LIMITS.partnerTag) || null;
   return out;

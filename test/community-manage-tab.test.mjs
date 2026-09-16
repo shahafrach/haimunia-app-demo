@@ -406,11 +406,19 @@ test("dashboard: the attention row counts only genuinely lapsed members, not the
   // attributes and exists from the first paint, so the bare selector
   // resolves before any data has loaded and races the assertion.
   await waitFor(() => !!window.document.querySelector('button.log-row[data-community-action="set-manage-tab"][data-tab="members"]'), 3000);
+  // The COUNT is what this test is about: one lapsed out of three rows, the two
+  // no_data members excluded. It used to assert the literal "1 חברים לא נכנסו",
+  // a plural noun carrying the numeral one, and so defended the copy bug that
+  // round 10 found here - the row above it had been singular-guarded for nine
+  // rounds and this one never was. The singular drops the numeral entirely, so
+  // "not three" is asserted directly below instead of read out of the string.
   assert.match(
     window.document.body.textContent,
-    /1 חברים לא נכנסו לאפליקציה לאחרונה/,
+    /יש חבר\/ה שלא נכנס\/ה לאפליקציה לאחרונה/,
     "one lapsed member out of three rows - the two no_data members are not counted",
   );
+  assert.ok(!/3 חברים לא נכנסו/.test(window.document.body.textContent),
+    "and certainly not all three rows");
 });
 
 // ===== P2: booting straight into Manage triggers ensureCommunityDataLoaded() =

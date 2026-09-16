@@ -15,7 +15,7 @@ let barWeight = 20;
 // Single source of truth for the app version. After bumping this, run
 // `npm run sync-version` to copy it into SW_VERSION in sw.js — `npm test`
 // fails if the two drift apart.
-const APP_VERSION = "4.59.0";
+const APP_VERSION = "4.61.0";
 
 // A movement typed into the WOD builder that isn't in the built-in list
 // above - persisted (see WODTAGSTORE), same "custom X" pattern as
@@ -1221,6 +1221,50 @@ function communityMilestoneCodes() {
   return codes;
 }
 const COMMUNITY_CLAIMED_KEY = "haimunia-demo:communityClaimedAchievements";
+// WHOSE training log this device holds. The log itself is deliberately
+// device-local and server-less ("נשמר במכשיר הזה בלבד"), and that is a feature -
+// but the community layer is a separate identity that can change under it, and
+// on a shared phone the two drifted apart with no one noticing.
+//
+// FOUND BY WALKING IT (round 10): a coach logged a WOD on her own phone, signed
+// out of the community, and handed the phone to a teammate, who signed in as
+// himself. The club-WOD card then offered HIM her 18:30 Rx as his own result to
+// publish - and publishing it wrote her effort to club_wod_results under his
+// user_id. He had not trained. She had nothing on the board. Plausible on a
+// coach demoing the app, on training partners sharing a phone, on a gym kiosk.
+//
+// The binding is deliberately NOT destructive and does NOT hide the member's own
+// history. Nothing local is deleted or concealed on the strength of an identity
+// guess - the only thing gated is the CLUB-FACING bridge, which is where the
+// actual harm was: presenting one person's numbers to another as theirs, and
+// publishing them under the wrong name.
+const LOG_OWNER_KEY = "haimunia-demo:logOwnerUserId";
+let logOwnerUserId = null;
+let logOwnedByOther = false;
+// Called by cloud.js whenever a community identity becomes known, alongside
+// adoptCommunityDisplayName(). Three cases, and the FIRST is the common one:
+//   nothing stored  -> adopt. Training locally and joining the club later is the
+//                      normal path, and that log genuinely is the new member's.
+//   same id         -> their own device. Nothing changes.
+//   different id    -> this log was built by somebody else. Club-facing reads
+//                      go quiet until they are the signed-in member again.
+window.haimuniaBindLogOwner = async function (userId) {
+  const id = typeof userId === "string" && userId ? userId : null;
+  if (!id) return;
+  if (logOwnerUserId === null) {
+    try { logOwnerUserId = (await dbGetSetting(LOG_OWNER_KEY)) || null; } catch (e) { logOwnerUserId = null; }
+  }
+  if (!logOwnerUserId) {
+    logOwnerUserId = id;
+    dbSetSetting(LOG_OWNER_KEY, id).catch(noteStorageError);
+  }
+  const wasOwnedByOther = logOwnedByOther;
+  logOwnedByOther = logOwnerUserId !== id;
+  if (wasOwnedByOther !== logOwnedByOther) render();
+};
+// Whether the club-facing bridges may speak for this log. Exported so the
+// notice in the club card and the bridges themselves cannot disagree.
+window.haimuniaLogIsOwnedByAnotherMember = function () { return logOwnedByOther; };
 let communityClaimedCodes = new Set();
 async function loadCommunityClaimed() {
   try {
@@ -1276,10 +1320,28 @@ function checkForNewAchievements() {
 // was a personal record, or null. Badges and a plain PR can land in the
 // same save (a PR that also crosses a tier threshold) - one popup covers
 // both instead of firing twice back to back.
-function celebrateAfterSave(prLabel) {
+function celebrateAfterSave(prLabel, savedLabel) {
   syncCommunityMilestones();
   const newBadges = claimNewlyEarned();
-  if (!prLabel && !newBadges.length) return;
+  if (!prLabel && !newBadges.length) {
+    // FOUND BY WALKING IT (round 10): an ordinary save - not a first entry, not
+    // a PR, not a new badge - gave the member almost nothing back. The button
+    // stayed enabled with the same weight and reps still loaded, and the only
+    // change on screen was one more line in the session list. A member unsure
+    // whether the tap registered tapped again and logged the set twice.
+    //
+    // A confirmation, not a dedupe: two identical sets ARE a normal thing to
+    // log (three sets of 90x5 is three real rows), so refusing or merging the
+    // second one would break the most ordinary flow in the app to fix a
+    // feedback problem. Telling the member the save landed is the actual fix.
+    // render() is what PAINTS a toast - showToast() only stores it (see the
+    // note beside the restore-failed toast). Both callers here have already
+    // rendered by this point, so without this the confirmation would sit in
+    // pendingToast until some unrelated render happened to flush it, which is
+    // to say: it would look implemented and do nothing.
+    if (savedLabel) { showToast(savedLabel); render(); }
+    return;
+  }
   showCelebration(prLabel, newBadges);
 }
 // Design spec §1.2 S4 / §5.2 tier A, entry 1: the member's first-ever saved
@@ -2149,6 +2211,12 @@ async function saveSet(sanityConfirmed) {
     entry = {
       id: existing ? existing.id : uid("set"),
       ts: existing ? existing.ts : Date.now(),
+      // ts is FIRST SAVED (and the History sort key). updatedAt is LAST MODIFIED,
+      // and it must advance on every save or the conflict rule degenerates: two
+      // devices editing the same existing entry both carried the identical frozen
+      // ts, so `incomingTs >= existing.ts` was always true and whoever synced last
+      // won unconditionally — no conflict was ever detected for these two types.
+      updatedAt: Date.now(),
       exerciseId: selectedId, type: "duration", weight, reps: 0, sets,
       durationSeconds, date, isPR, est1RM: 0, groupId, blockLabel,
     };
@@ -2174,6 +2242,7 @@ async function saveSet(sanityConfirmed) {
     entry = {
       id: existing ? existing.id : uid("set"),
       ts: existing ? existing.ts : Date.now(),
+      updatedAt: Date.now(), // last modified — see saveSet for why this is not ts
       exerciseId: selectedId, type: "reps", weight, reps, sets, date, isPR, est1RM: est,
       durationSeconds: 0, groupId, blockLabel,
     };
@@ -2271,7 +2340,8 @@ async function saveSet(sanityConfirmed) {
     if (isFirstLogArrival) {
       celebrateFirstLog(mov ? `${mov.name} — ${celebrationLabel}` : celebrationLabel);
     } else {
-      celebrateAfterSave(celebratePR && mov ? `${mov.name} — ${celebrationLabel}` : null);
+      celebrateAfterSave(celebratePR && mov ? `${mov.name} — ${celebrationLabel}` : null,
+        mov ? `נשמר: ${mov.name} — ${celebrationLabel}` : "נשמר");
     }
     if (emitPR && prDetail) emitCommunityPrCreated(entry, mov, prDetail);
   }
@@ -2357,7 +2427,14 @@ function shouldApplyRemote(recordType, recordId, incomingTs) {
     recordType === "wod_entry" ? wodEntries.find((e) => e.id === recordId) :
     recordType === "bodyweight" ? bodyweightEntries.find((e) => e.id === recordId) :
     recordType === "measurement" ? measureEntries.find((e) => e.id === recordId) : null;
-  return !existing || incomingTs >= existing.ts;
+  if (!existing) return true;
+  // Compare LAST-MODIFIED, not first-saved. saveSet/saveWod deliberately keep
+  // ts frozen at creation so History stays in the order things happened, which
+  // left ts useless as a recency signal for edits. Records written before
+  // updatedAt existed fall back to ts — the only stamp they have, and the same
+  // behavior as before for rows nobody has edited since.
+  const existingMod = isFinite(existing.updatedAt) ? existing.updatedAt : existing.ts;
+  return incomingTs >= existingMod;
 }
 async function applyRemotePrivateRecord(row) {
   if (!row || !row.record_type || !row.record_id) return;
@@ -2371,7 +2448,7 @@ async function applyRemotePrivateRecord(row) {
     : row.record_type === "measure_type" ? sanitizeMeasureType(payload)
     : row.record_type === "measurement" ? sanitizeMeasurement(payload) : null;
   if (!deleted && !clean) return;
-  if (!deleted && clean && !shouldApplyRemote(row.record_type, row.record_id, clean.ts)) return;
+  if (!deleted && clean && !shouldApplyRemote(row.record_type, row.record_id, isFinite(clean.updatedAt) ? clean.updatedAt : clean.ts)) return;
   const key = `${row.record_type}:${row.record_id}`;
   syncApplyingRemote.add(key);
   try {
@@ -2509,6 +2586,7 @@ function runAppConfirm() {
   else if (c.action === "delete-measurement-entry") deleteMeasurementEntry(c.payload.id);
   else if (c.action === "delete-custom-wod") deleteCustomWod(c.payload.id);
   else if (c.action === "save-set") saveSet(true);
+  else if (c.action === "save-wod") saveWod(true);
   else render();
 }
 function renderAppConfirmSheet() {
@@ -2959,6 +3037,15 @@ function saveUserName(name) {
   closeWelcomeModal();
   renderUserGreeting();
 }
+// The name the member gave the CLUB, adopted for the private log rather than
+// asking a second time (2026-09-16). Only when the log has no name yet, so a
+// name deliberately chosen for the private log is never overwritten by a
+// later community profile edit.
+window.adoptCommunityDisplayName = function (name) {
+  const trimmed = cleanStr(name, LIMITS.nameLen);
+  if (!trimmed || userName !== null) return;
+  saveUserName(trimmed);
+};
 function saveBoxStartDate(v) {
   const cleaned = v ? cleanISODate(v) : null;
   const today = todayISO();
@@ -3554,6 +3641,10 @@ function clubWodSessionForWod(wodId) {
 // definition of what a WOD result looks like and it lives in this file.
 window.communityWodLogFor = function (wodId) {
   if (!wodId) return [];
+  // Another member's log on this device: offer them nothing to publish. See
+  // LOG_OWNER_KEY - this is the club-facing half, gated; their own History and
+  // stats are untouched.
+  if (logOwnedByOther) return [];
   return wodEntriesFor(wodId).slice()
     .sort((a, b) => (b.ts || 0) - (a.ts || 0))
     .slice(0, 5)
@@ -3565,6 +3656,11 @@ window.communityWodLogFor = function (wodId) {
 // would reject is a bug worth catching on this side of the wire.
 window.communityWodEntryForAttach = function (recordId) {
   if (!recordId) return null;
+  // Belt and braces: communityWodLogFor() already offers no buttons when the
+  // log belongs to someone else, so this path should be unreachable - but it is
+  // the one that actually WRITES to the club board, so it re-checks rather than
+  // trusting a caller to have checked.
+  if (logOwnedByOther) return null;
   const entry = wodEntries.find((e) => e.id === recordId);
   return entry ? sanitizeWodEntry(entry) : null;
 };
@@ -4006,7 +4102,7 @@ function builderMovementsToDesc(movements) {
 // Same in-flight guard as saveSet() above, same live-report double-tap bug
 // reproduced against the WOD save CTA too.
 let savingWod = false;
-async function saveWod() {
+async function saveWod(sanityConfirmed) {
   if (savingWod) return;
   savingWod = true;
   try {
@@ -4025,9 +4121,27 @@ async function saveWod() {
   const existing = editId ? wodEntries.find((e) => e.id === editId) : null;
   // Live bug hunt (2026-09-11): rx-scoped now - see bestWodScore()'s comment.
   const prevBest = bestWodScore(selectedWodId, editId, wodRx);
+  // Same guard as saveSet(), and missed here for the same reason the rest of
+  // this function's siblings were not: a load-format WOD is a max-lift
+  // benchmark, so it takes a raw weight and reaches the identical celebration
+  // overlay. Without this, a 400 typed where 40 was meant threw a full-screen
+  // "שיא אישי חדש" and wrote a permanent fake record, with no way back except
+  // finding and editing the entry.
+  if (w.scoreType === "load" && !sanityConfirmed && prevBest > 0
+      && wodWeight >= prevBest * ABSURD_WEIGHT_MULTIPLE) {
+    // savingWod is cleared by this function's own finally, not here.
+    askAppConfirm({
+      title: `${wodWeight} ק״ג — לוודא?`,
+      message: `התוצאה הטובה שלך ב-${w.name} עד היום היא ${prevBest} ק״ג.`,
+      confirmLabel: "כן, זה נכון", cancelLabel: "תיקון",
+      action: "save-wod",
+    });
+    return;
+  }
   const entry = {
     id: existing ? existing.id : uid("wod"),
     ts: existing ? existing.ts : Date.now(),
+    updatedAt: Date.now(), // last modified — see saveSet for why this is not ts
     // Live bug hunt (2026-09-11): same fix as saveSet() - see
     // logDateExplicitlyChosen's declaration.
     date: wodLogDateExplicitlyChosen ? clampLogDate(wodLogDate) : todayISO(),
@@ -4101,7 +4215,8 @@ async function saveWod() {
   if (isFirstLogArrival) {
     celebrateFirstLog(`${w.name} — ${formatWodEntry(entry)}`);
   } else {
-    celebrateAfterSave(celebratePR ? `${w.name} — ${formatWodEntry(entry)}` : null);
+    celebrateAfterSave(celebratePR ? `${w.name} — ${formatWodEntry(entry)}` : null,
+      `נשמר: ${w.name} — ${formatWodEntry(entry)}`);
   }
   } finally { savingWod = false; }
 }
@@ -5989,9 +6104,19 @@ function renderClubWodAttachAffordance(w) {
   // newest assumed for them.
   const mine = typeof window.communityWodLogFor === "function" ? window.communityWodLogFor(w.id) : [];
   if (!mine.length) {
+    // Two different reasons for an empty offer, and saying which one is the
+    // whole point: "log it and you can attach it" is encouraging and correct
+    // for a member with nothing logged yet, and actively misleading for a
+    // member holding a phone whose log belongs to somebody else - they would
+    // log a workout and still be offered nothing, with no idea why.
+    const notMine = typeof window.haimuniaLogIsOwnedByAnotherMember === "function"
+      && window.haimuniaLogIsOwnedByAnotherMember();
+    const why = notMine
+      ? "הרישומים במכשיר הזה שייכים לחשבון אחר, ולכן אי אפשר לצרף אותם ללוח בשמכם. כדי לצרף תוצאה, השתמשו במכשיר שבו אתם רושמים את האימונים שלכם."
+      : "אחרי שתרשמו את האימון כאן אפשר יהיה לצרף את התוצאה ללוח של המועדון בלחיצה אחת.";
     return `<div style="border:1px solid var(--border); border-radius:14px; padding:12px 14px; margin-bottom:12px;">
       ${head}
-      <div style="color:var(--steel); font-size:12px; line-height:1.5;">אחרי שתרשמו את האימון כאן אפשר יהיה לצרף את התוצאה ללוח של המועדון בלחיצה אחת.</div>
+      <div style="color:var(--steel); font-size:12px; line-height:1.5;">${esc(why)}</div>
       ${openBoard}
     </div>`;
   }
@@ -7678,7 +7803,21 @@ async function init() {
   // boot too. isFreshInstall already excludes anyone with real data; a
   // grandfathered member can still set a name any time via Settings' edit
   // icon (openWelcomeModal(true)).
-  if (userName === null && isFreshInstall) openWelcomeModal();
+  // NOT WHILE AN INVITATION IS ON SCREEN. Live bug hunt, fresh round 9
+  // (2026-09-16): cloud.js is deferred ahead of this file, so by now it may
+  // already have captured an invite deep link and routed the app to the
+  // invite-code screen. Opening this focus-trapping full-screen sheet on top
+  // of that screen intercepted the taps meant for the invite form's own
+  // submit button - the very first thing a member arriving from a shared link
+  // or QR code would have hit, and a gate about something entirely unrelated
+  // to the invitation they just accepted.
+  //
+  // Not merely deferred: community signup asks for a display name of its own,
+  // and cloud.js now hands it to adoptCommunityDisplayName() below when the
+  // profile is saved. So this question is not postponed, it is answered - and
+  // a member who joins by invite is never asked their name twice.
+  const invitePending = typeof window.communityInviteFlowPending === "function" && window.communityInviteFlowPending();
+  if (userName === null && isFreshInstall && !invitePending) openWelcomeModal();
   else if (unseenReleaseNotes().length) openNotifications();
 
   if ("serviceWorker" in navigator) {

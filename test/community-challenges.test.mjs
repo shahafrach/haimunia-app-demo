@@ -775,7 +775,15 @@ test("the Boards pill carries a badge when a challenge is ending within 48 hours
   await waitFor(() => !!window.document.querySelector("#commTab-boards .tab-badge"), 3000);
   const badge = window.document.querySelector("#commTab-boards .tab-badge");
   assert.equal(badge.textContent.trim(), "1", "only the challenge ending within 48h is counted, not the one with weeks left");
-  assert.match(badge.getAttribute("aria-label"), /אתגרים מסתיימים בקרוב/, "the badge's own accessible label describes what it counts, not the generic pending-reports string this bar's markup is shared with");
+  // The INTENT here is that the label describes what this badge counts rather
+  // than the generic pending-reports string the bar's markup is shared with -
+  // and that still holds. What changed in round 10 is that a count of 1 now
+  // gets the singular "אתגר אחד מסתיים בקרוב" instead of "1 אתגרים", so the
+  // assertion checks the subject and not one hard-coded plural spelling.
+  const label = badge.getAttribute("aria-label");
+  assert.match(label, /מסתיים|מסתיימים/, "the label is about challenges ending");
+  assert.ok(!/דיווחים/.test(label), "not the generic pending-reports string");
+  assert.match(label, /אתגר/, "and it names challenges specifically");
 });
 
 test("the Boards pill carries no badge when nothing is ending soon", async () => {
