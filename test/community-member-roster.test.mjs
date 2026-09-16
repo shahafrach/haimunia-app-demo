@@ -121,7 +121,14 @@ test("a roster search matching nothing among loaded members shows an empty state
   assert.match(section.textContent, /לא נמצאו חברים תואמים/);
 });
 
-test("an admin sees the roster with live role controls, and no remove-member control on a roster row", async () => {
+// REWRITTEN BY 202609160005, which reversed the product decision this test
+// used to pin. It asserted `=== null` on the remove control, on COMM-377's
+// reading that removal belonged only to renderMemberManagement()'s search
+// panel. That panel returns "" for anyone who is not is_admin(), so the rule
+// it was defending meant the head coach - the role that owns the invite
+// surface and the only one whose panel renders it - could add members to the
+// club and never take one off. The roster is the board; it acts now.
+test("an admin sees the roster with live role controls AND the remove control on a roster row", async () => {
   const mock = seeded({}, "admin");
   mock.onRpc("admin_member_roster", () => ({ data: [rosterRow("bob")], error: null }));
   const window = await bootCommunity(mock, { syncEnabled: false });
@@ -130,7 +137,56 @@ test("an admin sees the roster with live role controls, and no remove-member con
   const section = window.document.querySelector('[data-member-roster-section="1"]');
   const btn = section.querySelector('[data-community-action="admin-grant-coach"]');
   assert.equal(btn.disabled, false);
-  assert.equal(section.querySelector('[data-community-action="admin-remove-member"]'), null, "the roster never offers the destructive remove control");
+  assert.ok(section.querySelector('[data-community-action="admin-remove-member"]'),
+    "the roster offers the remove control to a viewer who outranks the row");
+});
+
+test("a head coach can remove a member straight off the roster, and the call is admin_remove_member", async () => {
+  const mock = seeded({}, "head_coach");
+  mock.onRpc("admin_member_roster", () => ({ data: [rosterRow("bob")], error: null }));
+  const removeCalls = [];
+  mock.onRpc("admin_remove_member", (args) => { removeCalls.push(args); return { error: null }; });
+  const window = await bootCommunity(mock, { syncEnabled: false });
+  await openAccountTab(window);
+  await waitFor(() => window.document.body.textContent.includes("bob"), 3000);
+  const btn = window.document.querySelector('[data-member-roster-section="1"] [data-community-action="admin-remove-member"]');
+  assert.ok(btn, "a head coach - not an admin - is offered the control");
+  btn.click();
+  await waitFor(() => !!window.document.querySelector('[data-community-action="confirm-yes"]'), 3000);
+  // The destructive direction asks first, like every other one on this row.
+  window.document.querySelector('[data-community-action="confirm-yes"]').click();
+  await waitFor(() => removeCalls.length === 1, 3000);
+  assert.deepEqual(removeCalls[0], { p_user_id: "m-bob" });
+});
+
+test("the rank guard is drawn, not just enforced: a head coach gets no remove control against another head coach", async () => {
+  const mock = seeded({}, "head_coach");
+  mock.onRpc("admin_member_roster", () => ({ data: [
+    rosterRow("peer", { role: "head_coach" }),
+    rosterRow("bob"),
+  ], error: null }));
+  const window = await bootCommunity(mock, { syncEnabled: false });
+  await openAccountTab(window);
+  await waitFor(() => window.document.body.textContent.includes("peer"), 3000);
+  const rows = Array.from(window.document.querySelectorAll('[data-member-roster-section="1"] .log-row'));
+  const peerRow = rows.find((r) => r.textContent.includes("peer"));
+  const bobRow = rows.find((r) => r.textContent.includes("bob"));
+  assert.ok(peerRow && bobRow, "both rows render");
+  assert.equal(peerRow.querySelector('[data-community-action="admin-remove-member"]'), null,
+    "an equal rank is out of reach, and the button is not drawn onto a call the server would refuse");
+  assert.ok(bobRow.querySelector('[data-community-action="admin-remove-member"]'),
+    "a member below the viewer's rank still gets one");
+});
+
+test("a plain coach holds no remove permission, so no roster row offers the control", async () => {
+  const mock = seeded({}, "coach");
+  mock.onRpc("admin_member_roster", () => ({ data: [rosterRow("bob")], error: null }));
+  const window = await bootCommunity(mock, { syncEnabled: false });
+  await openAccountTab(window);
+  await waitFor(() => window.document.body.textContent.includes("bob"), 3000);
+  assert.equal(
+    window.document.querySelector('[data-member-roster-section="1"] [data-community-action="admin-remove-member"]'),
+    null, "community.member.remove starts at head_coach");
 });
 
 test("the roster's role buttons are the exact adminGrantCoach/adminSetRole/adminRevokeCoach RPCs already wired to member search", async () => {

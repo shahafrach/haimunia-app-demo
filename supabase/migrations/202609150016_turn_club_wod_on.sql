@@ -24,6 +24,34 @@
 -- members who already opened the app - precisely the ones who do not need
 -- nudging. It becomes worth switching on the day push can deliver it, and
 -- should be reconsidered together with that, not before.
+-- 2026-09-16: THE ROW THIS UPDATES IS NOT SEEDED BY ANY MIGRATION.
+--
+-- Every other module key is inserted by the migration that introduced it
+-- (202609010012's six, 202609050006's five, 202609100002's two,
+-- 202609150014's five). club_wod never was - it reached production's
+-- club_features by way of admin_set_club_feature() upserting it from the
+-- panel at some point, which no replay reproduces. So on a FRESH database
+-- the update below matched nothing, the guard raised, and the whole
+-- migration chain stopped here: `supabase start` failed, and with it CI's
+-- pgTAP job (79 files, 2747 assertions) and any attempt to stand up a
+-- second club.
+--
+-- EDITING AN APPLIED MIGRATION, DELIBERATELY AND ONCE. The repo's rule
+-- (scripts/check-migration-immutability.mjs) is that corrections go in a
+-- NEW migration, and it is the right rule. It cannot reach this case: a
+-- migration that RAISES aborts the chain, so nothing named after it ever
+-- runs on the database that needs the fix. The alternative was a permanent
+-- dead CI gate.
+--
+-- The edit is provably a no-op wherever this file already ran. Production
+-- has the row and has it enabled, so the insert conflicts and does nothing
+-- and the update still matches nothing; the guard sees exactly what it saw
+-- before. Only a replay from empty behaves differently, which is the whole
+-- point. 202609160006 records the same seed in forward history.
+insert into public.club_features (module_key, enabled)
+values ('club_wod', true)
+on conflict (club_id, module_key) do nothing;
+
 update public.club_features
    set enabled = true, updated_at = now()
  where module_key = 'club_wod'

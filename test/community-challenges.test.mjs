@@ -576,6 +576,11 @@ test("the same form edits an existing challenge (title, target) and can publish 
   window.document.querySelector('[data-community-action="challenge-edit"]').click();
   await waitFor(() => !!window.document.querySelector('[data-community-action="challenge-archive"]'), 3000);
   window.document.querySelector('[data-community-action="challenge-archive"]').click();
+  // Archiving used to fire straight off this click. It asks first now (the
+  // same correction admin-revoke-coach got), so the flow this test walks
+  // gained a step rather than changing its outcome.
+  await waitFor(() => !!window.document.querySelector('[data-community-action="confirm-yes"]'), 3000);
+  window.document.querySelector('[data-community-action="confirm-yes"]').click();
   await waitFor(() => mock.db.challenges.find((c) => c.id === "c1").status === "archived", 3000);
 });
 
@@ -825,4 +830,86 @@ test("double-tapping Join on the list card only ever inserts one participant row
   const mine = mock.db.challenge_participants.filter((p) => p.challenge_id === "c1" && p.user_id === "u1");
   assert.equal(mine.length, 1, "exactly one participant row - the guard must prevent a second real insert, not just a second click");
   assert.doesNotMatch(window.document.body.textContent, /לא ניתן היה להצטרף לאתגר/, "no failure toast for a join that actually succeeded");
+});
+
+// ==========================================================================
+// 202609160005 / cloud.js staffToolbar. Ending and deleting a challenge.
+//
+// archiveChallenge() shipped with COMM-207 but had exactly ONE call site: a
+// button inside renderChallengeForm(), reached by opening the challenge,
+// pressing "עריכה", and scrolling past every field. Deleting was never wired
+// at all, though challenges_delete_perm (202608280009) has allowed it for a
+// community.challenge.create holder since the table was created. So the
+// honest answer to "how does a coach take a challenge down" was "they
+// don't", which is what these tests now stop being true.
+// ==========================================================================
+// A FACTORY, not a shared literal. seeded() hands the object straight to the
+// mock db, and archiveChallenge() mutates it in place - so a single shared
+// const would carry test 1's "archived" into test 3 and make the isolation
+// silently false.
+const activeC1 = (over) => Object.assign({ id: "c1", challenge_type: "individual_target", title: "12 אימונים החודש", description: "", metric_type: "session_count", target_value: 12, start_at: iso(-5), end_at: iso(20), status: "active", join_mode: "open", visibility: "club", created_by: "coach1", config: {} }, over || {});
+
+async function openDetailAsStaff(challenge) {
+  const mock = seeded({ challenges: [challenge] }, true);
+  const window = await bootCommunity(mock, { syncEnabled: false });
+  await openBoards(window);
+  openChallengeCard(window, challenge.id);
+  await waitFor(() => !!window.document.querySelector('[data-community-action="challenge-edit"]'), 3000);
+  return { mock, window };
+}
+
+test("a staff holder gets end and delete controls on the challenge itself, not buried in the edit form", async () => {
+  const { window } = await openDetailAsStaff(activeC1());
+  assert.ok(window.document.querySelector('[data-community-action="challenge-archive"]'),
+    "סיום האתגר is reachable without opening the edit form");
+  assert.ok(window.document.querySelector('[data-community-action="challenge-delete"]'),
+    "מחיקה is reachable at all, which it was not before");
+});
+
+test("a plain member sees neither control on the same challenge", async () => {
+  const mock = seeded({ challenges: [activeC1()] }, false);
+  const window = await bootCommunity(mock, { syncEnabled: false });
+  await openBoards(window);
+  openChallengeCard(window, "c1");
+  await waitFor(() => window.document.body.textContent.includes("12 אימונים החודש"), 3000);
+  assert.equal(window.document.querySelector('[data-community-action="challenge-archive"]'), null);
+  assert.equal(window.document.querySelector('[data-community-action="challenge-delete"]'), null);
+});
+
+test("ending a challenge asks first, names it, and updates status to archived rather than deleting anything", async () => {
+  const { mock, window } = await openDetailAsStaff(activeC1());
+  window.document.querySelector('[data-community-action="challenge-archive"]').click();
+  await waitFor(() => !!window.document.querySelector('[data-community-action="confirm-yes"]'), 3000);
+  const sheet = window.document.querySelector('[data-community-action="confirm-yes"]').closest("div, section, dialog").parentElement;
+  assert.match(sheet.textContent, /12 אימונים החודש/, "the dialog names the challenge it is about to end");
+  window.document.querySelector('[data-community-action="confirm-yes"]').click();
+  await waitFor(() => (mock.db.challenges[0] || {}).status === "archived", 3000);
+  assert.equal(mock.db.challenges.length, 1, "ending keeps the row - and with it every participant and contribution");
+});
+
+test("deleting a challenge asks first and then really removes the row", async () => {
+  const { mock, window } = await openDetailAsStaff(activeC1());
+  window.document.querySelector('[data-community-action="challenge-delete"]').click();
+  await waitFor(() => !!window.document.querySelector('[data-community-action="confirm-yes"]'), 3000);
+  window.document.querySelector('[data-community-action="confirm-yes"]').click();
+  await waitFor(() => mock.db.challenges.length === 0, 3000);
+});
+
+test("neither control fires on the click alone - dismissing the dialog leaves the challenge untouched", async () => {
+  const { mock, window } = await openDetailAsStaff(activeC1());
+  window.document.querySelector('[data-community-action="challenge-delete"]').click();
+  await waitFor(() => !!window.document.querySelector('[data-community-action="confirm-no"]'), 3000);
+  window.document.querySelector('[data-community-action="confirm-no"]').click();
+  await new Promise((r) => setTimeout(r, 60));
+  assert.equal(mock.db.challenges.length, 1, "a dismissed confirmation deletes nothing");
+  assert.equal(mock.db.challenges[0].status, "active", "and ends nothing");
+});
+
+test("a draft can be deleted but not ended - there is nothing to end", async () => {
+  const draft = activeC1({ id: "c-draft", status: "draft" });
+  const { window } = await openDetailAsStaff(draft);
+  assert.equal(window.document.querySelector('[data-community-action="challenge-archive"]'), null,
+    "no סיום on a challenge that never ran");
+  assert.ok(window.document.querySelector('[data-community-action="challenge-delete"]'),
+    "but the draft opened by mistake is still removable");
 });

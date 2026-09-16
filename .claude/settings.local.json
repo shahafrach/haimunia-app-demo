@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm --version)",
+      "Bash(git --version)",
+      "Bash(npm install:*)",
+      "Bash(npm init:*)",
+      "Bash(npx playwright:*)",
+      "Bash(ls:*)",
+      "Bash(find:*)",
+      "Bash(command -v:*)",
+      "Bash(which:*)",
+      "Bash(/usr/bin/brave-browser:*)",
+      "Bash(brave-browser:*)",
+      "Bash(node:*)",
+      "Bash(curl:*)"
+    ]
+  }
+}

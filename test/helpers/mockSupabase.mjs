@@ -36,9 +36,9 @@ export function createMockSupabase(seedTables = {}) {
   const MOCK_ROLE_PERMS = {
     member: ["community.post.create"],
     coach: ["community.post.create", "community.comment.moderate", "community.challenge.create", "community.event.manage", "community.announcement.publish", "community.member.invite", "community.content.manage_onboarding"],
-    head_coach: ["community.post.create", "community.comment.moderate", "community.challenge.create", "community.event.manage", "community.announcement.publish", "community.post.delete_any", "community.member.restrict", "community.content.pin", "community.member.invite", "community.content.manage_onboarding", "community.invite.manage_codes", "community.analytics.view"],
+    head_coach: ["community.member.remove", "community.post.create", "community.comment.moderate", "community.challenge.create", "community.event.manage", "community.announcement.publish", "community.post.delete_any", "community.member.restrict", "community.content.pin", "community.member.invite", "community.content.manage_onboarding", "community.invite.manage_codes", "community.analytics.view"],
     staff: ["community.post.create", "community.event.manage", "community.announcement.publish", "community.content.pin", "community.member.invite", "community.content.manage_onboarding"],
-    admin: ["community.post.create", "community.post.delete_any", "community.comment.moderate", "community.challenge.create", "community.event.manage", "community.analytics.view", "community.member.restrict", "community.announcement.publish", "community.content.pin", "community.member.invite", "community.invite.manage_codes", "community.content.manage_onboarding", "community.club.manage_modules"],
+    admin: ["community.member.remove", "community.post.create", "community.post.delete_any", "community.comment.moderate", "community.challenge.create", "community.event.manage", "community.analytics.view", "community.member.restrict", "community.announcement.publish", "community.content.pin", "community.member.invite", "community.invite.manage_codes", "community.content.manage_onboarding", "community.club.manage_modules"],
   };
   MOCK_ROLE_PERMS.owner = MOCK_ROLE_PERMS.admin.slice();
   function roleOf(uid) {

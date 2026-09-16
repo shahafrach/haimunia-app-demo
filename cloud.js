@@ -959,7 +959,35 @@
     MEMBER_INVITE: "community.member.invite",
     INVITE_MANAGE_CODES: "community.invite.manage_codes",
     CONTENT_MANAGE_ONBOARDING: "community.content.manage_onboarding",
+    // 202609160005. Removal used to be admin-only (a hardcoded is_admin()
+    // inside admin_remove_member), which left the head coach - the role that
+    // OWNS the invite surface, and the only one whose panel renders it -
+    // able to add members and never take one off the roster. The server
+    // pairs this permission with a rank guard, so holding it does not mean
+    // "may remove anyone": you reach strictly below your own rank only.
+    MEMBER_REMOVE: "community.member.remove",
   };
+  // Mirrors public.roles.rank (202608280001). Used ONLY to decide what to
+  // draw - admin_remove_member() re-derives both ranks server-side and is
+  // the authority. Kept here so a head coach is not shown a remove button
+  // against another head coach that the server would then refuse.
+  const ROLE_RANK = { member: 10, coach: 20, head_coach: 30, staff: 40, admin: 50, owner: 60 };
+  function myRoleRank() {
+    if (inMgmtContext()) return mgmtIsAdmin() ? ROLE_RANK.admin : (mgmtIsStaff() ? ROLE_RANK.coach : 0);
+    const redeemed = (state.redemption && ROLE_RANK[state.redemption.role]) || 0;
+    const flagged = (state.profile && state.profile.is_admin) ? ROLE_RANK.admin : 0;
+    return Math.max(redeemed, flagged);
+  }
+  // The client half of admin_remove_member()'s two gates: the permission,
+  // and target rank strictly below mine. is_admin is checked on the row
+  // itself because the flag outranks the redeemed role server-side too.
+  function canRemoveMember(m) {
+    if (!m || !m.id) return false;
+    if (!(isAdmin() || hasPerm(PERM.MEMBER_REMOVE))) return false;
+    if (state.user && m.id === state.user.id) return false;
+    const target = Math.max((ROLE_RANK[m.role] || ROLE_RANK.member), m.is_admin ? ROLE_RANK.admin : 0);
+    return target < myRoleRank();
+  }
   // COMM-321 Club Modules, extended by the redesign's Phase 2 (202609050006).
   // Two groups now, matching the mockup's own "תכני קהילה" / "כלי מאמנים"
   // split, declared here ahead of both toggleClubFeature() and
@@ -6370,14 +6398,26 @@
   }
   const removeMemberBusy = {};
   async function adminRemoveMember(userId) {
-    if (!state.user || !isAdmin()) return;
+    // 202609160005 widened the server gate from is_admin() to
+    // is_admin OR community.member.remove, plus a rank guard. This mirrors
+    // both halves so the button is never drawn onto a call that will be
+    // refused; the server re-derives the ranks itself and remains the
+    // authority.
+    if (!state.user || !(isAdmin() || hasPerm(PERM.MEMBER_REMOVE))) return;
     if (removeMemberBusy[userId]) return;
     removeMemberBusy[userId] = true;
     const { error } = await mgmtDb().rpc("admin_remove_member", { p_user_id: userId });
     removeMemberBusy[userId] = false;
     if (error) return setMessage(failText("הסרת החבר/ה נכשלה", error));
     setMessage("החבר/ה הוסר/ה");
+    // BOTH surfaces that can show the row have to lose it. The admin search
+    // was the only one until 202609160005 put the control on the roster too,
+    // and refreshing only the search left a head coach looking at the member
+    // they had just removed, still listed, with a live remove button - the
+    // removal having actually succeeded. The roster reload is skipped when
+    // nothing has loaded it, so this stays one round trip for the admin.
     await searchMembers(state.members.search);
+    if (state.admin.roster.loaded) await loadRoster(true);
   }
   // 2026-09-05 launch-readiness fix. Login emails are synthetic
   // (usernameToEmail() - never a real deliverable address), so there is no
@@ -8169,6 +8209,13 @@
   // to show, not the most informative - it would be untranslated, probably
   // English, possibly a Postgres internal, and it is never actionable.
   const SERVER_ERROR_TEXT = {
+    // 202609160005's rank guard. The refusal is a fact about the TARGET, not
+    // about the person reading it, so the sentence names who is out of reach
+    // rather than saying "you are not allowed" - a head coach who tried to
+    // remove another head coach has the permission and is being told about
+    // this row, not about themselves.
+    "cannot remove a member at or above your own role": "אפשר להסיר רק חבר/ה בדרגה נמוכה משלכם. מאמן/ת ראשי/ת, מנהל/ת או בעל/ת המועדון מוסרים/ות על ידי מנהל/ת המערכת.",
+    "use account deletion for your own account": "כדי למחוק את החשבון שלכם יש להשתמש במחיקת חשבון במסך החשבון, לא בהסרת חבר/ה.",
     // The COMM-016 gate. Worth being blunt that this closes reading too:
     // feed_page carries the same is_community_member() check as post_create,
     // so "you can still browse" would be the same false promise the account
@@ -9054,6 +9101,17 @@
     }
     return "";
   }
+  // The challenge's own title, for the two confirmations that name it. Both
+  // the list and the open detail can be the source: archiving from the
+  // detail toolbar is the common case, but the list is the only source once
+  // a card gains its own control, and a dialog that says "{subject}" with an
+  // empty subject is the failure subjectSentenceHtml() exists to prevent.
+  function challengeTitleFor(id) {
+    const v = state.challenges.view;
+    if (v && v.id === id && v.challenge && v.challenge.title) return v.challenge.title;
+    const row = (state.challenges.items || []).find((c) => c && c.id === id);
+    return (row && row.title) || "";
+  }
   // Shared by renderConfirmSheet() and renderModActionSheet(): the same
   // sentence-with-a-name rendering, so the two dialogs cannot drift into
   // naming their subject two different ways.
@@ -9082,6 +9140,8 @@
     else if (c.action === "admin-revoke-coach") adminRevokeCoach(c.payload.userId);
     else if (c.action === "admin-set-role") adminSetRole(c.payload.userId, c.payload.role);
     else if (c.action === "admin-remove-member") adminRemoveMember(c.payload.userId);
+    else if (c.action === "challenge-archive") archiveChallenge(c.payload.id);
+    else if (c.action === "challenge-delete") deleteChallenge(c.payload.id);
     else if (c.action === "admin-reset-password") adminResetPassword(c.payload.userId);
     else if (c.action === "admin-invite-revoke") revokeInvite(c.payload.inviteId);
     else if (c.action === "post-delete-rpc") postDeleteViaMenu(c.payload.postId);
@@ -10797,9 +10857,17 @@
   // (admin_member_roster returns the identical eight columns, pgTAP 0060's
   // own assertion) - no second row template. `opts.readOnly` disables the
   // role buttons (a staff-but-not-admin roster viewer); `opts.showRemove`
-  // (default true) hides the destructive remove-member control on the
-  // roster row, which this ticket's own acceptance criteria never asks for
-  // there - only the dedicated search-based panel below offers it.
+  // (default true) is the CALLER's half of whether the destructive
+  // remove-member control is drawn, and canRemoveMember() is the other half
+  // - permission plus a target strictly below the viewer's own rank.
+  //
+  // The roster passed showRemove:false from COMM-377 until 202609160005, on
+  // that ticket's reading that removal belonged only to the search panel
+  // below. That made the roster read-only for the one role that needs it:
+  // the search panel is inside renderMemberManagement(), which returns ""
+  // for anyone who is not is_admin(), so a head coach had no removal surface
+  // at all. The roster is now both halves of the job - browse the club, and
+  // take someone off it - and the rank guard is what makes that safe.
   // `last_activity_on` here comes from admin_member_roster /
   // admin_search_members, both of which read activity_pings - days the member
   // OPENED THE APP, not days they trained. This row used to render a null as
@@ -10817,7 +10885,7 @@
       <div class="footer-note" style="margin:0;font-size:10.5px;">${esc(m.id)}</div>
       ${m.is_admin ? "" : `<div class="chip-row" style="margin-top:0;">
         ${memberRoleButtonsHtml(m, readOnly)}
-        ${showRemove ? `<button class="chip-btn danger" data-community-action="admin-remove-member" data-id="${esc(m.id)}">הסרת חבר/ה</button>` : ""}
+        ${showRemove && canRemoveMember(m) ? `<button class="chip-btn danger" data-community-action="admin-remove-member" data-id="${esc(m.id)}">הסרת חבר/ה</button>` : ""}
       </div>`}
       <div class="chip-row" style="margin-top:0;">
         <button class="chip-btn"${readOnly ? ' disabled title="זמין למנהל/ת בלבד"' : ""} data-community-action="admin-reset-password" data-id="${esc(m.id)}">איפוס סיסמה</button>
@@ -10916,7 +10984,7 @@
       const filtered = r.items.filter((m) => rosterSearchMatches(m, r.search || ""));
       const searching = !!(r.search || "").trim();
       const list = filtered.length
-        ? `<div class="log-list">${filtered.map((m) => memberManagementRowHtml(m, { readOnly, showRemove: false })).join("")}</div>`
+        ? `<div class="log-list">${filtered.map((m) => memberManagementRowHtml(m, { readOnly, showRemove: true })).join("")}</div>`
         : (searching ? `<div class="empty">לא נמצאו חברים תואמים בין החברים שכבר נטענו</div>` : "");
       body = `${list}${r.end ? "" : `<div class="chip-row" style="justify-content:center;margin-top:8px;"><button class="chip-btn" data-community-action="roster-more"${r.loadingMore ? " disabled" : ""}>${r.loadingMore ? "טוען…" : "טעינת עוד"}</button></div>`}`;
     }
@@ -13190,6 +13258,42 @@
     await loadChallenges();
     rerender();
   }
+  // THE ONLY WAY TO END A CHALLENGE WAS BURIED INSIDE THE EDIT FORM.
+  //
+  // archiveChallenge() has existed since COMM-207, but its single call site
+  // was one button inside renderChallengeForm(), reachable only by opening
+  // the challenge, pressing "עריכה", and scrolling past every field to the
+  // form's footer. A coach asking "how do I take this challenge down" had no
+  // answer on any screen they were actually looking at, and there was no
+  // delete at all - the RLS policy challenges_delete_perm (202608280009) has
+  // always allowed one for a community.challenge.create holder, and no
+  // client ever called it.
+  //
+  // Both now sit in the challenge's own staff toolbar, and they are
+  // deliberately two separate actions rather than one:
+  //   ARCHIVE keeps the challenge, its participants and every logged
+  //     contribution, and moves it under "אתגרים שהסתיימו". This is what
+  //     "the challenge is over" means and it is the one offered first.
+  //   DELETE removes the row, and the three child tables cascade with it
+  //     (challenge_teams, challenge_participants, challenge_progress - all
+  //     `on delete cascade`, and challenge_teams_block_delete's own escape
+  //     hatch exists precisely so a team challenge with members stays
+  //     deletable). Nothing survives it, so its confirmation says so.
+  async function deleteChallenge(id) {
+    if (!hasPerm(PERM.CHALLENGE_CREATE)) return;
+    const { error } = await client.from("challenges").delete().eq("id", id);
+    if (error) return setMessage(failText("מחיקת האתגר נכשלה", error));
+    state.challenges.form = null;
+    // The detail view is looking at a row that no longer exists; refreshing
+    // it would render an error state over a deletion that succeeded. Closing
+    // back to the list is the honest outcome.
+    if (state.challenges.view && state.challenges.view.id === id) state.challenges.view = null;
+    delete state.challenges.participation[id];
+    delete state.challenges.aggregates[id];
+    setMessage("האתגר נמחק");
+    await loadChallenges();
+    rerender();
+  }
   async function archiveChallenge(id) {
     const { error } = await client.from("challenges").update({ status: "archived" }).eq("id", id);
     if (error) return setMessage(failText("הפעולה נכשלה", error));
@@ -14280,7 +14384,14 @@
     // CONTENT_PIN starts at head_coach, so a plain coach who can edit this
     // challenge still won't see a pin toggle, correctly.
     const pinBtn = hasPerm(PERM.CONTENT_PIN) ? `<button class="chip-btn" data-community-action="${isPinnedTarget("challenge", c.id) ? "unpin" : "pin"}" data-type="challenge" data-id="${esc(c.id)}" data-note="${esc(c.title)}">${isPinnedTarget("challenge", c.id) ? "ביטול הצמדה" : "הצמדה למעלה"}</button>` : "";
-    const staffToolbar = (staff || pinBtn) ? `<div class="chip-row" style="margin-bottom:10px;">${staff ? `<button class="chip-btn" data-community-action="challenge-edit" data-id="${esc(c.id)}">עריכה</button>` : ""}${pinBtn}</div>` : "";
+    // "סיום" is offered only while there is something to end - a draft was
+    // never running and an already-archived challenge has nowhere to go -
+    // but DELETE is offered for every status, including the draft that was
+    // opened by mistake and the finished challenge nobody wants in the list.
+    const canEnd = c.status === "active" || c.status === "completed";
+    const endBtn = staff && canEnd ? `<button class="chip-btn" data-community-action="challenge-archive" data-id="${esc(c.id)}">סיום האתגר</button>` : "";
+    const deleteBtn = staff ? `<button class="chip-btn danger" data-community-action="challenge-delete" data-id="${esc(c.id)}">מחיקה</button>` : "";
+    const staffToolbar = (staff || pinBtn) ? `<div class="chip-row" style="margin-bottom:10px;">${staff ? `<button class="chip-btn" data-community-action="challenge-edit" data-id="${esc(c.id)}">עריכה</button>` : ""}${pinBtn}${endBtn}${deleteBtn}</div>` : "";
     const myProgress = renderMyChallengeProgress(v);
     const typePanel = c.challenge_type === "cooperative" ? renderCooperativePanel(v)
       : c.challenge_type === "team" ? renderTeamPanel(v)
@@ -21313,7 +21424,11 @@
     else if (action === "challenge-form-cancel") closeChallengeForm();
     else if (action === "challenge-form-type") setChallengeFormType(el.dataset.type);
     else if (action === "challenge-publish") publishChallengeDraft(el.dataset.id);
-    else if (action === "challenge-archive") archiveChallenge(el.dataset.id);
+    // Archiving used to fire straight off the click with no dialog, the same
+    // defect the coach-revoke button had: the destructive direction asked
+    // nothing while the harmless ones asked. Both run through askConfirm now.
+    else if (action === "challenge-archive") askConfirm({ title: "סיום האתגר", message: "לסיים את \"{subject}\"? האתגר יעבור ל\"אתגרים שהסתיימו\", וההתקדמות של כל המשתתפים נשמרת.", subject: challengeTitleFor(el.dataset.id), confirmLabel: "סיום", action: "challenge-archive", payload: { id: el.dataset.id } });
+    else if (action === "challenge-delete") askConfirm({ title: "מחיקת האתגר", message: "למחוק את \"{subject}\" לצמיתות? כל ההרשמות, הקבוצות וההתקדמות שנרשמה באתגר יימחקו איתו ואי אפשר לשחזר. כדי לסגור אתגר בלי לאבד נתונים יש להשתמש ב\"סיום האתגר\".", subject: challengeTitleFor(el.dataset.id), confirmLabel: "מחיקה", destructive: true, action: "challenge-delete", payload: { id: el.dataset.id } });
     else if (action === "challenge-delete") askConfirm({ title: "מחיקת טיוטה", message: "למחוק את הטיוטה? הפעולה אינה ניתנת לביטול.", confirmLabel: "מחיקה", destructive: true, action: "challenge-delete-draft", payload: { challengeId: el.dataset.id } });
     // COMM-213/217/228. openEvent() itself records EVENT_VIEWED (source
     // defaults to "post_card", and COMM-233 labelled the Boards list cards
