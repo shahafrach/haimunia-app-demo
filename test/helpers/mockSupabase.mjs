@@ -583,6 +583,43 @@ export function createMockSupabase(seedTables = {}) {
           }
           return Promise.resolve({ data: null, error: null });
         }
+        // THE SHARED JOIN CODE. Absent from this mock until 2026-09-16, which
+        // meant the one path every member's access depends on - an admin
+        // pressing "יצירת קוד" - had no end-to-end coverage at all. The gap
+        // surfaced the way gaps like this always do: the owner could not find
+        // the screen, and the harness could not tell him whether it worked.
+        //
+        // Mirrors admin_invite_code_create()'s real contract: member or coach
+        // only (an invite may never hand out an elevated tier), the plaintext
+        // returned EXACTLY ONCE at creation and never stored - the table keeps
+        // only code_hash - and use_count starting at zero.
+        if (name === "admin_invite_code_create") {
+          const role = (args && args.p_role) || "member";
+          if (!["member", "coach"].includes(role)) {
+            return Promise.resolve({ data: null, error: { message: "invalid role" } });
+          }
+          const code = "mockcode" + String(rows("invite_codes").length + 1).padStart(40, "0");
+          const row = {
+            id: "ic-" + (rows("invite_codes").length + 1),
+            role,
+            active: true,
+            max_uses: (args && args.p_max_uses) || 100,
+            use_count: 0,
+            expires_at: (args && args.p_expires_at) || null,
+            revoked_at: null,
+            created_at: new Date().toISOString(),
+          };
+          rows("invite_codes").push(row);
+          return Promise.resolve({ data: Object.assign({ code }, row), error: null });
+        }
+        if (name === "admin_invite_code_list") {
+          return Promise.resolve({ data: rows("invite_codes").slice(), error: null });
+        }
+        if (name === "admin_invite_code_set_active") {
+          const row = rows("invite_codes").find((c) => c.id === (args && args.p_code_id));
+          if (row) row.active = !!(args && args.p_active);
+          return Promise.resolve({ data: null, error: null });
+        }
         if (name === "redeem_invite_code") {
           const redeemedAt = new Date().toISOString();
           rows("invite_redemptions").push({ user_id: currentUser.id, invite_id: "inv-1", role: "member", redeemed_at: redeemedAt });
