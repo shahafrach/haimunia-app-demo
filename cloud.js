@@ -3601,7 +3601,7 @@
     const bodyHtml = v.loading ? `<div class="empty">טוען את הלוח…</div>`
       : (v.error || !board) ? `<div class="empty">${esc(v.errorText || "לא ניתן היה לטעון את הלוח.")}</div>`
       : renderClubWodBoardBody(board, v);
-    return `<div class="modal-overlay open" role="dialog" aria-modal="true" aria-labelledby="clubWodBoardTitle" data-cloud-dialog="clubWodBoard" style="align-items:flex-start;padding:20px 12px;">
+    return `<div class="modal-overlay open" role="dialog" aria-modal="true" aria-labelledby="clubWodBoardTitle" data-cloud-dialog="clubWodBoard" style="align-items:center;padding:20px 12px;">
       <div class="modal-sheet" style="border-radius:20px;max-height:88vh;overflow:auto;width:100%;max-width:560px;">
         <div style="padding:18px 18px calc(env(safe-area-inset-bottom,0px) + 16px);">
           <div class="flex" style="justify-content:space-between;align-items:center;margin-bottom:12px;">
@@ -14426,7 +14426,7 @@
     // but DELETE is offered for every status, including the draft that was
     // opened by mistake and the finished challenge nobody wants in the list.
     const canEnd = c.status === "active" || c.status === "completed";
-    const endBtn = staff && canEnd ? `<button class="chip-btn" data-community-action="challenge-archive" data-id="${esc(c.id)}">סיום האתגר</button>` : "";
+    const endBtn = staff && canEnd ? `<button class="chip-btn" data-community-action="challenge-archive" data-id="${esc(c.id)}">סיום</button>` : "";
     const deleteBtn = staff ? `<button class="chip-btn danger" data-community-action="challenge-delete" data-id="${esc(c.id)}">מחיקה</button>` : "";
     const staffToolbar = (staff || pinBtn) ? `<div class="chip-row" style="margin-bottom:10px;">${staff ? `<button class="chip-btn" data-community-action="challenge-edit" data-id="${esc(c.id)}">עריכה</button>` : ""}${pinBtn}${endBtn}${deleteBtn}</div>` : "";
     const myProgress = renderMyChallengeProgress(v);
@@ -14449,13 +14449,35 @@
     const commentsNote = `<div class="footer-note" style="margin-top:12px;">עדכונים ותגובות על האתגר מופיעים בפיד המועדון בכל שיתוף שקשור אליו.</div>`;
     return `${meta}${staffToolbar}${description}${rules}${actions}${myProgress}${typePanel}${coachPanel}${shareBtn}${participantsHtml}${commentsNote}`;
   }
+  // THESE SIX DIALOGS ARE FLOATING CARDS, NOT BOTTOM SHEETS, and they were
+  // pinned to the top of the screen.
+  //
+  // .modal-overlay defaults to align-items:flex-end - eleven dialogs in this
+  // file are bottom sheets that slide up, flush to the bottom edge, with only
+  // their top corners rounded. Six are not: challengeView, eventView,
+  // recapView, profileView, notifCenter and clubWodBoard are cards with all
+  // four corners rounded and a margin on every side, and each overrode the
+  // default with the same copied `align-items:flex-start;padding:20px 12px`.
+  //
+  // flex-start pins a card to the TOP. Measured on a 390x844 phone, the
+  // challenge detail rendered 349px tall at 20px from the top - leaving 475px
+  // of empty overlay beneath it, more than half the screen, with the card and
+  // its controls up by the status bar and away from the thumb. Reported as
+  // "the challenge window is too high", which is exactly what it was.
+  //
+  // center, not flex-end: these are cards and should stay cards. Centering
+  // costs nothing for tall content (max-height:88vh and overflow:auto still
+  // do the work, and a card at 88vh is centered and top-anchored at once)
+  // while short content - which is most of them - lands where the eye and
+  // the thumb already are. All six move together; leaving five behind is how
+  // this file got six copies of one style string in the first place.
   function renderChallengeViewOverlay() {
     const v = state.challenges.view;
     if (!v) return "";
     const bodyHtml = v.loading ? `<div class="empty">טוען את האתגר…</div>`
       : (v.error || !v.challenge) ? `<div class="empty">לא ניתן היה לטעון את האתגר. נסו שוב.</div>`
       : renderChallengeViewBody(v);
-    return `<div class="modal-overlay open" role="dialog" aria-modal="true" aria-labelledby="challengeViewTitle" data-cloud-dialog="challengeView" style="align-items:flex-start;padding:20px 12px;">
+    return `<div class="modal-overlay open" role="dialog" aria-modal="true" aria-labelledby="challengeViewTitle" data-cloud-dialog="challengeView" style="align-items:center;padding:20px 12px;">
       <div class="modal-sheet" style="border-radius:20px;max-height:88vh;overflow:auto;width:100%;max-width:560px;">
         <div style="padding:18px 18px calc(env(safe-area-inset-bottom,0px) + 16px);">
           <div class="flex" style="justify-content:space-between;align-items:center;margin-bottom:12px;">
@@ -15096,7 +15118,7 @@
     const bodyHtml = v.loading ? `<div class="empty">טוען את האירוע…</div>`
       : (v.error || !v.event) ? `<div class="empty">לא ניתן היה לטעון את האירוע. נסו שוב.</div>`
       : renderEventViewBody(v);
-    return `<div class="modal-overlay open" role="dialog" aria-modal="true" aria-labelledby="eventViewTitle" data-cloud-dialog="eventView" style="align-items:flex-start;padding:20px 12px;">
+    return `<div class="modal-overlay open" role="dialog" aria-modal="true" aria-labelledby="eventViewTitle" data-cloud-dialog="eventView" style="align-items:center;padding:20px 12px;">
       <div class="modal-sheet" style="border-radius:20px;max-height:88vh;overflow:auto;width:100%;max-width:560px;">
         <div style="padding:18px 18px calc(env(safe-area-inset-bottom,0px) + 16px);">
           <div class="flex" style="justify-content:space-between;align-items:center;margin-bottom:12px;">
@@ -15496,7 +15518,7 @@
         <button class="chip-btn" data-community-action="recap-older"${v.olderWeekStart ? "" : " disabled"}>שבוע קודם</button>
         <button class="chip-btn" data-community-action="recap-newer"${v.newerWeekStart ? "" : " disabled"}>שבוע הבא</button>
       </div>` : "";
-    return `<div class="modal-overlay open" role="dialog" aria-modal="true" aria-labelledby="recapViewTitle" data-cloud-dialog="recapView" style="align-items:flex-start;padding:20px 12px;">
+    return `<div class="modal-overlay open" role="dialog" aria-modal="true" aria-labelledby="recapViewTitle" data-cloud-dialog="recapView" style="align-items:center;padding:20px 12px;">
       <div class="modal-sheet" style="border-radius:20px;max-height:88vh;overflow:auto;width:100%;max-width:560px;">
         <div style="padding:18px 18px calc(env(safe-area-inset-bottom,0px) + 16px);">
           <div class="flex" style="justify-content:space-between;align-items:center;margin-bottom:12px;">
@@ -17628,7 +17650,7 @@
     // 2026-09-05. A member's bio/display name were reportable nowhere - only
     // posts and comments were. Own profile has no report button.
     const reportProfileBtn = (state.user && pv.userId === state.user.id) ? "" : `<button class="chip-btn" data-community-action="report-profile" data-id="${esc(pv.userId)}">דיווח</button>`;
-    return `<div class="modal-overlay open" role="dialog" aria-modal="true" aria-labelledby="profileViewTitle" data-cloud-dialog="profileView" style="align-items:flex-start;padding:20px 12px;">
+    return `<div class="modal-overlay open" role="dialog" aria-modal="true" aria-labelledby="profileViewTitle" data-cloud-dialog="profileView" style="align-items:center;padding:20px 12px;">
       <div class="modal-sheet" style="border-radius:20px;max-height:88vh;overflow:auto;width:100%;max-width:520px;">
         <div style="padding:18px 18px calc(env(safe-area-inset-bottom,0px) + 16px);">
           <div class="flex" style="justify-content:space-between;align-items:center;margin-bottom:12px;">
@@ -18640,7 +18662,7 @@
       <div class="scene-page__media" style="height:100px;" aria-hidden="true"></div>
       <div class="scene-page__scrim" aria-hidden="true"></div>
     </div>`;
-    return `<div class="modal-overlay open" role="dialog" aria-modal="true" aria-labelledby="notifCenterTitle" data-notif-center data-cloud-dialog="notifCenter" style="align-items:flex-start;padding:20px 12px;">
+    return `<div class="modal-overlay open" role="dialog" aria-modal="true" aria-labelledby="notifCenterTitle" data-notif-center data-cloud-dialog="notifCenter" style="align-items:center;padding:20px 12px;">
       <div class="modal-sheet" style="border-radius:20px;max-height:88vh;overflow:auto;width:100%;max-width:520px;">
         <div style="padding:18px 18px calc(env(safe-area-inset-bottom,0px) + 16px);">
           ${headerStrip}
