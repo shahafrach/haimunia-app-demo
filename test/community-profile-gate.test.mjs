@@ -25,5 +25,8 @@ test("a signed-in, code-redeemed user with no profile yet sees an unskippable pr
   assert.ok(gateAt < tabsAt, "the gate must be checked before the tabbed UI is ever built");
   const gate = cloudJs.slice(gateAt, cloudJs.indexOf("const p = state.profile"));
   assert.match(gate, /id="communityProfile"/, "the gate's form must use the same id the existing submit dispatcher already handles");
-  assert.match(gate, /name="handle"/);
+  // One name, asked once: the gate collects the club-facing name and derives
+  // the handle from it, so a member is never asked to invent an identifier.
+  assert.match(gate, /name="displayName"/);
+  assert.doesNotMatch(gate, /name="handle"/);
 });

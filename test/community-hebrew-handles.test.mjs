@@ -17,11 +17,18 @@ test("the database handle constraint accepts Hebrew letters, same length bound a
 });
 
 test("the client-side handle validation matches the database constraint exactly", () => {
-  assert.match(cloudJs, /\/\^\[a-zא-ת0-9_\]\{3,24\}\$\/\.test\(handle\)/);
+  // The member no longer types a handle (one name, asked once - see
+  // deriveHandle). The rule still has to match the database CHECK exactly,
+  // because a DERIVED handle that violates it is a save failure the member
+  // cannot understand or fix, so the same regex now guards the derived value.
+  assert.match(cloudJs, /\/\^\[a-zא-ת0-9_\]\{3,24\}\$\/\.test\(candidates\[0\]\)/);
 });
 
-test("neither handle input forces dir=\"ltr\" anymore - Hebrew must render naturally while typing", () => {
-  assert.doesNotMatch(cloudJs, /name="handle" dir="ltr"/);
-  const handleInputs = (cloudJs.match(/name="handle" dir="auto"/g) || []).length;
-  assert.equal(handleInputs, 2, "both handle inputs (the profile gate and the account tab) must use dir=\"auto\"");
+test("the club-name input never forces dir=\"ltr\" - Hebrew must render naturally while typing", () => {
+  // Same requirement, now on the field that actually exists: the handle input
+  // is gone and the club name is the single thing a member types.
+  assert.doesNotMatch(cloudJs, /name="displayName" dir="ltr"/);
+  const nameInputs = (cloudJs.match(/name="displayName" dir="auto"/g) || []).length;
+  assert.equal(nameInputs, 2, "both club-name inputs (the profile gate and the account tab) use dir=\"auto\"");
+  assert.equal((cloudJs.match(/name="handle"/g) || []).length, 0, "and no handle input is asked for at all");
 });

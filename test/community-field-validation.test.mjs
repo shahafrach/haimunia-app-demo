@@ -35,9 +35,14 @@ test("both handle inputs (profile gate and account tab) route through field() un
   // The label is CLUB_NAME_LABEL now, not the literal "שם משתמש (handle)":
   // signup asked for a name twice under that same label and the two fields
   // enforced contradictory rules. See the label constants in cloud.js.
-  const matches = src.match(/field\("communityProfile", "handle", CLUB_NAME_LABEL/g) || [];
+  // One name, asked once. The two forms now carry a single club-name field
+  // each, and a duplicate still has to land on that field rather than on a
+  // generic banner - which was this test's real point all along.
+  const matches = src.match(/field\("communityProfile", "displayName", CLUB_NAME_LABEL/g) || [];
   assert.equal(matches.length, 2);
-  assert.match(src, /error\.code === "23505"\) setFieldErrors\(formId, \{ handle: "השם הזה כבר תפוס במועדון\. בחרו שם אחר\." \}\)/);
+  assert.equal((src.match(/field\("communityProfile", "handle"/g) || []).length, 0,
+    "the member is never asked for a handle");
+  assert.match(src, /error\.code === "23505"\) setFieldErrors\(formId, \{ displayName: "השם הזה כבר תפוס במועדון/);
 });
 
 test("the announcement and weekly-challenge composers validate every required field individually, not just as one generic message", () => {

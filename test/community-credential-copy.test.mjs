@@ -206,17 +206,24 @@ test("the login name and the club-facing name are not both called שם משתמ�
   await waitFor(() => !!window.document.getElementById("communityProfile"), 3000);
 
   const profileCard = window.document.getElementById("communityProfile").closest(".chart-card");
-  const handleLabel = window.document.querySelector('#communityProfile [name="handle"]').closest("label.field").querySelector(".field-label").textContent;
-  assert.notEqual(handleLabel, "שם משתמש");
-  assert.notEqual(handleLabel, loginLabel, "the two name fields must not carry the same label");
-  assert.match(handleLabel, /מועדון/, "this one is the name other members see, and says so");
+  // The club-facing name is now ONE field (the form used to ask twice, under
+  // two labels that both read as "your display name"). The requirement this
+  // test exists for is unchanged and now easier to hold: the login name and
+  // the club name must never be confusable.
+  const clubNameLabel = window.document.querySelector('#communityProfile [name="displayName"]').closest("label.field").querySelector(".field-label").textContent;
+  assert.notEqual(clubNameLabel, "שם משתמש");
+  assert.notEqual(clubNameLabel, loginLabel, "the two name fields must not carry the same label");
+  assert.match(clubNameLabel, /מועדון/, "this one is the name other members see, and says so");
+  assert.equal(window.document.querySelectorAll('#communityProfile [name="handle"]').length, 0,
+    "and there is no third name field to confuse it with");
   assert.match(profileCard.textContent, /לא שם הכניסה/, "and it says explicitly that it is not the login name");
 });
 
 test("the club-facing name field still accepts the Hebrew its own placeholder suggests", async () => {
-  // The placeholder "למשל דנה_כהן" is only honest if Hebrew is genuinely
-  // accepted here - it is the first field's rules, not this one's, that
-  // reject it. Disambiguating the labels must not have quietly unified them.
+  // The placeholder "למשל דנה כהן" is only honest if Hebrew AND a space are
+  // genuinely accepted here. Disambiguating the labels must not have quietly
+  // unified the two names, and collapsing the club's two name fields into one
+  // must not have re-imposed the handle's no-spaces rule on a human name.
   const window = await bootCommunity(createMockSupabase(), { syncEnabled: false });
   await reachCredentials(window);
   window.document.querySelector('#communityCredentials input[name="username"]').value = "dana";
@@ -225,9 +232,11 @@ test("the club-facing name field still accepts the Hebrew its own placeholder su
   submit(window, "communityCredentials");
   await waitFor(() => !!window.document.getElementById("communityProfile"), 3000);
 
-  const handleInput = window.document.querySelector('#communityProfile [name="handle"]');
-  assert.match(handleInput.placeholder, /דנה/, "the placeholder still suggests Hebrew");
-  handleInput.value = "דנה_כהן";
+  const clubNameInput = window.document.querySelector('#communityProfile [name="displayName"]');
+  assert.match(clubNameInput.placeholder, /דנה/, "the placeholder still suggests Hebrew");
+  // A real name, with the space a real name has - the thing the old handle
+  // field rejected, which is what sent the owner here asking "why?".
+  clubNameInput.value = "דנה כהן";
   submit(window, "communityProfile");
   await waitFor(() => !window.document.getElementById("communityProfile"), 3000);
 });

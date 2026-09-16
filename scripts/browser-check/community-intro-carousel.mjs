@@ -78,7 +78,7 @@ check("the carousel itself is gone", (await page.$('[data-intro-carousel="1"]'))
 const seenFlag = await page.evaluate(() => localStorage.getItem("haimunia-demo:seenIntroCarousel"));
 check("the one-time device flag is stamped", seenFlag === "1");
 
-await page.fill('#communityProfile input[name="handle"]', "new_member");
+await page.fill('#communityProfile input[name="displayName"]', "new member");
 await submitForm(page, "#communityProfile");
 await page.waitForSelector(".subtabbar", { timeout: 20000 });
 check("profile completion lands in the normal tabbed Community UI", true);

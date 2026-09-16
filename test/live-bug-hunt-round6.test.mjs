@@ -167,7 +167,7 @@ test("a display name typed with an RTL-override character never reaches the DOM 
   accountTabBtn.click();
   await waitFor(() => !!window.document.getElementById("communityProfile"), 4000);
   const form = window.document.getElementById("communityProfile");
-  form.elements.handle.value = "dana_k";
+  // No handle field any more - it is derived from the club name.
   form.elements.displayName.value = typed;
   form.elements.bio.value = "";
   form.dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
@@ -188,14 +188,25 @@ test("a zero-width-only display name is treated as not set, not as an invisible-
   accountTabBtn.click();
   await waitFor(() => !!window.document.getElementById("communityProfile"), 4000);
   const form = window.document.getElementById("communityProfile");
-  form.elements.handle.value = "dana_k";
   form.elements.displayName.value = zwsp.repeat(5);
   form.elements.bio.value = "";
   form.dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
-  await waitFor(() => !!mock.db.profiles.find((p) => p.id === "u1"), 4000);
+  await new Promise((r) => setTimeout(r, 600));
 
+  // THE EXPECTATION MOVED, deliberately. This used to assert the name stored
+  // as "" - acceptable when `handle` was a separate required field carrying
+  // the member's identity, so an empty display name just meant "fall back to
+  // @handle". Since the form collapsed to one name (2026-09-16), this IS the
+  // identity, and a name that cleans down to nothing is not a name. It is
+  // refused, with the same message any too-short name gets.
+  //
+  // The security half is unchanged and still the point: nothing invisible is
+  // ever written to storage.
   const stored = mock.db.profiles.find((p) => p.id === "u1").display_name;
-  assert.equal(stored, "", "zero-width-only input must clean down to an actually-empty string, not an invisible non-empty one");
+  assert.ok(!stored.includes(zwsp), "no zero-width character ever reaches storage");
+  assert.notEqual(stored, "", "and the member's existing good name is not wiped by a refused edit");
+  assert.match(window.document.body.textContent, /2 עד 40 תווים/,
+    "and the member is told what is wrong, rather than ending up with a blank name");
 });
 
 // ---------------------------------------------------------------------------

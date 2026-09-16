@@ -206,7 +206,7 @@ check("the new signup creates real, device-portable credentials", true);
 // completing the profile is what gives the admin's list a real identity to
 // show, rather than the two null name keys an unfinished signup leaves.
 await page.waitForSelector("#communityProfile", { timeout: 5000 });
-await page.fill('#communityProfile input[name="handle"]', "new_member");
+await page.fill('#communityProfile input[name="displayName"]', "new member");
 await page.fill('#communityProfile input[name="displayName"]', "חברה חדשה");
 await submitForm(page, "#communityProfile");
 // Not "wait for the 'הפרופיל נשמר' message": ensureCommunityDataLoaded()'s

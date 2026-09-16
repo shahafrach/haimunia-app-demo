@@ -7448,7 +7448,7 @@
   const LOGIN_IDENTIFIER_LABEL = "שם לכניסה או אימייל";
   const CLUB_NAME_LABEL = "השם שרואים במועדון";
   const CREDENTIALS_INTRO_TEXT = "שם וסיסמה לכניסה — כדי שתוכלו להיכנס לחשבון שוב מכל מכשיר. שם הכניסה הוא רק בשבילכם ואף אחד במועדון לא רואה אותו; את השם שחברי המועדון כן יראו בוחרים בשלב הבא, והוא יכול להיות אחר לגמרי.";
-  const CLUB_NAME_HINT_TEXT = "זה השם שחברי המועדון יראו לידכם בפיד ובלוחות. הוא לא שם הכניסה לחשבון, ואפשר לכתוב אותו בעברית.";
+  const CLUB_NAME_HINT_TEXT = "זה השם שחברי המועדון יראו לידכם בפיד ובלוחות. אפשר שם מלא עם רווחים, בעברית או באנגלית. זה לא שם הכניסה לחשבון.";
   // The value setCredentials() will actually save, not the raw keystrokes: it
   // trims and lower-cases before validating, so "Dana_K" is accepted and
   // stored as "dana_k". The live check normalises identically, otherwise it
@@ -7860,21 +7860,76 @@
     if (state.profile && !state.profile.recovery_verified_at) await verifyRecovery({ force: true });
     rerender();
   }
+  // ONE NAME, ASKED ONCE (2026-09-16), at the owner's instruction: "there are
+  // too many places a user needs to write his name - 3 different places - it
+  // needs to be one, only community."
+  //
+  // The form used to ask twice, in adjacent fields, and the labels made it
+  // worse: `handle` was labelled "השם שרואים במועדון" (the name people see in
+  // the club) directly above a second field labelled "שם תצוגה". Both read as
+  // "your display name". The one that sounded most like it was the handle,
+  // which may not contain a space - so the owner typed his own real name into
+  // it and was rejected, with a rule about underscores. And the label was not
+  // merely confusing but FALSE: every name render in this file is
+  // `display_name || handle`, so the display name is what the club sees
+  // wherever it is set, and the handle only ever surfaces as an "@" fallback.
+  //
+  // So the club name is now the only thing a member types, spaces and all, and
+  // the handle is derived from it. A handle is an identifier, not a question to
+  // put to a person.
+  function deriveHandle(name) {
+    const base = String(name || "").toLowerCase().trim()
+      .replace(/\s+/g, "_")
+      // Everything the handle rule forbids, dropped rather than rejected - the
+      // member never sees this string, so there is nobody to explain it to.
+      .replace(/[^a-zא-ת0-9_]/g, "")
+      .replace(/_+/g, "_").replace(/^_+|_+$/g, "");
+    return base.slice(0, 24);
+  }
+  // A derived handle can collide (two members really can both be דנה כהן), and
+  // a collision is OURS to resolve, not the member's - they typed their own
+  // name and it is not wrong. Suffixes are tried in order so the first דנה כהן
+  // keeps the clean handle and the second becomes דנה_כהן2.
+  function handleCandidates(name) {
+    const base = deriveHandle(name);
+    // A name made entirely of characters the handle alphabet has no room for
+    // (emoji, punctuation) strips to nothing. Padding that to "___" would pass
+    // the 3-24 rule and mint a handle with no relation to the member at all, so
+    // it returns empty and the caller asks for something typable instead.
+    if (!/[a-zא-ת0-9]/.test(base)) return [];
+    const seed = base.length >= 3 ? base : (base + "___").slice(0, 3);
+    const out = [seed];
+    for (let n = 2; n <= 9; n++) out.push(seed.slice(0, 23) + n);
+    for (let n = 10; n <= 99; n += 7) out.push(seed.slice(0, 22) + n);
+    return out;
+  }
   async function saveProfile(form) {
     if (!state.user) return;
     const formId = form.id;
-    const handle = String(form.elements.handle.value || "").trim().toLowerCase();
-    // Deliberately a DIFFERENT rule from the login name (USERNAME_RE): this is
-    // the name the club sees, Hebrew is welcome here, and the message says so
-    // rather than leaving a member to infer it from a rejection. The lengths
-    // are spelled "3 עד 24" for the same bidi reason USERNAME_RULE_TEXT is.
-    if (!/^[a-zא-ת0-9_]{3,24}$/.test(handle)) return setFieldErrors(formId, { handle: "השם שרואים במועדון צריך להיות 3 עד 24 תווים — עברית או אנגלית, ספרות או קו תחתון, בלי רווחים." });
+    const displayName = cleanStr(form.elements.displayName.value, 80).trim();
+    // The only rule a member can now break, and it is about THEIR name rather
+    // than about an identifier's character set: it has to be long enough to be
+    // a name and short enough to sit beside an avatar.
+    if (displayName.length < 2 || displayName.length > 40) {
+      return setFieldErrors(formId, { displayName: "השם שרואים במועדון צריך להיות באורך 2 עד 40 תווים." });
+    }
+    // An existing member keeps the handle they already have: it is their
+    // identity in @mentions and in every link already posted, so renaming
+    // yourself must not silently rename that too.
+    const existingHandle = state.profile && state.profile.handle ? state.profile.handle : null;
+    const candidates = existingHandle ? [existingHandle] : handleCandidates(displayName);
+    if (!candidates.length || !/^[a-zא-ת0-9_]{3,24}$/.test(candidates[0])) {
+      // Only reachable when a name is made entirely of characters the handle
+      // alphabet has no room for (emoji, punctuation). Ask for something
+      // typable rather than inventing an identifier with no relation to them.
+      return setFieldErrors(formId, { displayName: "השם צריך לכלול אותיות בעברית או באנגלית, או ספרות." });
+    }
     // is_admin is deliberately never sent from here — a coach-code
     // redemption is a label only (invite_redemptions.role), not automatic
     // full admin access. Full admin stays a manual dashboard-only flip;
     // real coach-scoped permissions (their own classes/members) are a
     // separate piece of work, not built yet.
-    const payload = { id: state.user.id, handle, display_name: cleanStr(form.elements.displayName.value, 80), bio: cleanStr(form.elements.bio.value, 160) };
+    const payload = { id: state.user.id, handle: candidates[0], display_name: displayName, bio: cleanStr(form.elements.bio.value, 160) };
     // The ONE place an insert is genuinely possible: profile completion runs
     // before the row exists. Once it does, update - an upsert would evaluate
     // profiles_insert_self, which requires recovery_verified_at to be null,
@@ -7883,11 +7938,21 @@
     // Whether this is a FIRST profile or an edit of an existing one - read
     // before the write, because the write is what makes state.profile exist.
     const isFirstProfile = !state.profile;
-    const { error } = state.profile
-      ? (await client.from("profiles").update({ handle: payload.handle, display_name: payload.display_name, bio: payload.bio }).eq("id", state.user.id))
-      : (await client.from("profiles").upsert(payload));
+    // Walk the candidates on 23505 rather than handing the collision back to
+    // the member. Only a NEW profile can walk: an existing member has exactly
+    // one candidate (their current handle), so a duplicate there is a genuine
+    // conflict and still surfaces.
+    let error = null;
+    for (const candidate of candidates) {
+      payload.handle = candidate;
+      const res = state.profile
+        ? (await client.from("profiles").update({ handle: candidate, display_name: payload.display_name, bio: payload.bio }).eq("id", state.user.id))
+        : (await client.from("profiles").upsert(payload));
+      error = res.error;
+      if (!error || error.code !== "23505") break;
+    }
     if (error) {
-      if (error.code === "23505") setFieldErrors(formId, { handle: "השם הזה כבר תפוס במועדון. בחרו שם אחר." });
+      if (error.code === "23505") setFieldErrors(formId, { displayName: "השם הזה כבר תפוס במועדון. נסו להוסיף שם משפחה או כינוי." });
       else setMessage("שמירת הפרופיל נכשלה");
       return;
     }
@@ -19081,7 +19146,7 @@
     // gates above it: this screen is all there is until a profile exists,
     // and the whole screen changing to the real tabbed UI afterward is the
     // confirmation, not just a toast that's easy to miss.
-    if (!state.profile) return `<div class="chart-card">${renderJoinProgress(3)}<div style="font-weight:800;font-size:18px;margin-bottom:6px;">השלמת פרופיל</div><div style="color:var(--steel);font-size:13px;line-height:1.7;margin-bottom:14px;">כמעט סיימתם — עוד רגע אחד ותהיו בפנים. ${CLUB_NAME_HINT_TEXT}</div><form id="communityProfile">${field("communityProfile", "handle", CLUB_NAME_LABEL, `<input class="text-input" name="handle" dir="auto" placeholder="למשל דנה_כהן" required/>`)}<label class="field"><span class="field-label">שם תצוגה</span><input class="text-input" name="displayName" placeholder="שם תצוגה"/></label><label class="field"><span class="field-label">קצת עליי</span><textarea class="text-input" name="bio" maxlength="160" placeholder="כמה מילים עליי"></textarea></label><button class="save-btn" type="submit" style="margin-top:12px;">שמירת פרופיל</button></form>${state.ui.message ? `<div class="footer-note" role="status" style="margin-top:10px;color:var(--brass);">${esc(state.ui.message)}</div>` : ""}</div>`;
+    if (!state.profile) return `<div class="chart-card">${renderJoinProgress(3)}<div style="font-weight:800;font-size:18px;margin-bottom:6px;">השלמת פרופיל</div><div style="color:var(--steel);font-size:13px;line-height:1.7;margin-bottom:14px;">כמעט סיימתם — עוד רגע אחד ותהיו בפנים. ${CLUB_NAME_HINT_TEXT}</div><form id="communityProfile">${field("communityProfile", "displayName", CLUB_NAME_LABEL, `<input class="text-input" name="displayName" dir="auto" placeholder="למשל דנה כהן" required/>`)}<div class="footer-note" style="margin:-6px 0 12px;">${CLUB_NAME_HINT_TEXT}</div><label class="field"><span class="field-label">קצת עליי</span><textarea class="text-input" name="bio" maxlength="160" placeholder="כמה מילים עליי"></textarea></label><button class="save-btn" type="submit" style="margin-top:12px;">שמירת פרופיל</button></form>${state.ui.message ? `<div class="footer-note" role="status" style="margin-top:10px;color:var(--brass);">${esc(state.ui.message)}</div>` : ""}</div>`;
     // COMM-016. Credentials are set and the profile row exists, but the
     // account has not been stamped recoverable yet, so is_community_member()
     // still blocks every write. Try once automatically (guarded inside
@@ -19405,9 +19470,8 @@
     ${au.error ? `<div class="field-error" role="alert" style="margin-bottom:10px;">${esc(au.error)}</div>` : ""}`;
     const account = `<form id="communityProfile" class="chart-card"><div style="font-weight:800;font-size:16px;margin-bottom:12px;">הפרופיל שלי</div>
       ${avatarControl}
-      ${field("communityProfile", "handle", CLUB_NAME_LABEL, `<input class="text-input" name="handle" dir="auto" value="${esc(p.handle || "")}" placeholder="למשל דנה_כהן" required/>`)}
+      ${field("communityProfile", "displayName", CLUB_NAME_LABEL, `<input class="text-input" name="displayName" dir="auto" value="${esc(p.display_name || "")}" placeholder="למשל דנה כהן" required/>`)}
       <div class="footer-note" style="margin:-6px 0 12px;">${CLUB_NAME_HINT_TEXT}</div>
-      <label class="field"><span class="field-label">שם תצוגה</span><input class="text-input" name="displayName" value="${esc(p.display_name || "")}" placeholder="שם תצוגה"/></label>
       <label class="field"><span class="field-label">קצת עליי</span><textarea class="text-input" name="bio" maxlength="160" placeholder="כמה מילים עליי">${esc(p.bio || "")}</textarea></label>
       <div class="chip-row"><button class="chip-btn primary" type="submit">שמירת פרופיל</button><button class="chip-btn" type="button" data-community-action="migrate">סנכרון היסטוריה פרטית</button></div>
     </form>`;

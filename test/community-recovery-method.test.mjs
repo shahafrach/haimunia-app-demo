@@ -36,7 +36,7 @@ test("full signup stamps recovery_verified_at and lands the member in the commun
   submit(window, "communityCredentials");
   await waitFor(() => !!window.document.getElementById("communityProfile"), 3000);
 
-  window.document.querySelector('#communityProfile input[name="handle"]').value = "dana";
+  window.document.querySelector('#communityProfile input[name="displayName"]').value = "dana";
   submit(window, "communityProfile");
   await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
 
@@ -81,7 +81,7 @@ test("a first-ever profile save whose automatic recovery verification fails show
   submit(window, "communityCredentials");
   await waitFor(() => !!window.document.getElementById("communityProfile"), 3000);
 
-  window.document.querySelector('#communityProfile input[name="handle"]').value = "dana";
+  window.document.querySelector('#communityProfile input[name="displayName"]').value = "dana";
   submit(window, "communityProfile");
 
   await waitFor(() => /אימות החשבון נכשל/.test(window.document.getElementById("content").textContent), 3000);

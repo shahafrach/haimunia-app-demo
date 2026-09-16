@@ -66,7 +66,7 @@ test("full signup lifecycle executes for real: bootstrap -> redeem code -> set c
   window.document.getElementById("communityCredentials").dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
   await waitFor(() => !!window.document.getElementById("communityProfile"), 3000);
 
-  window.document.querySelector('#communityProfile input[name="handle"]').value = "dana";
+  window.document.querySelector('#communityProfile input[name="displayName"]').value = "dana";
   window.document.getElementById("communityProfile").dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
   await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
 
@@ -95,10 +95,12 @@ test("full signup lifecycle executes for real: bootstrap -> redeem code -> set c
   assert.equal(window.document.getElementById("communityCredentials"), null, "a returning member must not be asked to set credentials again");
   // The Account tab's own profile-edit form legitimately reuses the
   // communityProfile id, so presence alone doesn't distinguish it from
-  // the completion gate - the pre-filled handle does, since only the
-  // real account-tab edit form pre-fills it from the saved profile.
-  const handleField = window.document.querySelector('#communityProfile input[name="handle"]');
-  assert.equal(handleField && handleField.value, "dana", "landed on the account tab's profile editor pre-filled with the saved handle, not an empty completion-gate form");
+  // the completion gate - the pre-filled NAME does, since only the real
+  // account-tab edit form pre-fills it from the saved profile. (It was the
+  // handle until the form collapsed to one name field; same signal, same
+  // reasoning, on the field that still exists.)
+  const nameField = window.document.querySelector('#communityProfile input[name="displayName"]');
+  assert.equal(nameField && nameField.value, "dana", "landed on the account tab's profile editor pre-filled with the saved name, not an empty completion-gate form");
 });
 
 test("an admin can search for a member and grant coach, executing for real through the confirm dialog", async () => {
