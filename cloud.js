@@ -4847,12 +4847,35 @@
     { id: "head_coach", label: "מאמן/ת ראשי/ת" },
   ];
   function roleCodeLabel(code) { const r = GRANTABLE_ROLES.find((x) => x.id === code); return r ? r.label : code; }
+  // BOTH SURFACES SHOW THE SAME ROW, SO BOTH HAVE TO BE RE-READ.
+  //
+  // renderMemberManagement()'s search panel and renderMemberRoster() render
+  // the identical row through the identical template (memberManagementRowHtml),
+  // and every control on that row - grant coach, promote, demote, revoke,
+  // remove - was refreshing only the SEARCH half. The search half is
+  // admin-only and starts empty until somebody types two characters into it,
+  // so acting from the roster, which is the browsable list and the one a head
+  // coach has at all, left the row you just changed sitting there unchanged.
+  // Reported as "after giving coach permission, it's not changing": the RPC
+  // had succeeded every time and the screen was showing a stale read.
+  //
+  // adminRemoveMember was given the roster reload when the remove control
+  // moved onto the roster (202609160005) and the other three were not, which
+  // is the same one-of-N fix this codebase keeps producing. One helper now,
+  // so there is no fourth place to forget.
+  //
+  // The roster reload is skipped when nothing has loaded it, so an admin
+  // working purely from search still pays for one round trip, not two.
+  async function refreshMemberSurfaces() {
+    await searchMembers(state.members.search);
+    if (state.admin.roster.loaded) await loadRoster(true);
+  }
   async function adminGrantCoach(userId) {
     if (!state.user || !isAdmin()) return;
     const { error } = await mgmtDb().rpc("admin_grant_coach", { p_user_id: userId });
     if (error) return setMessage(failText("הענקת ההרשאה נכשלה", error));
     setMessage("הרשאת מאמן/ת הוענקה");
-    await searchMembers(state.members.search);
+    await refreshMemberSurfaces();
   }
   async function adminSetRole(userId, roleCode) {
     if (!state.user || !isAdmin()) return;
@@ -4862,7 +4885,7 @@
     const { error } = await mgmtDb().rpc("admin_grant_coach", { p_user_id: userId, p_role: "head_coach" });
     if (error) return setMessage(failText("שינוי ההרשאה נכשל", error));
     setMessage("ההרשאה עודכנה ל" + roleCodeLabel(roleCode));
-    await searchMembers(state.members.search);
+    await refreshMemberSurfaces();
   }
   // Five-persona UX audit, defect 1. Granting coach asked "are you sure?";
   // revoking the same permission fired on a single click, from a list, with
@@ -4887,7 +4910,7 @@
     const { error } = await mgmtDb().rpc("admin_revoke_coach", { p_user_id: userId });
     if (error) return setMessage(failText("ביטול ההרשאה נכשל", error));
     setMessage("הרשאת מאמן/ת בוטלה");
-    await searchMembers(state.members.search);
+    await refreshMemberSurfaces();
   }
   // ---- COMM-376. Invite and code management -----------------------------
   // Two independent panels, gated on the two different permissions COMM-
@@ -6446,14 +6469,7 @@
     removeMemberBusy[userId] = false;
     if (error) return setMessage(failText("הסרת החבר/ה נכשלה", error));
     setMessage("החבר/ה הוסר/ה");
-    // BOTH surfaces that can show the row have to lose it. The admin search
-    // was the only one until 202609160005 put the control on the roster too,
-    // and refreshing only the search left a head coach looking at the member
-    // they had just removed, still listed, with a live remove button - the
-    // removal having actually succeeded. The roster reload is skipped when
-    // nothing has loaded it, so this stays one round trip for the admin.
-    await searchMembers(state.members.search);
-    if (state.admin.roster.loaded) await loadRoster(true);
+    await refreshMemberSurfaces();
   }
   // 2026-09-05 launch-readiness fix. Login emails are synthetic
   // (usernameToEmail() - never a real deliverable address), so there is no

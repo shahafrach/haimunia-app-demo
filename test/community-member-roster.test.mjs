@@ -189,6 +189,42 @@ test("a plain coach holds no remove permission, so no roster row offers the cont
     null, "community.member.remove starts at head_coach");
 });
 
+// REPORTED LIVE, 2026-09-16: "after giving coach permission, it's not
+// changing". The RPC succeeded every time; the roster never re-read it.
+// adminGrantCoach / adminSetRole / adminRevokeCoach all refreshed only
+// renderMemberManagement()'s SEARCH panel, which is admin-only and empty
+// until somebody types into it - so acting from the roster, the browsable
+// list and the only one a head coach has, left the changed row on screen
+// unchanged. adminRemoveMember got the roster reload when its control moved
+// here; the other three did not.
+test("a role change from the roster re-reads the roster, so the row actually updates", async () => {
+  const mock = seeded({}, "admin");
+  let role = "member";
+  const rosterCalls = [];
+  mock.onRpc("admin_member_roster", () => {
+    rosterCalls.push(1);
+    return { data: [rosterRow("bob", { role })], error: null };
+  });
+  mock.onRpc("admin_grant_coach", () => { role = "coach"; return { error: null }; });
+
+  const window = await bootCommunity(mock, { syncEnabled: false });
+  await openAccountTab(window);
+  await waitFor(() => window.document.body.textContent.includes("bob"), 3000);
+  const before = rosterCalls.length;
+
+  window.document.querySelector('[data-member-roster-section="1"] [data-community-action="admin-grant-coach"]').click();
+  await waitFor(() => !!window.document.querySelector('[data-community-action="confirm-yes"]'), 3000);
+  window.document.querySelector('[data-community-action="confirm-yes"]').click();
+
+  await waitFor(() => rosterCalls.length > before, 3000);
+  // The row itself, not just the extra call: the RPC was always firing, and
+  // what was broken was the screen still showing the old answer.
+  await waitFor(() => {
+    const section = window.document.querySelector('[data-member-roster-section="1"]');
+    return !!section && /מאמן/.test(section.textContent);
+  }, 3000);
+});
+
 test("the roster's role buttons are the exact adminGrantCoach/adminSetRole/adminRevokeCoach RPCs already wired to member search", async () => {
   const mock = seeded({}, "admin");
   mock.onRpc("admin_member_roster", () => ({ data: [rosterRow("bob")], error: null }));
