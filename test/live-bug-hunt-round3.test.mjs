@@ -221,11 +221,23 @@ test("Rx and Scaled attempts are compared as separate personal-best tracks, not 
     return entries.filter((e) => e.wodId === wod.id).sort((a, b) => b.ts - a.ts)[0];
   }
 
+  // UPDATED 2026-09-16. These two used to assert that a first-ever attempt in
+  // each track IS a record. Round 8 of the fresh hunt found that rule wrong -
+  // `prevBest === null ||` made every member's first attempt at every WOD an
+  // unearned personal record, celebration and all, for a result with nothing
+  // to compare against. The strength side had always said "nothing is a
+  // personal record until there is something to beat"; the WOD side had the
+  // sign inverted.
+  //
+  // The property THIS test exists for is untouched by that: Rx and Scaled are
+  // separate tracks. Both assertions are simply restated for the corrected
+  // rule - a first attempt establishes a track's baseline rather than
+  // scoring against nothing.
   const rx1 = await logTime(9, 0, true); // 540s, first Rx attempt
-  assert.equal(rx1.isPR, true);
+  assert.equal(rx1.isPR, false, "a first-ever Rx attempt has nothing to beat, so it is not a record");
 
   const scaled1 = await logTime(8, 0, false); // 480s - numerically "faster" than Rx, but a different category
-  assert.equal(scaled1.isPR, true, "a first-ever Scaled attempt is trivially its own category's first record");
+  assert.equal(scaled1.isPR, false, "and neither is a first-ever Scaled attempt, in its own separate track");
 
   // Live report's core finding: before the fix, "the" record ignored Rx/
   // Scaled entirely, so the faster Scaled time silently overwrote the

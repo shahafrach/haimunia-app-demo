@@ -6853,6 +6853,32 @@
     return `<div class="ach-section" style="margin-top:18px;" data-blocked-members-section="1">${sectionHead("var(--blue)", "חברים חסומים")}<div class="log-list">${rows}</div></div>`;
   }
   function isBlockedUser(userId) { return !!userId && state.members.blockedIds.indexOf(userId) >= 0; }
+  // FILTER WHEN RENDERING, not when blocking.
+  //
+  // Live bug hunt, fresh round 8 (2026-09-15), and the bug it fixes was
+  // committed by round 7's own fix to this exact problem. block() purges the
+  // member-row caches it knows about - and it had just been widened from one
+  // to three, with a comment saying "EVERY surface that renders a member row"
+  // - while two more went on rendering a blocked member with live "פרופיל"
+  // and "מעקב" buttons for the rest of the session: the people-you-may-know
+  // strip and the trained-with-you-today card. Both are loaded once and never
+  // invalidated. The block dialog promises "לא תראו זה את זה בקהילה"; two of
+  // the app's own surfaces did not honour it.
+  //
+  // Enumerating caches is what produced the bug twice, so this stops doing
+  // that. Reactors, comments, mentions and mention-search already filter with
+  // isBlockedUser() AT RENDER TIME, which is the pattern that cannot rot: a
+  // stale cache is then harmless, and a surface added later inherits the
+  // behaviour by using the same helper rather than by someone remembering to
+  // add it to a purge list.
+  //
+  // Returns a shallow copy so the cached list itself is untouched - an
+  // unblock must be able to bring those rows straight back without a reload.
+  function blockFilteredList(slice) {
+    if (!slice || !Array.isArray(slice.items)) return slice;
+    const kept = slice.items.filter((m) => !m || !isBlockedUser(m.id || m.user_id));
+    return kept.length === slice.items.length ? slice : Object.assign({}, slice, { items: kept });
+  }
 
   async function loadFollowingIds() {
     if (!state.user) { state.members.followingIds = []; state.members.followingLoaded = true; return; }
@@ -9511,7 +9537,7 @@
     </div>`;
   }
   function renderPeopleSuggestions() {
-    const s = state.members.suggestions;
+    const s = blockFilteredList(state.members.suggestions);
     // COMM-232: on error the strip is not rendered at all - no heading, no
     // empty state, no retry. Nothing tells the member a thing failed.
     if (s.error) return "";
@@ -12810,7 +12836,11 @@
       setMessage("אין חיבור — העדכון יישלח כשהחיבור יחזור");
       return rerender();
     }
-    if (error) { v.coachEntry.error = "לא ניתן היה לשמור את העדכון."; return rerender(); }
+    // Same omission as the composer above: the offline path for this very RPC
+    // maps its errors, and this one did not - so a coach updating a
+    // participant who had quietly left the challenge was told "couldn't save,
+    // try again" forever, with no hint that retrying was futile.
+    if (error) { v.coachEntry.error = failText("לא ניתן היה לשמור את העדכון.", error); return rerender(); }
     v.coachEntry.drafts[userId] = { delta: "", note: "" };
     await refreshChallengeView(v.id);
     const after = state.challenges.view && state.challenges.view.participants.find((p) => p.user_id === userId);
@@ -14889,7 +14919,7 @@
     </div>`;
   }
   function renderClassmatesTodayCard() {
-    const s = state.members.classmatesToday;
+    const s = blockFilteredList(state.members.classmatesToday);
     // The three no-card branches, all of which return the same empty string:
     // a failed fetch, a load that has not answered yet, and an answer with no
     // rows. The middle one is why there is no skeleton here - see below.
@@ -15399,7 +15429,26 @@
     }
     if (error || !data) {
       c.publishing = false;
-      c.error = "פרסום הפוסט נכשל, אפשר לנסות שוב";
+      // SAY WHY, when the server said why. Live bug hunt, fresh round 8
+      // (2026-09-15) - HIGH.
+      //
+      // This ignored `error` entirely and always said "failed, you can try
+      // again". For a member the club had restricted from posting, that is
+      // both wrong and cruel: the restriction does not lift on retry, and the
+      // app was telling them to keep trying. rate_limited and every content
+      // refusal were flattened the same way.
+      //
+      // The comment box beside it already maps the identical server strings
+      // through commentErrorMessage(), and the offline outbox banner shows
+      // the right text for THIS RPC when the write is queued instead. The
+      // header above SERVER_ERROR_TEXT documents this exact failure - "how a
+      // moderated member found out they had been sanctioned" - as the reason
+      // that table exists. This path simply never called it.
+      //
+      // failText() keeps the domain sentence for anything unrecognised, so an
+      // unknown server error still reads as a post that failed rather than as
+      // a bare English string.
+      c.error = failText("פרסום הפוסט נכשל, אפשר לנסות שוב", error);
       return rerender();
     }
     // COMM-102 optimistic insert. feed_page (COMM-110) is authoritative on the
@@ -18645,7 +18694,10 @@
   function renderCoachNewMembersSection() {
     // "חברים חדשים" - the exact phrase COMM-107's welcome post and the
     // coach-tools Welcome section already use for the same concept.
-    const rows = state.club.newMembers || [];
+    // Same render-time block filter as every other member list - see
+    // blockFilteredList(). A coach who has blocked someone should not be
+    // handed them as a task.
+    const rows = (state.club.newMembers || []).filter((m) => !m || !isBlockedUser(m.id || m.user_id));
     const body = rows.length
       ? `<div class="log-list">${rows.map((m) => {
           const days = Number(m.days_since_join);

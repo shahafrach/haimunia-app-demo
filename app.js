@@ -15,7 +15,7 @@ let barWeight = 20;
 // Single source of truth for the app version. After bumping this, run
 // `npm run sync-version` to copy it into SW_VERSION in sw.js — `npm test`
 // fails if the two drift apart.
-const APP_VERSION = "4.58.0";
+const APP_VERSION = "4.59.0";
 
 // A movement typed into the WOD builder that isn't in the built-in list
 // above - persisted (see WODTAGSTORE), same "custom X" pattern as
@@ -3243,9 +3243,40 @@ async function importDataFromFile(file) {
     entries: sanitizeList(data.entries, sanitizeEntry, LIMITS.importItems),
     wodEntries: sanitizeList(data.wodEntries, sanitizeWodEntry, LIMITS.importItems),
     bodyweightEntries: sanitizeList(data.bodyweightEntries, sanitizeBodyweight, LIMITS.importItems),
+    // (wodEntries is filtered against the WOD catalogue below, once the
+    // imported customWods are known - see dropOrphanWodEntries.)
     measureTypes: sanitizeList(data.measureTypes, sanitizeMeasureType, LIMITS.importItems),
     measureEntries: sanitizeList(data.measureEntries, sanitizeMeasurement, LIMITS.importItems),
   };
+  // AN IMPORTED RESULT MUST POINT AT A WOD THAT EXISTS. Live bug hunt, fresh
+  // round 8 (2026-09-15).
+  //
+  // Nothing validated wodId on the way in, so a backup carrying a result for
+  // a WOD that no longer exists - a deleted custom WOD, an older-shape file, a
+  // hand-edited one - imported cleanly and then sat in the calendar forever as
+  // "? מלא (Rx) 8:20". Its edit pencil was a SILENT no-op, because
+  // startEditWodEntry() bails on `if (!w) return;`, so the only way out was
+  // delete, with nothing on screen explaining what the row even was.
+  //
+  // restoreWodEntry() already refuses to bring back an entry whose WOD is
+  // gone, and says why - that guard was written after this exact failure mode
+  // was found on the undo path. Import never got it.
+  //
+  // Checked AFTER the imported customWods are in hand, since a result may
+  // legitimately reference a custom WOD that arrives in the same file.
+  // WOD_LIBRARY (built-ins) + club WODs already synced + the custom WODs
+  // arriving in THIS file. allWods() cannot be used yet: customWods is not
+  // assigned until the import commits.
+  const knownWodIds = new Set(
+    WOD_LIBRARY.map((w) => w.id)
+      .concat(clubWods.map((w) => w.id))
+      .concat((clean.customWods || []).map((w) => w && w.id))
+  );
+  const orphanWodEntries = (clean.wodEntries || []).filter((e) => e && !knownWodIds.has(e.wodId));
+  if (orphanWodEntries.length) {
+    clean.wodEntries = clean.wodEntries.filter((e) => e && knownWodIds.has(e.wodId));
+  }
+
   // Live bug hunt, round 9 (2026-09-11): sessionNotes/customWodMovementTags
   // restore, the same fix buildBackupPayload() got above. Kept out of the
   // incoming/rejected/ok/failed counters below - those "X רישומים" counts
@@ -3313,6 +3344,12 @@ async function importDataFromFile(file) {
   await reloadFromDb();
 
   const parts = [ok === 1 ? "יובא רישום אחד" : `יובאו ${ok} רישומים`];
+  // Say what was dropped, rather than letting a count quietly not add up.
+  if (orphanWodEntries.length) {
+    parts.push(orphanWodEntries.length === 1
+      ? "רישום אימון אחד דולג — האימון שלו כבר לא קיים"
+      : `${orphanWodEntries.length} רישומי אימון דולגו — האימונים שלהם כבר לא קיימים`);
+  }
   if (rejected) parts.push(`${rejected} נפסלו`);
   if (failed) parts.push(`${failed} נכשלו בשמירה`);
   setImportMessage(parts.join(", "));
@@ -4008,7 +4045,22 @@ async function saveWod() {
 
   // EMOM has no cross-attempt scoring (yet) — see bestWodScore/scoreValue.
   const val = scoreValue(entry);
-  const isPR = w.scoreType === "emom" ? false : (prevBest === null || (w.scoreType === "time" ? val < prevBest : val > prevBest));
+  // NOTHING TO BEAT IS NOT A RECORD. Live bug hunt, fresh round 8
+  // (2026-09-15) - HIGH, and it fired constantly rather than at an edge.
+  //
+  // `prevBest === null ||` made a WOD's FIRST-EVER attempt a personal record
+  // by definition. Every member's first Fran, first Grace, first anything
+  // opened the full-screen celebration, stored isPR: true in IndexedDB, and
+  // left a permanent flame on the entry and a record dot on the calendar day
+  // - for a result with no history to compare against.
+  //
+  // The strength side says this in its own words: "nothing is a personal
+  // record until there is something to beat", and enforces it with
+  // MIN_ENTRIES_BEFORE_PR. The WOD side inverted the same question. A
+  // threshold is not needed here - a WOD result is one attempt, not a set, so
+  // "is there a previous best" IS the question - but the answer had the wrong
+  // sign.
+  const isPR = w.scoreType === "emom" ? false : (prevBest !== null && (w.scoreType === "time" ? val < prevBest : val > prevBest));
   entry.isPR = isPR;
 
   // Live bug hunt (2026-09-11): same write-before-mutate fix as saveSet()
@@ -4033,6 +4085,11 @@ async function saveWod() {
   // audit's 300 kg typo down to 30 fired 'שיא אישי חדש!' a second time".
   // The WOD side was simply never given the same gate.
   const celebratePR = isPR && !existing;
+  // And say so when an edit REMOVES one. saveSet() has told members this
+  // since the strength side hit it ("you updated the set - the mark on the
+  // previous result was removed"); the WOD side dropped the flame in silence.
+  // Live bug hunt, fresh round 8 (2026-09-15).
+  if (existing && existing.isPR && !isPR) showToast("עדכנתם את האימון — העיטור על התוצאה הקודמת הוסר.");
   if (celebratePR) flashWodPR(entry.rx);
   // Same ordering rule as saveSet(): the debt is claimed before the render
   // that evaluates S5's consent card, never after it.
