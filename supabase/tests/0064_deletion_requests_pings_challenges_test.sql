@@ -359,10 +359,45 @@ select is(
 select is_empty(
   $$ select user_id from public.coach_inactive_members() where user_id = tests.uid('owner') $$,
   'a member who joined inside the window is never reported as inactive - they are new, and coach_new_members() is where they belong');
+-- `owner` can no longer carry the positive half of this pair. 202609160003
+-- narrowed coach_new_members() to role_rank < 20: the welcome queue is a
+-- list of people for a coach to greet, and the owner arriving is not one of
+-- them. So the "they are genuinely in the other list" assertion moves to a
+-- member-rank arrival inserted for it, and the owner's absence becomes its
+-- own assertion rather than a silent failure of this one.
+-- Fixture rows go in as the bootstrap superuser, then the coach reader is
+-- called back under the coach again - the same clear/set dance this file
+-- already does around its deletion-request block.
+select tests.clear_auth();
+insert into auth.users (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at, created_at, updated_at)
+values ('00000000-0000-0000-0000-000000000000', 'cccccccc-0000-4000-8000-0000000000aa', 'authenticated', 'authenticated', 'justjoined@members.haimuniya.invalid', '$2a$10$rlshelpersfixturehashaaaaaaaaaaaaaaaaaaaaaaaaaaaa', now(), now(), now())
+on conflict (id) do nothing;
+insert into public.profiles (id, handle, display_name, recovery_verified_at)
+values ('cccccccc-0000-4000-8000-0000000000aa', 'just_joined', 'Just Joined', now())
+on conflict (id) do nothing;
+insert into public.invite_redemptions (user_id, invite_id, role, redeemed_at)
+values ('cccccccc-0000-4000-8000-0000000000aa', '11111111-2222-4333-8444-555555555555', 'member', now())
+on conflict (user_id) do nothing;
+select tests.set_auth(tests.uid('coach'));
+
+select is_empty(
+  $$ select user_id from public.coach_inactive_members()
+     where user_id = 'cccccccc-0000-4000-8000-0000000000aa' $$,
+  'a member who joined inside the window is never reported as inactive');
 select is(
-  (select count(*)::int from public.coach_new_members() where user_id = tests.uid('owner')),
+  (select count(*)::int from public.coach_new_members()
+     where user_id = 'cccccccc-0000-4000-8000-0000000000aa'),
   1,
   '...and they are genuinely there, so the exclusion above moves the member between lists rather than hiding them from the coach entirely');
+
+select is(
+  (select count(*)::int from public.coach_new_members() where user_id = tests.uid('owner')),
+  0,
+  'the owner joining is NOT in the welcome queue - 202609160003 made that list role_rank < 20, because a coach does not welcome the owner to the club');
+select is(
+  (select count(*)::int from public.coach_new_members() where user_id = tests.uid('coach')),
+  0,
+  'and neither is a coach, by the same rank rule rather than a second special case');
 select results_eq(
   $$ select last_activity_on from public.coach_inactive_members(current_date + 1) where user_id = tests.uid('m2') $$,
   $$ select current_date $$,

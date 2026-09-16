@@ -39,6 +39,20 @@ create extension if not exists pgtap with schema extensions;
 
 begin;
 set local search_path to public, extensions, tests;
+
+-- THE MODULE IS OFF BY DEFAULT NOW, AND THAT IS THE POINT OF 202609160004.
+-- Owner's instruction, 2026-09-16: "there is no need for welcome on feed for
+-- every member". So the producer this file covers is gated on a club_features
+-- key that ships false, and the trigger returns early when it is off.
+--
+-- Switched on HERE, before \ir pulls in the fixture redemptions, because the
+-- trigger reads the flag at insert time: flipping it afterwards would leave
+-- every fixture member post-less and every assertion below meaningless. The
+-- off case and the staff case get their own sections at the end of the file,
+-- against members inserted for them.
+update public.club_features set enabled = true
+ where module_key = 'new_member_posts';
+
 \ir rls_helpers.sql
 select * from no_plan();
 
@@ -47,10 +61,13 @@ select * from no_plan();
 -- =====================================================================
 select tests.clear_auth();
 
+-- One post per ARRIVING MEMBER, which is no longer the same as one per
+-- redemption: 202609160004 skips any redemption whose role_rank clears 20.
 select results_eq(
   $$ select count(*)::int from public.workout_posts where post_type = 'POST_NEW_MEMBER' $$,
-  $$ select count(*)::int from public.invite_redemptions $$,
-  'every fixture redemption produced exactly one POST_NEW_MEMBER row - no member missed, none doubled');
+  $$ select count(*)::int from public.invite_redemptions
+     where coalesce(public.role_rank(role), 10) < 20 $$,
+  'every member-rank redemption produced exactly one POST_NEW_MEMBER row - no member missed, none doubled');
 
 select results_eq(
   $$ select count(*)::int from public.workout_posts
@@ -58,12 +75,19 @@ select results_eq(
   $$ values (0) $$,
   'every welcome post is authorless - this is the club speaking, not the new member');
 
--- Fires for coach and owner redemptions too, not just role = 'member'. Only
--- the promote-an-existing-member path is excluded, and that is an UPDATE.
-select isnt_empty(
+-- REVERSED BY 202609160004, deliberately. This used to read "a coach-code
+-- redemption is a joining too and gets a welcome post" and it fired for coach
+-- and owner alike. Staff are colleagues arriving, not newcomers for the club
+-- to welcome to itself, and a card announcing the head coach to the members
+-- they coach reads as noise. role_rank >= 20 is skipped.
+select is_empty(
   $$ select 1 from public.workout_posts
      where post_type = 'POST_NEW_MEMBER' and (metadata ->> 'member_id') = tests.uid('coach')::text $$,
-  'a coach-code redemption is a joining too and gets a welcome post');
+  'a coach-code redemption gets NO welcome post - staff are not newcomers');
+select is_empty(
+  $$ select 1 from public.workout_posts
+     where post_type = 'POST_NEW_MEMBER' and (metadata ->> 'member_id') = tests.uid('owner')::text $$,
+  'and neither does the owner, by the same rank rule rather than a second special case');
 
 -- =====================================================================
 -- The metadata shape the shipped renderer reads
@@ -272,6 +296,46 @@ select throws_ok(
   '42501',
   null,
   'a member cannot hand-write an authorless welcome post - posts_insert_self still requires author_id = auth.uid()');
+
+-- =====================================================================
+-- The switch itself. This is the DEFAULT state in production, and until
+-- now nothing asserted it at all - 202609160004 shipped a gate whose
+-- closed position was never tested.
+-- =====================================================================
+select tests.clear_auth();
+
+select is(
+  (select enabled from public.club_features where module_key = 'new_member_posts'
+     and club_id = public.default_club_id()),
+  true,
+  'the module is on for the rest of this file - switched at the top, not assumed');
+
+insert into auth.users (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at, created_at, updated_at)
+values ('00000000-0000-0000-0000-000000000000', 'bbbbbbbb-0000-4000-8000-0000000000ff', 'authenticated', 'authenticated', 'quiet@members.haimuniya.invalid', '$2a$10$rlshelpersfixturehashaaaaaaaaaaaaaaaaaaaaaaaaaaaa', now(), now(), now())
+on conflict (id) do nothing;
+insert into public.profiles (id, handle, display_name, recovery_verified_at)
+values ('bbbbbbbb-0000-4000-8000-0000000000ff', 'module_off_x', 'Module Off', now())
+on conflict (id) do nothing;
+
+update public.club_features set enabled = false
+ where module_key = 'new_member_posts' and club_id = public.default_club_id();
+
+insert into public.invite_redemptions (user_id, invite_id, role)
+values ('bbbbbbbb-0000-4000-8000-0000000000ff', '11111111-2222-4333-8444-555555555555', 'member')
+on conflict (user_id) do nothing;
+
+select is_empty(
+  $$ select 1 from public.workout_posts
+     where post_type = 'POST_NEW_MEMBER'
+       and (metadata ->> 'member_id') = 'bbbbbbbb-0000-4000-8000-0000000000ff' $$,
+  'with the module off, a member-rank redemption produces NO welcome post - the owner turned this off and it stays off');
+
+-- The gate must not cost the OTHER trigger on the same table. A member who
+-- joins while welcome posts are switched off still needs onboarding.
+select isnt_empty(
+  $$ select 1 from public.onboarding_progress
+     where user_id = 'bbbbbbbb-0000-4000-8000-0000000000ff' $$,
+  'and seed_onboarding_progress still fired - switching one module off must not silently disable the trigger beside it');
 
 select * from finish();
 rollback;

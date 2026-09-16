@@ -166,9 +166,25 @@ select lives_ok(
 select is_empty(
   $$ select 1 from public.attendance_log where user_id = tests.uid('m2') $$,
   'no attendance day yet');
+-- The un-delete has to carry a payload stamp NEWER than the deletion, and
+-- this fixture's did not: `"ts":1` is 1970, so 202609160001's stale-write
+-- guard correctly read the re-sync as an edit made BEFORE the delete and
+-- skipped it. That guard is right - a second device re-sending a record it
+-- edited before the deletion must not resurrect it - and the scenario this
+-- section is actually about (flushOutbox re-sending as an UPDATE, and
+-- attendance counting it) needs a re-sync that genuinely is later. Stamped
+-- with updatedAt, which pr_payload_mod_ms() prefers over ts, and a FULL
+-- SECOND past the deletion rather than a bare now(): deleted_at carries
+-- microseconds while the payload stamp is whole milliseconds, so now()
+-- lands within rounding distance of it and the guard's `<=` then decides
+-- on the microsecond remainder. That is a coin flip, and a flaky test is
+-- worse than a red one.
 select lives_ok(
-  $$ update public.private_records set deleted_at = null, payload = payload, updated_at = now()
-     where user_id = tests.uid('m2') and record_id = 'm2-e1' $$,
+  $$ update public.private_records
+        set deleted_at = null,
+            payload = payload || jsonb_build_object('updatedAt', (extract(epoch from now() + interval '1 second') * 1000)::bigint),
+            updated_at = now()
+      where user_id = tests.uid('m2') and record_id = 'm2-e1' $$,
   'the record is un-deleted by a later sync - the same UPDATE half of flushOutbox()''s upsert');
 select results_eq(
   $$ select occurred_on from public.attendance_log where user_id = tests.uid('m2') $$,

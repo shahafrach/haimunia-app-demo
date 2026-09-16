@@ -241,6 +241,22 @@ select is_empty(
 select tests.clear_auth();
 delete from public.blocks where blocker_id = tests.uid('m1') and blocked_id = tests.uid('m2');
 
+-- A BLOCK IS NOT REVERSIBLE BY UNBLOCKING, and the two blocks just staged
+-- above took the mutual follow with them. 202609150012 made blocking delete
+-- the follow rows in BOTH directions, deliberately - a block that left the
+-- follow standing meant the blocker kept appearing in the blocked member's
+-- friend surfaces. Removing the blocks does not re-follow anybody, which is
+-- also right: re-following is the members' decision, not the database's.
+--
+-- So this fixture has to be rebuilt by hand, or every later 'friends'-scope
+-- assertion in this file silently narrows to the caller alone. That is
+-- exactly what happened to the progress/friends case below, which expected
+-- m2 and m1 and got only m1 - a stale fixture reading as a behaviour change.
+insert into public.follows (follower_id, followed_id) values
+  (tests.uid('m1'), tests.uid('m2')),
+  (tests.uid('m2'), tests.uid('m1'))
+on conflict do nothing;
+
 -- COMM-212's whole point: the server-side opt-out is in_leaderboards, and it
 -- never hides you from yourself. Hide-my-result is the client's business.
 update public.profiles set in_leaderboards = false where id = tests.uid('m1');

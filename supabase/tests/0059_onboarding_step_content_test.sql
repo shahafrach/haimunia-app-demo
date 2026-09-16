@@ -32,10 +32,19 @@ select results_eq(
 
 -- Byte-for-byte against cloud.js's renderers, so a later copy edit in one
 -- place and not the other is caught here rather than by a member.
+--
+-- The welcome body changed in 202609150007: it named a control - לחיצה על
+-- "כתיבת פוסט" למעלה - that no longer exists, because that button was
+-- redesigned into the fake-input composer row reading "מה קורה היום?"
+-- (cloud.js's POST_COMPOSER_PLACEHOLDER). The very first sentence a new
+-- member reads was pointing at something not on their screen. This
+-- assertion is exactly the drift guard its own comment describes, and it
+-- has been failing silently since - the migration chain aborted before
+-- pgTAP could run (see 202609160006).
 select results_eq(
   $$ select title, body from public.onboarding_step_content where step = 'welcome' $$,
   $$ values ('ברוכים הבאים לקהילה!'::text,
-             'כאן רואים מה קורה במועדון, ואפשר לשתף אימונים ושיאים ולהגיב לחברים אחרים. לחיצה על "כתיבת פוסט" למעלה פותחת את השיתוף הראשון שלכם.'::text) $$,
+             'כאן רואים מה קורה במועדון, ואפשר לשתף אימונים ושיאים ולהגיב לחברים אחרים. השורה "מה קורה היום?" בראש הפיד פותחת את השיתוף הראשון שלכם.'::text) $$,
   'the welcome card is seeded with renderOnboardingWelcomeStep()''s exact live copy - first deploy changes nothing a member sees');
 select results_eq(
   $$ select title, body from public.onboarding_step_content where step = 'first_class' $$,

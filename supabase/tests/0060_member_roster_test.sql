@@ -216,11 +216,24 @@ select results_eq(
      where n.nspname = 'public' and p.proname = 'admin_member_roster' $$,
   $$ values (true, true) $$,
   'security definer and stable - definer because profiles is viewer-relative and invite_redemptions is own-row only, so an invoker-rights version would return the caller their own slice');
+-- The signature gained p_cursor_id in 202609160002, which also DROPPED the
+-- two-argument form rather than leaving both alive to drift apart. Naming
+-- the old one here raised "function does not exist" and took the whole file
+-- down with it - 25 assertions that had already passed were discarded as a
+-- parse error, invisibly, because the migration chain was aborting before
+-- pgTAP ran at all (see 202609160006).
 select results_eq(
-  $$ select has_function_privilege('authenticated', 'public.admin_member_roster(timestamptz, integer)', 'execute'),
-            has_function_privilege('anon', 'public.admin_member_roster(timestamptz, integer)', 'execute') $$,
+  $$ select has_function_privilege('authenticated', 'public.admin_member_roster(timestamptz, integer, uuid)', 'execute'),
+            has_function_privilege('anon', 'public.admin_member_roster(timestamptz, integer, uuid)', 'execute') $$,
   $$ values (true, false) $$,
   'granted to authenticated, revoked from anon');
+
+select is(
+  (select count(*)::int from pg_catalog.pg_proc p
+     join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public' and p.proname = 'admin_member_roster'),
+  1,
+  'and there is exactly ONE overload - two would be two paging rules for one list, which is the drift 202609160002 dropped the old form to prevent');
 
 select * from finish();
 rollback;

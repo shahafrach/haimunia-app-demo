@@ -18,6 +18,17 @@ create extension if not exists pgtap with schema extensions;
 
 begin;
 set local search_path to public, extensions, tests;
+
+-- Section 6 below is about what happens to a ghost's WELCOME POST when their
+-- invite is reclaimed, so this file needs welcome posts to exist at all.
+-- 202609160004 made them a club_features choice that ships OFF - the owner's
+-- call, 2026-09-16 - and the trigger reads the flag at insert time, so the
+-- switch has to precede the fixture redemptions rather than follow them.
+-- 0033 owns the gate's own coverage, on and off; this file only needs the
+-- producer running so the retraction has something to retract.
+update public.club_features set enabled = true
+ where module_key = 'new_member_posts';
+
 \ir rls_helpers.sql
 select * from no_plan();
 
