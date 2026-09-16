@@ -23,12 +23,18 @@
   there is no third-party entry in font-src/style-src at all — the app makes
   zero network requests to any origin but its own.
   frame-ancestors / X-Frame-Options are spec-ignored in <meta> — browsers
-  only honor them as real HTTP response headers. GitHub Pages serves static
-  files with no way to set custom response headers (no server config, no
-  _headers file), so there is no working clickjacking mitigation available
-  on this host at all — adding the directive here would be inert and
-  misleading, not a fix. It would take moving off GitHub Pages (a host that
-  supports a headers file) to actually close this gap. Verified directly
+  only honor them as real HTTP response headers, so the directive below is
+  inert HERE and always was.
+
+  IT IS NO LONGER THE ONLY MITIGATION. Since 2026-09-16 the app is served by
+  Cloudflare Pages, which reads the repo's _headers file, and the real headers
+  are live and verified on the origin:
+      content-security-policy: frame-ancestors 'none'
+      x-frame-options: DENY
+      strict-transport-security: max-age=31536000; includeSubDomains
+      cross-origin-opener-policy: same-origin
+  That closes SEC-014, which every earlier version of this comment described
+  as unfixable on the host of the day. Verified directly
   against the live production app (COMM-334, 2026-09-03: both the raw HTTP
   response headers and the served HTML of
   https://haimuniya.github.io/haimunia-app/) rather than assumed: production

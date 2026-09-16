@@ -49,6 +49,12 @@ const RESET_VERSION = 2;
 // which forces a CORS preflight. Scoped to the app's real origins rather
 // than "*", since this endpoint resets a password.
 const ALLOWED_ORIGINS = new Set([
+  // Cloudflare Pages, since 2026-09-16 - the real home. It is here rather than
+  // replacing the GitHub Pages entry because BOTH are live during the move: a
+  // member whose phone still has the old origin installed must keep working
+  // until they are moved over, and a password reset is the worst moment to
+  // discover an origin was dropped a day early.
+  "https://haimunia-app.pages.dev",
   "https://haimuniya.github.io",
   "http://localhost:3000",
   "http://127.0.0.1:3000",
