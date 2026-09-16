@@ -1190,6 +1190,42 @@
     return `<button class="chip-btn" data-community-action="feed-notifications" aria-label="התראות${unread ? (unread === 1 ? ", התראה אחת חדשה" : `, ${unread} חדשות`) : ""}" aria-haspopup="dialog" style="position:relative;">🔔${unread ? `<span class="tab-badge" aria-hidden="true">${unread}</span>` : ""}</button>`;
   }
   function rerender() { if (typeof window.render === "function") window.render(); }
+  // COALESCED RERENDER, for data that ARRIVES rather than data the member
+  // just changed.
+  //
+  // rerender() rebuilds the whole tab with one innerHTML write. That is a
+  // measured, deliberate architecture (COMM-366's spike: ~4.9 ms, kept on
+  // purpose) and it is fine ONCE. It is not fine N times in a row, and three
+  // loaders here are per-item: ensureReactionsLoaded() fires one
+  // loadReactionsFor() per rendered post card, and resolveAvatarUrl() /
+  // resolvePhotoUrl() fire one signed-URL request per distinct image. Each
+  // response independently called rerender(), so every card that came back
+  // rebuilt the entire tab again.
+  //
+  // MEASURED, not assumed (scripts/browser-check/feed-rerender-storm.mjs):
+  // one scroll to the bottom of a 30-post feed cost 11 full rebuilds, 8 of
+  // them from loadReactionsFor alone. Every one of those 8 threw away and
+  // rebuilt the DOM the previous one had just built, and each is a point
+  // where focus, caret and scroll have to be restored by hand.
+  //
+  // requestAnimationFrame is the right window: responses that land in the
+  // same frame paint once, and a frame is exactly the granularity the screen
+  // can show anyway. jsdom provides rAF under pretendToBeVisual (which
+  // test/helpers/boot.mjs sets), and the setTimeout fallback keeps this
+  // working anywhere it does not.
+  //
+  // NOT used for anything the member did. A tap, a toggle, a submit still
+  // calls rerender() synchronously: those need the DOM to reflect the action
+  // before the handler returns, and deferring them by a frame would be a
+  // visible lag on the one path where responsiveness is the whole point.
+  let rerenderScheduled = false;
+  function scheduleRerender() {
+    if (rerenderScheduled) return;
+    rerenderScheduled = true;
+    const flush = () => { rerenderScheduled = false; rerender(); };
+    if (typeof requestAnimationFrame === "function") requestAnimationFrame(flush);
+    else setTimeout(flush, 0);
+  }
   // WHERE A CONFIRMATION APPEARS DECIDES WHETHER IT IS SEEN.
   //
   // state.ui.message is this app's single notice channel - 66 success
@@ -6538,12 +6574,12 @@
     avatarInFlight[storedUrl] = true;
     const { data, error } = await client.storage.from("avatar-photos").createSignedUrl(path, SIGNED_URL_TTL_S);
     delete avatarInFlight[storedUrl];
-    if (!error && data && data.signedUrl) { signedCachePut(avatarUrlCache, storedUrl, data.signedUrl); rerender(); }
+    if (!error && data && data.signedUrl) { signedCachePut(avatarUrlCache, storedUrl, data.signedUrl); scheduleRerender(); }
   }
   async function resolvePhotoUrl(path) {
     if (!path || signedCacheGet(photoUrlCache, path)) return;
     const { data, error } = await client.storage.from("post-photos").createSignedUrl(path, SIGNED_URL_TTL_S);
-    if (!error && data) { signedCachePut(photoUrlCache, path, data.signedUrl); rerender(); }
+    if (!error && data) { signedCachePut(photoUrlCache, path, data.signedUrl); scheduleRerender(); }
   }
   // ==========================================================================
   // COMM-110..115  feed cluster.
@@ -7027,7 +7063,8 @@
       list: rows.map((r) => ({ id: r.user_id, name: r.profiles ? (r.profiles.display_name || "@" + r.profiles.handle) : "", avatar_url: r.profiles ? r.profiles.avatar_url : null })),
       count: rows.length,
     };
-    rerender();
+    // One frame, not one rebuild per post whose reactions came back.
+    scheduleRerender();
   }
   function syncFeedReactionCount(postId, count) {
     const row = findFeedPost(postId);

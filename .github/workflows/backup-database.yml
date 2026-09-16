@@ -1,0 +1,157 @@
+name: backup-database
+# WHY THIS EXISTS.
+#
+# The Supabase free tier takes no automatic backups. Until now the only copy
+# of this club's data outside the live project was whatever a member happened
+# to export from the app, which covers one member's own training log and
+# nothing else: no profiles, no invite redemptions, no posts, no challenges,
+# no audit trail. A dropped table, a bad migration or a deleted project would
+# have been unrecoverable, and nobody would have discovered that until they
+# needed it.
+#
+# ---------------------------------------------------------------------------
+# TWO REQUIRED SECRETS, in Settings -> Secrets and variables -> Actions:
+#
+#   SUPABASE_DB_URL    the direct Postgres connection string, from
+#                      Dashboard -> Project Settings -> Database -> Connection
+#                      string -> URI. It contains the database password, so
+#                      it is a secret in the strongest sense: it reads and
+#                      writes every member's data.
+#
+#   BACKUP_PASSPHRASE  a long random passphrase used to encrypt the dump
+#                      before it leaves this job. Generate one and store it
+#                      somewhere that is NOT this repo and NOT the same
+#                      password manager entry as the database - a backup you
+#                      cannot decrypt is not a backup, and one anybody can
+#                      decrypt is a leak.
+#
+# THE ENCRYPTION IS NOT OPTIONAL, AND HERE IS WHY. This repository is PUBLIC.
+# Workflow artifacts on a public repository are readable by anyone who can
+# reach the Actions API - there is no "private artifact on a public repo".
+# An unencrypted dump uploaded here would publish every member's profile,
+# handle, invite history and private training records to the open internet.
+# So the job refuses to run at all without the passphrase, the plaintext dump
+# never exists outside the runner, and only the ciphertext is uploaded.
+#
+# TO RESTORE:
+#   gh run download <run-id> -n haimunia-db-backup
+#   gpg --batch --passphrase "$BACKUP_PASSPHRASE" -d backup.sql.gpg > backup.sql
+#   psql "$SUPABASE_DB_URL" -f backup.sql
+#
+# The schema half is also reconstructible from supabase/migrations/ alone, so
+# the irreplaceable part of what this captures is the DATA.
+# ---------------------------------------------------------------------------
+on:
+  schedule:
+    # 02:17 UTC daily. Off the hour on purpose: every cron on the hour
+    # contends with every other cron on the hour, and a backup that gets
+    # queued behind the internet is a backup that sometimes does not run.
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: backup-database
+  cancel-in-progress: false
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Fails loudly rather than skipping quietly, the same rule
+      # deploy-edge-functions.yml follows: a backup job that reports green
+      # while backing nothing up is worse than no job at all, because it
+      # converts "we have no backups" into "we think we have backups".
+      - name: refuse to run without both secrets
+        run: |
+          missing=0
+          if [ -z "$SUPABASE_DB_URL" ]; then
+            echo "SUPABASE_DB_URL is not set."; missing=1
+          fi
+          if [ -z "$BACKUP_PASSPHRASE" ]; then
+            echo "BACKUP_PASSPHRASE is not set. Refusing to produce a dump"
+            echo "that could only be uploaded in the clear - this repository"
+            echo "is public and its artifacts are world-readable."
+            missing=1
+          fi
+          exit $missing
+
+      - uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520 # v3.0.0
+        with:
+          version: 2.116.0
+
+      # Schema and data separately, which is how they are restored: the
+      # schema is reproducible from migrations, the data is not. Keeping them
+      # apart means a data-only restore into a freshly migrated project
+      # (the common case) does not have to fight a second copy of the DDL.
+      - name: dump
+        run: |
+          set -euo pipefail
+          mkdir -p backup
+          supabase db dump --db-url "$SUPABASE_DB_URL" -f backup/schema.sql
+          supabase db dump --db-url "$SUPABASE_DB_URL" -f backup/data.sql --data-only
+          supabase db dump --db-url "$SUPABASE_DB_URL" -f backup/roles.sql --role-only
+
+      # A DUMP THAT SUCCEEDED IS NOT A DUMP THAT CONTAINS ANYTHING. pg_dump
+      # exits 0 on an empty result, so size is checked before anything is
+      # called a backup - the same class of false-green as the cron job that
+      # POSTed to a 404 every night and recorded 'succeeded'.
+      - name: verify the dump is not empty
+        run: |
+          set -euo pipefail
+          ls -l backup/
+          for f in backup/schema.sql backup/data.sql; do
+            size=$(stat -c%s "$f")
+            echo "$f: $size bytes"
+            if [ "$size" -lt 1024 ]; then
+              echo "$f is under 1 KB - that is not a backup of this database."
+              exit 1
+            fi
+          done
+          # The schema must contain the tables this app cannot work without.
+          for t in profiles invite_redemptions workout_posts private_records; do
+            grep -q "CREATE TABLE public.$t" backup/schema.sql || {
+              echo "schema.sql has no public.$t - the dump is not this project."
+              exit 1
+            }
+          done
+
+      - name: encrypt
+        run: |
+          set -euo pipefail
+          tar -czf backup.tar.gz -C backup .
+          gpg --batch --yes --symmetric --cipher-algo AES256 \
+              --passphrase "$BACKUP_PASSPHRASE" \
+              -o backup.tar.gz.gpg backup.tar.gz
+          # The plaintext never reaches the upload step. shred rather than rm
+          # so it does not sit in the runner image's filesystem either.
+          shred -u backup.tar.gz
+          rm -rf backup
+          ls -l backup.tar.gz.gpg
+          sha256sum backup.tar.gz.gpg
+
+      # Round-trips the ciphertext before calling the run a success. An
+      # encrypted file nobody has ever decrypted is a guess, not a backup.
+      - name: prove it decrypts
+        run: |
+          set -euo pipefail
+          gpg --batch --yes --passphrase "$BACKUP_PASSPHRASE" \
+              -d backup.tar.gz.gpg > /tmp/roundtrip.tar.gz
+          tar -tzf /tmp/roundtrip.tar.gz | head
+          tar -tzf /tmp/roundtrip.tar.gz | grep -q './schema.sql'
+          tar -tzf /tmp/roundtrip.tar.gz | grep -q './data.sql'
+          shred -u /tmp/roundtrip.tar.gz
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: haimunia-db-backup
+          path: backup.tar.gz.gpg
+          # 90 days is the free-tier artifact ceiling and there is no reason
+          # to keep less. Older runs age out on their own; this is a rolling
+          # window, not an archive.
+          retention-days: 90
+          if-no-files-found: error

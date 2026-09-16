@@ -15,7 +15,7 @@ let barWeight = 20;
 // Single source of truth for the app version. After bumping this, run
 // `npm run sync-version` to copy it into SW_VERSION in sw.js — `npm test`
 // fails if the two drift apart.
-const APP_VERSION = "4.64.0";
+const APP_VERSION = "4.65.0";
 
 // A movement typed into the WOD builder that isn't in the built-in list
 // above - persisted (see WODTAGSTORE), same "custom X" pattern as
@@ -636,6 +636,36 @@ function setImportMessage(msg) {
 
 // ---------- Derived helpers ----------
 function entriesFor(id, excludeId) { return entries.filter((e) => e.exerciseId === id && e.id !== excludeId); }
+// ONE PASS, for a screen that needs MANY exercises' lists in a row.
+//
+// entriesFor() is a full scan of `entries`, which is right for the Log tab
+// asking about the one movement in front of the member. The History tab asks
+// about every movement they have ever logged, THREE TIMES each - once for
+// bestLiftedSetFor, once for bestEst1RM, once for bestDurationFor - and it
+// re-renders on every keystroke of its own search box. At 60 movements and
+// 2000 entries that is 360,000 comparisons per keystroke to draw a list of
+// collapsed rows.
+//
+// Built per render and thrown away. No cache and no invalidation, so nothing
+// here can ever go stale - the cost of rebuilding it is the one pass the
+// screen was going to make anyway.
+function entriesByExercise() {
+  const byId = new Map();
+  for (const e of entries) {
+    let list = byId.get(e.exerciseId);
+    if (!list) byId.set(e.exerciseId, (list = []));
+    list.push(e);
+  }
+  return byId;
+}
+// The index is only safe to substitute when the caller wants the WHOLE list
+// for an exercise. `excludeId` (used when re-scoring a PR while editing the
+// entry that holds it) has to fall through to the real scan, or the excluded
+// row would silently count itself.
+function exerciseEntryList(id, excludeId, index) {
+  if (index && excludeId === undefined) return index.get(id) || [];
+  return entriesFor(id, excludeId);
+}
 // Actual logged working sets from the last N days, most recent first, capped
 // so a movement trained daily doesn't flood the entry screen. No warm-up
 // concept anywhere here — every row is a real set someone saved.
@@ -671,11 +701,11 @@ function recentEntriesFor(id, days = 14, cap = 5) {
 const PCT_STEPS = [95, 90, 85, 80, 75, 70, 65, 60];
 function roundToPlate(kg) { return Math.round(kg / 2.5) * 2.5; }
 function formatPlateKg(kg) { return Number.isInteger(kg) ? String(kg) : kg.toFixed(1); }
-function bestEst1RM(id, excludeId) {
+function bestEst1RM(id, excludeId, index) {
   // Duration entries carry est1RM: 0 (see sanitizeEntry) so they can't win
   // this max by accident, but they're filtered explicitly anyway so an
   // exercise logged only as holds correctly reports "no 1RM" (null), not 0.
-  const list = entriesFor(id, excludeId).filter((e) => e.type !== "duration");
+  const list = exerciseEntryList(id, excludeId, index).filter((e) => e.type !== "duration");
   return list.length ? Math.max(...list.map((e) => e.est1RM)) : null;
 }
 // The heaviest set actually put on the bar, as opposed to bestEst1RM() just
@@ -688,8 +718,8 @@ function bestEst1RM(id, excludeId) {
 // now separate functions with separate labels everywhere they appear.
 // Ties go to the higher rep count, then the later session: same load for
 // more reps is the better lift.
-function bestLiftedSetFor(id, excludeId) {
-  const list = entriesFor(id, excludeId).filter((e) => e.type !== "duration");
+function bestLiftedSetFor(id, excludeId, index) {
+  const list = exerciseEntryList(id, excludeId, index).filter((e) => e.type !== "duration");
   if (!list.length) return null;
   return list.reduce((best, e) => {
     if (e.weight !== best.weight) return e.weight > best.weight ? e : best;
@@ -706,8 +736,8 @@ function repRecordFor(id, repCount, excludeId) {
   const list = entriesFor(id, excludeId).filter((e) => e.reps === repCount);
   return list.length ? Math.max(...list.map((e) => e.weight)) : null;
 }
-function bestDurationFor(id, excludeId) {
-  const list = entriesFor(id, excludeId).filter((e) => e.type === "duration");
+function bestDurationFor(id, excludeId, index) {
+  const list = exerciseEntryList(id, excludeId, index).filter((e) => e.type === "duration");
   return list.length ? Math.max(...list.map((e) => e.durationSeconds)) : null;
 }
 // Which entry type the Log tab's toggle should default to when an exercise
@@ -4932,6 +4962,9 @@ function renderHistoryListArea() {
   // completely different exercise's history. Every row starts collapsed;
   // only the one actually tapped (historyId === m.id, same as every
   // other row below) ever shows renderDetailCard's chart/RM table.
+  // Built once for the whole list, not three times per row - see
+  // entriesByExercise()'s own comment for the arithmetic.
+  const byExercise = entriesByExercise();
   area.innerHTML = active.map((m) => {
     const row = `
       <button class="exercise-row ${historyId === m.id ? "active" : ""}" data-action="select-history" data-id="${esc(m.id)}" style="${historyId === m.id ? "margin-bottom:0; border-bottom-left-radius:0; border-bottom-right-radius:0;" : ""}">
@@ -4947,9 +4980,9 @@ function renderHistoryListArea() {
           // "Back Squat — 70 kg" ended up sitting directly above an
           // expanded panel reading 1RM — / 5RM 60 for someone whose
           // heaviest real set was 60×5.
-          const bestSet = bestLiftedSetFor(m.id);
-          const est = bestEst1RM(m.id);
-          const hold = bestDurationFor(m.id);
+          const bestSet = bestLiftedSetFor(m.id, undefined, byExercise);
+          const est = bestEst1RM(m.id, undefined, byExercise);
+          const hold = bestDurationFor(m.id, undefined, byExercise);
           const headline = bestSet ? formatLiftedSet(bestSet) : hold ? formatDuration(hold) : "—";
           return `<span style="text-align:left;">
           <span class="mono" style="display:block; color:var(--brass); font-weight:700; font-size:14px;">${esc(headline)}</span>
@@ -4973,8 +5006,37 @@ function isoDate(y, m, d) {
 // Whether any strength set or WOD attempt was logged on a given date —
 // shared by the calendar's day dots and the header streak indicator so the
 // two never define "counts as a trained day" differently.
-function hasAnyEntryOn(iso) {
+function hasAnyEntryOn(iso, index) {
+  if (index) return index.ent.has(iso) || index.wod.has(iso);
   return entries.some((e) => e.date === iso) || wodEntries.some((e) => e.date === iso);
+}
+// THE CALENDAR ASKED THE SAME QUESTION THIRTY-ONE TIMES.
+//
+// renderCalendarGrid() ran entries.filter(), wodEntries.filter() AND
+// hasAnyEntryOn() - itself two more scans - once per day cell. Drawing one
+// month was therefore ~124 full passes over both arrays, and it redraws on
+// every month change and every day tap. computeCurrentStreak() was worse in
+// a quieter way: it walks backward a day at a time calling hasAnyEntryOn(),
+// so a 100-day streak cost 200 scans to display one number in the header.
+//
+// Same rule as entriesByExercise(): built per render, never cached, so there
+// is no invalidation to get wrong. A Map lookup replaces a scan, and the one
+// pass that builds it is cheaper than the two the old code did for a SINGLE
+// day.
+function buildDayIndex() {
+  const ent = new Map();
+  const wod = new Map();
+  for (const e of entries) {
+    let list = ent.get(e.date);
+    if (!list) ent.set(e.date, (list = []));
+    list.push(e);
+  }
+  for (const e of wodEntries) {
+    let list = wod.get(e.date);
+    if (!list) wod.set(e.date, (list = []));
+    list.push(e);
+  }
+  return { ent, wod };
 }
 // Consecutive days, counting backward from today, with at least one logged
 // entry. Today not being logged yet doesn't break the streak — it's just
@@ -4982,9 +5044,11 @@ function hasAnyEntryOn(iso) {
 // yesterday also has nothing) resets it to 0.
 function computeCurrentStreak() {
   let streak = 0;
+  // One index for the whole walk, instead of two array scans per day.
+  const index = buildDayIndex();
   const d = new Date(todayISO() + "T00:00:00");
-  if (!hasAnyEntryOn(localISODate(d))) d.setDate(d.getDate() - 1);
-  while (hasAnyEntryOn(localISODate(d))) {
+  if (!hasAnyEntryOn(localISODate(d), index)) d.setDate(d.getDate() - 1);
+  while (hasAnyEntryOn(localISODate(d), index)) {
     streak++;
     d.setDate(d.getDate() - 1);
   }
@@ -5033,13 +5097,16 @@ function renderCalendarGrid() {
   // once per grid render, not per day, since celebratablePrEntryIds() walks
   // every entry on file.
   const celebratableIds = celebratablePrEntryIds();
+  // Same reasoning as celebratableIds directly above: once per grid, not
+  // once per day. See buildDayIndex().
+  const dayIndex = buildDayIndex();
   let cells = "";
   for (let i = 0; i < firstWeekday; i++) cells += `<div class="cal-cell empty"></div>`;
   for (let d = 1; d <= daysInMonth; d++) {
     const iso = isoDate(calYear, calMonth, d);
-    const dayEntries = entries.filter((e) => e.date === iso);
-    const dayWods = wodEntries.filter((e) => e.date === iso);
-    const hasData = hasAnyEntryOn(iso);
+    const dayEntries = dayIndex.ent.get(iso) || [];
+    const dayWods = dayIndex.wod.get(iso) || [];
+    const hasData = hasAnyEntryOn(iso, dayIndex);
     const hasPR = dayEntries.some((e) => isFlameworthyEntry(e, celebratableIds)) || dayWods.some((e) => e.isPR);
     const cls = ["cal-cell"];
     if (iso === today) cls.push("today");

@@ -105,7 +105,33 @@ not to become a new way to lose a write.
 - **Web push** — deferred until after launch, at the owner's explicit choice.
   `streak_risk_nudges` stays off until it exists, because a nudge with no
   delivery channel is a toggle that does nothing.
-- **Feed rerender storm** — 21 rebuilds and ~289 ms per tap. Measured, real,
-  not a correctness issue.
-- **History/Calendar O(n) scans** — 2.5 ms at 100 entries, 56.1 ms at 2000.
-  Fine for a first season; will need attention before it is years of data.
+- ~~**Feed rerender storm**~~ — **FIXED 2026-09-16.** Re-measured first, and
+  the shape was not "one tap costs 21 rebuilds" but "three PER-ITEM loaders
+  each call rerender() on every response". One scroll to the bottom of a
+  30-post feed cost **11 full rebuilds, 20.2 ms — 8 of them from
+  `loadReactionsFor` alone**, each throwing away the DOM the last one built.
+  `scheduleRerender()` coalesces the three arriving-data paths
+  (`loadReactionsFor`, `resolveAvatarUrl`, `resolvePhotoUrl`) into one frame;
+  anything the member *did* still rerenders synchronously, because deferring
+  a tap by a frame is a visible lag on the one path where responsiveness is
+  the point. **Now 4 rebuilds, 8.5 ms.** Guarded by
+  `scripts/browser-check/feed-rerender-storm.mjs` (tripwire 6) and
+  `test/render-coalescing.test.mjs`.
+- ~~**History/Calendar O(n) scans**~~ — **FIXED 2026-09-16.** `entriesFor()`
+  is a full scan, and both screens called it per item: History three times per
+  movement (180 scans at 60 movements, redone on every keystroke of its search
+  box), the calendar four times per day cell (~124 passes to draw one month),
+  and `computeCurrentStreak()` twice per day walked backward. `entriesByExercise()`
+  and `buildDayIndex()` build one Map per render and throw it away — no cache,
+  so there is no invalidation to get wrong. At 2000 entries: History
+  **3.6 → 1.3 ms**, calendar **1.2 → 0.6 ms**, streak **0.6 → 0.1 ms**.
+  `test/scan-indexes.test.mjs` asserts the indexed and unindexed paths give
+  *identical* answers, which is the property that actually matters — a faster
+  screen reporting a different personal record would be worse than a slow one.
+- ~~**No automated Supabase backups**~~ — **ADDRESSED 2026-09-16.**
+  `.github/workflows/backup-database.yml` dumps schema, data and roles nightly,
+  encrypts with AES256 before anything leaves the runner, proves the ciphertext
+  round-trips, and uploads only that. **Needs two repo secrets** (`SUPABASE_DB_URL`,
+  `BACKUP_PASSPHRASE`) and refuses to run without them rather than reporting a
+  green backup of nothing. The encryption is not optional: this repository is
+  public and Actions artifacts on a public repo are world-readable.
