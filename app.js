@@ -15,7 +15,7 @@ let barWeight = 20;
 // Single source of truth for the app version. After bumping this, run
 // `npm run sync-version` to copy it into SW_VERSION in sw.js — `npm test`
 // fails if the two drift apart.
-const APP_VERSION = "4.62.0";
+const APP_VERSION = "4.63.0";
 
 // A movement typed into the WOD builder that isn't in the built-in list
 // above - persisted (see WODTAGSTORE), same "custom X" pattern as
@@ -5803,6 +5803,43 @@ function applyFieldValue(action, field, value) {
   if (cfg) cfg.sync(field, value);
 }
 
+// WHO HAD THE KEYBOARD, carried across a render (2026-09-16).
+//
+// REPORTED FROM A REAL PHONE: "when I press the type boxes it jumps off them,
+// and I need to press again." Tapping a field in the community sign-in put the
+// caret there, and a moment later the field lost it.
+//
+// Nothing was wrong with the field. render() replaces #content wholesale, and
+// any render that lands while a member is typing destroys the very node that
+// holds their focus - the browser then has nowhere to put it and drops it to
+// <body>, closing the keyboard. It is invisible on a fast connection, because
+// every pending request has already resolved before a human can tap. Over 4G,
+// a profile or club-features response arriving 300ms after the tap lands
+// squarely in the middle of it. That is why the SECOND tap always works: by
+// then there is nothing left in flight to trigger another render.
+//
+// Identity, not the node: the node is gone by the time we look for it again.
+// An id when the field has one, otherwise the owning form plus the field name,
+// which is what every form in this app gives its inputs.
+function focusFieldIdentity(el) {
+  if (!el || (el.tagName !== "INPUT" && el.tagName !== "TEXTAREA" && el.tagName !== "SELECT")) return null;
+  const content = document.getElementById("content");
+  // Only fields inside the region render() actually replaces. A dialog or the
+  // settings sheet lives elsewhere and keeps its own focus untouched.
+  if (!content || !content.contains(el)) return null;
+  if (el.id) return "#" + el.id;
+  if (el.name && el.form && el.form.id) return el.form.id + "::" + el.name;
+  return null;
+}
+function findFieldByIdentity(key) {
+  if (!key) return null;
+  try {
+    if (key.charAt(0) === "#") return document.getElementById(key.slice(1));
+    const at = key.indexOf("::");
+    const form = document.getElementById(key.slice(0, at));
+    return form && form.elements ? form.elements[key.slice(at + 2)] : null;
+  } catch (e) { return null; }
+}
 function render() {
   let content;
   // WHICH TOP-LEVEL TAB IS ON SCREEN, published for cloud.js (2026-09-15).
@@ -5940,7 +5977,43 @@ function render() {
   // ordinary light chrome).
   const scene = PAGE_SCENES[tab];
   if (scene) document.body.dataset.scene = scene.className; else delete document.body.dataset.scene;
+  // Captured BEFORE the swap, restored after - see focusFieldIdentity.
+  const focusKey = focusFieldIdentity(document.activeElement);
+  let caret = null, typed = null;
+  if (focusKey) {
+    // selectionStart throws on input types that have no text selection
+    // (number, email, date), so a failure here just means "no caret to keep".
+    try { caret = { start: document.activeElement.selectionStart, end: document.activeElement.selectionEnd }; } catch (e) { caret = null; }
+    // The value too, and ONLY for the focused field. A login name or an invite
+    // code lives in the DOM and not in state, so the swap erased what the
+    // member had typed as well as where they were - focus restored onto an
+    // empty box would still read as "it ate what I wrote".
+    //
+    // Deliberately just this one field. setFieldErrors' own note is the reason:
+    // a form that refills itself wholesale would be worse than the bug, because
+    // it would resurrect fields the app cleared on purpose. Nothing clears a
+    // field out from under the member's own cursor.
+    try { typed = document.activeElement.value; } catch (e) { typed = null; }
+  }
   document.getElementById("content").innerHTML = content + cloudOverlay + renderToastBar() + renderAppConfirmSheet();
+  if (focusKey) {
+    const again = findFieldByIdentity(focusKey);
+    // Only when the swap is what took focus away. If the member has moved to
+    // another control in the meantime, or a dialog has taken over, leave it
+    // alone - restoring here would be the same theft in the other direction.
+    const active = document.activeElement;
+    if (again && (!active || active === document.body)) {
+      try {
+        // Value before focus: setting .value moves the caret to the end, so
+        // the range below has to be applied after it.
+        if (typed != null && again.value === "" && typed !== "") again.value = typed;
+        again.focus();
+        // Without this the caret returns to position 0 and the next keystroke
+        // lands at the front of what they already typed.
+        if (caret && caret.start != null) again.setSelectionRange(caret.start, caret.end);
+      } catch (e) {}
+    }
+  }
   try {
     if (tab === "add") {
       const dateInput = document.getElementById("logDateInput");

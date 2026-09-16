@@ -1022,6 +1022,14 @@
     { key: "coach_tools", label: "לוח מאמנים (הכל)", clientOnly: true },
     { key: "member_of_week", label: "חבר/ת השבוע", clientOnly: true },
     { key: "welcome_flow", label: "קבלת פנים", clientOnly: true },
+    // 202609160004. NOT clientOnly, deliberately: this one is enforced inside
+    // post_new_member_on_join(), the trigger that writes the card. It used to
+    // be folded into welcome_flow above - which IS clientOnly - so turning that
+    // off hid a coach section while the server kept posting a "welcome our new
+    // member" card into everyone's feed. They are separate questions: that one
+    // is the coach's tool for greeting a newcomer personally, this one is an
+    // automatic card in front of the whole club.
+    { key: "new_member_posts", label: "פוסט הצטרפות בפיד" },
     { key: "monthly_recap", label: "סיכום חודשי", clientOnly: true },
     // 202609100002. Not clientOnly: gated inside coach_notify_engagement_flags()
     // itself (club_feature_enabled('engagement_alerts')) - coach_engagement_flags

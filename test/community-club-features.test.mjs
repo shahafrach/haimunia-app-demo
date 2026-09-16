@@ -11,6 +11,9 @@ import { test } from "node:test";
 import assert from "node:assert";
 import { bootCommunity, waitFor, seedAdminStepUp, unlockAdminPanel } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
+import { readFileSync } from "node:fs";
+
+const cloudJs = readFileSync(new URL("../cloud.js", import.meta.url), "utf8");
 
 const VERIFIED = new Date().toISOString();
 const MODULE_KEYS = ["announcements", "events", "challenges", "achievements", "feed", "leaderboards",
@@ -76,7 +79,24 @@ test("an admin sees one toggle row per module, all checked when every module is 
   // switchable, and an audit found five that were not - weekly_recap (whose
   // MONTHLY sibling had been switchable since it shipped), comments (bundled
   // inside the feed toggle), post photos, mentions, and outward share.
-  assert.equal(rows.length, 19, "one row per module across both groups");
+  // 20 since 2026-09-16: new_member_posts, the automatic "welcome our new
+  // member" feed card, which had no real switch at all - welcome_flow looked
+  // like one but is clientOnly, so turning it off hid a coach section while
+  // the trigger went on posting.
+  //
+  // DERIVED from the module list rather than typed as a number. The count has
+  // been hand-edited three times now, and the requirement was never "there are
+  // 19 of them" - it is "every module the app declares has exactly one row".
+  // Counted from the two toggle arrays themselves, not from every `key:` in
+  // cloud.js - plenty of other lists share that shape.
+  const declared = ["CLUB_MODULE_TOGGLES", "COACH_MODULE_TOGGLES"].reduce((n, name) => {
+    const at = cloudJs.indexOf(`const ${name} = [`);
+    assert.ok(at > -1, `${name} exists`);
+    const block = cloudJs.slice(at, cloudJs.indexOf("\n  ];", at));
+    return n + (block.match(/\{ key: "/g) || []).length;
+  }, 0);
+  assert.ok(declared >= 20, `both toggle arrays still declare their modules (found ${declared})`);
+  assert.equal(rows.length, declared, "one row per declared module across both groups");
   rows.forEach((el) => assert.equal(el.checked, true, `${el.dataset.clubFeature} starts checked`));
 });
 
