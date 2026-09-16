@@ -6613,6 +6613,23 @@
     // every single boot for no reason - nothing ever renders feedTab's
     // content in that state.
     if (!isModuleEnabled("feed")) { state.feed.items = []; state.feed.error = false; state.feed.loading = false; return; }
+    // Same early-return shape, for the other state in which this RPC can only
+    // ever be refused: a signed-in member who has not redeemed an invite yet is
+    // not an is_community_member(), and feed_page is gated on exactly that.
+    //
+    // REPORTED FROM A REAL PHONE as "can't sign in". Sign-in had worked fine.
+    // loadFeed ran, feed_page refused as designed, and the failure was written
+    // into state.ui.message - which the INVITE-CODE gate renders at its own
+    // foot. So the screen asking for an invite code carried a red "the
+    // community cannot be loaded right now" underneath it: a broken-looking app
+    // in the one moment the reader most needs to believe the next step will
+    // work. Nothing was broken. The message was.
+    //
+    // Safe to key on state.redemption here: loadRedemption() is awaited in the
+    // same Promise.all as loadProfile(), and ensureCommunityDataLoaded() will
+    // not call this until state.profile exists - so by now a null redemption
+    // means "not a member", never "not loaded yet".
+    if (!state.redemption) { state.feed.items = []; state.feed.error = false; state.feed.loading = false; return; }
     const pages = Math.max(1, state.feed.pagesLoaded || 1);
     startFeedSession();
     state.ui.loading = true;

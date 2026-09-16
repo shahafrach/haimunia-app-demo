@@ -46,7 +46,14 @@ test("the signed-out (or backup-only anonymous, pre-signup) render state trigger
   // to bounce a member whose invite-code redemption had already committed
   // back to this same neutral screen. See cloud.js's own comment at the
   // condition for the live repro.
-  const branch = cloudJs.slice(cloudJs.indexOf("if (!state.user || (state.user.is_anonymous && !state.signupStarted && !state.redemption)) {"), cloudJs.indexOf("if (!state.redemption)"));
+  // The end anchor is searched FROM the start anchor, not from the top of the
+  // file: "if (!state.redemption)" is no longer unique in cloud.js (loadFeed
+  // gained one to stop the invite gate showing a false load failure), and a
+  // global indexOf found that earlier one and sliced this branch to "".
+  const branchStart = cloudJs.indexOf("if (!state.user || (state.user.is_anonymous && !state.signupStarted && !state.redemption)) {");
+  assert.ok(branchStart > -1, "the login-or-start branch is still there");
+  const branch = cloudJs.slice(branchStart, cloudJs.indexOf("if (!state.redemption)", branchStart));
+  assert.ok(branch.length > 0, "and the slice actually captured it");
   assert.match(branch, /ensureAnonymousSession\(\);/);
   assert.doesNotMatch(branch, /type="email"/);
   assert.doesNotMatch(branch, /שליחת קישור/);
