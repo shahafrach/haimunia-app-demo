@@ -354,8 +354,10 @@ test("routing: a batched type renders as one collapsed row that expands", async 
 });
 
 test("notifRoute honours the per-type preference, with the operational-announcement override", async () => {
+  // Explicitly flag-off: this asserts the "push reads as in_app" fallback,
+  // which only exists while push is unavailable. Default is on since B3.
   const mock = seeded([notif(1)]);
-  const window = await bootCommunity(mock, { syncEnabled: false });
+  const window = await bootCommunity(mock, { syncEnabled: false, localStorage: { "haimunia-demo:notifPushFlag": "0" } });
   await openCommunity(window);
 
   assert.deepEqual(window.notifRoute("reaction", { reactions: "off" }), { channel: "off", mode: "batched", suppressed: true });
@@ -435,7 +437,7 @@ test("each Phase 1 type carries its own icon, category and copy", async () => {
 
 test("the Account panel lists every type with Push (disabled), In-app and Off", async () => {
   const mock = seeded([]);
-  const window = await bootCommunity(mock, { syncEnabled: false });
+  const window = await bootCommunity(mock, { syncEnabled: false, localStorage: { "haimunia-demo:notifPushFlag": "0" } });
   await openAccount(window);
 
   // "comments"/"replies"/"achievements" were re-keyed to their real server
@@ -561,12 +563,12 @@ test("the announcements row states plainly that important/urgent still reach a m
 
 // ===== push path is feature-flagged off ==============================
 
-test("no push subscription is created and push offers no control at all in V1", async () => {
+test("no push subscription is created and push offers no control at all with the flag off", async () => {
   const mock = seeded([notif(1)]);
   const seenTables = [];
   const realFrom = mock.client.from.bind(mock.client);
   mock.client.from = (table) => { seenTables.push(table); return realFrom(table); };
-  const window = await bootCommunity(mock, { syncEnabled: false });
+  const window = await bootCommunity(mock, { syncEnabled: false, localStorage: { "haimunia-demo:notifPushFlag": "0" } });
   await openAccount(window);
   // Real device feedback: this used to click a disabled push button - now
   // there is no button to click at all while the flag is off (see

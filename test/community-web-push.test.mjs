@@ -102,9 +102,13 @@ function stubIOSNonStandalone(window) {
 
 // ===== the flag stays off by default ==================================
 
-test("with the flag off (V1 default), the push option does not render at all - real device feedback: a disabled 'בקרוב' button unbalanced the row next to in_app/off", async () => {
+// The flag went default-ON on 2026-09-17 (B3), so this test now sets it off
+// explicitly rather than relying on the default. That distinction matters: if
+// it kept relying on the default it would have silently started testing the
+// on-path under an off-path name, and passed.
+test("with the flag explicitly off, the push option does not render at all - real device feedback: a disabled 'בקרוב' button unbalanced the row next to in_app/off", async () => {
   const mock = seeded();
-  const window = await bootCommunity(mock, { syncEnabled: false });
+  const window = await bootCommunity(mock, { syncEnabled: false, localStorage: { "haimunia-demo:notifPushFlag": "0" } });
   stubPushApis(window);
   await openAccount(window);
 
@@ -352,4 +356,17 @@ test("app.js's own serviceWorker message listener reaches communityHandlePushDee
 
   await waitFor(() => !!window.document.querySelector('#communityFeedList [data-post-id="p11"]'), 4000);
   assert.ok(window.document.getElementById("tabCommunityBtn").className.includes("active"));
+});
+
+test("the default is now ON: a member who set nothing sees the push option", async () => {
+  // The flip is the whole of B3 from the member's side. Booting with no
+  // localStorage at all is exactly what every real device does.
+  const mock = seeded();
+  const window = await bootCommunity(mock, { syncEnabled: false });
+  stubPushApis(window);
+  await openAccount(window);
+
+  const push = window.document.querySelector('[data-community-action="notif-pref"][data-type="comment_on_post"][data-channel="push"]');
+  assert.ok(push, "the push option renders for a member who has never touched the escape hatch");
+  assert.ok(!push.disabled, "and it is live, not the old 'בקרוב' placeholder");
 });

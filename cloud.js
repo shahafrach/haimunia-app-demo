@@ -203,7 +203,7 @@
     // test can flip it before boot the same way. Stays default off in
     // production until VAPID keys are provisioned server-side (per the
     // plan's operator checklist) - this ticket does not flip that default.
-    featureFlags: { coachEngage: localStorage.getItem("haimunia-demo:coachEngageFlag") !== "0", notifPush: localStorage.getItem("haimunia-demo:notifPushFlag") === "1" },
+    featureFlags: { coachEngage: localStorage.getItem("haimunia-demo:coachEngageFlag") !== "0", notifPush: localStorage.getItem("haimunia-demo:notifPushFlag") !== "0" },
     // COMM-318. { status: "idle"|"processing", error }, drives the avatar
     // control on the account profile form only.
     avatarUpload: { status: "idle", error: "" },
@@ -17705,11 +17705,22 @@
   // server-side by a trigger or an event-bus consumer (the table has no
   // insert grant) - the full trigger set is documented in
   // docs/community/contracts.md under "Needs from schema, notifications".
-  // Web push (COMM-229) is behind state.featureFlags.notifPush, default
-  // off (see the state literal above): the Push option renders disabled,
-  // no push_subscriptions write happens, and a stored channel of "push" is
-  // read as "in_app" - see notifPushEnabled() and the web push block below
-  // renderNotifPrefsPanel().
+  // Web push (COMM-229) is behind state.featureFlags.notifPush, which is
+  // DEFAULT ON as of 2026-09-17 (B3) now that there is something behind it:
+  // notif_push_send, the Edge Function that actually delivers, plus a real
+  // VAPID keypair whose private half is an Edge Function secret. It was
+  // default off for as long as a member choosing "Push" would have produced
+  // a subscription nothing ever sent to.
+  //
+  // Turning it on prompts nobody. It adds a third button to the notification
+  // preferences panel; the browser permission request happens when a member
+  // picks that button, which is the only time it should - a permission
+  // prompt fired on load is denied by reflex, and a denial is close to
+  // unrecoverable without the member walking into browser settings.
+  //
+  // The localStorage escape hatch inverts with the default, matching
+  // coachEngage: set haimunia-demo:notifPushFlag to "0" to turn it back off
+  // on one device.
   function notifPushEnabled() { return !!(state.featureFlags && state.featureFlags.notifPush); }
   const NOTIF_PAGE_SIZE = 20;
   // COMM-141. Rows older than this are not walked by default.
@@ -18714,7 +18725,9 @@
     // COMM-229. pushOn mirrors the state.featureFlags.notifPush check every
     // other push code path uses.
     //
-    // Real device feedback: while the flag is off (V1 default, today),
+    // Real device feedback from when the flag was off by default (it is on
+    // as of 2026-09-17; this branch still runs for anyone who set the
+    // localStorage escape hatch, and on a browser with no push support):
     // the push button used to still render - disabled, labelled "התראת
     // דחיפה · בקרוב" - and that one long, non-functional label was roughly
     // 3x the width of "באפליקציה"/"כבוי" beside it, unbalancing every row

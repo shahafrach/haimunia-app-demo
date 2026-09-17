@@ -12,21 +12,28 @@
 window.HAIMUNIA_CONFIG = Object.freeze({
   supabaseUrl: "https://jajmlyrjlkhclgphbfbb.supabase.co",
   supabasePublishableKey: "sb_publishable_DBnlKZMDKGR83DUtk-4VAA_nFlOdDI4",
-  // COMM-229. VAPID public key, base64url, the uncompressed EC point (0x04
-  // || X || Y) `PushManager.subscribe({applicationServerKey})` expects. A
-  // VAPID public key is meant to be exposed to the browser - the private
-  // half is what has to stay secret, and it is NOT in this repo. This
-  // demo keypair was generated with Node's crypto.generateKeyPair('ec',
-  // {namedCurve: 'prime256v1'}) as a one-off script (no `web-push`
-  // dependency added just for key generation). Whoever builds
-  // `notif_push_send` (the actual server-side Web Push send, out of
-  // COMM-229's scope - see docs/community/contracts.md, "Needs from
-  // schema, notifications (Phase 2)") needs the matching private key
-  // provisioned as a Supabase Edge Function secret (e.g. `VAPID_PRIVATE_KEY`
-  // via `supabase secrets set`), never committed here or anywhere else in
-  // the repo. Behind NOTIF_PUSH_ENABLED / state.featureFlags.notifPush,
-  // which stays default off in production until that provisioning happens.
-  notifPushVapidPublicKey: "BD16mHSAcS-jU5cV2xEqkNy09hCQ7MTjkY22CK8UrRw1JpI_5kjReL7tME6O4BFmQhuiaOVCWQ-nqsnoa1_0nAo",
+  // VAPID public key, base64url, the uncompressed EC point (0x04 || X || Y)
+  // `PushManager.subscribe({applicationServerKey})` expects. A VAPID public
+  // key is MEANT to be exposed to the browser - it is the half that proves,
+  // to the push service, that a message came from the same sender the
+  // subscription was created for. The private half is the secret, and it is
+  // not in this repo.
+  //
+  // REPLACED 2026-09-17 (B3). COMM-229 shipped a DEMO keypair whose private
+  // half was deliberately discarded rather than committed - correct at the
+  // time, and it meant no push could ever be sent with it. This is a real
+  // pair: the private half is a Supabase Edge Function secret
+  // (VAPID_PRIVATE_KEY, alongside VAPID_PUBLIC_KEY and VAPID_SUBJECT), set
+  // with `supabase secrets set --env-file`, never through a command line
+  // and never through this repo.
+  //
+  // CHANGING THIS VALUE INVALIDATES EVERY EXISTING SUBSCRIPTION. A
+  // PushSubscription is bound to the key it was created with, so a rotation
+  // silently stops delivery to every device that subscribed under the old
+  // one until each re-subscribes. Safe to do here only because no real
+  // subscription ever existed - the feature flag was off. Treat any future
+  // rotation as a migration, not an edit.
+  notifPushVapidPublicKey: "BLC12QX-6raod1c8DtK_4a4YcZc_U2qOnfxDxWTpqlpixlfulGsgQaV_MQM_qOsOU4uNouub-2LD_o-12eVfnUw",
 
   // Launch-readiness audit, SEC-004: bot protection on account creation.
   //
