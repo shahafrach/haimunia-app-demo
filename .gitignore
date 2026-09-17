@@ -6,3 +6,18 @@ supabase/.branches/
 # The seeded design canvas is a ~2 MB build artifact regenerated from
 # design/*.dc.html + design/canvas.json by the design skill helper.
 design/community-directions.html
+
+# THE OWNER GUIDE IS A DELIVERABLE, NOT PART OF THE APP.
+#
+# docs/owner-guide/ holds the PDF, its screenshots, the pitch text and - the
+# reason this entry exists - join-qr.png, which encodes a working 500-use
+# club join code. Committed 2026-09-16 and live at
+# https://haimunia-app.pages.dev/docs/owner-guide/join-qr.png within the hour,
+# because this deploy publishes the repository root verbatim.
+#
+# That is a straight violation of this project's one standing rule: no
+# credential is ever committed, because every committed file is a public URL.
+# The files stay on disk and are sent to the owner directly; they do not go
+# back into git. _redirects blocks the path as well, so the two have to fail
+# together for this to recur.
+docs/owner-guide/
