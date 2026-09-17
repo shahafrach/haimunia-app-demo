@@ -470,6 +470,40 @@
     return prefix + "-" + r;
   }
 
+  // ---- The product name -------------------------------------------------
+  //
+  // The VALUES live in cloud-config.js, which is the per-deployment file. The
+  // ACCESSORS live here, for two reasons that both matter.
+  //
+  // This file is the first script index.html loads and the first the test
+  // harness evaluates; cloud-config.js is neither, and is not loaded by the
+  // harness at all. Defining these there and calling them from app.js's
+  // top-level constants took 1184 of 1858 tests down with
+  // "brandChampionTitle is not defined" - app.js builds ATHLETE_LEVELS and
+  // ACHIEVEMENTS at module evaluation, so the call happens the instant the
+  // file is parsed.
+  //
+  // And the config is read at CALL time, not captured at definition time, so
+  // a cloud-config.js that is missing, stale, or failed to load degrades to
+  // the default name. Before this, an unreachable config file meant the whole
+  // app died while evaluating a branding string - a white screen, over a
+  // wordmark. A deployment that has not set a name should look slightly wrong,
+  // not be unusable.
+  function brandCfg() {
+    var c = global.HAIMUNIA_CONFIG;
+    return (c && c.brand) || {};
+  }
+  function brandName() { return brandCfg().appName || "האימוניה"; }
+  function brandWordmark() { return brandCfg().wordmark || brandName(); }
+  function brandChampionTitle() { return brandCfg().championTitle || ("אלוף " + brandName()); }
+
+  // On the global directly, not only inside BoxLogSafe: app.js and cloud.js
+  // call these as bare identifiers from inside template literals, the same way
+  // they call esc().
+  global.brandName = brandName;
+  global.brandWordmark = brandWordmark;
+  global.brandChampionTitle = brandChampionTitle;
+
   // Frozen so a later script cannot swap out an escape function under the
   // rest of the app — the whole point of having one copy is that there is
   // exactly one, and it is the one that was reviewed.
@@ -480,5 +514,6 @@
     bidiText, bidiHtml,
     cleanStr, cleanMultilineStr, cleanNum, cleanId, cleanISODate, cleanTs,
     uid,
+    brandName, brandWordmark, brandChampionTitle,
   });
 })(typeof window !== "undefined" ? window : globalThis);

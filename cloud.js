@@ -5775,7 +5775,7 @@
   // and it only ever happens from this button's own click.
   function inviteShareText(link) {
     const club = (state.club.row && state.club.row.name) || "המועדון";
-    return `הצטרפות ל${club} באפליקציית האימוניה:\n${link}`;
+    return `הצטרפות ל${club} באפליקציית ${brandName()}:\n${link}`;
   }
   // Same three tiers, same order and the same feature detection as
   // performOutwardShare(): image first, text second, clipboard last, with
@@ -16506,7 +16506,7 @@
     PAD: 84,
     MIME: "image/png",
     FILE_NAME: "haimunia.png",
-    WORDMARK: "האימוניה",
+    WORDMARK: brandWordmark(),
     // The dark theme's own tokens (index.html, :root[data-theme="dark"]),
     // written out rather than read through getComputedStyle: the card is the
     // brand's ground and must not flip to the light palette just because the
@@ -19878,7 +19878,7 @@
       <div class="scene-page__media" aria-hidden="true"></div>
       <div class="scene-page__scrim" aria-hidden="true"></div>
       <div class="scene-page__intro">
-        <div class="scene-page__brand">האימוניה</div>
+        <div class="scene-page__brand">${esc(brandWordmark())}</div>
         <h1 id="pageTitle-community" class="scene-page__title">קהילה</h1>
       </div>
       <div class="scene-sheet">

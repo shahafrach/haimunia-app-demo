@@ -2,7 +2,7 @@
 // Version is the single source of truth for the cache name — bumping
 // APP_VERSION in app.js is what ships an update. Don't edit SW_VERSION by
 // hand: run `npm run sync-version` (see app.js) to copy it here.
-const SW_VERSION = "4.68.0";
+const SW_VERSION = "4.69.0";
 // "haimunia-demo-v..." — deliberately distinct from the production app's
 // own "haimunia-v..." cache prefix. Both service workers are scoped to
 // the same origin (haimuniya.github.io), and the activate handler below
@@ -170,6 +170,17 @@ self.addEventListener("push", (e) => {
       try { payload = { body: e.data.text() }; } catch (err2) { payload = {}; }
     }
   }
+  // A SERVICE WORKER CANNOT READ cloud-config.js. It runs in its own global
+  // scope with no access to the page's window, so window.brandName() - which
+  // every other display of the product name now goes through - is unreachable
+  // here. importScripts("./cloud-config.js") would work and is not worth it:
+  // it would pull the whole config, including the Supabase keys, into the
+  // worker for one fallback string that is only ever used when the server
+  // omits a title.
+  //
+  // So this one stays literal, and PER_CLUB_SETUP.md lists it with the other
+  // static spots. Setting up a second club is a short, named list of files -
+  // not a search through 21,000 lines.
   const title = payload.title || "האימוניה";
   const deepLink = payload.deep_link || payload.deepLink || "./";
   const options = {

@@ -89,4 +89,64 @@ window.HAIMUNIA_CONFIG = Object.freeze({
   // for an address whose whole purpose is to be written to, and is why the
   // club inbox is the right one to put here.
   supportEmail: "haimuniya@gmail.com",
+
+  // ==========================================================================
+  // BRANDING. The product name, for a second club.
+  //
+  // THE CLUB'S OWN NAME IS NOT HERE, and must not be added. It lives in the
+  // `clubs` table and is read at runtime - inviteShareText() already does
+  // exactly this: `הצטרפות ל${club} באפליקציית ${appName}`, where the club
+  // comes from the database and only the app name is fixed. Two different
+  // things, and conflating them is how a config ends up with a value that
+  // contradicts the database.
+  //
+  // So this is the PRODUCT name: what the app calls itself on the home screen,
+  // in its title bar, and in a push notification. Haimunia keeps its own;
+  // a second box gets BoxLog, or its own.
+  // ==========================================================================
+  brand: Object.freeze({
+    appName: "האימוניה",
+    // Used where the name stands alone as a wordmark, and in push titles.
+    // Kept separate from appName only so a latin-script deployment can drop
+    // the definite article a Hebrew name carries ("האימוניה" is "the
+    // Haimunia"); set it to the same string when there is no difference.
+    wordmark: "האימוניה",
+    // The top athlete level and the capstone achievement both read "אלוף
+    // <name>" today. It is spelled out rather than composed, because "אלוף " +
+    // appName is right for a club name and wrong for a product one - a member
+    // of another box is the champion of THEIR box, not of the software.
+    championTitle: "אלוף האימוניה",
+  }),
+
+  // ==========================================================================
+  // NOT CONFIGURABLE, AND HERE SO NOBODY MAKES THEM SO.
+  //
+  // Both of these look exactly like branding, appear ~40 times between them,
+  // and changing either on a LIVE club destroys data. They are listed rather
+  // than omitted because the next person setting up a second club will grep
+  // for "haimunia", find them, and reasonably assume they belong in this file.
+  //
+  //   haimunia-demo:            the localStorage key prefix, ~38 uses.
+  //                             Every member's training log, their settings and
+  //                             their outbox live under it. Change it on a live
+  //                             deployment and every phone silently starts
+  //                             empty, with the real data still on disk under
+  //                             the old prefix and nothing reading it.
+  //
+  //   members.haimuniya.invalid the synthetic email domain, 3 uses. Logins are
+  //                             username-only, and usernameToEmail() maps a
+  //                             handle onto this domain to make a Supabase auth
+  //                             identity. Those addresses are already written
+  //                             into auth.users. Change it and every existing
+  //                             member is locked out - not degraded, locked
+  //                             out, with no self-service reset because the
+  //                             addresses were never deliverable.
+  //
+  // A genuinely NEW club, with no members and no local data yet, may pick its
+  // own values for both by editing them at source - before anyone signs in.
+  // After that they are permanent.
+  //
+  // window.haimunia* (6 names) is not branding at all: it is the interface
+  // between app.js and cloud.js. Renaming it changes nothing a member sees.
+  // ==========================================================================
 });

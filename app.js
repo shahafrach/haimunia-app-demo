@@ -15,7 +15,7 @@ let barWeight = 20;
 // Single source of truth for the app version. After bumping this, run
 // `npm run sync-version` to copy it into SW_VERSION in sw.js — `npm test`
 // fails if the two drift apart.
-const APP_VERSION = "4.68.0";
+const APP_VERSION = "4.69.0";
 
 // A movement typed into the WOD builder that isn't in the built-in list
 // above - persisted (see WODTAGSTORE), same "custom X" pattern as
@@ -409,7 +409,7 @@ function renderNavMenuList() {
   // finished screen either. A footer line gives the space a reason to be
   // there without inventing a duplicate action Settings already owns.
   return renderNavWho() + `<div class="nav-destinations" role="tablist" aria-label="מסכים נוספים">${renderNavRows(true, true)}</div>` + renderNavSettingsRow()
-    + `<div class="footer-note" style="text-align:center; margin-top:auto; padding-top:24px;">האימוניה · v${APP_VERSION}</div>`;
+    + `<div class="footer-note" style="text-align:center; margin-top:auto; padding-top:24px;">${esc(brandName())} · v${APP_VERSION}</div>`;
 }
 // Desktop / wide-viewport sidebar (Phase 4) - same registry, same rows,
 // same settings entry, just without the mobile-only ids (see renderNavRows
@@ -811,7 +811,7 @@ const ATHLETE_LEVELS = [
   { min: 50, name: "מתמיד" },
   { min: 200, name: "מנוסה" },
   { min: 500, name: "מתקדם" },
-  { min: 900, name: "אלוף האימוניה" },
+  { min: 900, name: brandChampionTitle() },
 ];
 function athleteLevel(score) {
   let level = ATHLETE_LEVELS[0];
@@ -945,7 +945,7 @@ function capstoneEarned() {
 const ACHIEVEMENTS = [
   {
     id: "capstone", group: "capstone", glyph: "home",
-    name: "אלוף האימוניה",
+    name: brandChampionTitle(),
     rule: "זהב בכל קבוצות השיאים + רצף זהב + אתלט שלם + כל מדליות הוותק",
     earned: capstoneEarned,
     points: CAPSTONE_POINTS,
@@ -1763,7 +1763,7 @@ function supportDiagnosticsPayload() {
 }
 function supportReportText() {
   const typed = (document.getElementById("supportMessage") || {}).value || "";
-  return `דיווח על תקלה — האימוניה\n\n${typed.trim() || "(לא נכתב תיאור)"}\n\n--- פרטים טכניים ---\n${supportDiagnostics()}`;
+  return `דיווח על תקלה — ${brandName()}\n\n${typed.trim() || "(לא נכתב תיאור)"}\n\n--- פרטים טכניים ---\n${supportDiagnostics()}`;
 }
 function renderSupportContent() {
   const cfg = supportConfig();
@@ -1863,7 +1863,7 @@ function supportSendWhatsApp() {
 function supportSendEmail() {
   const cfg = supportConfig();
   if (!cfg.email) return supportNote("לא הוגדרה כתובת מייל לתמיכה. אפשר להעתיק את הדיווח ולשלוח אותו ידנית.");
-  supportHandoff(`mailto:${encodeURIComponent(cfg.email)}?subject=${encodeURIComponent("דיווח על תקלה — האימוניה")}&body=${encodeURIComponent(supportReportText())}`,
+  supportHandoff(`mailto:${encodeURIComponent(cfg.email)}?subject=${encodeURIComponent("דיווח על תקלה — " + brandName())}&body=${encodeURIComponent(supportReportText())}`,
     "לא הצלחנו לפתוח את אפליקציית המייל. אפשר להעתיק את הדיווח ולשלוח אותו ידנית.");
 }
 function supportCopyReport() {
@@ -3347,7 +3347,7 @@ async function importDataFromFile(file) {
     data = JSON.parse(await file.text());
   } catch (e) { return bad(); }
   if (!data || typeof data !== "object" || Array.isArray(data)) return bad();
-  if (data.app !== BACKUP_APP_ID) return bad("הייבוא נכשל — הקובץ אינו גיבוי של האימוניה");
+  if (data.app !== BACKUP_APP_ID) return bad(`הייבוא נכשל — הקובץ אינו גיבוי של ${brandName()}`);
   if (Number(data.version) > BACKUP_VERSION) {
     return bad("הייבוא נכשל — הגיבוי נוצר בגרסה חדשה יותר של האפליקציה");
   }
@@ -4626,7 +4626,7 @@ function renderLogTab() {
       <div class="scene-page__media" aria-hidden="true"></div>
       <div class="scene-page__scrim" aria-hidden="true"></div>
       <div class="scene-page__intro">
-        <div class="scene-page__brand">האימוניה</div>
+        <div class="scene-page__brand">${esc(brandWordmark())}</div>
         <h1 id="pageTitle-add" class="scene-page__title">${hasLoggedToday ? `<span aria-hidden="true" style="display:inline-flex; align-items:center; justify-content:center; width:30px; height:30px; border-radius:999px; background:var(--club-success); flex-shrink:0;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>` : ""}<span>סיכום אימון</span></h1>
         <p class="scene-page__subtitle">${hasLoggedToday ? "עבודה מעולה!" : "מוכנים להתחיל?"}</p>
       </div>
@@ -5350,7 +5350,7 @@ function renderCalendarTab() {
       <div class="scene-page__media" aria-hidden="true"></div>
       <div class="scene-page__scrim" aria-hidden="true"></div>
       <div class="scene-page__intro">
-        <div class="scene-page__brand">האימוניה</div>
+        <div class="scene-page__brand">${esc(brandWordmark())}</div>
         <h1 id="pageTitle-calendar" class="scene-page__title">לוח שנה</h1>
       </div>
       <div class="scene-sheet">
@@ -5504,7 +5504,7 @@ function renderHistoryTab() {
       <div class="scene-page__media" aria-hidden="true"></div>
       <div class="scene-page__scrim" aria-hidden="true"></div>
       <div class="scene-page__intro">
-        <div class="scene-page__brand">האימוניה</div>
+        <div class="scene-page__brand">${esc(brandWordmark())}</div>
         <h1 id="pageTitle-history" class="scene-page__title">התקדמות</h1>
       </div>
       <div class="scene-sheet">
