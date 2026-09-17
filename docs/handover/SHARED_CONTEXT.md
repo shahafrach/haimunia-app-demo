@@ -15,7 +15,7 @@ Live: https://haimunia-app.pages.dev
 Repo: `haimuniya/haimunia-app-demo` — **private** since 2026-09-17
 Supabase: `jajmlyrjlkhclgphbfbb` (free tier)
 
-**v4.70.0** · 171 migrations · 1884 JS tests · 114 pgTAP files, 3492 assertions
+**v4.70.0** · 171 migrations · 1887 JS tests · 114 pgTAP files, 3492 assertions
 
 ## The rules that are not negotiable
 
@@ -47,7 +47,7 @@ Supabase: `jajmlyrjlkhclgphbfbb` (free tier)
 ## How to verify anything
 
 ```
-node --test                   # 1884 JS tests, jsdom, ~4 min
+node --test                   # 1887 JS tests, jsdom, ~4 min
 supabase start                # docker is on this machine
 supabase db reset --local     # replays all 171 migrations from empty, ~3 min
 supabase test db --local      # 114 files, 3492 pgTAP assertions, ~10 s

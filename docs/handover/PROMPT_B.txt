@@ -20,8 +20,12 @@ me — do not add the file.
 
 RULES THAT ARE NOT NEGOTIABLE:
 - Nothing secret is ever committed. There is no build step: Cloudflare Pages
-  publishes the repo root verbatim and the GitHub repo is public, so every
-  committed file is a public URL.
+  publishes the repo root verbatim, so every committed file is a public URL.
+  The GitHub repo was made private on 2026-09-16, which changed nothing about
+  this rule - the deploy is the exposure, not the repo. functions/_middleware.js
+  404s docs/, supabase/, test/, scripts/ and top-level .md/.sql, and that is a
+  second line of defence, not permission to commit a secret behind it. A join
+  code was committed once and was live at a public URL inside the hour.
 - Browser checks never touch production: installMockCloud(page, ...) before
   page.goto(...), resolveLocalOnlyTarget() for the target, never TARGET_URL.
 - Bump APP_VERSION in app.js on any shipped change (a hook mirrors it to
@@ -32,13 +36,13 @@ RULES THAT ARE NOT NEGOTIABLE:
 
 HOW TO VERIFY (node --test exceeds a 2-minute foreground timeout — background
 it):
-  node --test                                 # 1884 tests, jsdom
+  node --test                                 # 1887 tests, jsdom
   node scripts/browser-check/run-all.mjs      # real Chromium, mocked backend
 
-Start with B1, the BoxLog config extraction — it is a no-visible-change
-refactor, which is exactly the kind that breaks things quietly, so run the
-tests between steps. Session A's A4 is its server half; neither of you can
-stand up a second club alone.
+B1 (BoxLog config) is PARKED and B4 (the drift guard) is DONE, both on
+2026-09-17. What is left is B2, cosmetic, and B3, which needs the owner's word
+before a line is written. So there is no assigned starting task: read the
+board, and if nothing on it is live, ask rather than inventing work.
 
 Two habits that earned their keep here: measure before you fix (a recorded
 "21 rebuilds per tap" did not reproduce and pointed at the wrong code), and
