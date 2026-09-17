@@ -9194,14 +9194,13 @@
     else if (c.action === "admin-set-role") adminSetRole(c.payload.userId, c.payload.role);
     else if (c.action === "admin-remove-member") adminRemoveMember(c.payload.userId);
     else if (c.action === "challenge-archive") archiveChallenge(c.payload.id);
-    else if (c.action === "challenge-delete") deleteChallenge(c.payload.id);
+    else if (c.action === "challenge-delete") deleteChallenge(c.payload.id, c.payload.draft);
     else if (c.action === "admin-reset-password") adminResetPassword(c.payload.userId);
     else if (c.action === "admin-invite-revoke") revokeInvite(c.payload.inviteId);
     else if (c.action === "post-delete-rpc") postDeleteViaMenu(c.payload.postId);
     else if (c.action === "delete-comment") deleteComment(c.payload.commentId, c.payload.postId);
     else if (c.action === "composer-discard") closeComposer();
     else if (c.action === "leave-challenge") leaveChallenge(c.payload.challengeId);
-    else if (c.action === "challenge-delete-draft") deleteChallengeDraft(c.payload.challengeId);
     else if (c.action === "challenge-team-delete-confirm") deleteChallengeTeam(c.payload.teamId);
     else if (c.action === "event-cancel") cancelEvent(c.payload.eventId);
     else if (c.action === "club-wod-cancel") cancelClubWodSession(c.payload.sessionId);
@@ -13332,10 +13331,13 @@
   //     `on delete cascade`, and challenge_teams_block_delete's own escape
   //     hatch exists precisely so a team challenge with members stays
   //     deletable). Nothing survives it, so its confirmation says so.
-  async function deleteChallenge(id) {
+  // `wasDraft` only changes what the two messages call the thing. Deleting a
+  // draft used to run a near-identical second function; one function with one
+  // flag is one place to fix, which is the whole lesson of this codebase.
+  async function deleteChallenge(id, wasDraft) {
     if (!hasPerm(PERM.CHALLENGE_CREATE)) return;
     const { error } = await client.from("challenges").delete().eq("id", id);
-    if (error) return setMessage(failText("מחיקת האתגר נכשלה", error));
+    if (error) return setMessage(failText(wasDraft ? "מחיקת הטיוטה נכשלה" : "מחיקת האתגר נכשלה", error));
     state.challenges.form = null;
     // The detail view is looking at a row that no longer exists; refreshing
     // it would render an error state over a deletion that succeeded. Closing
@@ -13343,7 +13345,7 @@
     if (state.challenges.view && state.challenges.view.id === id) state.challenges.view = null;
     delete state.challenges.participation[id];
     delete state.challenges.aggregates[id];
-    setMessage("האתגר נמחק");
+    setMessage(wasDraft ? "הטיוטה נמחקה" : "האתגר נמחק");
     await loadChallenges();
     rerender();
   }
@@ -13364,15 +13366,6 @@
     await loadChallenges();
     rerender();
   }
-  async function deleteChallengeDraft(id) {
-    const { error } = await client.from("challenges").delete().eq("id", id);
-    if (error) return setMessage(failText("הפעולה נכשלה", error));
-    state.challenges.form = null;
-    setMessage("הטיוטה נמחקה");
-    await loadChallenges();
-    rerender();
-  }
-
   // ---- Automatic progress from the product event bus (COMM-202, COMM-205) -
   // Sourced from the same non-attendance signals the achievement engine
   // reacts to (COMM-130/132), never from attendance. WORKOUT_COMPLETED has no
@@ -14175,7 +14168,7 @@
         <button class="chip-btn primary" type="submit"${f.saving ? " disabled" : ""}>${f.saving ? "שומר…" : "שמירה"}</button>
         <button class="chip-btn" type="button" data-community-action="challenge-form-cancel">ביטול</button>
         ${f.mode === "edit" && f.status === "draft" ? `<button class="chip-btn" type="button" data-community-action="challenge-publish" data-id="${esc(f.id)}">פרסום</button>` : ""}
-        ${f.mode === "edit" && f.status === "draft" ? `<button class="chip-btn danger" type="button" data-community-action="challenge-delete" data-id="${esc(f.id)}">מחיקת טיוטה</button>` : ""}
+        ${f.mode === "edit" && f.status === "draft" ? `<button class="chip-btn danger" type="button" data-community-action="challenge-delete-draft" data-id="${esc(f.id)}">מחיקת טיוטה</button>` : ""}
         ${f.mode === "edit" && (f.status === "active" || f.status === "completed") ? `<button class="chip-btn" type="button" data-community-action="challenge-archive" data-id="${esc(f.id)}">העברה לארכיון</button>` : ""}
       </div>
     </form>`;
@@ -14444,7 +14437,26 @@
     const canEnd = c.status === "active" || c.status === "completed";
     const endBtn = staff && canEnd ? `<button class="chip-btn" data-community-action="challenge-archive" data-id="${esc(c.id)}">סיום</button>` : "";
     const deleteBtn = staff ? `<button class="chip-btn danger" data-community-action="challenge-delete" data-id="${esc(c.id)}">מחיקה</button>` : "";
-    const staffToolbar = (staff || pinBtn) ? `<div class="chip-row" style="margin-bottom:10px;">${staff ? `<button class="chip-btn" data-community-action="challenge-edit" data-id="${esc(c.id)}">עריכה</button>` : ""}${pinBtn}${endBtn}${deleteBtn}</div>` : "";
+    // B2, and the numbers are measured, not estimated. Four chips - עריכה,
+    // הצמדה למעלה, סיום, מחיקה - need 347px inside this dialog. At a 390px
+    // viewport the row has 328px (390 less the overlay's 12px sides and the
+    // card's 18px ones), so it wrapped 3 + 1 with מחיקה orphaned underneath,
+    // reading as a layout accident. At the app's large text setting (zoom
+    // 1.2) it is worse and differently worse: 410px needed against 316px, so
+    // it broke 2 + 2 and put מחיקה directly beside סיום - delete-forever
+    // adjacent to the one action that keeps every participant's progress.
+    //
+    // Shortening הצמדה למעלה was the tempting fix and the wrong one: that
+    // string is shared with the post menu and the event toolbar, and changing
+    // it here only is the drift this codebase is made of.
+    //
+    // So the break is made deliberate instead. The destructive action gets
+    // its own row behind the same hairline the post menu uses to fence its
+    // own destructive items - a pattern already in the app, not a new one
+    // invented here. Measured after: 390px normal breaks 3 + 1 exactly as
+    // before but now with a separator above it, and large text becomes three
+    // lines rather than pairing סיום with מחיקה.
+    const staffToolbar = (staff || pinBtn) ? `<div class="chip-row" style="margin-bottom:${deleteBtn ? "0" : "10px"};">${staff ? `<button class="chip-btn" data-community-action="challenge-edit" data-id="${esc(c.id)}">עריכה</button>` : ""}${pinBtn}${endBtn}</div>${deleteBtn ? `<div class="chip-row" style="margin-top:10px;margin-bottom:10px;padding-top:10px;border-top:1px solid var(--border);">${deleteBtn}</div>` : ""}` : "";
     const myProgress = renderMyChallengeProgress(v);
     const typePanel = c.challenge_type === "cooperative" ? renderCooperativePanel(v)
       : c.challenge_type === "team" ? renderTeamPanel(v)
@@ -21504,7 +21516,21 @@
     // nothing while the harmless ones asked. Both run through askConfirm now.
     else if (action === "challenge-archive") askConfirm({ title: "סיום האתגר", message: "לסיים את \"{subject}\"? האתגר יעבור ל\"אתגרים שהסתיימו\", וההתקדמות של כל המשתתפים נשמרת.", subject: challengeTitleFor(el.dataset.id), confirmLabel: "סיום", action: "challenge-archive", payload: { id: el.dataset.id } });
     else if (action === "challenge-delete") askConfirm({ title: "מחיקת האתגר", message: "למחוק את \"{subject}\" לצמיתות? כל ההרשמות, הקבוצות וההתקדמות שנרשמה באתגר יימחקו איתו ואי אפשר לשחזר. כדי לסגור אתגר בלי לאבד נתונים יש להשתמש ב\"סיום האתגר\".", subject: challengeTitleFor(el.dataset.id), confirmLabel: "מחיקה", destructive: true, action: "challenge-delete", payload: { id: el.dataset.id } });
-    else if (action === "challenge-delete") askConfirm({ title: "מחיקת טיוטה", message: "למחוק את הטיוטה? הפעולה אינה ניתנת לביטול.", confirmLabel: "מחיקה", destructive: true, action: "challenge-delete-draft", payload: { challengeId: el.dataset.id } });
+    // THIS BRANCH WAS UNREACHABLE. Both it and the one above tested
+    // `action === "challenge-delete"`, so a draft's delete button hit the
+    // first: a coach deleting an unpublished draft was warned that "every
+    // registration, team and progress entry will be deleted with it" - a
+    // draft has none - and pointed at "end the challenge instead", which an
+    // unpublished challenge cannot do. Its own copy, written for exactly
+    // this case, had never once been shown.
+    //
+    // It dispatches challenge-delete, not challenge-delete-draft: the delete
+    // itself was duplicated too, and deleteChallenge() is the strict superset
+    // (same row delete, plus the permission check and the view/cache cleanup
+    // that stop the detail screen rendering an error over a deletion that
+    // worked). Same gate either way - both routes into this form are already
+    // behind CHALLENGE_CREATE.
+    else if (action === "challenge-delete-draft") askConfirm({ title: "מחיקת טיוטה", message: "למחוק את הטיוטה? הפעולה אינה ניתנת לביטול.", confirmLabel: "מחיקה", destructive: true, action: "challenge-delete", payload: { id: el.dataset.id, draft: true } });
     // COMM-213/217/228. openEvent() itself records EVENT_VIEWED (source
     // defaults to "post_card", and COMM-233 labelled the Boards list cards
     // explicitly for the same reason the challenge ones needed it), the

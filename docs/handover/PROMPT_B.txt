@@ -1,6 +1,6 @@
 You are picking up the Haimunia / האימוניה project — a Hebrew/RTL PWA for one
 CrossFit club. Buildless vanilla JS, Supabase, Cloudflare Pages. Currently
-v4.70.0.
+v4.71.0.
 
 Start by reading, in this order:
   docs/handover/SHARED_CONTEXT.md
@@ -36,13 +36,13 @@ RULES THAT ARE NOT NEGOTIABLE:
 
 HOW TO VERIFY (node --test exceeds a 2-minute foreground timeout — background
 it):
-  node --test                                 # 1887 tests, jsdom
+  node --test                                 # 1890 tests, jsdom
   node scripts/browser-check/run-all.mjs      # real Chromium, mocked backend
 
-B1 (BoxLog config) is PARKED and B4 (the drift guard) is DONE, both on
-2026-09-17. What is left is B2, cosmetic, and B3, which needs the owner's word
-before a line is written. So there is no assigned starting task: read the
-board, and if nothing on it is live, ask rather than inventing work.
+B1 (BoxLog config) is PARKED; B2 and B4 are DONE. The only item left is B3,
+which needs the owner's word before a line of it is written. There is no
+assigned starting task: read the board, and if nothing on it is live, ask
+rather than inventing work.
 
 Two habits that earned their keep here: measure before you fix (a recorded
 "21 rebuilds per tap" did not reproduce and pointed at the wrong code), and

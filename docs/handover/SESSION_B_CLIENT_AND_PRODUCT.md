@@ -11,10 +11,10 @@ change needs a migration, write up what it must do and hand it over.
 
 ## State on 2026-09-17
 
-v4.70.0 · 1887 JS tests green · 45 browser scenarios green.
+v4.71.0 · 1890 JS tests green · 45 browser scenarios green.
 
-**Left on this board: B2 (cosmetic) and B3 (needs the owner's word).** B1 is
-parked and B4 is done.
+**Left on this board: B3 only, and it needs the owner's word.** B1 is parked,
+B2 and B4 are done.
 
 Session A is closed; its file is a record of what each item turned out to be,
 and most were not what they looked like. Worth skimming once for the two
@@ -123,18 +123,33 @@ put two identical glyphs on adjacent rows.
 test caught it, and watched all five pass, because `openSupport()` already
 closes the menu on its first line. The assertion stayed; the dead code did not.
 
-## B2 — The staff toolbar wraps 3 + 1
+## B2 — DONE 2026-09-17: the staff toolbar breaks 3 + 1 on purpose
 
-On a 390px phone the challenge dialog's staff row is `עריכה │ הצמדה למעלה │
-סיום` on one line and `מחיקה` alone on the next. It reads as an accident.
+Made deliberate rather than made to fit. `מחיקה` now has its own row behind the
+same hairline the post menu uses to fence destructive items — a pattern already
+in the app. `הצמדה למעלה` was left alone: it is shared with the post menu and
+the event toolbar, and shortening it in one place is the drift.
 
-Either make it deliberate (a destructive control on its own row is a
-defensible pattern — but then it should look chosen, with a separator or a
-label, not orphaned) or make four fit. Do **not** just shorten
-`הצמדה למעלה` here: that string appears in four places (`cloud.js` 12117,
-12295, 14423, 15090) and changing one is the drift this codebase is made of.
+Measured, before and after, in the real dialog at both text settings:
 
-Low priority. Cosmetic, on a coach-only surface.
+| | needs | has | breaks |
+|---|---|---|---|
+| before, 390px | 347px | 328px | 3 + 1, `מחיקה` orphaned |
+| before, 390px large text | 410px | 316px | 2 + 2 — **`מחיקה` beside `סיום`** |
+| after, 390px | — | — | 3 + 1, separator above `מחיקה` |
+| after, 390px large text | — | — | 3 lines, `מחיקה` still fenced |
+
+The large-text case was the one nobody had looked at and the worse of the two:
+delete-forever sitting next to the one action that preserves every
+participant's progress.
+
+**Read this before trusting your own measurement.** The first pass said the row
+fits in 267px and does not wrap — i.e. that the report was wrong. It was the
+measurement that was wrong: the harness took `<style>`…`</style>`, `index.html`
+has two style blocks, and every token in the second was missing, so the chips
+rendered at fallback sizes. The tell was `--text-scale` resolving to an empty
+string. A correct fix was one step from being reverted on the strength of it.
+That entry is now in SHARED_CONTEXT's table with the other seven.
 
 ## B3 — Web push, which blocks a real feature
 
@@ -185,10 +200,23 @@ string. The real invariant is the value: `center`, `stretch` or `flex-end`, neve
 found at least 15 centred, because a guard whose regex stops matching passes
 silently — the failure mode in SHARED_CONTEXT's table, six times over.
 
-Falsified before committing, all three red on purpose: removed
+Falsified before committing, all red on purpose: removed
 `refreshMemberSurfaces()` from `adminGrantCoach`, put one dialog back to
-`flex-start`, dropped the `loadRoster` line. Each failed with the message that
+`flex-start`, dropped the `loadRoster` line, restored the duplicate dispatch
+branch, put `מחיקה` back on the first row. Each failed with the message that
 names the fix.
+
+**Extended the same day, by a bug it found while being written.** A sixth
+assertion now rejects any `else if (action === "X")` branch that repeats a test
+made above it. That caught a live one: the challenge form's "delete draft"
+button and the challenge view's "delete" button both fired `challenge-delete`,
+and both branches tested for it, so the second was unreachable. A coach
+deleting an unpublished draft was warned that "every registration, team and
+progress entry will be deleted with it" — a draft has none — and told to end
+the challenge instead, which an unpublished challenge cannot do. The copy
+written for that exact case had never once been shown. The near-duplicate
+`deleteChallengeDraft()` is gone; `deleteChallenge(id, wasDraft)` was already
+the strict superset.
 
 ## What shipped on 2026-09-16, so you do not re-do it
 

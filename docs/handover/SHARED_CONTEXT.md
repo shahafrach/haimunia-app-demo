@@ -15,7 +15,7 @@ Live: https://haimunia-app.pages.dev
 Repo: `haimuniya/haimunia-app-demo` — **private** since 2026-09-17
 Supabase: `jajmlyrjlkhclgphbfbb` (free tier)
 
-**v4.70.0** · 171 migrations · 1887 JS tests · 114 pgTAP files, 3492 assertions
+**v4.71.0** · 171 migrations · 1890 JS tests · 114 pgTAP files, 3492 assertions
 
 ## The rules that are not negotiable
 
@@ -47,7 +47,7 @@ Supabase: `jajmlyrjlkhclgphbfbb` (free tier)
 ## How to verify anything
 
 ```
-node --test                   # 1887 JS tests, jsdom, ~4 min
+node --test                   # 1890 JS tests, jsdom, ~4 min
 supabase start                # docker is on this machine
 supabase db reset --local     # replays all 171 migrations from empty, ~3 min
 supabase test db --local      # 114 files, 3492 pgTAP assertions, ~10 s
@@ -73,8 +73,8 @@ finished.
 
 ## The second pattern, learned the hard way on 2026-09-17
 
-**Six things shipped that day reported success while doing nothing.** All six
-passed review. All six were caught by running them for real:
+**Seven things reported success while doing nothing.** All of them passed
+review. All were caught by running them for real:
 
 | | looked like | did |
 |---|---|---|
@@ -84,14 +84,19 @@ passed review. All six were caught by running them for real:
 | `inputs.drill` | gating the restore drill | skipped it; run still green |
 | `closeNavMenu()` in open-support | preventing stacked overlays | nothing — `openSupport()` already did it |
 | `ALTER DEFAULT PRIVILEGES … FROM public` | closing the anon EXECUTE gap | narrowed it; PUBLIC still grants EXECUTE |
+| a CSS reconstruction taking `<style>` … `</style>` | measuring a real layout | took the FIRST of two style blocks. Chips measured 267px against a real 347px, so the measurement said "fits fine" about a row that visibly wraps — and nearly reverted a correct fix (2026-09-17) |
 
 **Falsify your own tests.** Break the code on purpose and confirm the test
 goes red. That caught a day-index test passing while `wodEntries` was dropped
 entirely, a timing assertion that was a genuine coin flip, and a "fix" for a
 bug that did not exist.
 
-**Measure before fixing.** A recorded "21 rebuilds, 289 ms per tap" did not
-reproduce, and pointed at the wrong code.
+**Measure before fixing** — and check the instrument before believing it. A
+recorded "21 rebuilds, 289 ms per tap" did not reproduce and pointed at the
+wrong code. The opposite also happened: a measurement said a reported wrap did
+not reproduce, and the measurement was broken, not the report. The tell was a
+CSS variable resolving to empty. If a measurement contradicts something a human
+watched happen, suspect the measurement first.
 
 ## Declined by the owner — do not re-propose
 

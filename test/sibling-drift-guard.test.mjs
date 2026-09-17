@@ -120,3 +120,79 @@ test("no dialog overlay pins its card to the top of the screen", () => {
   assert.ok(withAlign >= 20, `expected to have parsed the overlay styles, saw only ${withAlign}`);
   assert.ok(centred >= 15, `expected most card dialogs to be centred, saw only ${centred}`);
 });
+
+test("no dispatch branch is unreachable behind an identical one above it", () => {
+  // Found on 2026-09-17 while reading for something else: the challenge form's
+  // "delete draft" button and the challenge view's "delete" button both fired
+  // `challenge-delete`, and BOTH branches tested for it. The second could
+  // never run. The visible result was a coach deleting an unpublished draft
+  // being warned that every registration, team and progress entry would go
+  // with it - a draft has none - and told to "end the challenge" instead,
+  // which an unpublished challenge cannot do. The copy written for that exact
+  // case sat three lines below, unreachable, for as long as it had existed.
+  //
+  // Nothing about this is specific to challenges: it is a long else-if chain
+  // keyed on a string, which is what every action dispatch in this app is.
+  const chains = [
+    ["cloud.js", cloudJs, /else if \(action === "([a-z0-9-]+)"\)/g, 200],
+    ["cloud.js", cloudJs, /else if \(c\.action === "([a-z0-9-]+)"\)/g, 15],
+    ["app.js", appJs, /else if \(c\.action === "([a-z0-9-]+)"\)/g, 3],
+  ];
+  for (const [name, src, re, floor] of chains) {
+    const seen = new Set();
+    const dead = [];
+    let parsed = 0;
+    for (const [, action] of src.matchAll(re)) {
+      parsed++;
+      if (seen.has(action)) dead.push(action);
+      seen.add(action);
+    }
+    // A guard that matched nothing would pass. Pin a floor per chain.
+    assert.ok(parsed >= floor, `${name}: expected to parse at least ${floor} branches, parsed ${parsed}`);
+    assert.deepEqual(dead, [], `${name}: these branches can never run - an identical test appears above them: ${dead.join(", ")}`);
+  }
+  // If a second, genuinely separate dispatcher ever needs a name this one
+  // already uses, teach this test the pair. Do not delete the assertion.
+});
+
+test("deleting a draft says draft, and runs the one delete function", () => {
+  const form = fnBody(cloudJs, "function renderChallengeForm()");
+  assert.match(form, /data-community-action="challenge-delete-draft"/,
+    "the draft button has its own action, so its own confirm copy is reachable");
+
+  // Take the whole line: the payload is an object, so a [^}] capture stops
+  // short of exactly the part worth asserting on.
+  const branchAt = cloudJs.indexOf('else if (action === "challenge-delete-draft")');
+  assert.ok(branchAt > -1, "the draft branch exists");
+  const draftBranch = [null, cloudJs.slice(branchAt, cloudJs.indexOf("\n", branchAt))];
+  assert.match(draftBranch[1], /title: "מחיקת טיוטה"/, "with the copy written for a draft");
+  assert.ok(!/כל ההרשמות/.test(draftBranch[1]),
+    "and not the permanent-deletion warning about registrations a draft does not have");
+  assert.match(draftBranch[1], /action: "challenge-delete", payload: \{ id: el\.dataset\.id, draft: true \}/,
+    "it runs the SAME delete as everything else - deleteChallenge is the superset, with the "
+    + "permission check and the view/cache cleanup the draft-only copy never had");
+
+  // One delete function, not two that drift.
+  assert.ok(!/deleteChallengeDraft/.test(cloudJs), "the near-duplicate delete function is gone");
+  assert.match(cloudJs, /async function deleteChallenge\(id, wasDraft\)/);
+  assert.match(cloudJs, /setMessage\(wasDraft \? "הטיוטה נמחקה" : "האתגר נמחק"\)/,
+    "the flag changes what the message calls the thing, and nothing else");
+});
+
+test("the challenge staff toolbar breaks 3 + 1 on purpose, not by wrapping", () => {
+  const at = cloudJs.indexOf("const staffToolbar = (staff || pinBtn)");
+  assert.ok(at > -1);
+  const line = cloudJs.slice(at, cloudJs.indexOf("\n", at));
+  // Two rows, and the destructive one is the second, fenced by the same
+  // hairline the post menu uses. Four chips will not fit a 390px line, so the
+  // only question was whether the break looked chosen.
+  assert.ok(!/\$\{endBtn\}\$\{deleteBtn\}/.test(line), "מחיקה no longer trails סיום on the same row");
+  assert.match(line, /\$\{deleteBtn \? `<div class="chip-row"[^`]*border-top:1px solid var\(--border\)/,
+    "it gets its own row behind a separator");
+  assert.match(line, /margin-bottom:\$\{deleteBtn \? "0" : "10px"\}/,
+    "and the first row drops its bottom margin so the two read as one block");
+  // The tempting wrong fix, pinned so nobody takes it: this string is shared
+  // with the post menu and the event toolbar.
+  const pinLabels = (cloudJs.match(/"הצמדה למעלה"|>הצמדה למעלה</g) || []).length;
+  assert.ok(pinLabels >= 3, "הצמדה למעלה is still shared across surfaces - do not shorten it in one of them");
+});
