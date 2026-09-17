@@ -33,11 +33,32 @@ test("all three auth entry points are gated by the challenge", () => {
   assert.equal(bare.length, 0, "no ungated signInAnonymously() call remains");
 });
 
-test("it is off by default and completely inert with no site key configured", () => {
-  // The shipped config must not enable it for a project that has not set
-  // the matching secret in the dashboard - that would break every signup.
-  assert.match(configJs, /captchaSiteKey:\s*""/,
-    "captchaSiteKey ships empty; enabling it is a deliberate deploy-time act");
+test("the club ships WITH a captcha site key, and it is a real Turnstile one", () => {
+  // Was: "captchaSiteKey ships empty; enabling it is a deliberate deploy-time
+  // act". It stayed empty from 2026-09-07 (the owner declined) until
+  // 2026-09-17, when it was turned on before opening the club to real
+  // members. The assertion is inverted rather than deleted, because "" and a
+  // live key are both states somebody could arrive at by accident, and only
+  // one of them is now correct.
+  const key = /captchaSiteKey:\s*"([^"]*)"/.exec(configJs);
+  assert.ok(key, "captchaSiteKey is still in the config");
+  assert.notEqual(key[1], "", "an empty key silently disables every check in this file");
+  // Turnstile site keys start 0x and are ~24 chars. Shape only - this cannot
+  // tell a valid key from a revoked one, and says so rather than implying it.
+  assert.match(key[1], /^0x[A-Za-z0-9_-]{15,40}$/,
+    `captchaSiteKey does not look like a Turnstile site key: ${key[1]}`);
+  assert.match(configJs, /captchaProvider:\s*"turnstile"/, "and the provider matches the key's issuer");
+
+  // The SECRET half must never appear here. A Turnstile secret starts 0x too,
+  // so shape alone will not save anybody - what saves them is that the secret
+  // belongs in the Supabase dashboard and this file has exactly one key in it.
+  const keysInFile = (configJs.match(/"0x[A-Za-z0-9_-]{15,40}"/g) || []);
+  assert.equal(keysInFile.length, 1,
+    "exactly one 0x-prefixed key in cloud-config.js - a second one is probably the SECRET, "
+    + "which is served publicly from this repo and would hand anyone a bypass");
+});
+
+test("the inert-with-no-key path still exists, for a club that has not enabled it", () => {
   assert.match(cloudJs, /function captchaEnabled\(\)\s*\{\s*return !!captchaConfig\(\)\.siteKey;\s*\}/);
   // withCaptcha short-circuits to the original call when disabled, so the
   // pre-feature behaviour is preserved exactly.

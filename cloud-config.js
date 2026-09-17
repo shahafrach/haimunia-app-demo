@@ -56,16 +56,32 @@ window.HAIMUNIA_CONFIG = Object.freeze({
   // in the dashboard, paste the site key here, deploy.
   // See COMMUNITY_SETUP.md "CAPTCHA on sign-up" for the full runbook.
   // DECISION (2026-09-07): staying OFF. The owner declined a third-party
-  // CAPTCHA provider, and the measurement backs it: an account that signs up
+  // CAPTCHA provider, and the measurement backed it: an account that signs up
   // but never redeems an invite can read nothing (posts and profiles are
   // gated on is_community_member(); comments/reactions/media inherit that
   // gate through post_visible_to_viewer(), which is SECURITY INVOKER) and
   // write nothing. Redemption is rate-limited to 5 tries / 15 min. What is
   // left is empty auth.users rows - a quota nuisance, not a leak.
-  // The code below stays, inert and tested, so this is reversible in one
-  // line. hCaptcha is the non-Cloudflare option if that ever changes.
+  //
+  // REVERSED (2026-09-17), before going live. The analysis above is still
+  // correct and is exactly why this was never urgent - it is a quota and
+  // abuse problem, not a leak. What changed is the cost of the other side:
+  // Turnstile is free, the client was already built and tested, and the CSP
+  // already carries the provider host, so turning it on is one field rather
+  // than a project. Opening the club to real members is the moment to stop
+  // leaving a free identity factory running.
+  //
+  // The site key below is Cloudflare Turnstile, Managed mode, scoped to the
+  // hostname haimunia-app.pages.dev. A CUSTOM DOMAIN WOULD NEED ADDING TO
+  // THAT WIDGET'S HOSTNAME LIST - the same third place a new origin has to
+  // be registered, alongside the CSP in index.html and ALLOWED_ORIGINS in
+  // admin_reset_password.
+  //
+  // ORDER MATTERS IF THIS IS EVER RE-DONE: deploy the site key FIRST, then
+  // enable enforcement in the Supabase dashboard. Backwards, the server
+  // demands a token the client is not sending yet and every signup fails.
   captchaProvider: "turnstile", // "turnstile" | "hcaptcha"
-  captchaSiteKey: "",
+  captchaSiteKey: "0x4AAAAAAE6mfjw79idh0ptH",
 
   // Support and bug reporting (2026-09-15), added after the first real-phone
   // session produced four "not working" reports that had no route back into
