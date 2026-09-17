@@ -5,9 +5,9 @@
 // nothing here can reach - or photograph - the real club's data. Every name,
 // workout and number below is invented for the guide.
 import { chromium } from "playwright";
-import { resolveLocalOnlyTarget } from "./lib/target.mjs";
-import { installMockCloud } from "./lib/mockCloud.mjs";
-import { dismissWelcomeModal, switchTab, selectMovement, openManagementPanel, dismissCelebrationIfOpen } from "./lib/actions.mjs";
+import { resolveLocalOnlyTarget } from "../browser-check/lib/target.mjs";
+import { installMockCloud } from "../browser-check/lib/mockCloud.mjs";
+import { dismissWelcomeModal, switchTab, selectMovement, openManagementPanel, dismissCelebrationIfOpen } from "../browser-check/lib/actions.mjs";
 
 // A few real sets, logged through the real UI. The progress and calendar
 // screens are empty states on a fresh install, and a guide that opens on
@@ -148,4 +148,18 @@ await shot("07-system-manage", async (page) => {
 }, { mock: AS_OWNER, scroll: 420 });
 
 await browser.close();
+// BOTH, AND THEN EXIT. resolveLocalOnlyTarget() leaves an HTTP server
+// listening, and an open server handle keeps node alive: a script that
+// finishes normally without closing it does not end, it hangs. Measured
+// 2026-09-17 - a throw exits cleanly (1), a clean finish with the server open
+// hangs (124 under a timeout), which is the counter-intuitive half.
+//
+// This file was the one that did it. It sat in scripts/browser-check/, where
+// run-all.mjs globs every .mjs, so CI ran it as though it were a regression
+// check and the browser-checks job stayed in_progress for four hours
+// reporting nothing. It has moved here, out of that glob, because
+// regenerating a PDF for the owner is a build step and not a check of
+// anything - but the cleanup is fixed regardless, so running it by hand ends.
+await target.close();
 console.log("done");
+process.exit(0);

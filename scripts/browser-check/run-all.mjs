@@ -24,18 +24,58 @@ const scripts = readdirSync(here)
   .filter((f) => f.endsWith(".mjs") && f !== "run-all.mjs")
   .sort();
 
+// A STUCK SCRIPT MUST NOT BE ABLE TO STOP CI, and until 2026-09-17 it could.
+//
+// spawnSync with no timeout waits forever, and these scripts have two ways to
+// never return. Every one of them starts a local HTTP server through
+// resolveLocalOnlyTarget(), and an open server handle keeps node alive: a
+// script that finishes normally without closing it hangs (verified, exit 124
+// under a timeout), and so does any await that never settles - browser.close()
+// on a wedged chromium being the usual one - since process.exit() is then
+// never reached either. A script that simply THROWS is fine; node terminates
+// on the rejected top-level await. The loud failure was never the problem.
+//
+// The browser-checks job sat in_progress for FOUR HOURS on 2026-09-17,
+// reporting nothing, which is worse than a red build: a job that never
+// finishes never tells anyone anything, and branch protection reads it as
+// "expected" rather than "failed" - so the push goes through and the gate
+// looks merely pending forever.
+//
+// Eight minutes is roughly four times the slowest real run on this machine.
+// A script that needs longer than that has a problem worth surfacing, and
+// SIGKILL rather than SIGTERM because the thing being killed is, by
+// definition, not responding to its own shutdown path.
+const PER_SCRIPT_TIMEOUT_MS = 8 * 60 * 1000;
+
 const results = [];
 for (const script of scripts) {
   console.log(`\n${"=".repeat(60)}\n${script}\n${"=".repeat(60)}`);
-  const result = spawnSync(process.execPath, [path.join(here, script)], { stdio: "inherit", env: process.env });
-  const ok = result.status === 0;
-  results.push({ script, ok, status: result.status });
-  console.log(ok ? `\nrun-all: ${script} passed` : `\nrun-all: ${script} FAILED (exit ${result.status ?? 1})`);
+  const result = spawnSync(process.execPath, [path.join(here, script)], {
+    stdio: "inherit",
+    env: process.env,
+    timeout: PER_SCRIPT_TIMEOUT_MS,
+    killSignal: "SIGKILL",
+  });
+  // A timeout is reported as signal SIGKILL with a null status, which would
+  // otherwise read as `exit null` and look like any other failure. Naming it
+  // is the difference between "this check failed" and "this check never
+  // answered", and those need different fixes.
+  const timedOut = result.signal === "SIGKILL" || (result.error && result.error.code === "ETIMEDOUT");
+  const ok = !timedOut && result.status === 0;
+  results.push({ script, ok, status: result.status, timedOut });
+  if (timedOut) {
+    console.log(`\nrun-all: ${script} TIMED OUT after ${PER_SCRIPT_TIMEOUT_MS / 1000}s and was killed`);
+    console.log("         A browser-check that hangs is usually a script that threw");
+    console.log("         before closing its target server - see the try/finally in");
+    console.log("         feed-rerender-storm.mjs for the shape every script needs.");
+  } else {
+    console.log(ok ? `\nrun-all: ${script} passed` : `\nrun-all: ${script} FAILED (exit ${result.status ?? 1})`);
+  }
 }
 
 const failedScripts = results.filter((r) => !r.ok);
 console.log(`\n${"=".repeat(60)}\nrun-all summary: ${results.length - failedScripts.length}/${results.length} passed\n${"=".repeat(60)}`);
-for (const r of results) console.log(`  ${r.ok ? "PASS" : "FAIL"}  ${r.script}`);
+for (const r of results) console.log(`  ${r.ok ? "PASS" : (r.timedOut ? "HUNG" : "FAIL")}  ${r.script}`);
 
 if (failedScripts.length) {
   console.log(`\nrun-all: ${failedScripts.length} scenario(s) failed`);

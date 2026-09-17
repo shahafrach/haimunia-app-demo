@@ -87,7 +87,13 @@ jobs:
       # finding that out here costs a minute instead of an incident.
       - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
         with:
-          deno-version: v2.x
+          # PINNED, for the reason the launch-readiness audit already gave
+          # about supabase/setup-cli and deploy-edge-functions.yml's own
+          # `latest`: a floating version lets a release change this gate's
+          # behaviour with no commit in this repo to review. v2.x was the last
+          # unpinned version selector left. 2.9.7 is the version the frozen
+          # lockfiles were verified against on 2026-09-17.
+          deno-version: 2.9.7
       - name: verify each function against its lockfile
         run: |
           for fn in supabase/functions/*/; do

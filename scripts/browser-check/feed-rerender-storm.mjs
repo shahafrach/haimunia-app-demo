@@ -62,7 +62,32 @@ const seedTables = {
 const target = await resolveLocalOnlyTarget();
 console.log(`Target: ${target.url} (local static server, mocked backend)\n`);
 
-const browser = await chromium.launch();
+// EVERY EXIT PATH HAS TO CLOSE THE STATIC SERVER, not just the happy one.
+//
+// resolveLocalOnlyTarget() starts a local HTTP server, and an open server
+// handle keeps node alive. Measured rather than assumed, because the obvious
+// theory was wrong: a script that THROWS exits fine (node rejects the
+// top-level await and terminates, exit 1), while a script that finishes
+// NORMALLY without closing the server hangs forever (exit 124 under a
+// timeout). So the dangerous path is not the loud one.
+//
+// This script reaches process.exit() on its own happy path, which is why it
+// survived locally. What it did not survive is any await that never settles -
+// browser.close() on a wedged chromium is the usual one in CI - because then
+// process.exit() is never reached and the open server does the rest.
+// run-all.mjs spawns these synchronously, so "never returns" is not this
+// script hanging, it is CI hanging: the browser-checks job sat in_progress
+// for four hours on 2026-09-17, reporting nothing.
+//
+// community-render-cost.mjs closes both the browser and the target; this file
+// was added beside it and closed only the browser. Sibling drift again.
+// run-all.mjs now also kills anything that overruns, because a cleanup block
+// cannot help an await that never returns.
+let failed = false;
+let browser;
+try {
+const launched = await chromium.launch();
+browser = launched;
 const page = await browser.newPage({ viewport: { width: 420, height: 900 } });
 await page.addInitScript(() => localStorage.setItem("haimunia-demo:cloudSyncEnabled", "1"));
 // test/helpers/mockSupabase.mjs's feed_page() stand-in base64s its cursor
@@ -124,7 +149,6 @@ async function burst(label, act) {
 // the synchronous rerender() path, without pinning an exact number that other
 // legitimate feed work would have to fight.
 const SCROLL_REBUILD_TRIPWIRE = 6;
-let failed = false;
 const scroll = await burst("scroll the feed to the bottom (pagination)", async () => {
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
 });
@@ -148,5 +172,10 @@ if (scroll && scroll.n > SCROLL_REBUILD_TRIPWIRE) {
 } else if (scroll) {
   console.log(`\nPASS  one scroll cost ${scroll.n} full rebuilds (limit ${SCROLL_REBUILD_TRIPWIRE}).`);
 }
-await browser.close();
+} finally {
+  // Both, unconditionally. A cleanup that itself throws must not mask the
+  // real error, hence the catch on each.
+  if (browser) await browser.close().catch(() => {});
+  await target.close().catch(() => {});
+}
 process.exit(failed ? 1 : 0);
