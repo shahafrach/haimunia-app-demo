@@ -219,5 +219,53 @@ select is(
   'select public.cron_invoke_edge_function(''notif_push_send'')',
   'and it reaches the Edge Function through the same bridge recap_weekly uses');
 
+-- =====================================================================
+-- 6. The admin kill switch (202609170003).
+--
+-- The owner asked for one switch that stops push for the whole club. Five of
+-- the toggles added on 2026-09-15 are clientOnly - they hide a control and
+-- the panel says so. This one must not be: a member already subscribed, on a
+-- notification already written, with a cron already running, must stop
+-- receiving. So the assertion is on the SQL, not on the rendering.
+-- =====================================================================
+-- Put one row back in a deliverable state first, so "nothing pending" below
+-- means the switch did it and not the fixtures.
+update public.notifications set push_sent_at = null, created_at = now()
+ where id = '55555555-0000-4000-8000-000000000001';
+update public.push_subscriptions set revoked_at = null
+ where id = '44444444-0000-4000-8000-000000000001';
+select is(
+  (select count(*)::int from public.notif_push_pending(100)
+    where notification_id = '55555555-0000-4000-8000-000000000001'),
+  1,
+  'deliverable again with the module on - so the next assertion measures the switch');
+
+update public.club_features set enabled = false where module_key = 'push_notifications';
+select is(
+  (select count(*)::int from public.notif_push_pending(100)),
+  0,
+  'with the club module off, NOTHING is pending for anybody - not filtered per member, off');
+
+-- And the off period must not silently consume the notifications written
+-- during it. push_sent_at stays null, so they become deliverable again when
+-- the switch goes back on, provided they are still inside the 24h window.
+select is(
+  (select push_sent_at from public.notifications where id = '55555555-0000-4000-8000-000000000001'),
+  null,
+  'a notification written while push is off is not marked sent - turning push off for an '
+  'afternoon does not throw that afternoon away');
+
+update public.club_features set enabled = true where module_key = 'push_notifications';
+select is(
+  (select count(*)::int from public.notif_push_pending(100)
+    where notification_id = '55555555-0000-4000-8000-000000000001'),
+  1,
+  'and switching it back on resumes delivery of the row that was waiting');
+
+select is(
+  (select count(*)::int from public.club_features where module_key = 'push_notifications'),
+  1,
+  'the module has a row, so the admin panel is not rendering a toggle with nothing behind it');
+
 select * from finish();
 rollback;

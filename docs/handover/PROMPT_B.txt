@@ -1,6 +1,6 @@
 You are picking up the Haimunia / האימוניה project — a Hebrew/RTL PWA for one
 CrossFit club. Buildless vanilla JS, Supabase, Cloudflare Pages. Currently
-v4.72.0.
+v4.73.0.
 
 Start by reading, in this order:
   docs/handover/SHARED_CONTEXT.md
@@ -36,7 +36,7 @@ RULES THAT ARE NOT NEGOTIABLE:
 
 HOW TO VERIFY (node --test exceeds a 2-minute foreground timeout — background
 it):
-  node --test                                 # 1915 tests, jsdom
+  node --test                                 # 1917 tests, jsdom
   node scripts/browser-check/run-all.mjs      # real Chromium, mocked backend
 
 THE BOARD IS EMPTY. B1 is parked at the owner's word (one club, so branding a

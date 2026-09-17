@@ -1350,6 +1350,34 @@
        that reordering these two blocks cannot change the outcome. */
     .app-shell:not(:has(> .context-col > *)) #app:has(#content .subtabbar[aria-label="ניווט בניהול"]),
     .app-shell:not(:has(> .context-col > *)) #app:has(#content .subtabbar #manageTab-moderation){ max-width:940px; }
+    /* (4b) The same rule, extended 2026-09-17 on the owner's instruction to
+       widen the other surfaces that are tables rather than forms.
+
+       ONE tab qualifies, and the restraint is the point. חברים (the member
+       directory) renders log-list/log-row - the identical row shape the
+       member roster uses on ניהול, which is already widened three lines
+       above. Reading a list of people is the same task at 940px that it is
+       at 560px, only with fewer wraps.
+
+       Deliberately NOT widened, each for its own reason rather than by
+       omission:
+         - פיד is a reading column. 560px is close to the measure prose
+           wants; 940px of body text is worse, not more.
+         - חשבון is forms, and a 940px form row puts its label and its
+           control at opposite ends of the screen.
+         - לוחות is mixed - leaderboards are tables but challenges are
+           cards, and widening would stretch the cards to fix the tables.
+           It needs the two split before it can be judged, not a blanket
+           rule.
+         - The logging column never changes width at any breakpoint. That is
+           rule (1) above and this does not touch it.
+
+       [aria-selected="true"] is load-bearing and is the one real difference
+       from the ניהול rule above. Every commTab-* button is in the DOM on
+       every community sub-tab, so matching the id alone would widen the feed
+       and the account form too. The manage rule can match on presence
+       because the whole manage BAR only exists on that tab. */
+    .app-shell:not(:has(> .context-col > *)) #app:has(#content .subtabbar #commTab-directory[aria-selected="true"]){ max-width:940px; }
   }
   @media (min-width: 1280px){
     /* (3) Every rule below is gated on the column actually having an

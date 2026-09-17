@@ -11,7 +11,38 @@ change needs a migration, write up what it must do and hand it over.
 
 ## State on 2026-09-17
 
-v4.72.0 · 1915 JS tests green · 3510 pgTAP assertions · 45 browser scenarios green.
+v4.73.0 · 1917 JS tests green · 3515 pgTAP assertions · 46 browser scenarios green.
+
+## B5 — DONE 2026-09-17: an admin switch for push, and a wider desktop column
+
+Both asked for directly by the owner, after push went live.
+
+**The kill switch** is a `club_features` row like the other twenty, so it sits
+in the same admin panel with the same audit trail. Push only, by the owner's
+explicit choice: the bell and the notification centre are untouched. It is NOT
+clientOnly — the check is inside `notif_push_pending` (202609170003), so
+switching it off stops delivery to a device already subscribed, for a
+notification already written, with the cron still running. Falsified by
+deleting the server check and watching `supabase/tests/0114` go red.
+
+Nothing is marked sent while it is off, so an afternoon with push disabled is
+not an afternoon of notifications thrown away — they become deliverable again
+when it comes back on, inside the 24h window.
+
+**The desktop column.** `index.html`'s own measurements said 43.9% of a
+1440px viewport carried nothing. The intended fix is the context column, which
+is markup and CSS with no module rendering into it. The cheap half, which the
+owner chose: widen the surfaces that are tables. Exactly one qualified —
+חברים, which renders the same `log-list`/`log-row` shape the roster does, and
+the roster's tab was already widened. פיד, חשבון and לוחות are argued against
+by name in the CSS rather than left out silently.
+
+`[aria-selected="true"]` is the load-bearing difference from the ניהול rule:
+every `commTab-*` button exists on every community sub-tab, so matching the id
+alone would have widened the feed too. Guarded by
+`scripts/browser-check/desktop-column-widths.mjs` in a real browser, because
+these rules turn on `:has()` and a selector that matches nothing looks exactly
+like a design decision from the source.
 
 **The board is empty.** B1 parked at the owner's word (one club); B2, B3 and B4
 done. Do not invent a B5 - ask.

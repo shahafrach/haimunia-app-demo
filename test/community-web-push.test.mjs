@@ -370,3 +370,35 @@ test("the default is now ON: a member who set nothing sees the push option", asy
   assert.ok(push, "the push option renders for a member who has never touched the escape hatch");
   assert.ok(!push.disabled, "and it is live, not the old 'בקרוב' placeholder");
 });
+
+test("the admin's club-wide kill switch removes the push option for every member", async () => {
+  // The owner asked for one switch that stops push for the club. Five of the
+  // 2026-09-15 toggles are clientOnly and the admin panel says so; this one is
+  // not, and the assertion that matters is in pgTAP (supabase/tests/0114:
+  // with the module off, notif_push_pending returns nothing for anybody, even
+  // a device already subscribed). This test covers the other half - that a
+  // club with push switched off does not go on OFFERING members a button that
+  // would create a subscription nothing would ever send to.
+  const mock = seeded({ club_features: [{ module_key: "push_notifications", enabled: false, config: {} }] });
+  const window = await bootCommunity(mock, { syncEnabled: false });
+  stubPushApis(window);
+  await openAccount(window);
+
+  const push = window.document.querySelector('[data-community-action="notif-pref"][data-type="comment_on_post"][data-channel="push"]');
+  assert.equal(push, null, "no push button while the club module is off");
+
+  // The other two channels are untouched: this switch is push only, and a
+  // member must still be able to choose between in-app and off.
+  assert.ok(window.document.querySelector('[data-community-action="notif-pref"][data-type="comment_on_post"][data-channel="in_app"]'),
+    "in-app notifications keep working - the bell and the notification centre are not part of this switch");
+  assert.ok(window.document.querySelector('[data-community-action="notif-pref"][data-type="comment_on_post"][data-channel="off"]'));
+});
+
+test("with the module on, the push option is back - so the test above measures the switch", async () => {
+  const mock = seeded({ club_features: [{ module_key: "push_notifications", enabled: true, config: {} }] });
+  const window = await bootCommunity(mock, { syncEnabled: false });
+  stubPushApis(window);
+  await openAccount(window);
+  assert.ok(window.document.querySelector('[data-community-action="notif-pref"][data-type="comment_on_post"][data-channel="push"]'),
+    "a guard that cannot come back on is not measuring the thing it names");
+});

@@ -1029,6 +1029,16 @@
     { key: "post_photos", label: "תמונות בפוסטים", clientOnly: true },
     { key: "mentions", label: "תיוג חברים (@)", clientOnly: true },
     { key: "outward_share", label: "שיתוף מחוץ לאפליקציה", clientOnly: true },
+    // The owner's kill switch for push, 2026-09-17. Deliberately NOT
+    // clientOnly: the check is inside notif_push_pending (202609170003), so
+    // switching it off stops delivery even for a device already subscribed,
+    // a notification already written and a cron already running. A kill
+    // switch that only hides a button is not a kill switch.
+    //
+    // PUSH ONLY, by the owner's explicit choice. The bell, the notification
+    // centre and every in-app notification are untouched - this stops the
+    // delivery that leaves the app and interrupts somebody.
+    { key: "push_notifications", label: "התראות דחיפה למכשיר" },
     // Real device feedback: this whole feature (a coach schedules a
     // catalogue WOD for today; it gets one card on the feed and one board
     // members attach their own logged results to) had no toggle at all -
@@ -17721,7 +17731,14 @@
   // The localStorage escape hatch inverts with the default, matching
   // coachEngage: set haimunia-demo:notifPushFlag to "0" to turn it back off
   // on one device.
-  function notifPushEnabled() { return !!(state.featureFlags && state.featureFlags.notifPush); }
+  // Two gates, and they are different things. featureFlags.notifPush is the
+  // build-level flag (a device escape hatch, default on since B3). The module
+  // is the CLUB's switch, owned by the admin panel and enforced server-side
+  // in notif_push_pending - checked here too so a club with push off does not
+  // offer members a button that would produce a subscription nothing sends to.
+  function notifPushEnabled() {
+    return !!(state.featureFlags && state.featureFlags.notifPush) && isModuleEnabled("push_notifications");
+  }
   const NOTIF_PAGE_SIZE = 20;
   // COMM-141. Rows older than this are not walked by default.
   const NOTIF_RECENT_DAYS = 90;
