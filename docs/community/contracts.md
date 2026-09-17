@@ -2554,14 +2554,22 @@ documented under "## Challenges" above, not here.
   that the preferences panel gains no new row. The urgent "bypass" of a
   member's `off` row is `notif_is_operational` answering true, which is the
   Phase 1 mechanism unchanged.
-- `notif_push_send`: NOT built here. The actual Web Push send (calling the
-  Web Push protocol with VAPID keys against every unrevoked
-  `push_subscriptions` row for a notification's recipient) is a service-role
-  Edge Function or scheduled job, the same "storage exists, delivery
-  scheduler does not" gap already logged for `notif_batch_flush_due`.
-  COMM-229 wires subscription storage (existing table, no change) and the
-  `sw.js` client handler only; sending a real push waits on VAPID key
-  provisioning, confirmed but not yet available at authoring time.
+- `notif_push_send`: **BUILT 2026-09-17** (was: "NOT built here"). The Web
+  Push send exists as a service-role Edge Function
+  (`supabase/functions/notif_push_send`), scheduled every three minutes as
+  the `notif-push-send` pg_cron job through `cron_invoke_edge_function`, the
+  same bridge `recap_weekly` uses. A real VAPID keypair replaced COMM-229's
+  demo one; the private half is an Edge Function secret.
+
+  The selection is deliberately NOT in the function. `notif_push_pending`,
+  `notif_push_mark_sent` and `notif_push_revoke` (202609170002, service_role
+  only) decide who is owed a delivery, and `supabase/tests/0114` tests that
+  against a real Postgres. The function fetches, encrypts and posts.
+
+  Encryption is `_shared/webPush.mjs` (RFC 8291 + 8292, WebCrypto), verified
+  against RFC 8291's published example in `test/web-push-crypto.test.mjs` -
+  the same file the function imports, because a wrong byte here returns 201
+  from the push service and shows nothing on the phone.
 
 ## Identity and privacy
 

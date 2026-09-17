@@ -53,6 +53,26 @@ Generate it rather than inventing one:
 **ניהול מערכת → שינוי סיסמה.** Different from the headcoach one. That account
 now holds `is_admin`, so its password protects everything.
 
+### 5. Confirm a push actually arrives
+
+**Settings → notifications → pick "התראת דחיפה" on any type.** The browser
+asks permission; allow it. Then get someone to react to one of your posts, or
+wait for the next thing that would notify you.
+
+This is the one step nobody else can do. Everything about web push is built,
+tested and live as of 2026-09-17 — the encryption is verified against the
+spec's own published example, byte for byte — but no notification has ever
+been watched landing on a real phone. That gap is not paranoia: a push that
+fails returns **201 from the push service and shows nothing**, so there is no
+error anywhere for anyone to find.
+
+On iPhone it only works if the app is installed to the home screen. In Safari,
+without installing, nothing arrives and nothing says why.
+
+Tell me when one lands, and `streak_risk_nudges` gets turned on — one
+migration. Until then it stays off, because otherwise the first real use of
+this code would also be its first test.
+
 ## Decide, do not just tick
 
 ### The scheduled-job-alert secrets
@@ -95,4 +115,6 @@ rediscovering that the ALTER cannot be run.
 Join code revoked (used once, by you, testing) · repo private · GitHub Pages
 torn down · `is_admin` + `head_coach` on your member account · backups running
 nightly, encrypted, and **proven restorable** by a weekly drill · both broken
-CI jobs fixed · 19 anon EXECUTE grants closed.
+CI jobs fixed · 19 anon EXECUTE grants closed · web push built and deployed,
+with a real VAPID keypair (the private half is an Edge Function secret, set
+without ever passing through a command line or this repo).

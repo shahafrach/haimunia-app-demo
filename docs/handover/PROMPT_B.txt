@@ -1,6 +1,6 @@
 You are picking up the Haimunia / האימוניה project — a Hebrew/RTL PWA for one
 CrossFit club. Buildless vanilla JS, Supabase, Cloudflare Pages. Currently
-v4.71.0.
+v4.72.0.
 
 Start by reading, in this order:
   docs/handover/SHARED_CONTEXT.md
@@ -36,13 +36,18 @@ RULES THAT ARE NOT NEGOTIABLE:
 
 HOW TO VERIFY (node --test exceeds a 2-minute foreground timeout — background
 it):
-  node --test                                 # 1895 tests, jsdom
+  node --test                                 # 1915 tests, jsdom
   node scripts/browser-check/run-all.mjs      # real Chromium, mocked backend
 
-B1 (BoxLog config) is PARKED; B2 and B4 are DONE. The only item left is B3,
-which needs the owner's word before a line of it is written. There is no
-assigned starting task: read the board, and if nothing on it is live, ask
-rather than inventing work.
+THE BOARD IS EMPTY. B1 is parked at the owner's word (one club, so branding a
+second one buys nothing); B2, B3 and B4 are done. There is no assigned
+starting task. Read the board, and if nothing on it is live, ASK rather than
+inventing work - a made-up B5 is worse than an idle session.
+
+One thing is genuinely open and is not a task: streak_risk_nudges is still
+off. The push delivery path went live on 2026-09-17 but has not been watched
+putting a notification on a real phone. It gets turned on by one migration
+AFTER the owner confirms a test push arrived, not before.
 
 Two habits that earned their keep here: measure before you fix (a recorded
 "21 rebuilds per tap" did not reproduce and pointed at the wrong code), and

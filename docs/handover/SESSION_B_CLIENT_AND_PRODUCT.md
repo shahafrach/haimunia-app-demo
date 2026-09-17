@@ -11,10 +11,10 @@ change needs a migration, write up what it must do and hand it over.
 
 ## State on 2026-09-17
 
-v4.71.0 · 1895 JS tests green · 45 browser scenarios green.
+v4.72.0 · 1915 JS tests green · 3510 pgTAP assertions · 45 browser scenarios green.
 
-**Left on this board: B3 only, and it needs the owner's word.** B1 is parked,
-B2 and B4 are done.
+**The board is empty.** B1 parked at the owner's word (one club); B2, B3 and B4
+done. Do not invent a B5 - ask.
 
 Session A is closed; its file is a record of what each item turned out to be,
 and most were not what they looked like. Worth skimming once for the two
@@ -151,17 +151,50 @@ rendered at fallback sizes. The tell was `--text-scale` resolving to an empty
 string. A correct fix was one step from being reverted on the strength of it.
 That entry is now in SHARED_CONTEXT's table with the other seven.
 
-## B3 — Web push, which blocks a real feature
+## B3 — DONE 2026-09-17: web push delivers
 
-`streak_risk_nudges` is switched off and stays off because there is no
-delivery channel: an in-app-only nudge reaches people who already opened the
-app, who are exactly the ones not at risk. The client half (subscription,
-`push_subscriptions`, permission prompt) is scaffolded; the sending half does
-not exist.
+Built after the owner answered the one question that decided it. The case
+against was iOS: web push reaches an iPhone only for a PWA installed to the
+home screen, and a member browsing in Safari gets nothing, silently. The
+owner's answer — *"mostly will install, it's a brand new install and people
+will import from the old one"* — removes that ceiling, so it was worth
+building.
 
-Deferred at the owner's explicit choice. **Confirm he still wants it before
-building it** — it is the largest single piece of work left, and it is a
-notification feature for a club of a few dozen people.
+**More existed than the brief said.** The table, the `sw.js` handler, the
+subscribe flow, a VAPID public key, and `streak_at_risk_notify()` already
+running daily on cron. The gap was one Edge Function.
+
+- `supabase/functions/notif_push_send` — fetch, encrypt, post. No policy in it.
+- `supabase/functions/_shared/webPush.mjs` — RFC 8291 + 8292, WebCrypto only,
+  so the file the function imports is the file `node --test` runs.
+- `202609170002` — `notif_push_pending` / `notif_push_mark_sent` /
+  `notif_push_revoke`, service_role only, plus the `notif-push-send` cron
+  every three minutes.
+- `supabase/tests/0114` — who gets a push, against a real Postgres.
+
+**Why the selection is in SQL and not in the function.** Who receives a push
+is a privacy decision, and this repo can test SQL far better than it can test
+Deno talking to a push service. Falsified by rewriting the predicate as
+`channel <> 'off'` — the version that pushes to the entire club — and watching
+the `in_app` assertion go red.
+
+**The crypto is verified against the RFC's own example, byte for byte,** then
+decrypted back with the user agent's private key the way a browser does. This
+is the one feature whose failure is completely silent: a wrong byte and the
+push service returns 201 while the phone shows nothing.
+
+**Two bugs caught while building it, both this repo's signature shapes.** The
+payload emitted `url`; `sw.js` reads `deep_link` and falls back to `"./"`, so
+every notification would have opened the home screen instead of its target,
+with nothing erroring. And the function was written with no `deno.json` and no
+`deno.lock`, which would have failed the deploy of all four functions, not
+one — `deno cache --frozen` runs over every function before any deploy. Both
+are now tests.
+
+**Still off: `streak_risk_nudges`.** The delivery path is live but has not
+been seen to put a notification on a real phone. Turning the nudges on before
+that is confirmed would mean the first real use of this code is also its first
+test. One migration flips it, once the owner confirms a test push arrived.
 
 ## B4 — DONE 2026-09-17: the drift class is now a test, not a habit
 
