@@ -15,7 +15,7 @@ let barWeight = 20;
 // Single source of truth for the app version. After bumping this, run
 // `npm run sync-version` to copy it into SW_VERSION in sw.js — `npm test`
 // fails if the two drift apart.
-const APP_VERSION = "4.69.0";
+const APP_VERSION = "4.70.0";
 
 // A movement typed into the WOD builder that isn't in the built-in list
 // above - persisted (see WODTAGSTORE), same "custom X" pattern as
@@ -398,6 +398,30 @@ function renderNavSettingsRow() {
     <button class="navrow" data-action="open-settings">
       <span class="icon-chip icon-chip-steel">${ICONS.settingsIcon}</span>
       <span class="nav-label">הגדרות</span>
+      <span style="transform:scaleX(-1); display:inline-flex; color:var(--steel);" aria-hidden="true">${ICONS.chevron}</span>
+    </button>
+    <!-- Owner's call, 2026-09-17: "should be in the hamburger, so people will
+         have easy access to report". It was one row inside Settings, under
+         עזרה - three taps and a scroll from anywhere, which is three taps too
+         many for the one thing a member does when the app is misbehaving. The
+         moment you most need to report a fault is the moment you are least
+         inclined to go looking for where to do it.
+         It STAYS in Settings as well. This is not a move: the two places
+         answer different questions - "something is broken right now" belongs
+         on the menu you already have open, and "where do I get help" belongs
+         under עזרה with the rest of it. Both routes call the same openSupport().
+         In renderNavSettingsRow rather than renderNavMenuList so the desktop
+         sidebar gets it too - they share this function, and a desktop user
+         reporting a fault should not have to find a hamburger that is not
+         there.
+         No dispatcher change was needed: openSupport() closes the nav menu on
+         its first line already. I added a closeNavMenu() here anyway and wrote
+         a comment about the stacked overlays it prevented, then reverted it to
+         confirm the test caught it - and nothing failed, because there was
+         nothing to catch. -->
+    <button class="navrow" data-action="open-support">
+      <span class="icon-chip icon-chip-steel">${ICONS.helpIcon}</span>
+      <span class="nav-label">תמיכה ודיווח על תקלה</span>
       <span style="transform:scaleX(-1); display:inline-flex; color:var(--steel);" aria-hidden="true">${ICONS.chevron}</span>
     </button>`;
 }
@@ -4408,6 +4432,13 @@ const ICONS = {
   emptyDay: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4.5" width="16" height="16" rx="2.5"/><path d="M9 2.8h6M8.5 10.5h7M8.5 15h4"/></svg>',
   ladder: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3v18M18 3v18M6 8h12M6 13h12M6 18h12"/></svg>',
   repeat: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 2l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>',
+  // A help circle, sized 20x20 to match settingsIcon: both render inside the
+  // 30px .icon-chip in the nav menu and the desktop sidebar, and the 22x22
+  // tab-bar glyphs overflow it. Added rather than reusing an existing icon -
+  // the nearest candidates were the gear, which would put two identical
+  // glyphs on adjacent rows, and the pencil, which says "write something"
+  // rather than "get help".
+  helpIcon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.2 9.2a3 3 0 0 1 5.6 1c0 2-2.8 2.5-2.8 4"/><path d="M12 17.5h.01"/></svg>',
   bell: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>',
   calendarIcon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
   chartIcon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V12M12 20V4M20 20v-7"/></svg>',
