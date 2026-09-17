@@ -35,11 +35,39 @@ name: backup-database
 #
 # TO RESTORE:
 #   gh run download <run-id> -n haimunia-db-backup
-#   gpg --batch --passphrase "$BACKUP_PASSPHRASE" -d backup.sql.gpg > backup.sql
-#   psql "$SUPABASE_DB_URL" -f backup.sql
+#   gpg --batch --passphrase "$BACKUP_PASSPHRASE" -d backup.tar.gz.gpg > b.tar.gz
+#   tar -xzf b.tar.gz
+#   psql "$TARGET_DB_URL" -f schema.sql
+#   psql "$TARGET_DB_URL" -c "SET session_replication_role = replica;" \
+#                         -f data.sql \
+#                         -c "SET session_replication_role = DEFAULT;"
+#
+# THE session_replication_role LINE IS LOAD-BEARING, and it is not decoration.
+# The first real run of this job (2026-09-17) printed:
+#
+#   pg_dump: warning: there are circular foreign-key constraints on this table:
+#   pg_dump: detail: profiles
+#   pg_dump: detail: post_comments
+#
+# Both are SELF-references - profiles.assigned_coach_id -> profiles.id, and
+# post_comments.parent_comment_id -> post_comments.id - so a data-only dump can
+# emit a row before the row it points at: a reply before its parent comment, a
+# member before their assigned coach. The restore then fails on a foreign key
+# for a reason that has nothing to do with the data being wrong.
+#
+# supabase db dump does not expose pg_dump's --disable-triggers, so this cannot
+# be fixed on the dump side. session_replication_role = replica suspends
+# trigger and FK enforcement for the session, which is the standard answer and
+# costs nothing while the constraints are re-checked by nothing else in a
+# restore. Do NOT leave it set.
 #
 # The schema half is also reconstructible from supabase/migrations/ alone, so
 # the irreplaceable part of what this captures is the DATA.
+#
+# NOT YET DONE, and worth knowing: nothing has actually restored one of these.
+# The job proves the ciphertext decrypts and that the dump is non-empty and
+# contains the tables this app cannot work without, which is more than most
+# backup jobs prove and still not the same as a rehearsed restore.
 # ---------------------------------------------------------------------------
 on:
   schedule:
