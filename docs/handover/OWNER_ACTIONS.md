@@ -78,6 +78,18 @@ nobody runs.
 **Leaked-password protection** is Pro-plan only. It will show as a WARN in the
 security advisor forever. Generated passwords do the same job.
 
+**The `anon` EXECUTE default** in schema `public`. Supabase's bootstrap sets it
+as `supabase_admin`, and `alter default privileges for role supabase_admin`
+raises "permission denied to change default privileges" even from the dashboard
+SQL editor, which runs as `postgres`. So the default stays open.
+
+That is the default, not the grants: every function that exists today has had
+`anon` revoked explicitly, asserted on the live database by the migration's own
+final check. The exposure is only a *future* function whose author forgets the
+revoke line, and `supabase/tests/0113` fails CI the moment one does. Nothing to
+do here — it is recorded so the next person does not spend an afternoon
+rediscovering that the ALTER cannot be run.
+
 ## Done, for the record
 
 Join code revoked (used once, by you, testing) · repo private · GitHub Pages

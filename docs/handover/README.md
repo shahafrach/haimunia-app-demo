@@ -12,7 +12,10 @@ Start here.
 
 Where things stand on 2026-09-17:
 
-- **v4.70.0**, 171 migrations, zero drift
+- **v4.70.0**, 171 migrations, zero drift — verified against production
+  with `supabase migration list --linked` on 2026-09-17, not from this file.
+  The 171st sat committed-but-unapplied for a day: the repo and the
+  database are separate facts, and only the CLI knows the second one.
 - **1884 JS tests**, **3492 pgTAP assertions**, **45 browser scenarios** — all green
 - Backups run nightly, encrypted, and are **proven restorable** by a weekly drill
 - The repo is private; one public surface, with internal paths blocked
