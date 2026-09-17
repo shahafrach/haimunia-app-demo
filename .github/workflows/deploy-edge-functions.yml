@@ -35,7 +35,27 @@ name: deploy-edge-functions
 # fails loudly rather than reporting a green deploy that did nothing - which
 # is the exact failure mode it was written to end.
 # ---------------------------------------------------------------------------
+# 2026-09-17: this workflow was workflow_dispatch ONLY, which contradicts every
+# word of the header above it. Nothing triggered it on a merge, so "what is
+# deployed is a function of what is on main" was true only if a human
+# remembered to press the button - the exact habit the file was written to
+# replace. Caught when notif_push_send sat undeployed after its merge and the
+# gateway kept answering 404.
+#
+# The choice list was also stale: it named three of the four functions that
+# existed, so a targeted dispatch could not deploy sanitize_upload at all and
+# 'all' was the only working option for it. A list of names in a workflow is
+# the same maintenance burden as a list of names in a test, and it drifted the
+# same way. Both are fixed; the list now carries every function, and adding one
+# means adding it here too.
 on:
+  push:
+    branches: [main]
+    paths:
+      # The shared modules count: _shared/webPush.mjs IS the encryption, and a
+      # change there that never deploys is a change that did not happen.
+      - "supabase/functions/**"
+      - ".github/workflows/deploy-edge-functions.yml"
   workflow_dispatch:
     inputs:
       function:
@@ -43,7 +63,7 @@ on:
         required: true
         default: all
         type: choice
-        options: [all, purge_abandoned_profiles, admin_reset_password, recap_weekly]
+        options: [all, purge_abandoned_profiles, admin_reset_password, recap_weekly, sanitize_upload, notif_push_send]
 permissions:
   contents: read
 concurrency:
@@ -105,7 +125,14 @@ jobs:
       - name: deploy
         run: |
           set -euo pipefail
-          if [ "${{ inputs.function }}" = "all" ]; then
+          # A push event carries no inputs.function. Without this the else
+          # branch below would run `supabase functions deploy "" ` and deploy
+          # nothing while the job stayed green - the same shape as every other
+          # false-green this repo has found. A merge deploys everything;
+          # only an explicit dispatch narrows it.
+          FN="${{ inputs.function }}"
+          [ -n "$FN" ] || FN=all
+          if [ "$FN" = "all" ]; then
             for fn in supabase/functions/*/; do
               [ -f "$fn/index.ts" ] || continue
               name="$(basename "$fn")"
@@ -114,7 +141,7 @@ jobs:
               echo "::endgroup::"
             done
           else
-            supabase functions deploy "${{ inputs.function }}" --project-ref "$PROJECT_REF"
+            supabase functions deploy "$FN" --project-ref "$PROJECT_REF"
           fi
 
       # Deploying is not the same as being deployed. This reads the project
