@@ -37,8 +37,21 @@ name: backup-database
 #   gh run download <run-id> -n haimunia-db-backup
 #   gpg --batch --passphrase "$BACKUP_PASSPHRASE" -d backup.tar.gz.gpg > b.tar.gz
 #   tar -xzf b.tar.gz
-#   psql "$TARGET_DB_URL" -f schema.sql
-#   psql "$TARGET_DB_URL" -c "SET session_replication_role = replica;" \
+#   psql "$TARGET_DB_URL" -f schema.sql        # or: supabase db push
+#   # EMPTY IT FIRST. Migrations seed reference data - one clubs row, 20
+#   # club_features, 31 achievement_definitions, 6 roles, 14 permissions - and
+#   # the dump carries those same rows, so a straight load dies on a duplicate
+#   # key. Truncate exactly what the dump restores, read out of the dump:
+#   TARGETS=$(grep -oE 'INSERT INTO "[a-z_]+"\."[a-z_]+"' data.sql \
+#             | sed 's/INSERT INTO //; s/"\([a-z_]*\)"\."\([a-z_]*\)"/\1.\2/' \
+#             | sort -u | paste -sd, -)
+#   psql "$TARGET_DB_URL" -c "begin; set session_replication_role = replica; \
+#                             truncate table $TARGETS cascade; commit;"
+#   # Do NOT truncate all of public and storage instead: storage.migrations and
+#   # storage.buckets_vectors belong to supabase_storage_admin and refuse even
+#   # postgres, and one permission error rolls the whole thing back.
+#   psql "$TARGET_DB_URL" -v ON_ERROR_STOP=1 \
+#                         -c "SET session_replication_role = replica;" \
 #                         -f data.sql \
 #                         -c "SET session_replication_role = DEFAULT;"
 #
@@ -71,11 +84,22 @@ name: backup-database
 # ---------------------------------------------------------------------------
 on:
   schedule:
-    # 02:17 UTC daily. Off the hour on purpose: every cron on the hour
-    # contends with every other cron on the hour, and a backup that gets
+    # 02:17 UTC, six days a week. Off the hour on purpose: every cron on the
+    # hour contends with every other cron on the hour, and a backup that gets
     # queued behind the internet is a backup that sometimes does not run.
-    - cron: "17 2 * * *"
+    - cron: "17 2 * * 1-6"
+    # Sunday is the same backup PLUS the restore drill below. Weekly rather
+    # than nightly at the owner's choice: Actions minutes are metered since
+    # the repository went private, and a rehearsal that runs every seven days
+    # still catches a backup that has stopped being restorable long before
+    # anyone needs it.
+    - cron: "17 2 * * 0"
   workflow_dispatch:
+    inputs:
+      drill:
+        description: "Also rehearse the restore"
+        type: boolean
+        default: true
 permissions:
   contents: read
 concurrency:
@@ -141,12 +165,36 @@ jobs:
             fi
           done
           # The schema must contain the tables this app cannot work without.
+          #
+          # THE PATTERN IS A REGEX BECAUSE THE LITERAL WAS WRONG. The first
+          # real run failed here on a perfectly good 900 KB dump: the check
+          # looked for `CREATE TABLE public.profiles`, and supabase db dump
+          # runs pg_dump with --quote-all-identifier, so the actual text is
+          # `CREATE TABLE IF NOT EXISTS "public"."profiles"`. A check that
+          # fails a valid backup is worse than no check - it teaches whoever
+          # sees it that the job is flaky, and the next real failure gets
+          # waved through.
+          #
+          # Optional quotes and optional IF NOT EXISTS, so a change in either
+          # does not fail a good dump again. Verified against a real dump
+          # before shipping this time, including that it still REJECTS a dump
+          # of some other database.
           for t in profiles invite_redemptions workout_posts private_records; do
-            grep -q "CREATE TABLE public.$t" backup/schema.sql || {
+            grep -Eq "CREATE TABLE( IF NOT EXISTS)? \"?public\"?\.\"?${t}\"?" backup/schema.sql || {
               echo "schema.sql has no public.$t - the dump is not this project."
               exit 1
             }
           done
+
+          # AND THE DATA HALF CARRIES ROWS, not just a valid file. schema.sql
+          # is reproducible from supabase/migrations/; data.sql is the part
+          # that cannot be rebuilt from anything, so "it is over 1 KB" is too
+          # weak a claim to rest a backup on.
+          grep -q 'INSERT INTO "public"."clubs"' backup/data.sql || {
+            echo "data.sql has no rows for public.clubs - a club with no club row is not a backup."
+            exit 1
+          }
+          echo "data.sql INSERT statements: $(grep -c 'INSERT INTO' backup/data.sql)"
 
       - name: encrypt
         run: |
@@ -183,3 +231,144 @@ jobs:
           # window, not an archive.
           retention-days: 90
           if-no-files-found: error
+
+  # ==========================================================================
+  # THE DRILL. A backup nobody has restored is a guess, and this file said so
+  # in a comment for a day before there was anything behind it.
+  #
+  # It deliberately starts from the ARTIFACT, not from the files still sitting
+  # on the backup job's runner: download, decrypt, restore. That is the path a
+  # real recovery takes, and each of those steps is a place it can be broken
+  # without anyone noticing - a passphrase that does not round-trip, an
+  # artifact that uploaded empty, a tar that unpacks to nothing.
+  #
+  # The restore target is `supabase start`, not a bare postgres image. That is
+  # the honest shape of a recovery here: the SCHEMA comes back from
+  # supabase/migrations/ (which is why migration-check exists), and the DATA
+  # comes from the backup. A vanilla postgres container has no auth schema, no
+  # extensions and none of this project's roles, so restoring into one would
+  # test nothing and fail for reasons that have no bearing on the backup.
+  #
+  # And it is the only thing that actually exercises session_replication_role.
+  # profiles.assigned_coach_id and post_comments.parent_comment_id are
+  # self-referencing foreign keys, so a data-only dump can emit a child before
+  # its parent; the restore instructions at the top of this file suspend
+  # enforcement for exactly that reason, and until this job existed nobody had
+  # ever run them.
+  restore-drill:
+    needs: backup
+    if: >-
+      github.event.schedule == '17 2 * * 0' ||
+      (github.event_name == 'workflow_dispatch' && inputs.drill)
+    runs-on: ubuntu-latest
+    env:
+      BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520 # v3.0.0
+        with:
+          version: 2.116.0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: haimunia-db-backup
+
+      - name: decrypt and unpack
+        run: |
+          set -euo pipefail
+          gpg --batch --yes --passphrase "$BACKUP_PASSPHRASE" \
+              -d backup.tar.gz.gpg > restore.tar.gz
+          tar -xzf restore.tar.gz
+          ls -l schema.sql data.sql roles.sql
+          echo "rows to restore: $(grep -c 'INSERT INTO' data.sql)"
+
+      # A real schema, built the way a real recovery would build it.
+      - name: bring up a database with the schema from migrations
+        run: supabase start
+
+      # THE TARGET HAS TO BE EMPTY FIRST, and the runbook did not say so.
+      #
+      # Found by this drill on its first rehearsal, which is the whole argument
+      # for having one. `supabase start` applies every migration, and those
+      # migrations SEED reference data - one clubs row, 20 club_features, 31
+      # achievement_definitions, 6 roles, 14 permissions, 55 grants. The dump
+      # contains those same rows, so loading it straight in dies on a duplicate
+      # key. A real recovery into a freshly migrated project hits exactly the
+      # same wall: this was a flaw in the procedure, not in the drill.
+      #
+      # TRUNCATE EXACTLY WHAT IS ABOUT TO BE RESTORED, derived from the dump
+      # itself rather than from a list someone has to maintain. Two earlier
+      # attempts failed the other way round - "truncate everything in public
+      # and storage" hit storage.migrations and then storage.buckets_vectors,
+      # both owned by supabase_storage_admin and not truncatable even as
+      # postgres, and one permission error rolls the whole transaction back so
+      # NOTHING gets emptied and the restore fails anyway. Enumerating what
+      # cannot be touched is a list that rots; enumerating what the dump
+      # actually writes cannot.
+      - name: empty exactly the tables the dump will restore
+        run: |
+          set -euo pipefail
+          DB="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+          TARGETS=$(grep -oE 'INSERT INTO "[a-z_]+"\."[a-z_]+"' data.sql \
+                    | sed 's/INSERT INTO //; s/"\([a-z_]*\)"\."\([a-z_]*\)"/\1.\2/' \
+                    | sort -u | paste -sd, -)
+          if [ -z "$TARGETS" ]; then
+            echo "data.sql names no tables at all - that is not a backup."
+            exit 1
+          fi
+          echo "emptying: $TARGETS"
+          psql "$DB" -v ON_ERROR_STOP=1 \
+            -c "begin; set session_replication_role = replica; truncate table $TARGETS cascade; commit;"
+
+      - name: restore the data, exactly as the runbook says to
+        run: |
+          set -euo pipefail
+          DB="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+          # session_replication_role = replica suspends FK and trigger
+          # enforcement for the session. Without it a self-referencing row can
+          # arrive before its parent and the whole restore aborts.
+          # -v ON_ERROR_STOP=1 is what makes this a test rather than a log:
+          # psql otherwise continues past a failed statement and exits 0, which
+          # is how a restore "succeeds" while dropping half the rows.
+          psql "$DB" -v ON_ERROR_STOP=1 \
+            -c "SET session_replication_role = replica;" \
+            -f data.sql \
+            -c "SET session_replication_role = DEFAULT;"
+
+      # THE ASSERTION THAT MAKES THIS A DRILL. Restoring without an error is
+      # not the same as restoring the data: an empty data.sql would also load
+      # without an error.
+      - name: prove the rows are actually there
+        run: |
+          set -euo pipefail
+          DB="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+          fail=0
+          for t in clubs profiles invite_redemptions; do
+            n=$(psql "$DB" -tAc "select count(*) from public.$t")
+            echo "  public.$t: $n rows"
+            if [ "$n" -lt 1 ]; then
+              echo "  public.$t came back EMPTY - the backup restored nothing for it."
+              fail=1
+            fi
+          done
+          # The self-referencing constraints must be satisfiable again once
+          # enforcement is back on. This is the half that would silently rot:
+          # session_replication_role lets the data IN regardless, so a restore
+          # can succeed and still leave a profile pointing at a coach that
+          # never arrived. A plain query, not a plpgsql block - dollar quoting
+          # inside a YAML block inside a double-quoted shell string is three
+          # layers of escaping and I got it wrong the first time.
+          orphans=$(psql "$DB" -tAc "
+            select count(*) from public.profiles p
+             where p.assigned_coach_id is not null
+               and not exists (select 1 from public.profiles c where c.id = p.assigned_coach_id)")
+          echo "  profiles pointing at a coach that did not restore: $orphans"
+          [ "$orphans" = "0" ] || fail=1
+
+          orphan_replies=$(psql "$DB" -tAc "
+            select count(*) from public.post_comments pc
+             where pc.parent_comment_id is not null
+               and not exists (select 1 from public.post_comments p where p.id = pc.parent_comment_id)")
+          echo "  replies whose parent comment did not restore: $orphan_replies"
+          [ "$orphan_replies" = "0" ] || fail=1
+
+          exit $fail
