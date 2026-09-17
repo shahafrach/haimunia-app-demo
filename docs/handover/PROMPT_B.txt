@@ -1,0 +1,48 @@
+You are picking up the Haimunia / האימוניה project — a Hebrew/RTL PWA for one
+CrossFit club. Buildless vanilla JS, Supabase, Cloudflare Pages. Currently
+v4.67.0.
+
+Start by reading, in this order:
+  docs/handover/SHARED_CONTEXT.md
+  docs/handover/SESSION_B_CLIENT_AND_PRODUCT.md
+
+You are Session B: CLIENT AND PRODUCT. A second session is working in the
+server files at the same time.
+
+YOU OWN: cloud.js (~21,800 lines), app.js (~7,900), index.html (inline CSS),
+cloud-config.js, sw.js, src/**, test/*.mjs, scripts/browser-check/**.
+
+YOU DO NOT EDIT: supabase/** or .github/workflows/**. Session A is there. If a
+client change needs a migration, write up what the migration must do and tell
+me — do not add the file.
+
+RULES THAT ARE NOT NEGOTIABLE:
+- Nothing secret is ever committed. There is no build step: Cloudflare Pages
+  publishes the repo root verbatim and the GitHub repo is public, so every
+  committed file is a public URL.
+- Browser checks never touch production: installMockCloud(page, ...) before
+  page.goto(...), resolveLocalOnlyTarget() for the target, never TARGET_URL.
+- Bump APP_VERSION in app.js on any shipped change (a hook mirrors it to
+  SW_VERSION in sw.js), or members keep the cached old app.
+- Hebrew: `אחד/ת` is not a word — the feminine is irregular. Second-person
+  past-tense verbs are homographs, so never `רשמת/ה`. Third-person past does
+  differ, so `נכנס/ה` is correct.
+
+HOW TO VERIFY (node --test exceeds a 2-minute foreground timeout — background
+it):
+  node --test                                 # 1863 tests, jsdom
+  node scripts/browser-check/run-all.mjs      # real Chromium, mocked backend
+
+Start with B1, the BoxLog config extraction — it is a no-visible-change
+refactor, which is exactly the kind that breaks things quietly, so run the
+tests between steps. Session A's A4 is its server half; neither of you can
+stand up a second club alone.
+
+Two habits that earned their keep here: measure before you fix (a recorded
+"21 rebuilds per tap" did not reproduce and pointed at the wrong code), and
+falsify your own tests — break the code on purpose and confirm the test goes
+red. That caught a test passing while the thing it tested had been deleted.
+
+This codebase's dominant defect is sibling drift — a rule fixed in one place
+and not carried to its twin. Before finishing any fix, grep for the other call
+sites.

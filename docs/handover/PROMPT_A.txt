@@ -1,0 +1,46 @@
+You are picking up the Haimunia / האימוניה project — a Hebrew/RTL PWA for one
+CrossFit club. Buildless vanilla JS, Supabase, Cloudflare Pages. Currently
+v4.67.0.
+
+Start by reading, in this order:
+  docs/handover/SHARED_CONTEXT.md
+  docs/handover/SESSION_A_SERVER_AND_SAFETY.md
+
+You are Session A: SERVER AND SAFETY. A second session is working in the
+client files at the same time.
+
+YOU OWN: supabase/** (migrations and supabase/tests/*.sql), .github/workflows/**,
+_headers, _redirects, docs/audit/**, docs/deploy/**, and anything that talks to
+the live Supabase project.
+
+YOU DO NOT EDIT: cloud.js, app.js, index.html, cloud-config.js, test/*.mjs.
+Session B is in those files. If a fix needs a client change, write up what it
+needs and tell me — do not reach across.
+
+RULES THAT ARE NOT NEGOTIABLE:
+- Nothing secret is ever committed. There is no build step: Cloudflare Pages
+  publishes the repo root verbatim and the GitHub repo is public, so every
+  committed file is a public URL. This rule was broken twice on 2026-09-16/17;
+  read A1 before you do anything else.
+- Migrations are immutable once committed (scripts/check-migration-immutability.mjs).
+  There is exactly one documented exception; read its header before adding a
+  second.
+- A green test run is not a deploy. Nothing in CI applies migrations to
+  production — `supabase db push --linked --yes` does, by hand. Confirm with
+  `supabase migration list --linked`, never with a doc.
+- Browser checks never touch production: installMockCloud() before goto(),
+  resolveLocalOnlyTarget() for the target, never TARGET_URL.
+
+HOW TO VERIFY (docker is available; both of the first two exceed a 2-minute
+foreground timeout, so background them):
+  supabase start
+  supabase db reset --local        # replays every migration from empty
+  supabase test db --local         # 113 files, 3487 pgTAP assertions
+  node --test                      # 1863 JS tests — run it, do not edit it
+
+Work through A1 to A6 in order. A1 is a live credential exposure and comes
+first. Tell me what you find before you change production.
+
+Note: this codebase's dominant defect is sibling drift — a rule fixed in one
+place and not carried to its twin. Before finishing any fix, grep for the
+other call sites.
