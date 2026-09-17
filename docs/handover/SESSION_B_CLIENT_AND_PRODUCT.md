@@ -191,6 +191,11 @@ with nothing erroring. And the function was written with no `deno.json` and no
 one — `deno cache --frozen` runs over every function before any deploy. Both
 are now tests.
 
+**Live as of 2026-09-17.** `notif_push_send` is deployed (gateway answers 401
+where a control probe for a nonexistent function answers 404), `202609170002`
+is applied, and `npm run check:drift` reports 172 migrations in agreement. The
+`notif-push-send` cron fires every three minutes.
+
 **Still off: `streak_risk_nudges`.** The delivery path is live but has not
 been seen to put a notification on a real phone. Turning the nudges on before
 that is confirmed would mean the first real use of this code is also its first

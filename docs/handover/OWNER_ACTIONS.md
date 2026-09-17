@@ -53,7 +53,25 @@ Generate it rather than inventing one:
 **ניהול מערכת → שינוי סיסמה.** Different from the headcoach one. That account
 now holds `is_admin`, so its password protects everything.
 
-### 5. Confirm a push actually arrives
+### 5. The deploy workflow is almost certainly missing its token
+
+`deploy-edge-functions.yml` was `workflow_dispatch`-only until 2026-09-17, so
+nothing had ever deployed on a merge. That is fixed. But after pushing a change
+to the workflow file itself — a path its own new trigger covers — the function
+was still absent from the gateway six and then ten minutes later, measured
+twice against a control probe.
+
+The workflow fails loudly rather than going green when `SUPABASE_ACCESS_TOKEN`
+is unset, which is exactly what this looks like. **Check the Actions tab for a
+red `deploy-edge-functions` run.** If it is the token: a personal access token
+from https://supabase.com/dashboard/account/tokens, added as a repository
+secret. It is not the service-role key and must never be confused with it —
+that token deploys code, the other reads and writes member data.
+
+Until it is set, every Edge Function deploy is a hand-run command, which is the
+habit that left two functions undeployed for weeks once already.
+
+### 6. Confirm a push actually arrives
 
 **Settings → notifications → pick "התראת דחיפה" on any type.** The browser
 asks permission; allow it. Then get someone to react to one of your posts, or
