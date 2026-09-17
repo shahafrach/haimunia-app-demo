@@ -1,91 +1,106 @@
-# Shared context — read this first, whichever session you are
+# Shared context — read this first
 
-Written 2026-09-17. Two sessions run in parallel from here; this file is the
-part both of them need. Your own half is in `SESSION_A_SERVER_AND_SAFETY.md`
-or `SESSION_B_CLIENT_AND_PRODUCT.md`.
+Written 2026-09-17, end of a long day. Your own half is in
+`SESSION_A_SERVER_AND_SAFETY.md` (closed, kept as a record) or
+`SESSION_B_CLIENT_AND_PRODUCT.md` (in progress).
 
 ## What this is
 
 **Haimunia / האימוניה** — a Hebrew/RTL PWA for one CrossFit club. Buildless
 vanilla JS: `index.html` (inline CSS), `app.js` (~7,900 lines, the training
-log), `cloud.js` (~21,800 lines, the community half). No bundler, no
-framework. Supabase for auth/data, Cloudflare Pages for hosting.
+log), `cloud.js` (~21,800, the community half). No bundler, no framework.
+Supabase for auth and data, Cloudflare Pages for hosting.
 
-Live: https://haimunia-app.pages.dev · Repo: `haimuniya/haimunia-app-demo`
-Supabase project: `jajmlyrjlkhclgphbfbb`
+Live: https://haimunia-app.pages.dev
+Repo: `haimuniya/haimunia-app-demo` — **private** since 2026-09-17
+Supabase: `jajmlyrjlkhclgphbfbb` (free tier)
 
-Current version **4.67.0** (`APP_VERSION` in `app.js`, mirrored to
-`SW_VERSION` in `sw.js` — a git hook syncs them; bump on any shipped change).
+**v4.70.0** · 171 migrations · 1884 JS tests · 114 pgTAP files, 3492 assertions
 
 ## The rules that are not negotiable
 
-1. **Nothing secret is ever committed.** The deploy has no build step —
-   Cloudflare Pages publishes the repo root verbatim, and the GitHub repo is
-   public. Every committed file is a live URL and a public one. This was
-   violated on 2026-09-16 and is item A1 in Session A.
-2. **Browser checks never touch production.** Every script in
-   `scripts/browser-check/` calls `installMockCloud(page, ...)` *before*
-   `page.goto(...)`, and resolves its target with `resolveLocalOnlyTarget()`.
+1. **Nothing secret is ever committed.** There is no build step: Cloudflare
+   Pages publishes the repo root verbatim, so every committed file is a live
+   URL. `functions/_middleware.js` now 404s the internal paths, but that is
+   disclosure control, not a secret store — the git history is what it is.
+   This rule was broken twice on 2026-09-16/17. See A1.
+2. **Browser checks never touch production.** `installMockCloud(page, ...)`
+   before `page.goto(...)`, and `resolveLocalOnlyTarget()` for the target.
    Never `TARGET_URL`.
-3. **Passwords live only in Supabase Auth**, as bcrypt hashes. There is no
-   self-service reset (login emails are synthetic), so the only path is the
-   admin reset Edge Function.
-4. **Migrations are immutable** once committed — `scripts/check-migration-immutability.mjs`
-   enforces it. The one documented exception is `202609150016`; read its
-   header before you consider a second one.
+3. **Migrations are immutable** once committed —
+   `scripts/check-migration-immutability.mjs` enforces it. One documented
+   exception (`202609150016`); read its header before considering a second.
+4. **Bump `APP_VERSION` in app.js** on any shipped change (a hook mirrors it
+   to `SW_VERSION`), or members keep the cached old app.
 5. **Arbox owns class scheduling, bookings, payments and attendance.** This
-   app reads attendance and does everything that happens *after* training. Do
-   not build booking.
+   app reads attendance and does what happens *after* training. Do not build
+   booking.
 6. **The app is opened after training,** not during. No rest timer, no
    bar-side calculator.
 
 ## Hebrew, because it has bitten this codebase repeatedly
 
-- `אחד/ת` is **not a word.** The feminine is irregular (`אחת`), so the slash
-  form is wrong. Write it out, or rephrase.
-- **Second-person past-tense verbs are homographs** in Hebrew — `רשמת` is both
-  genders. Never write `רשמת/ה`.
-- **Third-person past does differ**, so `נכנס/ה` is correct and expected.
+- `אחד/ת` is **not a word** — the feminine is irregular (`אחת`). Write it out.
+- **Second-person past-tense verbs are homographs.** Never `רשמת/ה`.
+- **Third-person past does differ,** so `נכנס/ה` is correct.
 
 ## How to verify anything
 
 ```
-node --test                      # 1863 JS tests, jsdom. ~4 min.
-supabase start                   # docker is on this machine
-supabase db reset --local        # replays every migration from empty, ~3 min
-supabase test db --local         # 113 files, 3487 pgTAP assertions, ~10 s
-node scripts/browser-check/run-all.mjs    # real Chromium, mocked backend
+node --test                   # 1884 JS tests, jsdom, ~4 min
+supabase start                # docker is on this machine
+supabase db reset --local     # replays all 171 migrations from empty, ~3 min
+supabase test db --local      # 114 files, 3492 pgTAP assertions, ~10 s
+node scripts/browser-check/run-all.mjs   # 45 scenarios, real Chromium
 ```
 
-`supabase db reset` and `node --test` both exceed a 2-minute foreground
-timeout — background them.
+`node --test` and `db reset` exceed a 2-minute foreground timeout — background
+them. `run-all.mjs` kills any scenario over 8 minutes and reports HUNG
+separately from FAIL.
 
-**A green `node --test` is not a deploy.** Nothing in CI applies migrations to
-production; `supabase db push --linked --yes` does, by hand. Always confirm
-with `supabase migration list --linked` rather than believing a doc.
+**A green suite is not a deploy.** Nothing in CI applies migrations to
+production; `supabase db push --linked --yes` does, by hand. Confirm with
+`supabase migration list --linked`, never with a doc.
 
 ## The defect pattern this codebase actually has
 
 **Sibling drift** — a rule fixed in one place and not carried to its twin.
-Roughly half of every finding across ten hunt rounds, and it produced three
-separate bugs on 2026-09-16 alone, two of them written the same day by the
-session that had just fixed the first one. Before you finish any fix, grep for
-the other call sites. If a rule has N places and you changed one, you have not
+Roughly half of every finding across ten hunt rounds, and it produced five
+separate bugs on 2026-09-16/17 alone, three of them written by the session
+that had just fixed the first one. Before finishing any fix, grep for the
+other call sites. If a rule has N places and you changed one, you have not
 finished.
+
+## The second pattern, learned the hard way on 2026-09-17
+
+**Six things shipped that day reported success while doing nothing.** All six
+passed review. All six were caught by running them for real:
+
+| | looked like | did |
+|---|---|---|
+| `_redirects` | blocking internal paths | nothing — Pages serves an existing file first |
+| `grep "CREATE TABLE public.profiles"` | verifying the dump | failed a perfect backup; pg_dump writes `CREATE TABLE IF NOT EXISTS "public"."profiles"` |
+| `tar \| grep -q` under `pipefail` | proving decryption | SIGPIPE — passes on a small archive, dies on a real one |
+| `inputs.drill` | gating the restore drill | skipped it; run still green |
+| `closeNavMenu()` in open-support | preventing stacked overlays | nothing — `openSupport()` already did it |
+| `ALTER DEFAULT PRIVILEGES … FROM public` | closing the anon EXECUTE gap | narrowed it; PUBLIC still grants EXECUTE |
+
+**Falsify your own tests.** Break the code on purpose and confirm the test
+goes red. That caught a day-index test passing while `wodEntries` was dropped
+entirely, a timing assertion that was a genuine coin flip, and a "fix" for a
+bug that did not exist.
+
+**Measure before fixing.** A recorded "21 rebuilds, 289 ms per tap" did not
+reproduce, and pointed at the wrong code.
 
 ## Declined by the owner — do not re-propose
 
 Streak consolidation · streak nudge redesign · opt-in board ranking ·
 finishing `lang="en"` · removing the welcome-modal name field.
 
-## Still the owner's to do, not yours
+## Permanently open, by plan
 
-- Rotate the `headcoach` password — it is still the weak one it was created
-  with, and the session that set it up knows it. ניהול המועדון → חברים →
-  איפוס סיסמה
-- Change the temporary admin password
-- Set his own `display_name` to `שחף רחמני`. The handle can never contain a
-  space (`profiles_handle_check` is `^[a-zא-ת0-9_]{3,24}$`), so the underscore
-  is not removable and is not the problem — `nameHtml()` falls back to
-  `@handle` only when `display_name` is empty.
-- Send the owner `docs/owner-guide/` (on disk, deliberately not in git)
+**Leaked-password protection** will show as a WARN in Supabase's security
+advisor forever: it is Pro-plan only, confirmed by trying it. Not fixable on
+the free tier and not worth looking at again. Generated passwords achieve the
+same thing.

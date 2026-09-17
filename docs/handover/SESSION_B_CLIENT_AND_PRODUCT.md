@@ -1,13 +1,22 @@
 # Session B — Client and product
 
-Read `SHARED_CONTEXT.md` first.
+Read `SHARED_CONTEXT.md` first, and `OWNER_ACTIONS.md` for what is waiting on
+a human.
 
 **You own:** `cloud.js`, `app.js`, `index.html`, `cloud-config.js`, `sw.js`,
-`src/**`, `test/*.mjs`, `scripts/browser-check/**`.
+`src/**`, `test/*.mjs`, `scripts/browser-check/**`, `scripts/owner-guide/**`.
 
-**You do not touch** `supabase/**` or `.github/workflows/**` — Session A is
-there. If a client change needs a migration, write the migration's *intent*
-into a note and hand it over; do not add the file.
+**You do not edit** `supabase/**` or `.github/workflows/**`. If a client
+change needs a migration, write up what it must do and hand it over.
+
+## State on 2026-09-17
+
+v4.70.0 · 1884 JS tests green · 45 browser scenarios green.
+
+Session A is closed; its file is a record of what each item turned out to be,
+and most were not what they looked like. Worth skimming once for the two
+patterns in SHARED_CONTEXT — sibling drift, and checks that pass while doing
+nothing. Both bit repeatedly.
 
 ---
 
@@ -87,6 +96,24 @@ stand up a second club alone.
 
 </details>
 
+## B1a — DONE 2026-09-17: support reachable from the hamburger
+
+Owner's call: "should be in the hamburger, so people will have easy access to
+report." It was one row inside Settings under עזרה — three taps and a scroll,
+and the moment a member most needs to report a fault is the moment they are
+least inclined to go hunting.
+
+Now in `renderNavSettingsRow()`, which the hamburger AND the desktop sidebar
+share, so a desktop user with no hamburger gets it too. Still in Settings as
+well: "something is broken right now" and "where do I get help" are different
+questions. New `ICONS.helpIcon` rather than reusing the gear, which would have
+put two identical glyphs on adjacent rows.
+
+`test/support-in-nav-menu.test.mjs`. Note the comment on test 2 — I added a
+`closeNavMenu()` "fix" with a confident explanation, reverted it to check the
+test caught it, and watched all five pass, because `openSupport()` already
+closes the menu on its first line. The assertion stayed; the dead code did not.
+
 ## B2 — The staff toolbar wraps 3 + 1
 
 On a 390px phone the challenge dialog's staff row is `עריכה │ הצמדה למעלה │
@@ -156,7 +183,7 @@ costs nothing to run.
   `test/scan-indexes.test.mjs` asserts the indexed and unindexed paths return
   *identical* answers, which is the property that matters.
 
-## Two habits worth keeping
+## Two habits worth keeping, both of which earned it again on 2026-09-17
 
 **Measure before you fix.** The rerender note said "21 rebuilds, ~289 ms per
 tap". It did not reproduce. The real shape was different and more fixable, and

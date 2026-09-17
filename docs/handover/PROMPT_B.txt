@@ -1,10 +1,12 @@
 You are picking up the Haimunia / האימוניה project — a Hebrew/RTL PWA for one
 CrossFit club. Buildless vanilla JS, Supabase, Cloudflare Pages. Currently
-v4.67.0.
+v4.70.0.
 
 Start by reading, in this order:
   docs/handover/SHARED_CONTEXT.md
   docs/handover/SESSION_B_CLIENT_AND_PRODUCT.md
+  docs/handover/OWNER_ACTIONS.md   (what is blocked on a human, so you do not
+                                    chase it or duplicate it)
 
 You are Session B: CLIENT AND PRODUCT. A second session is working in the
 server files at the same time.
@@ -30,7 +32,7 @@ RULES THAT ARE NOT NEGOTIABLE:
 
 HOW TO VERIFY (node --test exceeds a 2-minute foreground timeout — background
 it):
-  node --test                                 # 1863 tests, jsdom
+  node --test                                 # 1884 tests, jsdom
   node scripts/browser-check/run-all.mjs      # real Chromium, mocked backend
 
 Start with B1, the BoxLog config extraction — it is a no-visible-change

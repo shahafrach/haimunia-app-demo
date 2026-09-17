@@ -1,0 +1,86 @@
+# What only the owner can do
+
+Everything here needs a dashboard login or a phone in hand. None of it can be
+done from this repo. Ordered by whether it matters.
+
+## Worth doing
+
+### 1. Captcha on anonymous sign-ins
+
+**Authentication → Attack Protection**, and a free key pair from
+https://dash.cloudflare.com → Turnstile.
+
+- The **secret** goes into Supabase.
+- The **site key** goes into `cloud-config.js` → `captchaSiteKey` (currently
+  `""`). That file is public by design, same as the publishable key already
+  in it.
+
+**The app is already fully wired for this.** `cloud.js:7786` wraps the
+anonymous sign-in in `withCaptcha(...)` and passes a token whenever it has
+one; it never has one, because the key is empty. The work was done and left
+one field short.
+
+Why it matters: anonymous sign-in is how signup *starts*, so anyone can
+trigger it repeatedly. On the free tier that means MAU inflation, junk
+`auth.users` rows, and eventually a bill. Supabase's own dashboard warns
+about exactly this on the Sign In / Providers page.
+
+Do **not** disable anonymous sign-ins instead — signup depends on them.
+
+### 2. Auto-RLS on new tables
+
+**Database → Policies** → the **"Set up trigger"** button at the top, under
+*"Automatically enable Row Level Security on new tables"*. Ten seconds.
+
+Every existing table has RLS on, because every migration enables it by hand.
+A table created any other way — the Studio table editor, or a migration that
+forgets the line — lands with RLS **off**, and no policy applies. This makes
+it automatic instead of a habit.
+
+### 3. Rotate the headcoach password
+
+**ניהול המועדון → חברים → איפוס סיסמה**
+
+It is still the weak one it was created with, it was in public git history
+until the repo went private, and the session that set it up knows it.
+
+Generate it rather than inventing one:
+
+    openssl rand -base64 18
+
+### 4. Your own admin password
+
+**ניהול מערכת → שינוי סיסמה.** Different from the headcoach one. That account
+now holds `is_admin`, so its password protects everything.
+
+## Decide, do not just tick
+
+### The scheduled-job-alert secrets
+
+`.github/workflows/scheduled-job-alert.yml` has failed every day since
+2026-09-15, **by design** — it needs three secrets and fails closed rather
+than silently. Nothing is watching the cron jobs until they are set.
+
+One of them is `SUPABASE_SERVICE_ROLE_KEY`, which **bypasses every RLS policy
+on member data**. Putting it in GitHub Actions is defensible and the workflow
+argues it through in its own header, but it is a real decision about blast
+radius, not a checklist item. Read that header before deciding.
+
+### Required status checks
+
+Every push this week printed *"Bypassed rule violations… 4 of 4 required
+status checks are expected"*. CI was cancelled-not-failing, and is green now.
+The bypass should stop — a required check that is always overridden is a check
+nobody runs.
+
+## Not fixable
+
+**Leaked-password protection** is Pro-plan only. It will show as a WARN in the
+security advisor forever. Generated passwords do the same job.
+
+## Done, for the record
+
+Join code revoked (used once, by you, testing) · repo private · GitHub Pages
+torn down · `is_admin` + `head_coach` on your member account · backups running
+nightly, encrypted, and **proven restorable** by a weekly drill · both broken
+CI jobs fixed · 19 anon EXECUTE grants closed.

@@ -1,3 +1,17 @@
+SESSION A IS CLOSED (2026-09-17). This prompt is kept for reference only.
+
+Everything it pointed at was done: the published join code revoked, the repo
+made private, GitHub Pages torn down, the audit log closed to the staff it
+audits, fresh-database parity with production confirmed, backups running and
+proven restorable, and both broken CI jobs fixed.
+
+If you have server work to do, do not paste this. Read
+docs/handover/SHARED_CONTEXT.md and docs/handover/SESSION_A_SERVER_AND_SAFETY.md
+for what was found and what is still open, then write a prompt for the actual
+task.
+
+--- original, for reference ---
+
 You are picking up the Haimunia / האימוניה project — a Hebrew/RTL PWA for one
 CrossFit club. Buildless vanilla JS, Supabase, Cloudflare Pages. Currently
 v4.67.0.
