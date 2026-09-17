@@ -72,6 +72,50 @@ export async function installMockCloud(page, seedTables = {}, opts = {}) {
     route.fulfill({ status: 200, contentType: "application/javascript", body: "// stubbed for browser-check community scenarios — see lib/mockCloud.mjs\n" })
   );
 
+  // THE CAPTCHA PROVIDER, stubbed the same way and for the same two reasons:
+  // a scenario must not reach a third party, and it must not depend on this
+  // machine having network at all.
+  //
+  // This became load-bearing the moment captchaSiteKey stopped being ""
+  // (2026-09-17). Before that, captchaEnabled() was false and every auth call
+  // short-circuited straight through. With a real key, withCaptcha() waits for
+  // a token from challenges.cloudflare.com, and - correctly, by design - it
+  // REFUSES rather than failing open when the script cannot load. Two
+  // scenarios went from passing to a 20s timeout on the signup screen, which
+  // was the app behaving exactly as specified and the harness lying about the
+  // world.
+  //
+  // Stubbing the SCRIPT rather than patching captchaEnabled() keeps the real
+  // path under test: loadCaptchaScript resolves, getCaptchaToken renders,
+  // the callback fires, and the token travels into the auth call the way it
+  // does in production. Only Cloudflare is replaced.
+  const captchaStub = `
+    window.turnstile = {
+      render: function (el, opts) {
+        // Synchronous callback: the real widget is invisible and resolves on
+        // its own, so no scenario should have to wait or click for it.
+        if (opts && typeof opts.callback === "function") opts.callback("browser-check-captcha-token");
+        return "browser-check-widget-id";
+      },
+      execute: function () {},
+      reset: function () {},
+      remove: function () {},
+    };
+    window.hcaptcha = window.turnstile;
+  `;
+  // ORDER IS LOAD-BEARING AND IS THE OPPOSITE OF READING ORDER. Playwright
+  // matches routes LAST-REGISTERED-FIRST, so the broad abort has to be
+  // registered BEFORE the specific stub, or it wins and aborts the very
+  // request the stub exists to answer. Registered the other way round - which
+  // is how it reads naturally - the scenarios still time out and the stub
+  // above looks broken.
+  await page.route(/challenges\.cloudflare\.com|hcaptcha\.com/, (route) => route.abort());
+  for (const pattern of ["**/turnstile/v0/api.js*", "**/hcaptcha.com/1/api.js*"]) {
+    await page.route(pattern, (route) =>
+      route.fulfill({ status: 200, contentType: "application/javascript", body: captchaStub })
+    );
+  }
+
   const userLine = opts.user ? `window.__mock.setUser(${JSON.stringify(opts.user)});` : "";
   // Redesign, Phase 3: same default test/helpers/boot.mjs's bootCommunity()
   // sets, for the identical reason - cloud.js's hasSeenIntroCarousel() is
