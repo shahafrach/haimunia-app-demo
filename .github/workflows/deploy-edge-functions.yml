@@ -150,12 +150,34 @@ jobs:
       - name: verify every repo function is now live on the project
         run: |
           set -euo pipefail
-          supabase functions list --project-ref "$PROJECT_REF" > /tmp/live.json
+          # --output json IS LOAD-BEARING. Without it the CLI prints a human
+          # ASCII table here, and the grep below - written against JSON -
+          # matches nothing, so every function reports MISSING whether it
+          # deployed or not. That is exactly what happened on the first run
+          # with a working token (2026-09-17): five MISSING lines for five
+          # functions that were live.
+          #
+          # The trap is that the author of that grep never saw the table. The
+          # CLI detects when it is being driven by an agent and switches to
+          # JSON on its own, so the format depends on WHO RUNS IT - and a
+          # local check against real output can agree with the code while CI
+          # gets something else entirely.
+          supabase functions list --project-ref "$PROJECT_REF" --output json > /tmp/live.json
+          # A check that cannot read its input must say so, not report MISSING
+          # as though it had looked. Runs BEFORE the loop so the misleading
+          # per-function output never appears at all.
+          head -c 1 /tmp/live.json | grep -q '[[{]' || {
+            echo "functions list did not return JSON - this step cannot verify anything."
+            echo "It returned:"; head -n 5 /tmp/live.json
+            exit 1
+          }
           missing=0
           for fn in supabase/functions/*/; do
             [ -f "$fn/index.ts" ] || continue
             name="$(basename "$fn")"
-            if grep -q "\"slug\":\"$name\"" /tmp/live.json; then
+            # Whitespace-tolerant: --output json pretty-prints as
+            # `"slug": "name"`, the agent form emits `"slug":"name"`.
+            if grep -Eq "\"slug\"[[:space:]]*:[[:space:]]*\"$name\"" /tmp/live.json; then
               echo "  OK       $name"
             else
               echo "  MISSING  $name"

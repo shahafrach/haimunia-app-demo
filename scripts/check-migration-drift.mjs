@@ -17,15 +17,54 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
+// THE OUTPUT FORMAT DEPENDS ON WHO RUNS THIS, which is the trap this file
+// walked into on the day it was written. The Supabase CLI detects when it is
+// being driven by an agent and emits JSON; a person running it in a terminal
+// gets a human ASCII table instead. `--output json` does NOT override that for
+// `migration list` - it is accepted and ignored (verified 2026-09-17, CLI
+// v2.116.0), unlike `functions list` where it works.
+//
+// So the first version of this parser read JSON, was checked against real
+// output, passed - and would have thrown for every human who ran it. It failed
+// loudly rather than reporting "no drift", which is the only reason that was a
+// bug and not a disaster. Both shapes are handled now, and both are tested.
+//
 // Exported for the tests: the parsing is the part with edge cases, and it
 // should be checkable without a network or a linked project.
 export function parseMigrationList(stdout) {
-  // The CLI prints progress lines ("Initialising login role...") and an
-  // update notice around the payload, so pick the line that IS the payload
-  // rather than assuming it arrives alone.
-  const line = String(stdout).split("\n").find((l) => l.trim().startsWith('{"migrations"'));
-  if (!line) throw new Error("no migration list in the CLI output - did it fail to connect?");
-  const rows = JSON.parse(line).migrations || [];
+  const text = String(stdout);
+
+  // 1. The agent-mode JSON payload, surrounded by progress lines and a
+  //    version notice - so pick the line that IS the payload.
+  const jsonLine = text.split("\n").find((l) => l.trim().startsWith('{"migrations"'));
+  if (jsonLine) return summarise(JSON.parse(jsonLine).migrations || []);
+
+  // 2. The human table:
+  //      Local          | Remote         | Time (UTC)
+  //     ----------------|----------------|----------------
+  //      `202609170003` | `202609170003` | `202609170003`
+  //    An unapplied migration has an empty middle cell. Backticks are the
+  //    CLI's own formatting and are stripped rather than matched on, so a
+  //    version that stops being quoted still parses.
+  const rows = [];
+  for (const line of text.split("\n")) {
+    const cells = line.split("|");
+    if (cells.length < 3) continue;
+    const clean = (c) => c.replace(/`/g, "").trim();
+    const local = clean(cells[0]);
+    const remote = clean(cells[1]);
+    // Header row, separator row, and any prose all fail this: a version is
+    // digits and nothing else, and at least one side must carry one.
+    const isVersion = (v) => /^\d{8,20}$/.test(v);
+    if (!isVersion(local) && !isVersion(remote)) continue;
+    rows.push({ local: isVersion(local) ? local : "", remote: isVersion(remote) ? remote : "" });
+  }
+  if (rows.length) return summarise(rows);
+
+  throw new Error("no migration list in the CLI output - did it fail to connect?");
+}
+
+function summarise(rows) {
   return {
     total: rows.length,
     unapplied: rows.filter((r) => r.local && !r.remote).map((r) => r.local),
