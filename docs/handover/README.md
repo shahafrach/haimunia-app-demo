@@ -16,7 +16,7 @@ Where things stand on 2026-09-17:
   with `supabase migration list --linked` on 2026-09-17, not from this file.
   The 171st sat committed-but-unapplied for a day: the repo and the
   database are separate facts, and only the CLI knows the second one.
-- **1884 JS tests**, **3492 pgTAP assertions**, **45 browser scenarios** — all green
+- **1887 JS tests**, **3492 pgTAP assertions**, **45 browser scenarios** — all green
 - Backups run nightly, encrypted, and are **proven restorable** by a weekly drill
 - The repo is private; one public surface, with internal paths blocked
 - CI is green end to end after being dead for a day

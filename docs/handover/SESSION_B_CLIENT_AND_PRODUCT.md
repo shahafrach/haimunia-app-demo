@@ -11,7 +11,10 @@ change needs a migration, write up what it must do and hand it over.
 
 ## State on 2026-09-17
 
-v4.70.0 · 1884 JS tests green · 45 browser scenarios green.
+v4.70.0 · 1887 JS tests green · 45 browser scenarios green.
+
+**Left on this board: B2 (cosmetic) and B3 (needs the owner's word).** B1 is
+parked and B4 is done.
 
 Session A is closed; its file is a record of what each item turned out to be,
 and most were not what they looked like. Worth skimming once for the two
@@ -21,6 +24,12 @@ nothing. Both bit repeatedly.
 ---
 
 ## B1 — BoxLog: make a second club an hour, not an afternoon
+
+**PARKED 2026-09-17, owner's call: "for now it's only 1 club."** The half
+that was load-bearing is done and tested — the product name is configurable,
+and the two traps below are pinned so a future session cannot "finish the
+job" and lock every member out. The rest (palette, assets, setup doc) buys
+nothing until a second box is real. Do not pick it up unasked.
 
 **FIRST PASS DONE 2026-09-17.** The product name is configurable; read this
 before continuing, because the brief below describes the job wrongly.
@@ -139,7 +148,7 @@ Deferred at the owner's explicit choice. **Confirm he still wants it before
 building it** — it is the largest single piece of work left, and it is a
 notification feature for a club of a few dozen people.
 
-## B4 — Make the drift class visible instead of re-fixing it
+## B4 — DONE 2026-09-17: the drift class is now a test, not a habit
 
 Two bugs on 2026-09-16 were the same bug: a row appears on two surfaces and a
 mutation refreshed one of them.
@@ -155,11 +164,31 @@ mutation refreshed one of them.
   screen with half the viewport empty below it. Reported as *"the challenge
   window is too high"*. All six moved together.
 
-Worth one structural test rather than a third fix: assert that every mutation
-which changes a roster row refreshes both surfaces, and that no two dialog
-overlays carry the same inline positioning string. A grep-level test in the
-style of the existing `hunt-round10-drift-and-personas.test.mjs` is enough and
-costs nothing to run.
+`test/sibling-drift-guard.test.mjs`, three assertions, ~1 ms.
+
+It **derives** what to check from the source instead of listing it here, because
+a list in a test file needs exactly the maintenance the bug class is made of.
+The roster half reads the controls off `memberManagementRowHtml` /
+`memberRoleButtonsHtml`, maps each to its handler through the confirm dispatch,
+and requires `refreshMemberSurfaces()` in every one — so a *fifth* control added
+tomorrow is checked the day it is added, without anybody editing this test.
+
+One exemption, named with its reason in the file: `admin-reset-password` rotates
+a secret and changes nothing the row renders.
+
+The overlay half was not the assertion the brief asked for. "No two overlays
+share an inline positioning string" would have been wrong — `.modal-overlay` is
+`align-items:flex-end` (a bottom sheet) by default, so every centred card dialog
+*must* override it inline, and sixteen of them legitimately carry the identical
+string. The real invariant is the value: `center`, `stretch` or `flex-end`, never
+`flex-start`. The test also asserts it parsed at least 20 overlay styles and
+found at least 15 centred, because a guard whose regex stops matching passes
+silently — the failure mode in SHARED_CONTEXT's table, six times over.
+
+Falsified before committing, all three red on purpose: removed
+`refreshMemberSurfaces()` from `adminGrantCoach`, put one dialog back to
+`flex-start`, dropped the `loadRoster` line. Each failed with the message that
+names the fix.
 
 ## What shipped on 2026-09-16, so you do not re-do it
 
