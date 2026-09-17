@@ -15,7 +15,7 @@ Live: https://haimunia-app.pages.dev
 Repo: `haimuniya/haimunia-app-demo` — **private** since 2026-09-17
 Supabase: `jajmlyrjlkhclgphbfbb` (free tier)
 
-**v4.71.0** · 171 migrations · 1890 JS tests · 114 pgTAP files, 3492 assertions
+**v4.71.0** · 171 migrations · 1895 JS tests · 114 pgTAP files, 3492 assertions
 
 ## The rules that are not negotiable
 
@@ -47,7 +47,7 @@ Supabase: `jajmlyrjlkhclgphbfbb` (free tier)
 ## How to verify anything
 
 ```
-node --test                   # 1890 JS tests, jsdom, ~4 min
+node --test                   # 1895 JS tests, jsdom, ~4 min
 supabase start                # docker is on this machine
 supabase db reset --local     # replays all 171 migrations from empty, ~3 min
 supabase test db --local      # 114 files, 3492 pgTAP assertions, ~10 s
@@ -60,7 +60,10 @@ separately from FAIL.
 
 **A green suite is not a deploy.** Nothing in CI applies migrations to
 production; `supabase db push --linked --yes` does, by hand. Confirm with
-`supabase migration list --linked`, never with a doc.
+`npm run check:drift`, never with a doc — it runs that same CLI call, names any
+migration that is committed-but-unapplied, and exits 2 rather than 0 if it
+could not check at all. On 2026-09-17 a security migration had been sitting
+committed, tested and unapplied for a day, and was found on a hunch.
 
 ## The defect pattern this codebase actually has
 

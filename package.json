@@ -13,7 +13,8 @@
     "smoke-test-anon-key": "node scripts/smoke-test-anon-key.mjs",
     "setup-hooks": "node scripts/setup-hooks.mjs",
     "test": "node --test",
-    "check-deploy-readiness": "node scripts/check-deploy-readiness.mjs"
+    "check-deploy-readiness": "node scripts/check-deploy-readiness.mjs",
+    "check:drift": "node scripts/check-migration-drift.mjs"
   },
   "devDependencies": {
     "fake-indexeddb": "^6.0.0",

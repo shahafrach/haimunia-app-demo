@@ -11,7 +11,7 @@ change needs a migration, write up what it must do and hand it over.
 
 ## State on 2026-09-17
 
-v4.71.0 · 1890 JS tests green · 45 browser scenarios green.
+v4.71.0 · 1895 JS tests green · 45 browser scenarios green.
 
 **Left on this board: B3 only, and it needs the owner's word.** B1 is parked,
 B2 and B4 are done.

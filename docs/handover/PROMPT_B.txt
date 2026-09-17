@@ -36,7 +36,7 @@ RULES THAT ARE NOT NEGOTIABLE:
 
 HOW TO VERIFY (node --test exceeds a 2-minute foreground timeout — background
 it):
-  node --test                                 # 1890 tests, jsdom
+  node --test                                 # 1895 tests, jsdom
   node scripts/browser-check/run-all.mjs      # real Chromium, mocked backend
 
 B1 (BoxLog config) is PARKED; B2 and B4 are DONE. The only item left is B3,
