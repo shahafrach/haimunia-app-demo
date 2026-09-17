@@ -1,17 +1,102 @@
 # Session A — Server and safety
 
+**CLOSED 2026-09-17.** Everything below was done, and the record of what each
+item turned out to be is kept because most of them were not what they looked
+like. What is left is listed at the bottom under "Still open".
+
 Read `SHARED_CONTEXT.md` first.
 
-**You own:** `supabase/**` (migrations, `supabase/tests/*.sql`),
-`.github/workflows/**`, `_headers`, `_redirects`, `docs/audit/**`,
-`docs/deploy/**`, and anything that talks to the live project.
+## What A actually found
 
-**You do not touch** `cloud.js`, `app.js`, `index.html` or `test/*.mjs` —
-Session B is in those files and a merge conflict in a 21,000-line file is a
-bad afternoon. If a fix genuinely needs a client change, write it up and hand
-it over rather than reaching across.
+**A1 — a working join code was published.** `docs/owner-guide/join-qr.png`,
+committed 2026-09-16, live at a public URL within the hour because this deploy
+publishes the repo root verbatim. Revoked (`active = false`, `revoked_at` set -
+redemption needs both). One use, by the owner, five minutes after creating it,
+testing his own QR. **No stranger got in.** The folder is out of git and
+gitignored, and `functions/_middleware.js` 404s the path.
+
+`_redirects` was the first attempt and **could never have worked**: Cloudflare
+Pages resolves a static asset before consulting it, so a rule cannot shadow a
+file that exists - which was every path being blocked. Deleted rather than left
+as decoration. Middleware runs before asset resolution and can.
+
+**A2 — CI was not failing, it was being cancelled**, by each subsequent push.
+That alone explained "4 of 4 required status checks are expected". Underneath
+it, two jobs were genuinely broken and neither was what it first looked like:
+
+- `browser-checks` hung for four hours on `make-owner-guide-shots.mjs`, which
+  finished normally without closing its target server. Measured: a script that
+  THROWS exits cleanly; one that finishes normally with the server open hangs
+  forever. `run-all.mjs` had no per-script timeout at all, so one stuck script
+  took the whole job - and a job that never finishes reads to branch protection
+  as "expected", not "failed". Now killed at 8 minutes and reported HUNG
+  separately from FAIL. Both owner-guide build tools moved out of the test glob.
+- `edge-function-lockfiles` had nothing to do with Edge Functions: the lockfiles
+  recorded the **repo root's package.json** dependencies, because Deno walks up
+  and treats the function as part of that workspace. They went stale when the
+  node deps were bumped. Each function has a `deno.json` now - 36 lines deleted,
+  0 added, dependency pins byte-identical.
+
+**A3 — the audit-log fix verified in production.** Policy is
+`admin_actions_read_admin | is_admin()`, one function, gated on `is_admin`.
+
+**A4 — `club_wod` was the only one of its class.** All eight reference tables
+now match production exactly. A fresh database reproduces production, which is
+what standing up a second club requires.
+
+**A5 — backups exist, and have been restored.** Nightly Mon-Sat, Sunday adds a
+restore drill: download the artifact, decrypt, bring up a database from
+migrations, empty exactly the tables the dump writes, restore, assert. First
+green run 2026-09-17.
+
+The drill found three flaws in the restore runbook before it ever ran in CI -
+migrations seed the rows the dump also contains, so the restore died on a
+duplicate key; truncating all of public and storage hit `storage.migrations`
+and then `storage.buckets_vectors`, both owned by `supabase_storage_admin` and
+not truncatable even as postgres, and one permission error rolls the whole
+transaction back. The answer is to truncate exactly what the dump restores,
+read out of the dump itself.
+
+**A6 — the owner's account is `is_admin` + `head_coach`.** The account
+switching is over.
+
+**New, not on the original list: GitHub Pages was still serving the entire
+repo** at `haimuniya.github.io`, unprotected, with the Cloudflare middleware
+doing nothing for it. Gone once the repo went private - though not immediately;
+it took about twenty minutes to tear down.
+
+## The pattern worth carrying into any future work here
+
+Four separate things shipped today reported success while doing nothing:
+`_redirects` that Pages ignores · a `CREATE TABLE public.profiles` grep against
+a dump that writes `CREATE TABLE IF NOT EXISTS "public"."profiles"` ·
+`tar | grep -q` under `pipefail`, which passes on a small archive and SIGPIPEs
+on a real one · and `inputs.drill`, which silently skipped the drill and left
+the run green.
+
+All four passed review. All four were caught by running them for real. Three of
+them were found only because something tried to *use* the thing rather than
+read it.
+
+## Still open
+
+- **Node 20 deprecation warnings** on `actions/upload-artifact` and
+  `actions/download-artifact`. Harmless today - the runner forces Node 24 - and
+  worth pinning to a current release properly, with a real SHA.
+- **`scheduled-job-alert` has failed every day since 2026-09-15**, by design:
+  it needs three secrets and fails closed. One is `SUPABASE_SERVICE_ROLE_KEY`,
+  which bypasses every RLS policy on member data. Nothing is watching the cron
+  jobs until this is decided, and it deserves a decision rather than a
+  checklist tick.
+- **Required status checks are still being bypassed** on every push. Now that
+  CI is green end to end, that should stop.
+- **The `headcoach` password** is still the weak one, and was in public git
+  history until the repo went private.
 
 ---
+
+<details>
+<summary>The original brief, kept for reference</summary>
 
 ## A1 — A join code was published, and is still valid  ⚠️ FIRST
 
@@ -154,3 +239,5 @@ password now protects everything the admin password protects.
 2026-09-16. pgTAP: 113 files, 3487 assertions, green on a full replay.
 `supabase/tests/0112_head_coach_removes_a_member_test.sql` is the newest and
 covers the rank guard in both directions.
+
+</details>

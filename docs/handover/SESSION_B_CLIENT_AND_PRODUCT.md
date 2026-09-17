@@ -13,6 +13,52 @@ into a note and hand it over; do not add the file.
 
 ## B1 — BoxLog: make a second club an hour, not an afternoon
 
+**FIRST PASS DONE 2026-09-17.** The product name is configurable; read this
+before continuing, because the brief below describes the job wrongly.
+
+"Extract the branding" is not what this is. The ~190 `haimunia` references are
+four different things, and only one of them is branding:
+
+| | count | |
+|---|---|---|
+| `האימוניה` product name | 22 | configurable - done |
+| `haimunia-demo:` localStorage prefix | 38 | **new clubs only.** Change it live and every phone silently starts empty, real data still on disk under the old prefix |
+| `members.haimuniya.invalid` | 3 | **new clubs only.** Already in `auth.users`; change it and everyone is locked out, with no self-service reset |
+| `window.haimunia*` | 6 | not branding - the interface between app.js and cloud.js |
+
+**The club's own name is deliberately NOT configurable.** It lives in the
+`clubs` table and is read at runtime. `inviteShareText()` already had this
+right: `הצטרפות ל${club} באפליקציית ${brandName()}` - club from the database,
+product name from config. A config value for it could only contradict the
+database.
+
+Accessors are `brandName()` / `brandWordmark()` / `brandChampionTitle()` in
+`src/shared/safe-helpers.js` - **not** in `cloud-config.js`, and that is not a
+style choice. Defining them there took down 1184 of 1858 tests: `app.js` builds
+`ATHLETE_LEVELS` and `ACHIEVEMENTS` at module evaluation, so an undefined
+helper there is a dead app, not a missing label - and the test harness does not
+load `cloud-config.js` at all. They read config at CALL time, so a missing
+config degrades to the default name instead of white-screening over a wordmark.
+
+`test/brand-config.test.mjs` sets a DIFFERENT name and checks it comes back,
+because a helper returning the hardcoded default is indistinguishable from a
+working one when the default is the current value. It also pins both traps as
+literal, so a future session "finishing the job" fails loudly.
+
+Deliberately still literal: `sw.js` (a service worker cannot reach the page's
+`window`, and `importScripts` would pull the Supabase keys into the worker for
+one fallback string), and `manifest.json`, `index.html`, `terms.html`,
+`privacy.html` - a buildless app cannot template its own manifest.
+
+**Left to do on B1:** the palette (`:root` in `index.html` - the contrast
+comments there are measured, not chosen, and must travel with the values), the
+nine branded assets, and rewriting `PER_CLUB_SETUP.md` so it names the four
+static files rather than sending someone searching.
+
+<details>
+<summary>The original brief</summary>
+
+
 The owner wants to sell this to other boxes under the name **BoxLog**.
 `docs/deploy/PER_CLUB_SETUP.md` is the current checklist and it is honest
 about the cost: club name, colours, logo, copy and icons are scattered across
@@ -38,6 +84,8 @@ steps and on `scripts/browser-check/run-all.mjs` at the end.
 
 Session A's **A4** is the server half of the same goal. Neither of you can
 stand up a second club alone.
+
+</details>
 
 ## B2 — The staff toolbar wraps 3 + 1
 
