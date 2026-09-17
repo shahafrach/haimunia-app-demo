@@ -80,8 +80,9 @@ finishing `lang="en"` · removing the welcome-modal name field.
 
 ## Still the owner's to do, not yours
 
-- Rotate the `headcoach` password (still `Aa123456789!`) —
-  ניהול המועדון → חברים → איפוס סיסמה
+- Rotate the `headcoach` password — it is still the weak one it was created
+  with, and the session that set it up knows it. ניהול המועדון → חברים →
+  איפוס סיסמה
 - Change the temporary admin password
 - Set his own `display_name` to `שחף רחמני`. The handle can never contain a
   space (`profiles_handle_check` is `^[a-zא-ת0-9_]{3,24}$`), so the underscore
