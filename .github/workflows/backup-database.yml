@@ -212,15 +212,27 @@ jobs:
 
       # Round-trips the ciphertext before calling the run a success. An
       # encrypted file nobody has ever decrypted is a guess, not a backup.
+      # LIST ONCE, THEN GREP THE LIST. `tar -tzf ... | grep -q` looks obvious
+      # and fails: grep -q exits the moment it matches, tar is still writing,
+      # and SIGPIPE plus `set -o pipefail` turns that into a failed step. It is
+      # SIZE DEPENDENT, which is the worst part - a three-entry archive of tiny
+      # files survives, and this one, with a 900 KB schema in it, did not.
+      # Reproduced both ways before fixing: exit 0 small, exit 141 large.
       - name: prove it decrypts
         run: |
           set -euo pipefail
           gpg --batch --yes --passphrase "$BACKUP_PASSPHRASE" \
               -d backup.tar.gz.gpg > /tmp/roundtrip.tar.gz
-          tar -tzf /tmp/roundtrip.tar.gz | head
-          tar -tzf /tmp/roundtrip.tar.gz | grep -q './schema.sql'
-          tar -tzf /tmp/roundtrip.tar.gz | grep -q './data.sql'
+          tar -tzf /tmp/roundtrip.tar.gz > /tmp/roundtrip.list
+          cat /tmp/roundtrip.list
+          for want in ./schema.sql ./data.sql ./roles.sql; do
+            grep -qxF "$want" /tmp/roundtrip.list || {
+              echo "the decrypted archive has no $want"
+              exit 1
+            }
+          done
           shred -u /tmp/roundtrip.tar.gz
+          rm -f /tmp/roundtrip.list
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
