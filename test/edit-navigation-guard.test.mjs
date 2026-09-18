@@ -44,7 +44,14 @@ test("picking a different exercise mid-edit does not overwrite the original entr
 
   assert.equal(window.document.querySelector("[data-action='cancel-edit-entry']"), null, "picking a different exercise mid-edit should cancel the edit, not carry it over");
 
-  window.applyFieldValue("step", "weight", 999);
+  // 99, not the 999 this test used to type: since 2026-09-18 a movement's
+  // FIRST set is checked against a per-category ceiling, and 999 kg on a
+  // brand-new Press movement now (correctly) opens the sanity-confirm dialog
+  // instead of saving. This test is about edit navigation, not that guard -
+  // its own coverage is in absurd-weight-first-set.test.mjs - so it types a
+  // number a person could actually lift. It is still distinct from the
+  // original entry's 50, which is all the assertion below needs.
+  window.applyFieldValue("step", "weight", 99);
   window.applyFieldValue("step", "reps", 1);
   window.applyFieldValue("step", "sets", 1);
   await window.saveSet();
@@ -56,7 +63,7 @@ test("picking a different exercise mid-edit does not overwrite the original entr
 
   const otherAfter = window.entriesFor(other.id);
   assert.equal(otherAfter.length, 1, "the new exercise should get its own new entry");
-  assert.equal(otherAfter[0].weight, 999);
+  assert.equal(otherAfter[0].weight, 99);
   assert.notEqual(otherAfter[0].id, originalEntry.id, "the new entry must not reuse the original entry's id");
 });
 
