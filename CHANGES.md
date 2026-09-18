@@ -53,6 +53,78 @@ unified the accent across themes, and to `#8a5d25` after an axe pass caught
 `.chip-btn.selected` at 4.35:1 on `--surface2`. The table now says what ships,
 and says why each moved.
 
+## Push, drift and a captcha that was one field short — 2026-09-17
+
+Twenty-eight commits, written up here on 2026-09-18: the changelog had skipped
+2026-09-16 and 2026-09-17 entirely while the work went in, which is exactly the
+gap this entry closes.
+
+**Web push, the half that was never built.** The docs described a feature that
+did not exist. It exists now, is deployed, and is scheduled — with a real VAPID
+keypair whose private half is an Edge Function secret that never passed through
+a command line or this repository. An admin switch was added so the club can
+turn it off without a deploy.
+
+**"Is production running what the repo says?" became one command.** A security
+migration sat committed and unapplied for a day, and nothing in CI could have
+told anyone: CI applies migrations to a throwaway local stack, never to the
+project. `npm run check:drift` answers the question directly, and the class of
+bug it belongs to became a test rather than a habit. It exits 2 rather than 0
+when it cannot check at all, so "could not ask" never reads as "no drift".
+
+**The captcha was turned on, reversing an earlier decision rather than quietly
+contradicting it.** `captchaSiteKey` had been `""` since the feature was wired,
+which meant `withCaptcha(...)` never had a token to pass — anonymous sign-in,
+the thing signup starts with, was open to anyone who could POST. Turning it on
+broke two browser scenarios, **correctly**: they had been reaching Cloudflare
+for real. They now stub the widget script rather than the app's own captcha
+gate, so the real path stays under test.
+
+**The deploy workflow had never run on a merge.** Not "was broken" — had never
+fired. Fixed, along with the second CI job, neither for the reason first
+suspected.
+
+**Backups became provable.** A weekly restore drill, three findings before it
+ever ran for real, a backup that decrypted fine and was then failed by the
+pipeline's own verification step, and restore instructions that would not have
+restored. The anon `EXECUTE` grant class was closed at the same time — 19
+grants, plus the default-privileges rule that would have re-opened it.
+
+**Support and bug reporting** landed in the menu that was already open, with a
+table no client can read: the report is filed through a definer function, and
+a reporter reads their own back through one whose return type simply has no
+staff-internal columns.
+
+---
+
+## Cloudflare Pages, a head coach who can remove a member, and two bug hunts — 2026-09-16
+
+Seventeen commits, written up on 2026-09-18 alongside the entry above.
+
+**Cloudflare Pages became the real host.** GitHub Pages was torn down. The
+repository root is the site root and there is no build step, so every committed
+file is a URL — which is why `functions/_middleware.js` exists. `_redirects`
+was tried first and **could never have worked**: Pages matches a static asset
+before it consults that file, so a rule can never shadow a file that exists,
+which is precisely the case for every path being blocked. It was deleted rather
+than left in as decoration, because a file that looks like protection and is
+not is worse than no file. The repository also went private, which is a second
+layer and not a replacement for the first.
+
+**The head coach can remove a member, and the audit log closes behind them.**
+The removal is audited, and the audited cannot read the audit.
+
+**Two rounds of live bug hunting**, ending in the sibling-drift class: a false
+record on every member's first WOD, a role change that never showed up on the
+roster it was made from, six dialogs pinned to the top of the screen, typing
+that did not survive a render. The last of these is the pattern worth
+remembering — a right line with three copies, one of them missed.
+
+**Groundwork that is not a feature:** what standing up a second club actually
+takes, the migration path from the old app locked in, the join-code creation
+path covered, and 25 pgTAP assertions recovered that a dead chain had been
+hiding.
+
 ## The admin panel asks again — 2026-09-15 (ninth entry)
 
 **"On ניהול מערכת there is need to be separate log in for admin, because this

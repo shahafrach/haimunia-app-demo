@@ -15,7 +15,26 @@ Live: https://haimunia-app.pages.dev
 Repo: `haimuniya/haimunia-app-demo` — **private** since 2026-09-17
 Supabase: `jajmlyrjlkhclgphbfbb` (free tier)
 
-**v4.73.0** · 171 migrations · 1917 JS tests · 114 pgTAP files, 3515 assertions
+**v4.75.0** · 173 migrations · 1940 JS tests · 115 pgTAP files · 47 browser scenarios
+
+Reconciled 2026-09-18 against `main` at `7f30823`. Schema: 62 tables, all with
+RLS on, 137 policies, 235 functions (182 SECURITY DEFINER). The pgTAP
+ASSERTION total is not restated here because it cannot be measured without
+Docker — count it from `supabase test db` and put the number in
+`docs/PROJECT_STATUS.md` when you have one.
+
+## Read these two first
+
+- **[`/CLAUDE.md`](../../CLAUDE.md)** — the rules every session works under:
+  the stack, the theming rule, migration immutability, the precache list, the
+  secrets and member-data rules, the desktop gate, sibling drift, how parallel
+  branches stay out of each other's way, and what counts as verification.
+- **[`docs/PROJECT_STATUS.md`](../PROJECT_STATUS.md)** — the current state:
+  version, counts, host, what shipped most recently, what is deliberately
+  open.
+
+This file is the third: the hard-won specifics that are not rules and not
+state, but the things that have bitten somebody here already.
 
 ## The rules that are not negotiable
 
@@ -72,11 +91,11 @@ Four things to know before touching it:
 ## How to verify anything
 
 ```
-node --test                   # 1917 JS tests, jsdom, ~4 min
+node --test                   # 1940 JS tests, jsdom, ~10 min
 supabase start                # docker is on this machine
-supabase db reset --local     # replays all 171 migrations from empty, ~3 min
-supabase test db --local      # 116 files, 3515 pgTAP assertions, ~10 s
-node scripts/browser-check/run-all.mjs   # 45 scenarios, real Chromium
+supabase db reset --local     # replays all 173 migrations from empty, ~3 min
+supabase test db --local      # 115 pgTAP files, ~10 s
+node scripts/browser-check/run-all.mjs   # 47 scenarios, real Chromium
 ```
 
 `node --test` and `db reset` exceed a 2-minute foreground timeout — background

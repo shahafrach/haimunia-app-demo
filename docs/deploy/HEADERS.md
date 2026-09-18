@@ -1,5 +1,19 @@
 # Response headers — the clickjacking gap and how to close it
 
+> **SUPERSEDED (2026-09-16): the host is Cloudflare Pages now, and the
+> premise of the decision below is gone.** The 2026-09-06 decision, kept
+> verbatim underneath, turned on not controlling `github.io` and therefore not
+> being able to put Cloudflare in front of it. That is no longer the
+> situation: the site moved to Cloudflare Pages, which reads `_headers`
+> natively, so the file this document calls inert is now live and the gap it
+> describes is closed by the move rather than by any of the options below.
+>
+> **Verify before trusting this line**, since nobody has re-measured the
+> headers since the move: `curl -sI https://haimunia-app.pages.dev | grep -i
+> 'x-frame-options\|content-security-policy'`. Everything from here down is
+> the original decision, left in place as the record of why the app spent ten
+> days without those headers.
+>
 > **DECISION (2026-09-06): staying on GitHub Pages. This is not being done.**
 >
 > The gap below is real and remains open, deliberately. Two reasons:
