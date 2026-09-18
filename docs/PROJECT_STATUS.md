@@ -82,6 +82,24 @@ member removal with an audit trail; two rounds of live bug hunting.
   live picture is this file, `CLAUDE.md` and
   `docs/handover/SHARED_CONTEXT.md`.
 
+## Stale in the repository, flagged not fixed
+
+Small, harmless, and left for a pass that is allowed to touch code — listed
+here so they are not rediscovered as findings:
+
+- **`_headers` carries its own out-of-date comment.** It still explains that
+  "GitHub Pages cannot set response headers", that the app therefore has "NO
+  clickjacking protection in production today", and that the file "is inert on
+  GitHub Pages". All three stopped being true on 2026-09-16. The header block
+  *below* the comment is correct and live — `docs/deploy/HEADERS.md` was
+  marked superseded in PR #10 and this file is its twin, so the drift is
+  between a comment and its own contents.
+- **`README1.md` sits at the repository root** under a name that reads like a
+  duplicate README. It is a design-direction handoff (Direction 06, "Club
+  Balance"), and `index.html` cites it **by name in three token comments**, so
+  it cannot simply be deleted or renamed — moving it under `docs/` means
+  updating those citations in the same change.
+
 ## Declined by the owner — do not re-propose
 
 Streak consolidation · streak nudge redesign · opt-in board ranking ·
