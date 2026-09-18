@@ -532,12 +532,12 @@
 
       // ---- COMM-377. Member roster ------------------------------------
       // items is admin_member_roster()'s accumulated pages, newest-joined
-      // first. cursor is the last row's own redeemed_at - see loadRoster()'s
-      // own comment for why a null-redeemed_at row (no invite_redemptions
-      // row at all) ends pagination there rather than resending a null
-      // cursor, a real gap between what this RPC returns and what its own
-      // sort key needs (documented in docs/community/backlog.md's COMM-377
-      // paragraph).
+      // first. cursor is the last row's own sort_key - the coalesce(
+      // redeemed_at, created_at) the RPC actually orders on, returned as its
+      // own column since 202609180001. Before that column existed a member
+      // with no invite_redemptions row ended pagination there, because the
+      // only date the client could see for them was a null; see loadRoster()
+      // for what still happens against an un-migrated server.
       roster: { items: [], cursor: null, loading: false, loadingMore: false, loaded: false, error: false, end: false, search: "" },
 
       // ---- Five-persona UX audit, defect 3. Incomplete signups ---------
@@ -10996,20 +10996,26 @@
     const page = Array.isArray(data) ? data : [];
     r.items = reset ? page : r.items.concat(page);
     const last = page[page.length - 1];
-    // GAP flagged in docs/community/backlog.md's COMM-377 paragraph:
-    // admin_member_roster sorts and pages on coalesce(invite_redemptions.
-    // redeemed_at, profiles.created_at), but only ever returns redeemed_at -
-    // a profile with no invite_redemptions row (mid-signup, or a pre-invite-
-    // gate legacy account) sorts on a created_at value this client never
-    // sees, so there is no correct next cursor once such a row is the last
-    // one on a page. Resending a null cursor would not skip it - the RPC
-    // reads a null p_cursor as "no bound at all" and restarts from the very
-    // top, looping the same rows forever - so pagination simply stops one
-    // page early there instead. Every row already fetched is real and
-    // correctly ordered; the only cost is not reaching further into a
-    // club's legacy tail in one browsing session.
-    r.end = page.length < ROSTER_PAGE_SIZE || !last || last.redeemed_at == null;
-    r.cursor = last ? last.redeemed_at : r.cursor;
+    // 202609180001 CLOSED THE GAP that was flagged here and in
+    // docs/community/backlog.md's COMM-377 paragraph. admin_member_roster
+    // sorts and pages on coalesce(invite_redemptions.redeemed_at,
+    // profiles.created_at) and used to return only redeemed_at, so a profile
+    // with no invite_redemptions row (mid-signup, or a pre-invite-gate legacy
+    // account) sorted on a created_at this client never saw and pagination
+    // had to stop one page early - resending a null cursor would not advance,
+    // since the RPC reads a null p_cursor as "no bound at all" and restarts
+    // from the very top. The RPC now returns that coalesced value as
+    // sort_key, so the cursor is simply that.
+    //
+    // The redeemed_at fallback is the un-migrated-server case, not a second
+    // rule: a client that ships ahead of its migrations finds sort_key
+    // undefined and behaves exactly as it did before, stopping at a
+    // null-redeemed_at boundary row rather than looping. Nothing shown is
+    // ever wrong in either direction, which is why the two halves can deploy
+    // in either order.
+    const lastSortKey = last ? (last.sort_key != null ? last.sort_key : last.redeemed_at) : null;
+    r.end = page.length < ROSTER_PAGE_SIZE || !last || lastSortKey == null;
+    r.cursor = last ? lastSortKey : r.cursor;
     // 202609160002: the id half of the cursor. Without it the RPC pages on the
     // join date alone and drops every member sharing the last-shown member's
     // timestamp - the normal case for a club that onboarded in one sitting.

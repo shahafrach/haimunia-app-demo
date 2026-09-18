@@ -2636,6 +2636,21 @@ tail in one browsing session. A real fix is a small schema addition (a
 one-line client change once it ships — filed here rather than invented
 around, per this file's own "flag it, don't paper over it" rule.
 
+**Closed, 2026-09-18, by `202609180001_the_roster_returns_what_it_sorts_on`
+— the fix named above, taken as named.** `admin_member_roster` now returns
+`coalesce(invite_redemptions.redeemed_at, profiles.created_at)` as its own
+`sort_key` column, so the cursor pair `(sort_key, id)` the client sends
+back is exactly the tuple the `WHERE` clause compares. `redeemed_at` is
+unchanged and still null for a member who never redeemed an invite — the
+roster row goes on rendering that as an em-dash, because it is the truth
+about that member; `sort_key` is the paging key, not a second opinion
+about when someone joined. `loadRoster()` pages on `sort_key` and falls
+back to `redeemed_at` (i.e. to the stop-early behaviour above) when the
+column is absent, so the client and its migration may ship in either
+order. pgTAP `0115` measures both halves — that the old cursor really did
+restart the list, and that the new one walks a nine-member roster three at
+a time with no repeat and no early stop.
+
 **COMM-378.** `cloud.js`'s five `renderOnboarding*Step()` functions now
 read `title`/`body` from `state.onboarding.stepContent` (loaded once for
 *every* signed-in member, not just staff, at boot alongside
