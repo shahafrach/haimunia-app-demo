@@ -5,29 +5,7 @@ done from this repo. Ordered by whether it matters.
 
 ## Worth doing
 
-### 1. Captcha on anonymous sign-ins
-
-**Authentication → Attack Protection**, and a free key pair from
-https://dash.cloudflare.com → Turnstile.
-
-- The **secret** goes into Supabase.
-- The **site key** goes into `cloud-config.js` → `captchaSiteKey` (currently
-  `""`). That file is public by design, same as the publishable key already
-  in it.
-
-**The app is already fully wired for this.** `cloud.js:7786` wraps the
-anonymous sign-in in `withCaptcha(...)` and passes a token whenever it has
-one; it never has one, because the key is empty. The work was done and left
-one field short.
-
-Why it matters: anonymous sign-in is how signup *starts*, so anyone can
-trigger it repeatedly. On the free tier that means MAU inflation, junk
-`auth.users` rows, and eventually a bill. Supabase's own dashboard warns
-about exactly this on the Sign In / Providers page.
-
-Do **not** disable anonymous sign-ins instead — signup depends on them.
-
-### 2. Auto-RLS on new tables
+### 1. Auto-RLS on new tables
 
 **Database → Policies** → the **"Set up trigger"** button at the top, under
 *"Automatically enable Row Level Security on new tables"*. Ten seconds.
@@ -37,7 +15,7 @@ A table created any other way — the Studio table editor, or a migration that
 forgets the line — lands with RLS **off**, and no policy applies. This makes
 it automatic instead of a habit.
 
-### 3. Rotate the headcoach password
+### 2. Rotate the headcoach password
 
 **ניהול המועדון → חברים → איפוס סיסמה**
 
@@ -48,12 +26,12 @@ Generate it rather than inventing one:
 
     openssl rand -base64 18
 
-### 4. Your own admin password
+### 3. Your own admin password
 
 **ניהול מערכת → שינוי סיסמה.** Different from the headcoach one. That account
 now holds `is_admin`, so its password protects everything.
 
-### 5. The deploy workflow is almost certainly missing its token
+### 4. The deploy workflow is almost certainly missing its token
 
 `deploy-edge-functions.yml` was `workflow_dispatch`-only until 2026-09-17, so
 nothing had ever deployed on a merge. That is fixed. But after pushing a change
@@ -71,7 +49,7 @@ that token deploys code, the other reads and writes member data.
 Until it is set, every Edge Function deploy is a hand-run command, which is the
 habit that left two functions undeployed for weeks once already.
 
-### 6. Confirm a push actually arrives
+### 5. Confirm a push actually arrives
 
 **Settings → notifications → pick "התראת דחיפה" on any type.** The browser
 asks permission; allow it. Then get someone to react to one of your posts, or
@@ -129,6 +107,16 @@ do here — it is recorded so the next person does not spend an afternoon
 rediscovering that the ALTER cannot be run.
 
 ## Done, for the record
+
+**Captcha on anonymous sign-ins — closed 2026-09-17.** This was item 1 here
+for weeks, and the entry said the app was "already fully wired ... one field
+short". The field is filled: `cloud-config.js` carries a real Turnstile site
+key (`0x4AAAAAAE6mfjw79idh0ptH`) and the matching secret is in Supabase, so
+`withCaptcha(...)` now actually has a token to pass. Turning it on broke two
+browser scenarios, correctly — they were reaching Cloudflare for real, and
+they now stub the widget script rather than the app's own captcha gate, which
+keeps the real path under test. Nothing is left for the owner here.
+
 
 Join code revoked (used once, by you, testing) · repo private · GitHub Pages
 torn down · `is_admin` + `head_coach` on your member account · backups running

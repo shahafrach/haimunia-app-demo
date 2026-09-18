@@ -3,7 +3,7 @@
 > **This repository ships a LIVE app to real members.** Despite the `-demo`
 > in the repository name, `cloud-config.js` points at a **production**
 > Supabase project holding real profiles, posts and training logs, and the
-> GitHub Pages site is what members actually install.
+> **Cloudflare Pages** site is what members actually install.
 >
 > **Never test against it.** Bring up a local stack instead —
 > `supabase start && supabase db reset` builds the identical schema from the
@@ -11,6 +11,17 @@
 > `scripts/seed-local-personas.sql` fills it with members, roles and feed
 > volume in one shot. See
 > `docs/audit/REMEDIATION_STATUS.md` for what "production" means here.
+>
+> **The repository root is the website.** There is no build step — Cloudflare
+> Pages serves the repo verbatim, so every committed file is a URL.
+> `functions/_middleware.js` 404s the paths that should not be public
+> (`/docs/`, `/supabase/`, `/test/`, `/scripts/` and top-level `.md`, `.sql`
+> and `.mjs`). **The repository is also private**, which is a second layer
+> and not a replacement for either that middleware or the rule that nothing
+> secret is ever committed — git history is history.
+>
+> New here? Read [`CLAUDE.md`](CLAUDE.md) for the rules and
+> [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md) for the current state.
 
 Live community layer for האימוניה: an installable, offline-first PWA with
 its own IndexedDB store, plus an optional Supabase-backed social layer
@@ -38,16 +49,21 @@ thing it still isn't.
 - Fully usable offline with no backend configured at all — training data
   stays local in IndexedDB and nothing in the Community tab is required
   to log a workout.
-- Deployed on GitHub Pages at the same origin as the production app
-  (`haimuniya.github.io`), on its own path — its IndexedDB name, its
-  localStorage key prefix, and its Cache Storage cache name are all
-  distinct from `haimunia-app`'s own, so the two apps never see or
-  overwrite each other's data despite sharing an origin.
+- Deployed on **Cloudflare Pages** (GitHub Pages was the host until
+  2026-09-16 and has been torn down). Its IndexedDB name, its localStorage
+  key prefix and its Cache Storage cache name are all distinct from
+  `haimunia-app`'s own, so an install of each can coexist on one device
+  without either seeing or overwriting the other's data.
 
 ## What this is not
 
-- Not connected to `haimunia-app`'s real database or member data — it's a
-  separate Supabase project and a separate browser storage namespace.
+- Not connected to `haimunia-app`'s database: this is a separate Supabase
+  project and a separate browser storage namespace. **It is not a sandbox
+  either** — that separate project is production for this club and holds
+  real member data. This bullet used to say "real database or member data",
+  which read as though nothing here were live and flatly contradicted the
+  warning at the top of this file. Bring up a local stack to experiment
+  (`supabase start && supabase db reset`).
 - Not scoped to a coach's specific classes or members — sign-up is gated
   behind a single shared invite code per role (member/coach), and a
   coach gets a fixed set of powers (announcements, the weekly challenge,
@@ -82,7 +98,7 @@ browser-check scripts).
 
 ```
 npm ci                              # install test dependencies
-npm test                            # 177+ unit/integration tests (jsdom)
+npm test                            # 1940 unit/integration tests (jsdom), ~10 min
 npm run sync-version                # keep APP_VERSION (app.js) and SW_VERSION (sw.js) in sync after a version bump
 cd scripts/browser-check && npm ci && npx playwright install chromium
 node run-all.mjs                    # full real-Chromium suite; same jobs CI runs

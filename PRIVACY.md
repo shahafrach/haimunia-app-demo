@@ -261,7 +261,7 @@ the Hebrew governs for members.
 - **Supabase** מספקת את בסיס הנתונים, ההתחברות ואחסון הקבצים (כולל
   תמונות שהעליתם). כל המידע שמתואר במסמך הזה מאוחסן ומעובד שם, באזור
   האחסון `ap-southeast-1` (סינגפור).
-- **GitHub Pages** מגישה את קובצי האפליקציה עצמם (הקוד שרץ בדפדפן שלכם).
+- **Cloudflare Pages** מגישה את קובצי האפליקציה עצמם (הקוד שרץ בדפדפן שלכם).
   היא לא מקבלת את החשבון או יומן האימונים שלכם.
 - **שירות הגנה מפני בוטים** (Cloudflare Turnstile או hCaptcha) יכול
   להיות מופעל על ידי המועדון במסכי פתיחת החשבון. כרגע הוא **אינו
@@ -661,7 +661,7 @@ Two points of accuracy about the toggles:
   (including photos you upload). All data described in this policy is
   stored and processed there, in the `ap-southeast-1` (Singapore) hosting
   region.
-- **GitHub Pages** serves the app's own files (the code that runs in your
+- **Cloudflare Pages** serves the app's own files (the code that runs in your
   browser). It does not receive your account or training-log data.
 - **A bot-protection service** (Cloudflare Turnstile or hCaptcha) can be
   switched on by the club for the account-creation screens. It is

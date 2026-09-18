@@ -9,7 +9,7 @@ backlog and contracts current. You do not write feature code.
 
 ## Repo context
 
-- Community PWA. Zero build step. Vanilla JS served static from GitHub Pages.
+- Community PWA. Zero build step. Vanilla JS served static from Cloudflare Pages.
 - `index.html` plus `app.js` (offline training log) plus `cloud.js` (community
   layer: one IIFE with a `state` object and a `rerender()` call).
 - Backend is Supabase. The browser uses the vendored client directly. Every

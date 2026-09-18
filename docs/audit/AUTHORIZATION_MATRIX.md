@@ -6,10 +6,30 @@ Security/threat-modeling audit stream. Built by reading every file in
 doc or comment. Every row cites `file:line` of the migration that declares the
 policy that is live today.
 
-Nothing here was verified against a running database — this repo has no
-reachable Supabase project from the audit sandbox. Everything is static reading
-of SQL. Where I could not fully determine an outcome I say so in the Notes
-column.
+**Reconciled 2026-09-18 against `main` at `7f30823`, and the sentence that
+used to sit here — "nothing here was verified against a running database" — is
+no longer true.** The counts and the per-table policy text below were read
+from a real Postgres 16 instance built by applying all **173** migrations in
+filename order, then queried through `pg_policies`,
+`information_schema.role_table_grants` and `pg_proc`.
+
+The caveat that replaces the old one, stated precisely: five migrations could
+not apply in that container — `202609050005`, `202609060016`, `202609060018`
+and `202609080003` (all need `pg_cron`) and `202609120008` (needs PG17's
+`MAINTAIN` privilege). **None of the five creates a table or a policy**, so the
+table and policy counts here are complete. What is still *not* verified is
+runtime enforcement for two real users; that is what `supabase/tests/*.sql`
+does under `supabase test db`, which needs Docker and did not run here.
+
+Where an outcome could not be fully determined it says so in the Notes column.
+
+### Live totals
+
+| | |
+|---|---|
+| Tables in `public` | **62**, every one with RLS enabled (none without) |
+| Policies | **137** |
+| Functions in `public` | **235**, of which **182** are SECURITY DEFINER |
 
 ## 0. Roles in play
 
@@ -169,6 +189,23 @@ own rows only, `cond` = permitted subject to the predicate in Notes.
 | `member_contact_log` SELECT/INSERT | – | – | – | Y | Y | Y | `202608290013:313,323` — `is_staff()` |
 | `coach_engagement_flags` all | – | – | – | Y | Y | Y | `202608280011:32-39` — `is_staff()` |
 | `community_health_scores` SELECT | – | – | – | – | Y | Y | `202609010009:287` |
+
+### Club WOD, support and plumbing
+
+Eight tables existed in `public` and appeared nowhere in this matrix until
+2026-09-18. Policy text below is the live text read from `pg_policies`, and
+the grant column is what `authenticated` actually holds.
+
+| Table | anon | ghost | member | coach | admin | service_role | Live policy / grant |
+|---|---|---|---|---|---|---|---|
+| `club_wods` SELECT | – | – | Y | Y | Y | Y | `club_wods_read` — `is_community_member()`. **SELECT is the only grant**; every write is a definer RPC, so there is no insert/update/delete policy to read. |
+| `club_wod_sessions` SELECT | – | – | Y | Y | Y | Y | `club_wod_sessions_read` — `is_community_member()`. SELECT-only grant, same shape: writes go through `club_wod_session_publish` / `_cancel`. |
+| `club_wod_results` SELECT | – | – | Y cond | Y cond | Y cond | Y | `club_wod_results_read` — `is_community_member() AND (user_id = auth.uid() OR can_view_profile_field(user_id, 'show_workout_results'))`. A member's own row is always visible to them; everyone else's is subject to that member's own privacy toggle. |
+| `weekly_challenges_archive` SELECT | – | – | – | Y | Y | Y | `weekly_challenges_archive_read` — `has_perm('community.challenge.create')`. Note this is the PERMISSION, not `is_staff()`: the `staff` role does not hold it, so a `staff`-role account is denied here while a coach is not. |
+| `onboarding_progress` SELECT/UPDATE | – | self | self | self | self | Y | `onboarding_progress_self_select` / `_self_update` — `user_id = auth.uid()` on both, with the same predicate in `with_check`. No INSERT grant. |
+| `bug_reports` | – | – | – | – | – | Y | **No policy and no grant to any client role.** Reporters file through `bug_report_submit()` and read their own through a function whose return type simply has no staff-internal columns; staff read through another. The table itself is unreachable, which is what makes `reporter_id` unforgeable. |
+| `coach_congratulations` | – | – | – | – | – | Y | No policy, no client grant. Written only by `coach_congratulate()`. |
+| `request_idempotency` | – | – | – | – | – | Y | No policy, no client grant. Server-side write-dedupe; a client that could read it could enumerate other members' request fingerprints. |
 
 ### Storage buckets
 
