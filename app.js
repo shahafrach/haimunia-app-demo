@@ -15,7 +15,7 @@ let barWeight = 20;
 // Single source of truth for the app version. After bumping this, run
 // `npm run sync-version` to copy it into SW_VERSION in sw.js — `npm test`
 // fails if the two drift apart.
-const APP_VERSION = "4.74.0";
+const APP_VERSION = "4.75.0";
 
 // A movement typed into the WOD builder that isn't in the built-in list
 // above - persisted (see WODTAGSTORE), same "custom X" pattern as
@@ -79,7 +79,10 @@ function isBarbellMovement(id) {
 const bidiText = SAFE.bidiText;
 // ---------- State ----------
 let entries = [];
-const VALID_TABS = ["add", "history", "calendar", "wod", "community", "manage"];
+// staffhome is a valid id but not a reachable destination on its own:
+// render() sends it back to "add" unless the staff desktop shell is on, so
+// a ?tab=staffhome link opened on a phone lands on the log.
+const VALID_TABS = ["add", "history", "calendar", "wod", "community", "manage", "staffhome"];
 const urlTab = new URLSearchParams(location.search).get("tab");
 let tab = VALID_TABS.includes(urlTab) ? urlTab : "add";
 
@@ -146,13 +149,34 @@ const PAGE_SCENES = Object.freeze({
 // cross-file reference, so it has to be assigned explicitly.
 window.PAGE_SCENES = PAGE_SCENES;
 function getNavItems() {
+  // `group` is read by ONE surface: the desktop staff sidebar, which shows
+  // these same destinations under three headings instead of as one list of
+  // eight. Additive on purpose - the bottom bar and the hamburger never look
+  // at it, so grouping the registry cannot change either of them. One
+  // registry, three renderings.
   const items = [
-    { id: "add", tab: "add", rowId: "tabAddBtn", label: "רישום", tint: "energy", icon: ICONS.logIcon, main: true },
-    { id: "history", tab: "history", rowId: "tabHistoryBtn", label: "התקדמות", tint: "blue", icon: ICONS.chartIcon, main: true },
-    { id: "calendar", tab: "calendar", rowId: "tabCalendarBtn", label: "לוח שנה", tint: "yellow", icon: ICONS.calendarIcon, main: true },
-    { id: "wod", tab: "wod", rowId: "tabWodBtn", label: "אימונים", tint: "purple", icon: ICONS.stopwatchIcon, main: true },
-    { id: "community", tab: "community", rowId: "tabCommunityBtn", label: "קהילה", tint: "teal", icon: ICONS.communityIcon, main: true },
+    { id: "add", tab: "add", rowId: "tabAddBtn", label: "רישום", tint: "energy", icon: ICONS.logIcon, main: true, group: "mine" },
+    { id: "history", tab: "history", rowId: "tabHistoryBtn", label: "התקדמות", tint: "blue", icon: ICONS.chartIcon, main: true, group: "mine" },
+    { id: "calendar", tab: "calendar", rowId: "tabCalendarBtn", label: "לוח שנה", tint: "yellow", icon: ICONS.calendarIcon, main: true, group: "mine" },
+    { id: "wod", tab: "wod", rowId: "tabWodBtn", label: "אימונים", tint: "purple", icon: ICONS.stopwatchIcon, main: true, group: "mine" },
+    { id: "community", tab: "community", rowId: "tabCommunityBtn", label: "קהילה", tint: "teal", icon: ICONS.communityIcon, main: true, group: "community" },
   ];
+  // THE ONE DESTINATION THIS FEATURE ADDS, and it is one rather than five.
+  //
+  // The three-column staff shell needs a screen to be the middle column of.
+  // It could have been a sixth hard-coded surface with its own navigation,
+  // which is what the previous attempt did; instead it is one more row in
+  // the registry every other nav surface already reads, so the sidebar, the
+  // click delegator and the ?tab= parser all pick it up with no new
+  // mechanism.
+  //
+  // Gated on the staff shell being ON, so it never reaches a phone, never
+  // reaches a member, and never appears in the bottom bar (main:false says
+  // the same thing a second way). render()'s own guard sends the tab back to
+  // the log if the shell turns off underneath it.
+  if (typeof applyDesktopLayout === "function" && document.documentElement.getAttribute("data-staff") === "1") {
+    items.unshift({ id: "staffhome", tab: "staffhome", label: "לוח המכון", tint: "steel", icon: ICONS.manageTabIcon, main: false, group: "staff" });
+  }
   // SPLIT INTO TWO DESTINATIONS, BOTH HAMBURGER-ONLY (2026-09-15).
   //
   // Two changes, both requested directly. First, admin and head coach are
@@ -205,8 +229,8 @@ function getNavItems() {
   // Nothing is given away by showing them. Each opens onto a gate that wants
   // management credentials, and every RPC behind it is RLS-enforced against
   // the management account's own JWT.
-  items.push({ id: "manage", tab: "manage", rowId: "tabManageBtn", label: "ניהול מערכת", tint: "steel", icon: ICONS.manageTabIcon, main: false });
-  items.push({ id: "clubmanage", tab: "clubmanage", rowId: "tabClubManageBtn", label: "ניהול המועדון", tint: "teal", icon: ICONS.communityIcon, main: false });
+  items.push({ id: "manage", tab: "manage", rowId: "tabManageBtn", label: "ניהול מערכת", tint: "steel", icon: ICONS.manageTabIcon, main: false, group: "staff" });
+  items.push({ id: "clubmanage", tab: "clubmanage", rowId: "tabClubManageBtn", label: "ניהול המועדון", tint: "teal", icon: ICONS.communityIcon, main: false, group: "staff" });
   return items;
 }
 // The fixed bottom tab bar (#bottomTabBar, index.html) - one tap to any of
@@ -308,9 +332,13 @@ function renderNavWho() {
 // desktop sidebar still passes onlyOther=false and shows every item
 // (including the preview) regardless, since it has no bottom bar to split
 // against.
-function renderNavRows(withIds, onlyOther) {
+// `pick` (optional) narrows the registry further, after onlyOther. It exists
+// for the staff sidebar, which renders these same rows under three headings;
+// a caller that passes nothing gets exactly what this function always gave.
+function renderNavRows(withIds, onlyOther, pick) {
   const communitySignedIn = typeof window.isCommunitySignedIn === "function" && window.isCommunitySignedIn();
-  const items = onlyOther ? getNavItems().filter((item) => !item.main) : getNavItems();
+  let items = onlyOther ? getNavItems().filter((item) => !item.main) : getNavItems();
+  if (typeof pick === "function") items = items.filter(pick);
   return items.map((item) => {
     const isActive = tab === item.tab;
     let sub = "";
@@ -440,8 +468,41 @@ function renderNavMenuList() {
 // above) and mounted into #desktopSidebar instead of the overlay. Shows
 // every item (onlyOther=false) - there's no separate bottom bar at this
 // width for the main tabs to split against (COMM-327).
+// THE THREE GROUPS, in the order a coach reads them: the club first, because
+// that is what they opened a laptop for; then the community; then their own
+// training, which is the phone's job and is here only so the desktop is not a
+// dead end. Labels and order live here, memberships live on the registry
+// rows themselves (getNavItems), so adding a destination is one property.
+const NAV_GROUPS = [
+  { key: "staff", label: "צוות" },
+  { key: "community", label: "קהילה" },
+  { key: "mine", label: "האימון שלי" },
+];
 function renderDesktopSidebar() {
-  return renderNavWho() + `<div class="nav-destinations" role="tablist" aria-label="מסכי האפליקציה" aria-orientation="vertical">${renderNavRows(false, false)}</div>` + renderNavSettingsRow();
+  // GROUPED ONLY UNDER THE STAFF SHELL. A member at a laptop gets the exact
+  // sidebar they had - one ungrouped list, same rows, same order, same
+  // markup - because the grouped branch is the only thing that changed and
+  // it cannot run for them. Verified by hashing the rendered HTML on both
+  // sides in test/desktop-staff-shell.test.mjs.
+  const staffShell = document.documentElement.getAttribute("data-staff") === "1";
+  if (!staffShell) {
+    return renderNavWho() + `<div class="nav-destinations" role="tablist" aria-label="מסכי האפליקציה" aria-orientation="vertical">${renderNavRows(false, false)}</div>` + renderNavSettingsRow();
+  }
+  const groups = NAV_GROUPS.map((g) => {
+    const rows = renderNavRows(false, false, (item) => item.group === g.key);
+    if (!rows) return "";
+    const headId = `navGroup-${g.key}`;
+    return `<div class="nav-group">
+      <div class="nav-group-head" id="${headId}">${esc(g.label)}</div>
+      <div class="nav-destinations" role="tablist" aria-labelledby="${headId}" aria-orientation="vertical">${rows}</div>
+    </div>`;
+  }).join("");
+  // Anything the registry grows later without a group still renders, rather
+  // than silently disappearing from the one nav surface staff use.
+  const ungrouped = renderNavRows(false, false, (item) => !NAV_GROUPS.some((g) => g.key === item.group));
+  return renderNavWho() + groups
+    + (ungrouped ? `<div class="nav-destinations" role="tablist" aria-label="מסכים נוספים" aria-orientation="vertical">${ungrouped}</div>` : "")
+    + renderNavSettingsRow();
 }
 // COMM-229. sw.js's notificationclick handler opens a fresh window at
 // ?notif=<deep link> when no app window was already open to focus (see
@@ -5956,9 +6017,34 @@ function render() {
   // Set before the dispatch below, so it is already correct for the render
   // pass it describes as well as for the after-render and click handlers that
   // follow it.
+  // WHICH LAYOUT THIS RENDER IS FOR (src/desktop-layout.js). Written on every
+  // render rather than only when the media query flips, because the other
+  // input - whether the viewer is staff - arrives asynchronously from
+  // cloud.js. typeof-guarded like every other cross-file call in this file;
+  // without that module <html> carries neither attribute and not one desktop
+  // rule matches, which is exactly today's phone layout.
+  const staffShell = typeof applyDesktopLayout === "function" ? applyDesktopLayout() : false;
+  // THE ROUTE GUARD. staffhome is only a destination while the staff shell is
+  // on. A phone, a member, a coach who dragged the window narrow with it
+  // open, a forwarded ?tab=staffhome link - all land on the log. `tab` itself
+  // is rewritten rather than only the rendered content, so the sidebar, the
+  // bottom bar and the next render all agree.
+  //
+  // Navigation, not authorisation: the server refuses a member's reads and
+  // writes on its own, which is what lets this be a layout question.
+  if (tab === "staffhome" && !staffShell) tab = "add";
+  // Published AFTER the guard, not before it. cloud.js reads this to decide
+  // WHOSE permissions a render is about (inMgmtContext), so announcing a tab
+  // the guard has just refused would describe a screen that is not on the
+  // page - and would leave window.haimuniaActiveTab reading "staffhome" on a
+  // phone that is showing the log.
   window.haimuniaActiveTab = tab;
   try {
-    if (tab === "add") {
+    if (tab === "staffhome") {
+      content = typeof renderStaffHome === "function"
+        ? renderStaffHome()
+        : `<div class="empty">בטעינה</div>`;
+    } else if (tab === "add") {
       const selected = movementById(selectedId);
       content = renderLogTab();
       // COMM-360: only name the save action once a movement is actually
@@ -6035,6 +6121,34 @@ function render() {
   if (desktopSidebarEl) {
     try { desktopSidebarEl.innerHTML = renderDesktopSidebar(); }
     catch (err) { console.error("desktop sidebar render error:", err); }
+  }
+  // THE THIRD COLUMN. #contextCol has been a mount point with no writer
+  // since Phase 4 - the CSS that reveals it is gated on it having an element
+  // child precisely so it could never render as an empty box. This is its
+  // first writer, and it writes only under the staff shell: for a member the
+  // column stays empty, so that gate still holds and their layout is
+  // untouched. Own try/catch, like every other region above.
+  //
+  // NOT ON THE TWO MANAGEMENT TABS, and this is not a preference. The ≥1200
+  // block above widens #app to the ~940px table area on ניהול with the
+  // selector `.app-shell:not(:has(> .context-col > *)) #app:has(...)` - it is
+  // conditional on the context column being EMPTY, deliberately, so that the
+  // moment a third column exists #app goes back to sharing the row instead of
+  // claiming 940px of it. Filling this column on those tabs therefore
+  // collapsed the moderation queue, the member roster and the audit log from
+  // 940px back to 560px. Caught by scripts/browser-check/desktop-layout.mjs,
+  // which measures that exact number, not by reading the rule.
+  //
+  // Skipping those two tabs is also the right product answer: the rail is a
+  // to-do list for a coach on the floor, and the management panels are a
+  // different person's screen with tables that want the width.
+  const contextColEl = document.getElementById("contextCol");
+  if (contextColEl) {
+    const railAllowed = staffShell && tab !== "manage" && tab !== "clubmanage";
+    try {
+      contextColEl.innerHTML = (railAllowed && typeof renderStaffContextColumn === "function")
+        ? renderStaffContextColumn() : "";
+    } catch (err) { console.error("context column render error:", err); contextColEl.innerHTML = ""; }
   }
   const bottomTabBarEl = document.getElementById("bottomTabBar");
   if (bottomTabBarEl) {
@@ -6132,6 +6246,11 @@ function render() {
     if (tab === "calendar") renderCalendarGrid();
     if (tab === "wod") renderWodContent();
     if (tab === "community" && typeof afterRenderCommunity === "function") afterRenderCommunity();
+    // The staff home's own lazy loads, in the same shape: fetched the first
+    // time a coach actually lands on the screen, never on a session that
+    // does not open it. Also fired for the context column, which renders on
+    // every staff tab and reads the same three coach loads.
+    if (staffShell && typeof staffHomeAfterRender === "function") staffHomeAfterRender();
     // Redesign, Phase 1: the Manage tab's own after-render hook, same
     // "runs once per actual render of this tab" convention as Community's
     // above - see afterRenderManage()'s own comment in cloud.js.
@@ -7951,6 +8070,12 @@ async function init() {
   // which a duplicate credential field is live in the document.
   setSettingsInert(true);
   renderUserGreeting();
+  // The live desktop switch (src/desktop-layout.js). Registered BEFORE the
+  // first render so <html> already carries its attributes when the first
+  // screen is painted - otherwise a staff laptop paints the phone layout and
+  // snaps a frame later. render() is the callback, because which columns
+  // exist is a render-level question, not only a stylesheet one.
+  if (typeof startDesktopLayoutWatch === "function") startDesktopLayoutWatch(render);
   render();
   maybeShowIOSInstallBanner();
 

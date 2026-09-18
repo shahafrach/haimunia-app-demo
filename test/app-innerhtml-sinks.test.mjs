@@ -93,9 +93,28 @@ test("the sink count is pinned, so a new sink is a deliberate decision", () => {
   // The member's own typed description is NEVER interpolated - it is read
   // from the live textarea's .value at send time by supportReportText() and
   // handed to encodeURIComponent(), so it never re-enters the DOM as markup.
+  //
+  // 38 -> 40 on 2026-09-18: render() gained the desktop staff shell's context
+  // column, which is two sinks on #contextCol - the write, and the `= ""`
+  // reset in its own catch. Checked rather than waved through, which is what
+  // this pin exists to force:
+  //   * NEITHER LINE INTERPOLATES ANYTHING. One assigns the return value of
+  //     window.renderStaffContextColumn() (a cloud.js function reached
+  //     through a typeof guard), the other assigns an empty string literal.
+  //     There is no `${...}` in either, so there is nothing in app.js for
+  //     this file's escaping rule to check.
+  //   * The markup itself is built in cloud.js, from the same coach section
+  //     renderers the phone already uses, and cloud.js is asserted directly
+  //     below to have ZERO innerHTML sinks of its own - it returns strings
+  //     and app.js is the one that writes them, which is the arrangement
+  //     this file is built around.
+  //   * The one value that column composes itself is pendingModerationCount(),
+  //     a .filter().length - provably an integer, the same class of value as
+  //     computeCurrentStreak() in the PROVEN_SAFE list above. Every other
+  //     interpolation in it goes through esc() or bidiText().
   const count = sinkLines(appJs).length;
-  assert.equal(count, 38,
-    `app.js has ${count} innerHTML/outerHTML sinks, expected 38. If you added one, verify its interpolations are escaped and update this number; if you removed one, just update it.`);
+  assert.equal(count, 40,
+    `app.js has ${count} innerHTML/outerHTML sinks, expected 40. If you added one, verify its interpolations are escaped and update this number; if you removed one, just update it.`);
 });
 
 test("esc() is a single shared definition, so there is one escaping rule and not several", () => {

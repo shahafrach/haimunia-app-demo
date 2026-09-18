@@ -38,6 +38,31 @@ Supabase: `jajmlyrjlkhclgphbfbb` (free tier)
 6. **The app is opened after training,** not during. No rest timer, no
    bar-side calculator.
 
+## The desktop staff shell (2026-09-18)
+
+The app is a phone app with one exception, and the exception is fenced with
+two attributes on `<html>` written by `src/desktop-layout.js`:
+`data-layout="desktop"` for `(min-width: 1024px) and (pointer: fine)`, and
+`data-staff="1"` for that plus `is_staff()`.
+
+Four things to know before touching it:
+
+1. **Every staff-shell CSS rule carries BOTH attributes, and there is no rule
+   on `data-layout` alone.** That absence is the entire guarantee that a
+   member at a laptop is unaffected. A test walks the block and fails on a
+   selector missing either half; a browser check measures a member's sidebar
+   (248px at x=892) and logging column (560px at x=300) at 1440px.
+2. **The shell adds no colours and no fonts.** Existing tokens only, so it
+   themes itself through both dark mechanisms with no rule of its own. The
+   first attempt at this feature shipped 23 hardcoded hex values and no dark
+   half at all, and was reverted for it.
+3. **No new tables, columns, policies or RPCs.** The columns are composed from
+   section renderers and RPCs that already existed - `club_wod_boards()` takes
+   a date range and always did, which is where the week strip comes from. The
+   first attempt added a table and a migration; also reverted.
+4. **The 560px logging column still never changes width.** Only the staff-home
+   tab widens, through `#app:has(#content .staff-home)`.
+
 ## Hebrew, because it has bitten this codebase repeatedly
 
 - `אחד/ת` is **not a word** — the feminine is irregular (`אחת`). Write it out.

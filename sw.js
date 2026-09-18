@@ -2,7 +2,7 @@
 // Version is the single source of truth for the cache name — bumping
 // APP_VERSION in app.js is what ships an update. Don't edit SW_VERSION by
 // hand: run `npm run sync-version` (see app.js) to copy it here.
-const SW_VERSION = "4.74.0";
+const SW_VERSION = "4.75.0";
 // "haimunia-demo-v..." — deliberately distinct from the production app's
 // own "haimunia-v..." cache prefix. Both service workers are scoped to
 // the same origin (haimuniya.github.io), and the activate handler below
@@ -32,6 +32,10 @@ const REQUIRED_ASSETS = [
   "./src/format.js",
   "./src/sanitize.js",
   "./src/db.js",
+  // Required, not optional: app.js calls applyDesktopLayout() on every
+  // render. A miss would leave a staff laptop on the phone layout with
+  // no signal that anything had gone wrong.
+  "./src/desktop-layout.js",
 ];
 // Optional: everything the core offline training log tolerates being absent
 // (a font falls back, an icon is missing, the Community tab shows its own
