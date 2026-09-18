@@ -134,6 +134,7 @@ WCAM marks the events that make a member active for the week.
 
 | Event | Trigger surface | Props | WCAM |
 | --- | --- | --- | --- |
+| `write_failed` | `trackWriteFailure()`, after any failed community write in `cloudWrite()`/the outbox handlers | `action` (the action name, 60 chars), `code` (a coarse error code, 20 chars) | no |
 | `club_tab_viewed` | `afterRenderCommunity()`, once per entry into a club sub-tab | `tab` | no |
 | `feed_viewed` | Entering the Feed sub-tab, and a filter chip change in `setFeedScope()` | `scope`, `source` (`club_tab`, `scope_change`) | no |
 | `post_impression` | `noteFeedImpression()`, a card at least half visible for one second | `post_id`, `position`, `feed_session_id` | no |
