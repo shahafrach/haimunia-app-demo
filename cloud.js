@@ -392,6 +392,11 @@
       // is a review trigger that a genuinely club-shaped feature should not
       // be spending.
       wodBoards: [], wodBoardsLoaded: false, wodBoardsLoading: false, wodBoardsError: false,
+      // The desktop staff week strip. Separate from wodBoards above, which
+      // is TODAY and is handed to app.js for the log form's attach control -
+      // widening that one to a week would have changed what the phone means
+      // by "today's board".
+      weekBoards: [], weekBoardsLoaded: false, weekBoardsLoading: false, weekBoardsError: false,
       // The open board dialog: { sessionId, board, loading, error, busy,
       // errorText }. null - a dialog starts closed (CLOUD_DIALOGS).
       wodBoardView: null,
@@ -12527,6 +12532,21 @@
     return postCardShell(post, inner, { authorless: !postAuthorName(post) });
   }
 
+  // HOISTED OUT OF feedTab (2026-09-18), byte-for-byte, so the staff desktop
+  // column can render the same archive the feed does instead of growing a
+  // second, drifting copy of it. Same inputs, same markup, same
+  // ANNOUNCEMENTS_ARCHIVE_VISIBLE cap and the same <details> disclosure past
+  // it; `hasPinned` is the one thing the caller has to tell it, because "no
+  // announcements" and "the only one is pinned above you" are different empty
+  // states and only the caller knows which it is looking at.
+  function renderAnnouncementsArchive(otherAnnouncements, hasPinned) {
+    const announcementRow = (a) => `<div class="log-row" data-announcement-id="${esc(a.id)}" style="align-items:flex-start;flex-direction:column;gap:4px;${announcementAccentStyle(a)}"><div style="font-weight:700;display:flex;align-items:center;flex-wrap:wrap;gap:6px;">${bidiText(a.title)}${announcementPriorityBadge(a)}</div><div style="color:var(--steel);font-size:13px;">${bidiText(a.body)}</div><div style="color:var(--steel);font-size:11px;">${esc(a.profiles ? (a.profiles.display_name || "@" + a.profiles.handle) : "")}</div>${pinToggleHtml("announcement", a.id, a.title)}</div>`;
+    const visibleAnnouncements = otherAnnouncements.slice(0, ANNOUNCEMENTS_ARCHIVE_VISIBLE);
+    const restAnnouncements = otherAnnouncements.slice(ANNOUNCEMENTS_ARCHIVE_VISIBLE);
+    return otherAnnouncements.length
+      ? `<div class="log-list">${visibleAnnouncements.map(announcementRow).join("")}</div>${restAnnouncements.length ? `<details style="margin-top:8px;"><summary class="link-btn" style="cursor:pointer;">עוד הודעות (${restAnnouncements.length})</summary><div class="log-list" style="margin-top:8px;">${restAnnouncements.map(announcementRow).join("")}</div></details>` : ""}`
+      : (hasPinned ? "" : `<div class="empty">אין הודעות חדשות</div>`);
+  }
   function renderAnnouncementPostCard(post) {
     const m = post.metadata || {};
     const title = m.title || post.title || "";
@@ -19447,12 +19467,7 @@
     // VISIBLE render as before; the rest sit behind the same <details>
     // disclosure renderAuditLog()'s "עוד סינונים" already uses, so nothing
     // is hidden, only de-prioritized past the first screenful.
-    const announcementRow = (a) => `<div class="log-row" data-announcement-id="${esc(a.id)}" style="align-items:flex-start;flex-direction:column;gap:4px;${announcementAccentStyle(a)}"><div style="font-weight:700;display:flex;align-items:center;flex-wrap:wrap;gap:6px;">${bidiText(a.title)}${announcementPriorityBadge(a)}</div><div style="color:var(--steel);font-size:13px;">${bidiText(a.body)}</div><div style="color:var(--steel);font-size:11px;">${esc(a.profiles ? (a.profiles.display_name || "@" + a.profiles.handle) : "")}</div>${pinToggleHtml("announcement", a.id, a.title)}</div>`;
-    const visibleAnnouncements = otherAnnouncements.slice(0, ANNOUNCEMENTS_ARCHIVE_VISIBLE);
-    const restAnnouncements = otherAnnouncements.slice(ANNOUNCEMENTS_ARCHIVE_VISIBLE);
-    const announcementsList = otherAnnouncements.length
-      ? `<div class="log-list">${visibleAnnouncements.map(announcementRow).join("")}</div>${restAnnouncements.length ? `<details style="margin-top:8px;"><summary class="link-btn" style="cursor:pointer;">עוד הודעות (${restAnnouncements.length})</summary><div class="log-list" style="margin-top:8px;">${restAnnouncements.map(announcementRow).join("")}</div></details>` : ""}`
-      : (pinnedToday ? "" : `<div class="empty">אין הודעות חדשות</div>`);
+    const announcementsList = renderAnnouncementsArchive(otherAnnouncements, !!pinnedToday);
     // ONE RAIL. pinnedHtml has moved OUT of this section and into the rail
     // above the feed, where it competes for a slot on merit like everything
     // else. What is left here is the archive: older announcements and the
@@ -21124,6 +21139,156 @@
     const sharedCodeDetails = document.getElementById(SHARED_CODE_DISCLOSURE_ID);
     if (sharedCodeDetails) sharedCodeDetails.addEventListener("toggle", () => { state.admin.openAreas[sharedCodeDetails.id] = sharedCodeDetails.open; });
   };
+  // ===================================================================
+  // THE DESKTOP STAFF COLUMNS
+  // ===================================================================
+  // Two exported renderers - the centre column and the "needs attention"
+  // rail - and one loader. Everything they draw is an existing section
+  // renderer or an existing RPC; nothing here adds a table, a column, a
+  // policy or a screen. The point of the desktop shell is that a coach can
+  // see at once what a phone makes them tab between, not that there is more
+  // to see.
+  //
+  // WHY THESE LIVE IN cloud.js. Every one of them reads state and the
+  // Supabase client, both private to this file's IIFE. app.js owns where the
+  // columns go; this owns what is in them.
+
+  // ---- The week strip -------------------------------------------------
+  // club_wod_boards(p_from, p_to) ALREADY takes a range - it is the same
+  // function the club home's today-strip calls with no arguments - and it
+  // clamps anything wider than 14 days itself. So a week costs one call to a
+  // function that already exists, and a day with no board is simply a day
+  // the answer does not mention.
+  //
+  // SUNDAY-FIRST, because that is the week an Israeli gym programmes
+  // against. The ISO week starts on Monday and would file a Sunday session
+  // in the week that just ended.
+  function staffWeekDates() {
+    const base = new Date();
+    base.setHours(0, 0, 0, 0);
+    const sunday = new Date(base);
+    sunday.setDate(sunday.getDate() - sunday.getDay());
+    const out = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(sunday);
+      d.setDate(sunday.getDate() + i);
+      out.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
+    }
+    return out;
+  }
+  async function loadStaffWeekBoards() {
+    if (!state.user || !isStaff() || !isModuleEnabled("club_wod")) return;
+    const dates = staffWeekDates();
+    state.club.weekBoardsLoading = true;
+    const { data, error } = await client.rpc("club_wod_boards", { p_from: dates[0], p_to: dates[6] });
+    state.club.weekBoardsLoading = false;
+    state.club.weekBoardsLoaded = true;
+    // A FAILED READ IS NOT AN EMPTY WEEK - the same rule
+    // renderClubWodTodayStrip() already states for a single day. On failure
+    // the previous answer is left alone and the strip says so.
+    state.club.weekBoardsError = !!error;
+    if (!error) state.club.weekBoards = data || [];
+    rerender();
+  }
+  function renderStaffWeekStrip() {
+    if (!isModuleEnabled("club_wod")) return "";
+    const dates = staffWeekDates();
+    const today = todayIso();
+    const byDate = {};
+    for (const b of state.club.weekBoards || []) {
+      if (b && b.session_date) (byDate[b.session_date] = byDate[b.session_date] || []).push(b);
+    }
+    if (state.club.weekBoardsError) {
+      return `<div class="chart-card" style="margin-bottom:12px;"><div class="empty" role="alert">לא ניתן היה לטעון את השבוע.<div class="chip-row" style="justify-content:center;margin-top:6px;"><button class="chip-btn" data-community-action="staff-week-retry">ניסיון חוזר</button></div></div></div>`;
+    }
+    const cells = dates.map((iso) => {
+      const boards = byDate[iso] || [];
+      const published = boards.length > 0;
+      const d = new Date(`${iso}T00:00:00`);
+      const dayName = isNaN(d.getTime()) ? "" : d.toLocaleDateString("he-IL", { weekday: "short" });
+      const dayNum = isNaN(d.getTime()) ? iso : d.toLocaleDateString("he-IL", { day: "numeric", month: "numeric" });
+      // The state word is rendered, not only the colour: a strip that says
+      // what it means is legible to a colour-blind coach and to a screen
+      // reader alike.
+      const label = published ? (boards[0].wod ? boards[0].wod.name : "פורסם") : "אין אימון";
+      return `<div class="staff-week-day${published ? " is-published" : ""}"${iso === today ? ' aria-current="date"' : ""}>
+        <span class="staff-week-when">${esc(dayName)} · ${esc(dayNum)}</span>
+        <span class="staff-week-what">${published ? bidiText(String(label)) : esc(label)}</span>
+      </div>`;
+    }).join("");
+    const published = dates.filter((iso) => byDate[iso]).length;
+    return `<div class="chart-card" style="margin-bottom:12px;">
+      <div class="flex" style="justify-content:space-between;align-items:baseline;margin-bottom:10px;">
+        <span style="font-weight:800;">השבוע</span>
+        <span style="color:var(--steel);font-size:12px;">${esc(`${published} מתוך 7 ימים`)}</span>
+      </div>
+      <div class="staff-week">${cells}</div>
+    </div>`;
+  }
+
+  // ---- The centre column ----------------------------------------------
+  // Today's board and the publish form, the week, the roster, the
+  // announcements - in that order, because it is the order a coach opening a
+  // laptop in the gym asks about them.
+  window.renderStaffHome = function () {
+    if (!isStaff()) return `<div class="empty">אין הרשאה</div>`;
+    const liveAnnouncements = state.club.announcements.filter((a) => !isAnnouncementExpired(a));
+    const announcements = isModuleEnabled("announcements")
+      ? `<div class="ach-section">${sectionHead("var(--brass)", "הודעות מהמועדון")}${renderAnnouncementsArchive(liveAnnouncements, false)}</div>`
+      : "";
+    return `<div class="staff-home">
+      <h1 class="page-title">לוח המכון</h1>
+      ${renderClubWodTodayStrip()}
+      ${renderStaffWeekStrip()}
+      <div class="ach-section">${sectionHead("var(--teal)", "חברי המועדון")}${renderDirectorySection()}</div>
+      ${announcements}
+    </div>`;
+  };
+
+  // ---- The context column ---------------------------------------------
+  // "דורש תשומת לב" - the rail is the one place on this screen that is
+  // allowed to be a to-do list, so everything in it is something a coach can
+  // act on today: a member the engagement flags have noticed, someone to
+  // congratulate, someone new to welcome, and a moderation queue with
+  // anything open in it.
+  //
+  // Every section here is the SAME renderer the coach dashboard uses on a
+  // phone, so an action taken in the rail and the same action taken on the
+  // phone go through one code path, not two.
+  window.renderStaffContextColumn = function () {
+    if (!isStaff()) return "";
+    // pendingModerationCount() consults has_perm(community.comment.moderate)
+    // itself and answers 0 for anyone without it, so a coach who does not
+    // moderate simply has one fewer row rather than a forbidden link.
+    const open = pendingModerationCount();
+    const queue = open
+      ? `<button class="log-row" data-action="switch-tab" data-tab="manage" style="width:100%;text-align:start;">
+           <span style="font-weight:700;">תורי דיווחים</span>
+           <span class="nav-badge" aria-hidden="true">${open}</span>
+           <span class="sr-only">${esc(open === 1 ? "דיווח אחד פתוח" : open + " דיווחים פתוחים")}</span>
+         </button>`
+      : "";
+    const sections = [
+      state.featureFlags.coachEngage ? renderCoachEngageSection() : "",
+      renderCoachCelebrateSection(),
+      renderCoachWelcomeSection(),
+    ].filter(Boolean).join("");
+    return `<h2 class="context-col-head">דורש תשומת לב</h2>${queue}${sections}`;
+  };
+
+  // The lazy loads the rail needs, in the same shape afterRenderCommunity()
+  // uses for the coach sub-tab: fetched the first time a coach actually
+  // lands on the screen, never on a session that does not open it. Called by
+  // app.js after it renders the staff home.
+  window.staffHomeAfterRender = function () {
+    if (!state.user || !isStaff()) return;
+    if (!state.coach.celebrate.loaded && !state.coach.celebrate.loading) loadCoachCelebrate();
+    if (!state.coach.welcome.loaded && !state.coach.welcome.loading) loadCoachWelcome();
+    if (state.featureFlags.coachEngage && !state.coach.engage.loaded && !state.coach.engage.loading) loadCoachEngageFlags();
+    if (!state.club.weekBoardsLoaded && !state.club.weekBoardsLoading) loadStaffWeekBoards();
+    if (!state.members.directory.loaded && !state.members.directory.loading) loadDirectory(true);
+  };
+
   window.handleCommunityClick = function (el) {
     const action = el.dataset.communityAction;
     // COMM-114. Measured before the action runs, so a click that navigates
@@ -21622,6 +21787,7 @@
     else if (action === "coach-engage-review") coachEngageResolveFlag(el.dataset.id, "reviewed");
     else if (action === "coach-engage-dismiss") coachEngageResolveFlag(el.dataset.id, "dismissed");
     // COMM-309 monthly club recap.
+    else if (action === "staff-week-retry") { state.club.weekBoardsLoaded = false; loadStaffWeekBoards(); }
     else if (action === "coach-monthly-recap-retry") loadCoachMonthlyRecap();
     else if (action === "coach-monthly-recap-publish") publishMonthlyRecap(el.dataset.id);
   };

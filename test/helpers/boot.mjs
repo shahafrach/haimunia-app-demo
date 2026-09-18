@@ -28,6 +28,9 @@ const appSrcPaths = [
   path.join(root, "src", "format.js"),
   path.join(root, "src", "sanitize.js"),
   path.join(root, "src", "db.js"),
+  // Same position index.html loads it in: after the core src files and
+  // before app.js, which calls into it from render() and from boot.
+  path.join(root, "src", "desktop-layout.js"),
 ];
 function readAppSrc() {
   return appSrcPaths.map((p) => readFileSync(p, "utf8")).join("\n") + "\n" + readFileSync(appJsPath, "utf8");
@@ -57,7 +60,7 @@ function readPlatformSrc() {
   return platformSrcPaths.map((p) => readFileSync(p, "utf8")).join("\n");
 }
 
-function newDom(url) {
+function newDom(url, opts = {}) {
   const html = readFileSync(htmlPath, "utf8");
   const dom = new JSDOM(html, {
     // COMM-229. Overridable so a test can boot with a ?notif=... query
@@ -76,14 +79,39 @@ function newDom(url) {
   window.IDBKeyRange = FDBKeyRange;
 
   // jsdom implements neither matchMedia nor a full randomUUID-capable crypto.
-  window.matchMedia = () => ({
-    matches: false,
-    media: "",
-    addEventListener() {},
-    removeEventListener() {},
-    addListener() {},
-    removeListener() {},
-  });
+  //
+  // The default answers false to every query, which is what every test
+  // written before this seam existed assumes - jsdom has no layout, so
+  // "false to everything" is the only honest default and it keeps every
+  // existing test on the phone layout. A test that is ABOUT a media query
+  // passes `matchMedia: (q) => ...` and gets a real, listenable
+  // MediaQueryList back; window.__setMediaMatcher(fn) then swaps the
+  // predicate and fires `change` at every live list, which is how a layout
+  // that switches on resize can be exercised without a browser.
+  let mediaMatcher = typeof opts.matchMedia === "function" ? opts.matchMedia : () => false;
+  const mediaLists = [];
+  window.matchMedia = (media) => {
+    const handlers = [];
+    const mql = {
+      media: String(media || ""),
+      get matches() { return !!mediaMatcher(String(media || "")); },
+      addEventListener(type, fn) { if (type === "change") handlers.push(fn); },
+      removeEventListener(type, fn) {
+        if (type !== "change") return;
+        const i = handlers.indexOf(fn);
+        if (i >= 0) handlers.splice(i, 1);
+      },
+      addListener(fn) { handlers.push(fn); },
+      removeListener(fn) { const i = handlers.indexOf(fn); if (i >= 0) handlers.splice(i, 1); },
+      __fire() { for (const fn of handlers.slice()) fn({ matches: mql.matches, media: mql.media }); },
+    };
+    mediaLists.push(mql);
+    return mql;
+  };
+  window.__setMediaMatcher = (fn) => {
+    mediaMatcher = typeof fn === "function" ? fn : () => false;
+    for (const mql of mediaLists) mql.__fire();
+  };
   // defineProperty rather than assignment: jsdom 30 made window.crypto an
   // accessor with no setter, so `window.crypto = ...` throws "Cannot set
   // property crypto of [object Window] which has only a getter" and takes
@@ -99,8 +127,8 @@ function newDom(url) {
   return window;
 }
 
-export async function bootApp() {
-  const window = newDom();
+export async function bootApp(opts = {}) {
+  const window = newDom(opts.url, opts);
   window.eval(readPlatformSrc());
   window.eval(readAppSrc());
 
@@ -117,7 +145,7 @@ export async function bootApp() {
 // the login/signup gates, publishing, moderation) instead of only
 // regex-matching cloud.js's source text.
 export async function bootCommunity(mock, opts = {}) {
-  const window = newDom(opts.url);
+  const window = newDom(opts.url, opts);
   window.HAIMUNIA_CONFIG = { supabaseUrl: "https://mockproj.supabase.co", supabasePublishableKey: "mock-key",
     // COMM-229. Same shape cloud-config.js ships - a test that stubs the
     // Push API needs a real (if fake) key here for vapidKeyToUint8Array to

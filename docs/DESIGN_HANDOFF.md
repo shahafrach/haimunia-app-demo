@@ -41,8 +41,8 @@ follows. The dark theme redefines the same names in two blocks — see
 --chalk       #1C2536   primary text
 --steel       #57627A   secondary text, labels, captions
 
---energy      #C94B29   THE primary action colour. Save buttons, primary chips.
---brass       #956529   numbers that matter: PRs, results, 1RM, highlights
+--energy      #E85D3D   THE primary action colour. Save buttons, primary chips.
+--brass       #8a5d25   numbers that matter: PRs, results, 1RM, highlights
 --blue        #2E5AA8   feed section marker
 --green       #2E7A48   success / positive
 --red         #C2392C   destructive / moderation
@@ -57,11 +57,27 @@ follows. The dark theme redefines the same names in two blocks — see
 --text-scale   1.2 — the "large text" multiplier
 ```
 
+**Both of those two values were stale in this document until 2026-09-18**, and
+each had moved for a reason worth keeping:
+
+* `--energy` is `#E85D3D`, not the `#C94B29` this table used to list. Direction
+  06 ("Club Balance") moved the light theme onto the same coral the dark theme
+  already shipped, so the primary accent is one colour across both themes
+  rather than two. `--energy-text` is an independently tuned token and is NOT
+  derived from it, which is what lets the fill change without dragging every
+  small-text use along.
+* `--brass` is `#8a5d25`, not `#956529`. It was darkened twice, both times to
+  clear a measured floor - see below.
+
 **`--brass` has an accessibility floor.** It was darkened from `#A6702E` to
 `#956529` because it is used at 13–14px bold for real numeric data (PRs, 1RM,
 results), and the lighter value measured 4.22:1 on `--surface` — under the
-4.5:1 AA minimum. If you re-pick it, keep it at or above 4.5:1 on both
-`--surface` and `--bg`.
+4.5:1 AA minimum. It was then darkened again to `#8a5d25` after an
+invite-tab axe pass caught `.chip-btn.selected`: `#956529` measured 4.35:1 on
+`--surface2`, a background the first pass never happened to check. If you
+re-pick it, keep it at or above 4.5:1 on `--surface`, `--surface2` AND `--bg`.
+`test/brass-contrast.test.mjs` computes all of these from the tokens as
+shipped, so an edit here that is not also an edit there fails CI.
 
 ---
 
@@ -128,6 +144,49 @@ three times:
 **Redefine tokens, never components, inside those blocks.** A colour whose only
 definition sits inside a dark block will not exist in light mode, and the page
 renders one theme's text on the other theme's background.
+
+---
+
+## The desktop staff shell (2026-09-18)
+
+The app is a phone app. One exception exists, and it is narrow on purpose.
+
+**Two attributes on `<html>`, written by `src/desktop-layout.js`:**
+
+| attribute | set when |
+|---|---|
+| `data-layout="desktop"` | `matchMedia("(min-width: 1024px) and (pointer: fine)")` matches |
+| `data-staff="1"` | that, AND `window.communityIsStaff()` — the server's `is_staff()` |
+
+`(pointer: fine)` is half the query and the more important half: a 1024px
+tablet in landscape is wide enough for three columns and completely wrong for
+them.
+
+**Every staff-shell rule is prefixed `html[data-layout="desktop"][data-staff="1"]`,
+both attributes, no exceptions.** There is deliberately **no rule keyed on
+`data-layout` alone**, and that absence is what keeps a member at a laptop on
+exactly the layout they had. It is enforced mechanically —
+`test/desktop-staff-shell.test.mjs` walks the block and fails on a selector
+missing either half — and measured for real at 1440px by
+`scripts/browser-check/desktop-staff-shell.mjs`, which asserts a member's
+sidebar is still 248px at x=892 and their logging column still 560px at x=300.
+
+**The shell introduces no colours and no fonts.** Every value in it is an
+existing token, so it follows the theme through both dark mechanisms above
+without a rule of its own; there is nothing to duplicate into them because
+there is no literal colour to go stale. If you add a rule that genuinely needs
+a theme-specific value, it goes in **both** dark blocks, per the section above.
+
+**Three columns, RTL:** the navigation rail is the rightmost column
+(`inset-inline-start`), the centre column is the widest, and the context rail
+("דורש תשומת לב") is leftmost. Below 1180px the context rail is hidden rather
+than squeezed — nothing is lost, since every section in it is also on the
+coach sub-tab.
+
+**The centre column is not the logging column.** The rule that the 560px
+logging column never changes width at any breakpoint still holds: only the
+staff-home tab widens, via `#app:has(#content .staff-home)`. A coach on the
+logging tab measures 560px, and the browser check asserts exactly that.
 
 ---
 

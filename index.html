@@ -2306,6 +2306,122 @@
       color:#FFF6F1;
     }
   }
+
+  /* ===================================================================
+     THE DESKTOP STAFF SHELL (2026-09-18)
+     ===================================================================
+     Three columns for gym staff at a real desktop, and nothing else. Every
+     rule below is prefixed html[data-layout="desktop"][data-staff="1"] -
+     both attributes, always, with no exceptions - and that prefix is the
+     whole safety argument, pinned by a test that walks this block and fails
+     on any selector missing either half:
+
+       * A PHONE matches nothing. data-layout is only written when
+         (min-width: 1024px) AND (pointer: fine) both hold.
+       * A MEMBER AT A LAPTOP matches nothing. They carry data-layout and
+         never data-staff, and there is deliberately no rule keyed on
+         data-layout alone. Their sidebar, their 560px logging column, their
+         940px table surfaces and their context column are the ones the
+         ≥900/1200/1280 blocks above already gave them, untouched. The CSS
+         comments in those blocks argue at length that the logging column
+         must never change width at any breakpoint, and rule (1) there still
+         holds here: THE CENTRE COLUMN BELOW IS NOT THE LOGGING COLUMN. It
+         is #app on one tab - the staff home - and every other tab renders
+         at exactly the width it did before.
+
+     NO NEW COLOURS. Every value below is an existing token (--surface,
+     --border, --steel, --chalk, --brass, --teal, --shadow-card...). That is
+     not decoration: those tokens are already redefined for both dark
+     mechanisms at the top of this file, so this shell follows the theme in
+     both of them without a single rule of its own. There is nothing here to
+     duplicate into the prefers-color-scheme block or into
+     :root[data-theme="dark"], because there is no hardcoded colour to go
+     stale in either. The one previous attempt at this feature shipped 23
+     hardcoded hex values and no dark half at all.
+
+     FONTS: unchanged. The app's own self-hosted stacks apply as they do
+     everywhere else; this block sets no font-family.
+     =================================================================== */
+  html[data-layout="desktop"][data-staff="1"] .app-shell{
+    /* Wider than the member shell's 1440 cap because there are three real
+       columns here rather than two and a sometimes-third, and aligned to the
+       top rather than centred so the rail does not float. */
+    max-width:1680px; align-items:flex-start; gap:24px; padding:28px 24px;
+  }
+  /* THE RIGHT-HAND RAIL. inset-inline-start is the RIGHT edge in this
+     document (dir="rtl"), written logically rather than as `right` so a
+     Latin locale would flip it correctly instead of needing this found and
+     reversed by hand. Sticky rather than fixed: it scrolls with a long page
+     until it reaches the top, which keeps it inside the shell's own grid
+     instead of floating over it. */
+  html[data-layout="desktop"][data-staff="1"] .desktop-sidebar{
+    width:264px; flex-shrink:0; position:sticky; top:28px;
+    max-height:calc(100dvh - 56px); overflow-y:auto; overscroll-behavior:contain;
+  }
+  html[data-layout="desktop"][data-staff="1"] .nav-group{ margin-bottom:14px; }
+  html[data-layout="desktop"][data-staff="1"] .nav-group-head{
+    color:var(--steel); font-size:11px; font-weight:800; letter-spacing:.08em;
+    text-transform:uppercase; padding:6px 10px 4px;
+  }
+  /* THE CENTRE COLUMN, and the one tab it applies to. #app is the logging
+     column on every other tab and keeps its own width there; only the staff
+     home widens, which is what :has() is checking for. Same mechanism the
+     ניהול tab's 940px rule already uses two blocks up. */
+  html[data-layout="desktop"][data-staff="1"] #app:has(#content .staff-home){
+    max-width:none; flex:1 1 auto; min-width:0;
+  }
+  /* THE LEFT CONTEXT COLUMN. The ≥1280 rules above already reveal
+     #contextCol once it has an element child and style it as a sticky card;
+     this only sets its measure for the staff shell and makes it appear from
+     1024 rather than 1280, since at this width it is the point of the
+     screen rather than an extra. */
+  html[data-layout="desktop"][data-staff="1"] .app-shell:has(> .context-col > *) > .context-col{
+    display:block; flex:0 0 320px; min-width:300px; max-width:360px;
+    position:sticky; top:28px; background:var(--surface); border:1px solid var(--border);
+    border-radius:20px; padding:16px 14px; box-shadow:var(--shadow-card);
+    max-height:calc(100dvh - 56px); overflow-y:auto; overscroll-behavior:contain;
+  }
+  html[data-layout="desktop"][data-staff="1"] .context-col-head{
+    font-size:13px; font-weight:800; color:var(--steel); margin:0 0 10px;
+    letter-spacing:.04em;
+  }
+  /* The rail holds the same coach sections the phone renders, so its cards
+     lose the outer margins they need in a single-column scroll. */
+  html[data-layout="desktop"][data-staff="1"] .context-col .chart-card{ margin-bottom:10px; }
+  html[data-layout="desktop"][data-staff="1"] .context-col .ach-section{ margin-bottom:10px; }
+  /* Below 1180 the three columns stop fitting: the rail is the one that
+     goes, because the centre column is the work and the sidebar is the
+     navigation. Nothing is lost - every section in it is also on the coach
+     sub-tab, which the sidebar still reaches. */
+  @media (max-width: 1180px){
+    html[data-layout="desktop"][data-staff="1"] .app-shell:has(> .context-col > *) > .context-col{ display:none; }
+  }
+
+  /* ---- The week strip ------------------------------------------------ */
+  /* Seven boxes, published or empty, and the state is a WORD in every one
+     of them rather than a colour alone. */
+  html[data-layout="desktop"][data-staff="1"] .staff-week{
+    display:grid; grid-template-columns:repeat(7, minmax(0, 1fr)); gap:8px;
+  }
+  html[data-layout="desktop"][data-staff="1"] .staff-week-day{
+    min-height:72px; display:flex; flex-direction:column; gap:4px;
+    border:1px solid var(--border); border-radius:12px; padding:8px;
+    background:var(--surface2); color:var(--steel); text-align:start;
+  }
+  html[data-layout="desktop"][data-staff="1"] .staff-week-day.is-published{
+    background:var(--surface); color:var(--chalk); border-color:var(--brass);
+  }
+  html[data-layout="desktop"][data-staff="1"] .staff-week-day[aria-current="date"]{
+    box-shadow:inset 0 0 0 1px var(--teal);
+  }
+  html[data-layout="desktop"][data-staff="1"] .staff-week-when{
+    font-size:11px; font-weight:800; color:var(--steel);
+  }
+  html[data-layout="desktop"][data-staff="1"] .staff-week-what{
+    font-size:12.5px; font-weight:700; overflow-wrap:anywhere;
+  }
+  html[data-layout="desktop"][data-staff="1"] .staff-home > .page-title{ margin-bottom:14px; }
+
 </style>
 </head>
 <body>
@@ -2857,6 +2973,11 @@
 <script defer src="./src/format.js"></script>
 <script defer src="./src/sanitize.js"></script>
 <script defer src="./src/db.js"></script>
+<!-- Desktop layout detection and the staff gate. After cloud.js, whose
+     window.communityIsStaff() is half the answer, and before app.js,
+     which calls applyDesktopLayout() on every render and starts the
+     watch once at boot. Both calls are typeof-guarded either way. -->
+<script defer src="./src/desktop-layout.js"></script>
 <script defer src="./app.js"></script>
 </body>
 </html>

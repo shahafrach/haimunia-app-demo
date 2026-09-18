@@ -1,3 +1,58 @@
+## A desk for the gym, fenced by two attributes — 2026-09-18
+
+**"Add an adaptive desktop layout to the app, for gym staff only. Do not change
+the existing mobile experience."** At 1024px and wider, with a real pointer, a
+staff member now gets three columns: the navigation rail on the right, the
+club's day in the middle, and a "דורש תשומת לב" rail on the left. Everyone else
+gets exactly what they had.
+
+**What "everyone else gets exactly what they had" means, as a mechanism rather
+than a promise.** Two attributes land on `<html>`: `data-layout="desktop"` when
+`(min-width: 1024px) and (pointer: fine)` matches, and `data-staff="1"` when
+that AND `is_staff()` are both true. Every rule in the shell is prefixed with
+**both**, and there is deliberately **no rule keyed on `data-layout` alone** —
+so a member at a laptop matches nothing at all. A test walks the stylesheet and
+fails on any selector missing either half. A browser check at 1440px measures
+the member's sidebar at 248px/x=892 and their logging column at 560px/x=300,
+the same numbers that block has produced since the ≥900 tier shipped.
+
+`(pointer: fine)` is half the query and does most of the work: a 1024px tablet
+in landscape is wide enough for three columns and completely wrong for them.
+
+**It adds no colours, no fonts, no tables and no screens.** Every value in the
+new CSS is an existing token, so the shell follows the theme through both dark
+mechanisms without a rule of its own — there is nothing to duplicate into them
+because there is no literal colour to go stale. Every panel in it is a section
+renderer that already existed, and the week strip comes from
+`club_wod_boards(p_from, p_to)`, which has taken a date range since the day it
+was written. One destination was added — לוח המכון — as one more row in the
+registry the bottom bar and the hamburger already read, rather than as a second
+navigation mechanism.
+
+**The sidebar groups what was already there.** צוות, קהילה, האימון שלי, built
+from the same `getNavItems()` config the bottom bar uses, with the grouping
+read by that one surface and nothing else. A member's sidebar renders from the
+identical branch it always did, which is asserted by hashing its HTML.
+
+**The 560px logging column still never changes width.** That rule has its own
+long argument in the stylesheet and it survived this: only the staff-home tab
+widens, and a coach on the logging tab measures 560px in a real browser.
+
+**This replaced a first attempt that was reverted the same day.** That version
+assumed React, added a `role` column the schema already had six better answers
+for, shipped a migration with a new table and new policies, hardcoded 23 hex
+colours with no dark half, and named its detection function `useIsDesktop()` in
+a repo with no React. None of it had reached production. The audit that found
+all of it is in the branch history; the lesson worth keeping is that a brief
+written without the repo in front of it will confidently ask for the thing the
+repo already has.
+
+**Also here:** `DESIGN_HANDOFF.md`'s token table had `--energy` at `#C94B29`
+and `--brass` at `#956529`. Both had moved — to `#E85D3D` when Direction 06
+unified the accent across themes, and to `#8a5d25` after an axe pass caught
+`.chip-btn.selected` at 4.35:1 on `--surface2`. The table now says what ships,
+and says why each moved.
+
 ## The admin panel asks again — 2026-09-15 (ninth entry)
 
 **"On ניהול מערכת there is need to be separate log in for admin, because this
