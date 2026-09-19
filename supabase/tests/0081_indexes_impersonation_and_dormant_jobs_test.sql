@@ -118,12 +118,35 @@ select is(
      else 'hourly' end),
   'weekly',
   'and a day-of-week expression is weekly');
+-- THE WINDOW MOVED. 202609190001 lifted the per-cadence `case` out of
+-- scheduled_job_health()'s body into public.cron_cadence_window(), so that
+-- job_health_check() could share it instead of carrying a second copy. The
+-- two assertions here used to read the literal back out of prosrc, and that
+-- refactor broke them in the two different ways a textual guard breaks:
+-- the first went RED, and the second went VACUOUSLY GREEN - `not like
+-- '%interval ''8 days''%'` is trivially true of a body that no longer
+-- contains any window at all, so it would have gone on passing forever while
+-- asserting nothing. Only the red one announced itself.
+--
+-- Both are restated against the helper, which is where the rule lives now,
+-- and both are behavioural rather than textual: they CALL the function and
+-- compare intervals instead of grepping its source. A future move cannot
+-- make these pass by accident the way the second one just did.
+select is(
+  public.cron_cadence_window('41 4 1 * *'),
+  interval '35 days',
+  'the monthly cadence carries a 35-day window, so recap_monthly is not permanently flagged');
+-- The rule being right is half of it; the operator view still having to go
+-- through it is the other half. Without this, scheduled_job_health() could
+-- quietly grow its own copy again and the assertion above would not notice.
 select ok(
-  (select prosrc from pg_proc where proname = 'scheduled_job_health') like '%35 days%',
-  'the function carries a monthly window, so recap_monthly is not permanently flagged');
+  (select prosrc from pg_proc where proname = 'scheduled_job_health') like '%cron_cadence_window%',
+  'and scheduled_job_health() derives that window from the one shared helper rather than a second copy of the case expression');
 select ok(
-  (select prosrc from pg_proc where proname = 'scheduled_job_health') not like '%interval ''8 days''%',
-  'and the flat 8-day window that caused the false positive is gone');
+  public.cron_cadence_window('41 4 1 * *') <> public.cron_cadence_window('11 5 * * 1')
+  and public.cron_cadence_window('11 5 * * 1') <> public.cron_cadence_window('41 4 * * *')
+  and public.cron_cadence_window('41 4 * * *') <> public.cron_cadence_window('*/15 * * * *'),
+  'and the flat window that caused the false positive is gone - four cadences produce four different windows, which no single flat constant can do');
 -- The behaviour that must NOT be relaxed by the above.
 select ok(
   (select prosrc from pg_proc where proname = 'scheduled_job_health') like '%coalesce(%false)%'

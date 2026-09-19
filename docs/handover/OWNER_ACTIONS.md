@@ -71,16 +71,27 @@ this code would also be its first test.
 
 ## Decide, do not just tick
 
-### The scheduled-job-alert secrets
+### ~~The scheduled-job-alert secrets~~ — decided, 2026-09-19
 
-`.github/workflows/scheduled-job-alert.yml` has failed every day since
-2026-09-15, **by design** — it needs three secrets and fails closed rather
-than silently. Nothing is watching the cron jobs until they are set.
+**There is no decision left here, and nothing to paste.** This used to ask you
+to weigh putting `SUPABASE_SERVICE_ROLE_KEY` — a key that **bypasses every RLS
+policy on member data** — into GitHub Actions, because the only function that
+could answer "are the cron jobs running" was service_role-only.
 
-One of them is `SUPABASE_SERVICE_ROLE_KEY`, which **bypasses every RLS policy
-on member data**. Putting it in GitHub Actions is defensible and the workflow
-argues it through in its own header, but it is a real decision about blast
-radius, not a checklist item. Read that header before deciding.
+Migration `202609190001` removed the question. The check now runs inside the
+database every hour and **notifies every admin in the app** when a job stops;
+the GitHub workflow only reads a three-field verdict
+(`ok`, `failing_count`, `last_checked_at`) using the publishable key that is
+already in `cloud-config.js`. No Supabase secret is involved.
+
+**If you ever see an instruction to add `SUPABASE_SERVICE_ROLE_KEY` to this
+repository's Actions secrets, it is out of date — don't.** A test
+(`test/scheduled-job-alert-needs-no-service-key.test.mjs`) fails the build if
+any workflow starts reading one again.
+
+Optional, and the only secret this alert can still use: `ALERT_WEBHOOK_URL`, a
+Slack or Discord incoming webhook. Without it the alert still works — the
+workflow run simply turns red in the Actions tab instead of pinging a channel.
 
 ### Required status checks
 

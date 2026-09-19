@@ -1,4 +1,21 @@
--- No function in `public` may be executable by `anon`.
+-- No function in `public` may be executable by `anon`, except one, by name.
+--
+-- THE ONE EXCEPTION, added 2026-09-19 (202609190001). `public.job_health_
+-- status()` is deliberately granted to anon. It takes no arguments and
+-- returns three fields - ok, failing_count, last_checked_at - and exists so
+-- .github/workflows/scheduled-job-alert.yml can ask whether the scheduled
+-- jobs are healthy using the publishable key from cloud-config.js instead of
+-- SUPABASE_SERVICE_ROLE_KEY, a credential that bypasses every RLS policy on
+-- real member data and had been sitting in GitHub Actions to answer a
+-- yes/no question.
+--
+-- The exception is written as an EQUALITY, not as a hole. The assertion
+-- below says the anon-executable set is exactly {job_health_status()}, so
+-- this file still fails the build the day a second function arrives without
+-- its `revoke all ... from public, anon` - which is the entire reason it
+-- exists. Widening it is a deliberate edit here, with an argument, not an
+-- accident somewhere else. supabase/tests/0116 asserts what that one
+-- function may return.
 --
 -- WHAT THIS IS DEFENDING, and why it is a test rather than only a migration.
 --
@@ -38,24 +55,41 @@ set local search_path to public, extensions, tests;
 \ir rls_helpers.sql
 select * from no_plan();
 
+-- The set, stated exactly. set_eq prints both directions on failure: a
+-- function that gained an anon grant it should not have, and equally a
+-- job_health_status() that lost the one it needs (which would take the
+-- monitoring workflow down silently, the failure mode that whole change
+-- exists to close).
+select set_eq(
+  $$ select p.oid::regprocedure::text
+       from pg_proc p
+       join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public'
+        and has_function_privilege('anon', p.oid, 'execute') $$,
+  $$ values ('job_health_status()') $$,
+  'exactly one function in public is executable by anon, and it is job_health_status() - anything else here is a missing `revoke all on function ... from public, anon`');
+
 select is(
   (select count(*)::int
      from pg_proc p
      join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public'
       and has_function_privilege('anon', p.oid, 'execute')),
-  0,
-  'no function in public is executable by anon - if this fails, the listing below names the ones missing `revoke all on function ... from public, anon`');
+  1,
+  'and there is exactly one of them - the count says so on its own, so an overload sneaking in under the same name is still a failure');
 
--- Names them, because a bare count tells whoever broke it nothing. is_empty
--- prints the offending rows on failure.
-select is_empty(
-  $$ select p.oid::regprocedure::text
-       from pg_proc p
-       join pg_namespace n on n.oid = p.pronamespace
-      where n.nspname = 'public'
-        and has_function_privilege('anon', p.oid, 'execute') $$,
-  'and here is which ones, if any');
+-- The named exception really is the one with no arguments. A `revoke` names a
+-- signature, so an overload is a different function with default privileges -
+-- the admin_actions_page lesson at the bottom of this file. If someone ever
+-- adds job_health_status(text), it is NOT covered by the grant above and must
+-- show up as a failure, which the count assertion above delivers.
+select is(
+  (select p.pronargs::int
+     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.proname = 'job_health_status'
+      and has_function_privilege('anon', p.oid, 'execute')),
+  0,
+  'the anon-callable job_health_status takes no arguments - there is nothing for a caller to pass, which is what makes the grant defensible');
 
 -- THE OTHER DIRECTION, so this file cannot pass by locking everything down.
 -- A revoke that also caught `authenticated` would close the hole and break

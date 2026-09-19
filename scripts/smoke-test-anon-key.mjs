@@ -36,6 +36,13 @@ const TABLES = [
   "reactions", "reports", "account_deletion_requests", "invite_codes",
   "invite_redemptions", "invite_attempts", "announcements",
   "weekly_challenges", "activity_pings", "post_comments", "rate_limits",
+  // 202609190001. The scheduled-job monitor's singleton verdict row. It has
+  // RLS enabled and NO grant to either client role, so anon must get 401/403
+  // here. It is listed precisely because public.job_health_status() IS
+  // granted to anon: the function is a three-field window onto this table,
+  // and the table itself must stay shut - failing_jobs and the alert
+  // bookkeeping have no public path.
+  "job_health_state",
 ];
 // Views are separate: community_feed is DELIBERATELY public-readable by
 // any authenticated session (that's the point of a feed) so it's not

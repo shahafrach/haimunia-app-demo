@@ -138,20 +138,31 @@ locally against the local Supabase stack: correctly reports unhealthy jobs
 not success), correctly falls back to printing when no webhook is
 configured yet.
 
-**What's left is three GitHub repo secrets** (Settings → Secrets and
-variables → Actions), not a developer task:
-- `SUPABASE_URL` — the production REST URL
-- `SUPABASE_SERVICE_ROLE_KEY` — `scheduled_job_health()` is service_role-only
-  by design; never put this in a workflow file itself, only the secrets
-  store
-- `ALERT_WEBHOOK_URL` — a Slack or Discord incoming webhook URL (both
-  accept `{"text": "..."}` as-is)
+**SUPERSEDED 2026-09-19 by migration `202609190001`.** The paragraph above
+describes the original shape; two things about it are no longer true.
 
-Until these are set, the workflow's own run turns red in the Actions tab
-on every scheduled trigger — which is itself a visible (if less
-convenient) signal, not a silent no-op. You can also trigger it manually
-any time from the Actions tab (`workflow_dispatch`) to test it end-to-end
-once the secrets are in.
+First, **the alert no longer needs any Supabase secret at all.** The check
+moved into the database (the hourly `job-health-check` pg_cron job, which
+also notifies every admin in-app), and the workflow reads only its verdict
+through `public.job_health_status()` — three fields, no arguments, granted to
+`anon` — using the publishable key already committed in `cloud-config.js`.
+`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are **not** repository secrets
+any more and must not be re-added; `test/scheduled-job-alert-needs-no-service-key.test.mjs`
+fails the build if a workflow starts reading a service-role key again.
+
+Second, the workflow runs **every six hours**, not daily, and fails when `ok`
+is false **or** when `last_checked_at` is older than two hours — the second
+condition being what catches the in-database check itself having stopped.
+
+**What's left is one OPTIONAL repo secret** (Settings → Secrets and
+variables → Actions):
+- `ALERT_WEBHOOK_URL` — a Slack or Discord incoming webhook URL (both
+  accept `{"text": "..."}` as-is). Without it the check still runs and still
+  fails; the red run in the Actions tab is the alert, and the message is
+  printed to the log.
+
+You can trigger it manually any time from the Actions tab
+(`workflow_dispatch`) to test it end-to-end.
 
 **Known blind spot, found and documented 2026-09-08 — this alert cannot
 detect VAULT-1.** `scheduled_job_health()` reports a job healthy based on

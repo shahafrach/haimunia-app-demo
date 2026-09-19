@@ -149,6 +149,17 @@
     // broken for them, and a six-hour batch window is the wrong latency for
     // that. notif_create()'s own 1-hour de-dupe still collapses a burst.
     new_bug_report:        { category: "community",  mode: "immediate", pref: "new_bug_report",      icon: "🐞", title: "דיווח תקלה חדש" },
+    // 202609190001. Admins only, by admin_alert_recipients() - exactly the
+    // same audience and the same no-server-pref-arm shape as new_bug_report
+    // above, and like it, deliberately absent from NOTIF_PREF_TYPES: an
+    // operational alert about the backend having stopped working is not a
+    // thing to offer a mute switch for. serverTitle is NOT set, so the
+    // client's fixed title wins and the server's row supplies the body
+    // ("N עבודות מתוזמנות לא רצו כמתוכנן") - the count is the whole message;
+    // job names never leave the database. There is no deep link because
+    // there is no in-app screen for this, and resolveNotifTarget() would
+    // otherwise land the admin on the feed, which is worse than no link.
+    job_health_alert:      { category: "community",  mode: "immediate", pref: "job_health_alert",    icon: "⚙️", title: "תקלה בעבודות המתוזמנות" },
     achievement_unlocked:  { category: "training",   mode: "immediate", pref: "achievement_unlocked",icon: "🏅", title: "פתחת הישג חדש" },
     friend_achievement:    { category: "training",   mode: "batched",   pref: "friend_achievements", icon: "🎉", title: "חברים פתחו הישגים" },
     challenge_ending_soon: { category: "challenges", mode: "immediate", pref: "challenges",          icon: "⏳", title: "אתגר מסתיים בקרוב" },
