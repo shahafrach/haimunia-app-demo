@@ -12,7 +12,10 @@ import { test } from "node:test";
 import assert from "node:assert";
 import fs from "node:fs";
 
-const cloudJs = fs.readFileSync(new URL("../cloud.js", import.meta.url), "utf8");
+import { cloudSource } from "./helpers/community-src.mjs";
+// The community layer, not one file of it: the outward-share and achievement
+// controls this test counts now live in src/community/*.js.
+const cloudJs = cloudSource();
 const seedSql = fs.readFileSync(new URL("../supabase/migrations/202609150014_every_function_has_a_switch.sql", import.meta.url), "utf8");
 
 const NEW_KEYS = ["weekly_recap", "comments", "post_photos", "mentions", "outward_share"];

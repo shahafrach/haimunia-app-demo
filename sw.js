@@ -48,6 +48,7 @@ const REQUIRED_ASSETS = [
 const OPTIONAL_ASSETS = [
   "./src/community/events.js",
   "./src/community/outward.js",
+  "./src/community/achievements.js",
   "./cloud.js",
   "./src/eventbus.js",
   "./src/analytics.js",
