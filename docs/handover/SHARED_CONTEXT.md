@@ -7,24 +7,30 @@ Written 2026-09-17, end of a long day. Your own half is in
 ## What this is
 
 **Haimunia / האימוניה** — a Hebrew/RTL PWA for one CrossFit club. Buildless
-vanilla JS: `index.html` (inline CSS), `app.js` (~7,900 lines, the training
-log), `cloud.js` (~21,800, the community half). No bundler, no framework.
+vanilla JS: `index.html` (inline CSS), `app.js` (~8,300 lines, the training
+log), and the community half — `cloud.js` (6,756 lines: state, render, RPC,
+the permission gates and the `window.*` surface) plus fourteen per-feature
+modules under `src/community/` (~16,000 lines), split out in PR #15. No
+bundler, no framework.
 Supabase for auth and data, Cloudflare Pages for hosting.
 
 Live: https://haimunia-app.pages.dev
 Repo: `haimuniya/haimunia-app-demo` — **private** since 2026-09-17
 Supabase: `jajmlyrjlkhclgphbfbb` (free tier)
 
-**v4.76.0** · 174 migrations · 1954 JS tests · 116 pgTAP files · 47 browser scenarios
+**v4.77.0** · 175 migrations · 1970 JS tests · 116 pgTAP suites · 47 browser scenarios
 
-Reconciled 2026-09-19 against `main` at `2ba871c`. Schema: 62 tables, all with
-RLS on, 137 policies, 235 functions (182 SECURITY DEFINER) — read in PR #10
-from a container built at 173 migrations and **not re-measured since**;
-`202609180001` has landed, and it changes none of those four counts, but
-re-read them rather than trusting them. The pgTAP ASSERTION total is not
-restated here because it cannot be measured without Docker — count it from
-`supabase test db` and put the number in `docs/PROJECT_STATUS.md` when you
-have one.
+Reconciled 2026-09-19 against `main` at `8ce9e5c`. Schema: **63 tables**, all
+with RLS on, 137 policies, 235 functions (182 SECURITY DEFINER) — that
+function count was read in PR #10 from a container built at 173 migrations and
+**has not been re-measured since**. Two migrations have landed on top of it:
+`202609180001` changes none of the four counts, and `202609190001` adds
+`job_health_state` (RLS on, no policy — hence 63 tables and still 137
+policies) plus five functions that no container has counted. Treat the table
+row as arithmetic and the function row as stale; re-read all four rather than
+trusting them. The pgTAP ASSERTION total is not restated here because it
+cannot be measured without Docker — count it from `supabase test db` and put
+the number in `docs/PROJECT_STATUS.md` when you have one.
 
 ## Read these two first
 
@@ -117,14 +123,106 @@ look like a zero rather than like a gap:
 
 ## An automated reviewer now reads your PR (2026-09-19)
 
-`.github/workflows/claude-review.yml` runs `anthropics/claude-code-action` on
-every PR and on any comment mentioning `@claude`, checking CLAUDE.md's seven
-rules. Three things to know: it **comments and never gates**, so a green build
-is still the deterministic guards in `test.yml` and not this; it holds
+`.github/workflows/claude-review.yml` runs `anthropics/claude-code-action`
+when a PR is **opened** — not on every push, since PR #17 — and on any comment
+mentioning `@claude`, checking CLAUDE.md's seven rules. If a push is worth a
+second look, ask for one in a comment. Three things to know: it **comments and
+never gates**, so a green build is still the deterministic guards in
+`test.yml` and not this; it holds
 `contents: read`, so it cannot push a fix and will not; and it is **dormant
 until the `CLAUDE_CODE_OAUTH_TOKEN` repository secret exists**, which as of
 this writing it does not — every run skips with a `::notice`. A silent skip is
 not a pass.
+
+## The community layer is fourteen files now (2026-09-19)
+
+`cloud.js` was 22,370 lines in one IIFE. PR #15 split it into fourteen
+per-feature files under `src/community/` and left 6,756 lines behind. Four
+things will bite you if you do not know them:
+
+1. **The modules are classic `<script defer>` files, not ES modules, and
+   `cloud.js` is no longer an IIFE.** That is what buys zero call-site
+   changes: one shared global lexical scope. It is also why 82 test files
+   still boot the layer through `window.eval()` — `import`/`export` in that
+   text is a SyntaxError, and jsdom links no module graph. Do not "modernise"
+   this without replacing the harness first.
+2. **Modules load before `cloud.js`**, because `cloud.js` builds top-level
+   `const`s out of direct references to module functions at evaluation time
+   (`POST_CARD_RENDERERS` is the clearest). A moved `const` whose *initialiser*
+   calls something left behind throws at load — `LOGIN_RECOVERY_NOTE` is why
+   it stayed put.
+3. **No two files may declare the same top-level name**, and jsdom cannot see
+   a violation: `boot.mjs` gives the whole layer one `window.eval()` with its
+   own scope, so only Chromium catches it. All three rules are pinned in
+   `test/community-module-split.test.mjs`.
+4. **Read the source through `cloudSource()`** (`test/helpers/community-src.mjs`),
+   not through a path. A test that reads one file asserts a property of that
+   file; what you almost always mean is a property of the *layer*. Six
+   hand-maintained file lists had quietly stopped covering what they were
+   written for — including two carrying the zero-`innerHTML` XSS guard for the
+   surface that renders other members' data. And a bare `indexOf` over the
+   concatenation finds the wrong occurrence: `const staffToolbar = (staff || pinBtn)`
+   matched the event toolbar instead of the challenge one, inside
+   `sibling-drift-guard` of all files.
+
+`docs/community/CLOUD_JS_MAP.md` is the map, and its §5 lists the 139 code
+lines now duplicated across modules and the five near-duplicate function pairs
+— named on purpose, merged on purpose nowhere. Its §9 says where the map was
+wrong.
+
+## No CI minutes until 2026-10-01 (2026-09-19)
+
+**The free GitHub Actions allowance ran out on 2026-09-19 and resets on
+2026-10-01.**
+
+- **Run `supabase test db` locally before merging anything with SQL in it.**
+  In this window that is the only place the pgTAP suite runs — CI's
+  `migration-check` job is not answering — so the person merging is the person
+  who ran it. Say in the PR which suites you ran and where. `0116` and the
+  amended `0113` from PR #14 have never been run by a runner.
+- **A job that finishes in three seconds did not run.** During the outage
+  every job on PR #15 completed in 2–4 seconds with `runner_id: 0`, no runner
+  name and `HTTP 404` on the log download, including jobs its diff never
+  touched. That is not a red build and it is not a green one; it is no build.
+  This is the same class of mistake as the two instrument failures above —
+  read the evidence before believing a total.
+- **PR #17 halved the bill, which is not the same as refilling it.** `test.yml`
+  had been running twice per push (`push` and `pull_request`, in two
+  concurrency groups that could not cancel each other); `push` is `main` only
+  now, docs-only changes skip the workflow entirely, and `claude-review` runs
+  on `opened` rather than on every push. Those savings start mattering on
+  2026-10-01.
+
+## A stash worth reading before you re-find it (2026-09-19)
+
+**`archive/ux-audit-stash`** (`0a43d34`) is a git stash from **2026-09-06**,
+made on `fix/ux-audit-blockers` at `45b98fe` — a base that is **not an
+ancestor of `main`**. It is on a branch rather than in a stash entry so it
+survives the machine it was made on. **Nobody has reviewed it. None of it is
+merged.**
+
+It touches `PRIVACY.md`, `app.js`, `cloud.js`, `index.html` and
+`privacy.html`, and it is UX-audit work — three findings that three separate
+reviewers raised:
+
+- The all-time-records headline showed `bestEst1RM()`, a formula output nobody
+  has ever lifted, while the row underneath said `5RM 60`. The stash separates
+  the estimate from the heaviest set actually put on the bar, with separate
+  labels everywhere both appear.
+- The welcome dialog asks when you started at the box, and a date typed there
+  was on its own enough to earn every tenure badge it cleared — three
+  full-screen celebrations inside ninety seconds, before a single set was
+  logged. The stash gates them behind at least one logged session.
+- A celebration rendered on top of the five-screen onboarding explainer and
+  hid it — both are `.modal-overlay` at `z-index: 50`, so two open at once
+  stack by DOM order. The stash defers the celebration and replays it on
+  close, because the badge is already marked seen by then and dropping it
+  would swallow it silently.
+
+**It will not replay cleanly.** `cloud.js` has been split since, so its
+`cloud.js` half needs re-targeting at `src/community/`, and the `PRIVACY.md`
+half predates the sub-processor correction in PR #10. Read it before deriving
+any of those three findings from scratch; do not apply it blind.
 
 ## Hebrew, because it has bitten this codebase repeatedly
 
@@ -136,10 +234,10 @@ not a pass.
 
 ```
 npm ci                        # FIRST. See below — the suite lies without it
-node --test                   # 1954 JS tests, jsdom, ~10 min
+node --test                   # 1970 JS tests, jsdom, ~10 min
 supabase start                # docker is on this machine
-supabase db reset --local     # replays all 174 migrations from empty, ~3 min
-supabase test db --local      # 116 pgTAP files, ~10 s
+supabase db reset --local     # replays all 175 migrations from empty, ~3 min
+supabase test db --local      # 116 pgTAP suites, ~10 s
 node scripts/browser-check/run-all.mjs   # 47 scenarios, real Chromium
 ```
 

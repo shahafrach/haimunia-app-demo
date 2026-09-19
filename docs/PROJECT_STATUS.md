@@ -5,7 +5,7 @@ holds the state, and it is the one a session should distrust first: if a
 number here disagrees with the repository, the repository is right and this
 file is stale. Say so in your PR.
 
-**Last reconciled: 2026-09-19, against `main` at `2ba871c`.**
+**Last reconciled: 2026-09-19, against `main` at `8ce9e5c`.**
 
 ---
 
@@ -13,14 +13,15 @@ file is stale. Say so in your PR.
 
 | | |
 |---|---|
-| App version | **4.76.0** (`APP_VERSION` in app.js, mirrored to `SW_VERSION` in sw.js) |
-| Migrations | **174** files in `supabase/migrations/` |
-| pgTAP suites | **116** files in `supabase/tests/` — assertion total **not measured here** (`supabase test db` needs Docker) |
-| JS tests | **1954 passing, 0 failing** (`npm test`, run 2026-09-19 on this branch) |
+| App version | **4.77.0** (`APP_VERSION` in app.js, mirrored to `SW_VERSION` in sw.js) |
+| Migrations | **175** files in `supabase/migrations/` |
+| pgTAP suites | **116** files in `supabase/tests/` (117 with `rls_helpers.sql`) — assertion total **not measured here** (`supabase test db` needs Docker) |
+| JS tests | **1970 passing, 0 failing** (`npm test`, run 2026-09-19 on this branch) |
 | Browser scenarios | **47**, all passing (`scripts/browser-check/run-all.mjs`, real Chromium, run 2026-09-19) |
-| Tables in `public` | **62**, every one with RLS enabled |
+| Community layer | `cloud.js` **6,756** lines plus **14** files in `src/community/` |
+| Tables in `public` | **63**, every one with RLS enabled |
 | RLS policies | **137** |
-| Functions in `public` | **235**, of which **182** are SECURITY DEFINER |
+| Functions in `public` | **235 measured**, of which **182** are SECURITY DEFINER — plus **five** declared by `202609190001` and never counted in a container |
 
 The schema figures were read from a Postgres 16 instance built by applying
 all 173 migrations in filename order, in PR #10. Five of them could not
@@ -29,11 +30,17 @@ apply in that container — `202609050005`, `202609060016`, `202609060018`, `202
 the five creates a table or a policy, so the table and policy counts are
 complete; the function count may be short by the handful those five declare.
 
-**Those four schema rows have not been re-measured since.** `202609180001` has
-landed and applied since that read; it drops and recreates
-`admin_member_roster` at the same argument list, so it adds no table and no
-policy and changes no count above — but the next session to stand up a
-container should re-read all four rather than trust these.
+**Those rows have still not been re-measured in a container, and two of them
+have since been adjusted by hand.** Two migrations have landed and applied
+since that read. `202609180001` drops and recreates `admin_member_roster` at
+the same argument list, so it adds no table, no policy and no function.
+`202609190001` adds **`job_health_state`** — hence 63 tables, and it has RLS
+enabled with **no policy at all**, so the policy count is genuinely unchanged
+at 137 — and declares five functions (`job_health_check()`,
+`job_health_status()`, `cron_cadence_window()`, `admin_alert_recipients()`,
+and a re-declared `scheduled_job_health()`). The table row is arithmetic on a
+measurement; the function row is not a measurement at all. The next session to
+stand up a container should re-read all four rather than trust any of this.
 
 ---
 
@@ -50,18 +57,76 @@ container should re-read all four rather than trust these.
   middleware, not a reason to relax either it or the no-secrets rule.
 - **Supabase project `jajmlyrjlkhclgphbfbb`** — production, real member data.
   Latest applied migration:
-  **`202609180001_the_roster_returns_what_it_sorts_on`, applied to production
-  on 2026-09-19** by the owner, alongside the merge of PR #13. It matches the
-  repository — 174 files committed, 174 applied. **No drift**
+  **`202609190001_job_health_without_a_service_key`, applied to production on
+  2026-09-19** by the owner, after the merge of PR #14. It matches the
+  repository — 175 files committed, 175 applied. **No drift**
   (owner-confirmed, 2026-09-19). Confirm with `npm run check:drift`, never
   with this line: it is a record of what was true at reconcile time, and the
   command is the measurement.
 
 ---
 
+## CI, until the quota resets on 2026-10-01
+
+**The free GitHub Actions allowance ran out on 2026-09-19.** It resets on
+**2026-10-01**. Until then there are no minutes to spend, so:
+
+- **Database tests run locally before merge, not in CI.** `supabase test db`
+  against a local stack is the only place the pgTAP suite runs in this window —
+  including `0116` and the amended `0113` from PR #14, which have never been
+  run by a runner. The person merging is the one who ran them, so a PR merged
+  before 2026-10-01 should say in its description which suites it ran and
+  where. `migration-check` is the job that is not answering.
+- **A run that looks instantaneous is not a pass.** During the outage every
+  job on PR #15 finished in 2–4 seconds with `runner_id: 0`, no runner name
+  and `HTTP 404` on the log download — including jobs that branch's diff never
+  touched. That is a job that never got a runner, and it is not a code result
+  in either direction.
+- **PR #17 halved the bill; it did not refill it.** PR-side cost is down from
+  ~375 to ~186 minutes for a five-push PR, and a docs-only PR now queues
+  nothing at all. That is what the allowance buys from 2026-10-01 onward.
+
+---
+
 ## What shipped most recently
 
-**Four branches merged 2026-09-19 (PRs #8, #11, #12, #13)**, plus **PR #10**,
+**Three branches merged 2026-09-19, after the consolidation in #16 (PRs #15,
+#17, #14).** None of them changes what a member sees:
+
+- **The community layer is fourteen files.** `cloud.js` went from 22,370 lines
+  in one IIFE to 6,756 plus fourteen per-feature modules under
+  `src/community/` — auth, feed, comments, boards, challenges, events,
+  notifications, directory, coach tools, club management, admin, posts,
+  outward sharing, achievements. Classic `<script>` files sharing one global
+  scope, so **no call site moved**; all fourteen are in `sw.js`'s
+  `OPTIONAL_ASSETS`, and the app was confirmed to still boot offline in real
+  Chromium with the server stopped. Giving up the IIFE exposed five names that
+  collided with `app.js`/`src/constants.js`; four are now declared compatibly,
+  and `isIOSDevice` is two *visibly* drifted copies instead of one silently
+  winning. Read `docs/community/CLOUD_JS_MAP.md` before the next module moves
+  — its §5 lists the 139 duplicated lines and five near-duplicate function
+  pairs the split exposed and deliberately did not merge (PR #15).
+- **The Actions bill, roughly halved.** `test.yml` was running the whole
+  37-minute suite twice per push — once as `push`, once as `pull_request` — in
+  two concurrency groups that could not cancel each other. `push` is now
+  `main` only, the group is keyed on `head_ref`, docs-only changes skip the
+  workflow, and `claude-review` runs on `opened` and on `@claude` rather than
+  on every push. The `paths-ignore` list names **only paths no test reads**;
+  `test/workflow-minutes.test.mjs` derives the read set by scanning `test/*.mjs`
+  for `.md` reads and fails if one of those six files ever lands inside the
+  ignore list (PR #17).
+- **The pg_cron jobs are watched without a service-role key in GitHub.**
+  `job_health_check()` runs hourly, flags any job that failed, stalled or never
+  ran, and notifies admins in-app as `job_health_alert` (rate-limited to the
+  first problem, any change in the failing set, then at most every six hours).
+  `job_health_status()` returns only `ok`, `failing_count` and
+  `last_checked_at` and is **the one function in `public` deliberately granted
+  to `anon`** — `supabase/tests/0113` now pins the anon-executable set to
+  exactly that one, zero-argument function. `SUPABASE_SERVICE_ROLE_KEY` and
+  `SUPABASE_URL` are no longer read by anything and **should be deleted from
+  Settings → Secrets → Actions**. Migration `202609190001` (PR #14).
+
+**Earlier on 2026-09-19 (PRs #8, #11, #12, #13)**, plus **PR #10**,
 which merged late on 2026-09-18 — after the reconcile this file last carried —
 and so appears here for the first time. Two of the five changed what a member
 experiences:
@@ -163,6 +228,25 @@ member removal with an audit trail; two rounds of live bug hunting.
   `bug_reports.diagnostics ->> 'standalone'`, which is a self-selected sample
   of members who hit a problem and wrote in — never an adoption rate. The
   one-line additive fix is `standalone` on `club_tab_viewed`'s props.
+
+- **`archive/ux-audit-stash` is preserved and unreviewed.** The branch holds a
+  git stash commit (`0a43d34`) made on 2026-09-06 on `fix/ux-audit-blockers` at
+  `45b98fe` — a base that is **not an ancestor of `main`**. It touches
+  `PRIVACY.md`, `app.js`, `cloud.js`, `index.html` and `privacy.html`, and its
+  substance is UX-audit work: separating the estimated 1RM from the heaviest
+  set actually lifted in the all-time-records headline, gating the tenure
+  badges behind at least one logged session so a self-typed signup date cannot
+  earn three celebrations in ninety seconds, and holding a celebration that
+  would otherwise render on top of the first-run onboarding overlay. **Nobody
+  has reviewed it and none of it is merged.** It lives on a branch rather than
+  in a stash entry so it survives the machine it was made on. It will not
+  replay cleanly — `cloud.js` has been split since, so its `cloud.js` half
+  needs re-targeting at `src/community/`. Read it before re-deriving any of
+  those three findings from scratch.
+- **The service-role key is still in the repository's Actions secrets**, and
+  nothing reads it any more (PR #14). Deleting `SUPABASE_SERVICE_ROLE_KEY` and
+  `SUPABASE_URL` is an owner action; leaving a service-role key in a store
+  nothing uses is the worst of both.
 
 ## Stale in the repository, flagged not fixed
 
