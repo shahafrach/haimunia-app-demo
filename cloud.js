@@ -1192,6 +1192,12 @@
     for (const row of (data || [])) next[row.module_key] = { enabled: row.enabled, config: row.config || {} };
     state.club.features = next;
     state.club.featuresLoaded = true;
+    // Hands the map to app.js, the same way setClubWods() hands it the
+    // catalogue. app.js keeps its OWN cached copy because what it gates
+    // (the percentage chips on the log screen) has to render offline, with
+    // no session and with this function never having run - see
+    // CLUB_FEATURES_CACHE_KEY there, and note its default is off, not on.
+    if (typeof window.setClubFeatureFlags === "function") window.setClubFeatureFlags(next);
   }
   // Defaults to true while not yet loaded and for any key with no row at
   // all - deliberately not mirroring notifPrefsLoaded's skeleton-row
