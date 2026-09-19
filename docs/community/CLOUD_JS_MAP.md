@@ -359,3 +359,109 @@ stop covering the new files rather than failing loudly.
 Whatever the approach, the number to compare against is the suite's state on
 `main` before anything moved. It is recorded in the pull request rather than
 here, because it is a property of a run, not of the file.
+
+---
+
+## 9. What the split actually did
+
+Written after the fact, against the same measurements. `cloud.js` went from
+**22,395 lines to 6,756**; fourteen files now sit under `src/community/`.
+
+| module | units | lines | runs it was gathered from |
+|---|---|---|---|
+| `admin` | 246 | 4,082 | 9 |
+| `posts` | 98 | 1,186 | 4 |
+| `club` | 78 | 1,460 | 6 |
+| `directory` | 76 | 1,090 | 6 |
+| `challenges` | 61 | 1,369 | 2 |
+| `outward` | 55 | 869 | 1 |
+| `coach-tools` | 51 | 1,318 | 5 |
+| `events` | 50 | 700 | 1 |
+| `auth` | 48 | 896 | 2 |
+| `comments` | 44 | 603 | 5 |
+| `notifications` | 42 | 964 | 3 |
+| `feed` | 31 | 443 | 3 |
+| `boards` | 25 | 285 | 2 |
+| `achievements` | 12 | 252 | 2 |
+
+Where the map was wrong, and how:
+
+- **Unit counts ran high.** The map's name-rule assignment missed one-line
+  declarations (`pad2`, `eventTypeBadge`, `icsFoldLine`, `closeEventForm`),
+  because the parser that produced §3 brace-matched to the next `^  }` and
+  swallowed them into a neighbour. Corrected before any code moved; the
+  corrected parser finds 1,117 top-level units, matching §1's declaration
+  count exactly.
+- **Run counts ran low for the same reason**, and high for `events` — which
+  the map put at 2 runs and which turned out to be 1 contiguous block plus
+  `renderEventLinkCard`, deliberately left behind.
+- **`admin` at 38 runs was an overcount**; it gathered from 9, because
+  several of the map's "runs" were adjacent blocks separated only by blank
+  lines.
+
+Where the map was right: the seams are product seams, not code seams. Every
+module needed a "what stayed behind, deliberately" paragraph, and several of
+those are the same argument — a renderer belongs with the table that
+dispatches it, a gate belongs with the other gates, a shared Realtime
+debounce is platform rather than a feature.
+
+### The mechanism, and its three rules
+
+Classic `<script>` tags sharing one global lexical environment, which is why
+not one of the 3,285 internal call sites changed. Three properties hold it
+together, each invisible in any single file and each asserted in
+`test/community-module-split.test.mjs`:
+
+1. **Modules load before `cloud.js`.** `cloud.js` builds top-level `const`s at
+   evaluation time out of direct references to module functions —
+   `POST_CARD_RENDERERS` is the clearest — and a function declaration is only
+   available once its own script has run.
+2. **Classic scripts, no IIFE, no ES module syntax.** Any of the three would
+   cut a module off from `state`, `client`, `esc` and `rerender`, which it
+   reaches as plain identifiers.
+3. **No two files declare the same top-level name.** Two `const`s of one name
+   at global scope is a SyntaxError that kills the later script. jsdom cannot
+   see it — `boot.mjs` gives the whole layer one `window.eval()` with its own
+   scope — so only Chromium catches it.
+
+Rule 1 has one more consequence, caught by the extractor rather than by a
+person: a moved top-level `const` whose *initialiser* calls something left in
+`cloud.js` throws at load. `LOGIN_RECOVERY_NOTE` interpolates `bidiText()`,
+so it stayed behind.
+
+### What the tests cost, in the end
+
+Forty-one test files changed. Most were one-line repoints from
+`readFileSync(".../cloud.js")` to `cloudSource()`, with every pattern in them
+untouched. Ten needed more, and they fall into three kinds worth knowing
+about before the next module moves:
+
+- **A slice marker that moved earlier in the concatenation inverts the
+  slice**, and an `assert.ok(start > -1 && end > start)` placed *after* the
+  slice sweeps an empty string and passes. Three tests had this shape.
+- **A bare `indexOf` over a concatenation finds the wrong occurrence.**
+  `{ key: "weekly_recap",` matched `NOTIF_PREF_TYPES` instead of
+  `CLUB_MODULE_TOGGLES`; `const staffToolbar = (staff || pinBtn)` matched the
+  event toolbar instead of the challenge one — in `sibling-drift-guard`, of
+  all files.
+- **A hand-maintained file list stops covering what it was written for.**
+  `app-innerhtml-sinks` (the XSS guard), `storage-isolation` (the production
+  storage-prefix guard), `hebrew-copy-rules` (slash-gender and final-form)
+  and `bidi-isolation` all named `cloud.js` explicitly. All four now iterate
+  the layer, and all four pass unchanged over the moved code — but they were
+  about to stop asking.
+
+The remaining 30 source-text files read the layer through `cloudSource()`, so
+they assert a property of the community layer rather than of one file. That
+is the trade §8 named in advance, taken knowingly.
+
+### Still open
+
+- **`core` stays in `cloud.js`** — 6,756 lines: `state`, `rerender`, `esc`,
+  `client`, `communityRpc`, the error table, the outbox bridge, the dialog
+  registry, the form and date helpers, the permission gates, the Manage tab
+  shell, the desktop staff columns, and the `window.*` export surface.
+  Extracting it repoints all 71 source-text tests at once.
+- **The duplicated logic in §5 is listed and not merged**, as instructed.
+- **`isIOSDevice` drift is exposed, not resolved**: both implementations are
+  still there, now under distinct names.
