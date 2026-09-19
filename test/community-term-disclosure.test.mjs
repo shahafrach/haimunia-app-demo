@@ -22,8 +22,13 @@ import assert from "node:assert";
 import fs from "node:fs";
 import { bootCommunity, waitFor } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
+import { cloudSource } from "./helpers/community-src.mjs";
 
-const src = fs.readFileSync(new URL("../cloud.js", import.meta.url), "utf8");
+// The whole community layer, not cloud.js alone. The zero-innerHTML-sink
+// assertion below is the XSS guard for the surface that renders other
+// members' data, and that surface is fourteen files now — a guard still
+// naming one of them would pass while covering a fraction of what it claims.
+const src = cloudSource();
 const indexHtml = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
 const V = new Date().toISOString();
 
@@ -123,7 +128,7 @@ test("no movement NAME was translated - the glossary explains concepts and leave
   for (const [, key, value] of pairs) {
     assert.equal(value, key.trim(), `CATEGORY_LABELS.${key.trim()} must stay an identity map - see this test's comment`);
   }
-  assert.ok(!/CATEGORY_LABELS\s*\[/.test(src), "cloud.js must not reach into the category label map at all");
+  assert.ok(!/CATEGORY_LABELS\s*\[/.test(src), "the community layer must not reach into the category label map at all");
   // Thruster/HSPU/OHS are in the glossary as EXPLANATIONS, keyed by their
   // English names - the entry describes the movement, it does not rename it.
   assert.match(src, /\{ id: "thruster", term: "Thruster"/);
@@ -317,7 +322,7 @@ test("the sheet is in the dialog registry, so Escape, the Tab trap and the backd
   assert.equal(keys.indexOf("termSheet"), 2);
 });
 
-test("every term the sheet renders goes through esc()/bidiText, and cloud.js still has no innerHTML sink", () => {
+test("every term the sheet renders goes through esc()/bidiText, and the community layer still has no innerHTML sink", () => {
   // A glossary is wall-to-wall mixed script - a Latin term inside a Hebrew
   // sentence is precisely the shape e013bed was written for, and getting it
   // wrong here would garble the explanation of the word being explained.
