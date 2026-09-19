@@ -21,7 +21,14 @@ import fs from "node:fs";
 import { bootCommunity, waitFor } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
 
-const src = fs.readFileSync(new URL("../cloud.js", import.meta.url), "utf8");
+import { cloudSource, communityFile } from "./helpers/community-src.mjs";
+// The community layer, not one file of it — the outward-sharing half of what
+// this test covers now lives in src/community/outward.js.
+const src = cloudSource();
+// ...except where the assertion is genuinely about that one module, below,
+// where reading the file alone is a STRONGER guarantee than slicing a
+// concatenation between two comment markers ever was.
+const outwardJs = communityFile("src/community/outward.js");
 const VERIFIED = new Date().toISOString();
 
 const FSI = "⁨";
@@ -510,7 +517,10 @@ test("an only_me achievement offers no outward control, matching the club contro
   // Unlike the profile-wide toggles, this is an item-level flag the member
   // set on this exact decoration, and it defaults to "club" - so honouring it
   // costs the feature nothing.
-  const section = src.slice(src.indexOf("function renderMyAchievements()"), src.indexOf("// OUTWARD SHARING"));
+  // End marker moved with the block it labelled: renderMyAchievements() is
+  // the last thing in cloud.js's achievements run, and the profile section is
+  // what now follows it.
+  const section = src.slice(src.indexOf("function renderMyAchievements()"), src.indexOf("// ---- Member profile community section"));
   assert.match(section, /const outward = r\.visibility === "only_me"\s*\n\s*\? ""/);
   const celebration = src.slice(src.indexOf("function renderAchievementUnlockCelebration()"), src.indexOf("function renderMyAchievements()"));
   assert.match(celebration, /\$\{canShare && isModuleEnabled\("outward_share"\) \? `<button class="chip-btn" data-community-action="outward-ach">/);
@@ -519,7 +529,10 @@ test("an only_me achievement offers no outward control, matching the club contro
 // ===== the guarantees that are easier to assert on the source ============
 
 test("the card image is rendered locally and never uploaded", () => {
-  const block = src.slice(src.indexOf("// OUTWARD SHARING"), src.indexOf("// ---- Member profile community section"));
+  // The whole module, not a slice between two comment markers: outward
+  // sharing is one file now, so "no Supabase anywhere in it" is a property of
+  // the file and can simply be asserted as one.
+  const block = outwardJs;
   assert.doesNotMatch(block, /client\.(rpc|from|storage|functions)/,
     "an outward share must not touch Supabase - no upload, no post, no analytics row");
   assert.match(block, /navigator\.share/);
