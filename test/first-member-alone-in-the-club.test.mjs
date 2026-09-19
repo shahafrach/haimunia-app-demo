@@ -13,8 +13,12 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import fs from "node:fs";
+import { cloudSource } from "./helpers/community-src.mjs";
 
-const cloudJs = fs.readFileSync(new URL("../cloud.js", import.meta.url), "utf8");
+// The community layer, not one file of it: cloud.js is being split into
+// src/community/*.js, and what this test asserts is a property of the layer.
+// Every pattern below is unchanged.
+const cloudJs = cloudSource();
 
 test("a club of one does not read '1 חברי מועדון'", () => {
   // Hebrew does not pluralise like that: the noun must be singular for 1.

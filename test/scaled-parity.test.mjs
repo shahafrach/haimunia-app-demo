@@ -19,9 +19,13 @@ import { test } from "node:test";
 import assert from "node:assert";
 import fs from "node:fs";
 import { bootApp } from "./helpers/boot.mjs";
+import { cloudSource } from "./helpers/community-src.mjs";
 
 const appJs = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
-const cloudJs = fs.readFileSync(new URL("../cloud.js", import.meta.url), "utf8");
+// The community layer, not one file of it: cloud.js is being split into
+// src/community/*.js, and what this test asserts is a property of the layer.
+// Every pattern below is unchanged.
+const cloudJs = cloudSource();
 
 test("the PR flash names the level, so a scaled record is announced as a record", async () => {
   const window = await bootApp();

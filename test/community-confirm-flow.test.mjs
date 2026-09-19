@@ -15,7 +15,11 @@ import fs from "node:fs";
 import { bootCommunity, waitFor } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
 
-const src = fs.readFileSync(new URL("../cloud.js", import.meta.url), "utf8");
+import { cloudSource } from "./helpers/community-src.mjs";
+// The community layer, not one file of it: what this test asserts is a
+// property of the layer, and the layer is cloud.js plus src/community/*.js
+// now. Every pattern below is unchanged.
+const src = cloudSource();
 
 const VERIFIED = new Date().toISOString();
 const NOW = Date.now();

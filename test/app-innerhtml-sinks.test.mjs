@@ -22,10 +22,15 @@ import assert from "node:assert";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { cloudSource, COMMUNITY_MODULES, communityFile } from "./helpers/community-src.mjs";
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const appJs = fs.readFileSync(path.join(root, "app.js"), "utf8");
-const cloudJs = fs.readFileSync(path.join(root, "cloud.js"), "utf8");
+// THE WHOLE COMMUNITY LAYER, not cloud.js alone. This guard is the reason
+// cloud.js has zero innerHTML sinks, and cloud.js is being split into
+// src/community/*.js — a guard that keeps naming one file would go on passing
+// while the code it protects moved out from under it.
+const cloudJs = cloudSource();
 
 // Identifiers proven safe by inspection during the SEC-018 pass. Each entry
 // records WHY, because an allow-list without reasons rots into a mute
@@ -51,12 +56,16 @@ function sinkLines(src) {
     .filter(({ line }) => /\.(innerHTML|outerHTML)\s*=/.test(line));
 }
 
-test("cloud.js still has zero innerHTML/outerHTML assignments", () => {
+test("the community layer still has zero innerHTML/outerHTML assignments", () => {
   // This is the load-bearing one: cloud.js is where remote, other-member
   // data is rendered. It reaches esc() unguarded at the top of the file
   // precisely so it fails loudly rather than degrading to a no-op.
   assert.equal(sinkLines(cloudJs).length, 0,
-    "cloud.js renders attacker-influenced data - it must keep using template composition with esc(), never a raw innerHTML sink");
+    "the community layer renders attacker-influenced data - it must keep using template composition with esc(), never a raw innerHTML sink");
+  // Named per file too, so a failure says WHICH module grew the sink.
+  for (const f of COMMUNITY_MODULES) {
+    assert.equal(sinkLines(communityFile(f)).length, 0, `${f} must have no innerHTML/outerHTML sink`);
+  }
 });
 
 test("every interpolation in an app.js innerHTML sink is escaped, numeric, or a proven constant", () => {

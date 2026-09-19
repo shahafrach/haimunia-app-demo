@@ -16,6 +16,7 @@ import assert from "node:assert";
 import { bootCommunity, waitFor, waitForCommunityGate, seedAdminStepUp, unlockAdminPanel } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
 import fs from "node:fs";
+import { cloudSource } from "./helpers/community-src.mjs";
 
 function submit(window, id) {
   window.document.getElementById(id).dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
@@ -389,7 +390,8 @@ test("a refused RLS write (does not raise - matches zero rows) is caught by the 
 // that clears it - a guard that can wedge on a thrown request would strand
 // the carousel on its fallback copy forever, which is worse than the storm.
 test("the intro-carousel content read is guarded against overlapping in-flight loads", () => {
-  const cloudJs = fs.readFileSync(new URL("../cloud.js", import.meta.url), "utf8");
+  // loadIntroCarouselContent() lives in src/community/club.js now.
+  const cloudJs = cloudSource();
   assert.match(
     cloudJs, /if \(!state\.user \|\| state\.intro\.contentLoading\) return;/,
     "loadIntroCarouselContent must refuse to start while one read is already in flight",

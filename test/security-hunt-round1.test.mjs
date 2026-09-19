@@ -8,6 +8,7 @@
 // exploitable on its own. See CHANGES.md for the full report.
 import { test } from "node:test";
 import assert from "node:assert";
+import { cloudSource } from "./helpers/community-src.mjs";
 import { bootApp } from "./helpers/boot.mjs";
 
 test("a render failure shows a generic message, not the raw internal exception text", async () => {
@@ -26,7 +27,7 @@ test("a render failure shows a generic message, not the raw internal exception t
 });
 
 test("event map_link is only rendered as a clickable link when it actually starts http(s):// - a second, render-site gate independent of the submit-time check and the DB constraint", async () => {
-  const src = await import("node:fs").then((fs) => fs.readFileSync(new URL("../cloud.js", import.meta.url), "utf8"));
+  const src = cloudSource();
   // Source-text assertion (cloud.js has no jsdom-executable community-driven
   // render path in bootApp() alone - see community-*.test.mjs for the
   // bootCommunity-driven equivalents this fix's sibling checks already use).
@@ -40,8 +41,11 @@ test("event map_link is only rendered as a clickable link when it actually start
 });
 
 test("navigateToNotifTarget builds its post-id selector through the shared cssSel() helper, not a naive manual escape", async () => {
-  const src = await import("node:fs").then((fs) => fs.readFileSync(new URL("../cloud.js", import.meta.url), "utf8"));
-  assert.match(src, /const cssSel = window\.BoxLogSafe\.cssSel;/, "cssSel must be bound from the shared safe-helpers module, same pattern as esc/bidiText");
+  const src = cloudSource();
+  // `var` since cloud.js stopped being an IIFE - src/constants.js declares
+  // cssSel with `var` too, and two `var`s at global scope are legal where two
+  // `const`s are not. Where it is bound FROM is the assertion.
+  assert.match(src, /var cssSel = window\.BoxLogSafe\.cssSel;/, "cssSel must be bound from the shared safe-helpers module, same pattern as esc/bidiText");
   assert.match(src, /const sel = '\[data-post-id="' \+ cssSel\(target\.post\) \+ '"\]';/,
     "the selector must be built with cssSel(), not a bare .replace() escape");
 });

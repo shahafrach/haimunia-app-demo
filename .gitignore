@@ -21,3 +21,8 @@ design/community-directions.html
 # back into git. _redirects blocks the path as well, so the two have to fail
 # together for this to recur.
 docs/owner-guide/
+
+# Scratch extraction tooling for the src/community/ split, run from outside the
+# repo. The root IS the website, so nothing unreviewed belongs here even when
+# functions/_middleware.js already 404s it.
+/_*.mjs

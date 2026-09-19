@@ -25,6 +25,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { bootCommunity, waitFor } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
+// The Welcome row is in src/community/coach-tools.js now, and this test is
+// genuinely about that one file: reading it whole is a stronger guarantee
+// than slicing a concatenation between two function names.
+import { communityFile } from "./helpers/community-src.mjs";
 
 const migrationsDir = new URL("../supabase/migrations/", import.meta.url);
 const MIGRATION = "202609060020_coach_signal_honesty.sql";
@@ -432,7 +436,7 @@ test("render: the coach never sees a bare consecutive-app-open streak labelled a
   // renderCoachWelcomeRow() used to print community_streaks.current_streak -
   // consecutive days the member OPENED THE APP - as "רצף נוכחי" beside a new
   // member's name, where a coach reads it as sessions trained.
-  const src = fs.readFileSync(new URL("../cloud.js", import.meta.url), "utf8");
+  const src = communityFile("src/community/coach-tools.js");
   // Comment lines are stripped first: the replacement is documented in place
   // (it has to be - the old label looked deliberate), and a naive substring
   // search matches the note explaining the removal rather than the code.

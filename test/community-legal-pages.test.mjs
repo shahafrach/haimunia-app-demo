@@ -10,6 +10,7 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import fs from "node:fs";
+import { cloudSource } from "./helpers/community-src.mjs";
 
 const privacyMd = fs.readFileSync(new URL("../PRIVACY.md", import.meta.url), "utf8");
 const termsMd = fs.readFileSync(new URL("../TERMS.md", import.meta.url), "utf8");
@@ -220,7 +221,8 @@ test("the Terms describe account creation as asked-or-not, matching the Privacy 
 // this audit keeps finding - in the legal basis this time. Asserted here, in
 // the suite that owns the sentence, so the failure lands next to the claim.
 test("the code that makes the consent half of the legal basis true is still in place", () => {
-  const cloudJs = fs.readFileSync(new URL("../cloud.js", import.meta.url), "utf8");
+  // maybeAutoStartBackup() is in src/community/auth.js now.
+  const cloudJs = cloudSource();
   assert.match(appJs, /window\.haimuniaBackupConsentPending = function \(\) \{ return backupConsent === null; \};/);
   assert.match(cloudJs, /if \(typeof window\.haimuniaBackupConsentPending === "function" && window\.haimuniaBackupConsentPending\(\)\) return;/);
   // And the other population is real, which is why the document names it:

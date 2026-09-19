@@ -23,6 +23,7 @@ import { test } from "node:test";
 import assert from "node:assert";
 import fs from "node:fs";
 import { bootApp } from "./helpers/boot.mjs";
+import { COMMUNITY_MODULES, communityFile } from "./helpers/community-src.mjs";
 
 const helpersSrc = fs.readFileSync(new URL("../src/shared/safe-helpers.js", import.meta.url), "utf8");
 const appSrc = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
@@ -47,12 +48,21 @@ test("there is exactly one definition: app.js and cloud.js bind the helper, they
   // nobody sees a broken string — only a plausible, valid-looking, different
   // workout. A source-level assertion is the only thing that catches a fourth
   // copy being pasted back in later.
-  for (const [name, src] of [["app.js", appSrc], ["cloud.js", cloudSrc]]) {
+  // Every community file, not cloud.js alone: a fourth copy of bidiText is
+  // exactly the kind of thing that gets pasted into a new module.
+  for (const [name, src] of [["app.js", appSrc], ["cloud.js", cloudSrc], ...COMMUNITY_MODULES.map((f) => [f, communityFile(f)])]) {
     assert.doesNotMatch(src, /^\s*function bidiText\s*\(/m, `${name} must not re-declare bidiText`);
     assert.doesNotMatch(src, /^\s*function bidiHtml\s*\(/m, `${name} must not re-declare bidiHtml`);
   }
-  assert.match(appSrc, /const bidiText = SAFE\.bidiText;/);
-  assert.match(cloudSrc, /const bidiText = window\.BoxLogSafe\.bidiText;/);
+  // `var`, not `const`, in both: cloud.js stopped being an IIFE so that
+  // src/community/*.js can share its scope, which put its bidiText and
+  // app.js's in the same global lexical environment. Two `const`s there are a
+  // redeclaration SyntaxError; two `var`s binding the identical
+  // window.BoxLogSafe function are not. What this test is actually about -
+  // that neither file re-implements it - is unchanged, and the
+  // doesNotMatch pair above is what enforces it.
+  assert.match(appSrc, /var bidiText = SAFE\.bidiText;/);
+  assert.match(cloudSrc, /var bidiText = window\.BoxLogSafe\.bidiText;/);
   assert.match(cloudSrc, /const bidiHtml = window\.BoxLogSafe\.bidiHtml;/);
 });
 

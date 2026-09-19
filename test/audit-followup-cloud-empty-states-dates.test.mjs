@@ -20,8 +20,21 @@ import assert from "node:assert";
 import fs from "node:fs";
 import { bootCommunity, waitFor, seedAdminStepUp, unlockAdminPanel } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
+import { cloudSource } from "./helpers/community-src.mjs";
 
-const src = fs.readFileSync(new URL("../cloud.js", import.meta.url), "utf8");
+// The community layer, not one file of it: cloud.js is being split into
+// src/community/*.js, and what this test asserts is a property of the layer.
+// Every pattern below is unchanged.
+const src = cloudSource();
+
+// emptyStateHtml()'s own body, from its declaration to its closing brace.
+function emptyStateHelperSource() {
+  const at = src.indexOf("function emptyStateHtml");
+  assert.ok(at > -1, "emptyStateHtml must still exist");
+  const end = src.indexOf("\n  }", at);
+  assert.ok(end > at, "emptyStateHtml must still close at top level");
+  return src.slice(at, end);
+}
 const VERIFIED = "2026-08-01T00:00:00.000Z";
 const NOW = Date.now();
 const daysAgoIso = (days) => new Date(NOW - days * 86400000).toISOString();
@@ -102,7 +115,11 @@ test("no empty-state headline opens with a word the spec's tone rules ban, and n
   }
   // Tone rule 2: absence is not an error. No empty state may reach for the
   // red-text token or a red ground the way the scolding badges did.
-  const helper = src.slice(src.indexOf("function emptyStateHtml"), src.indexOf("function emptyStateHtml") + 2000);
+  // Bounded by the helper's own closing brace, not by a fixed 2,000
+  // characters. That window used to land inside emptyStateHtml() by luck of
+  // where it sat in cloud.js; once the code around it moved to
+  // src/community/*.js it started reading whatever followed instead.
+  const helper = emptyStateHelperSource();
   assert.equal(/--red/.test(helper), false, "no empty state renders in red - absence is not an error");
 });
 
@@ -136,7 +153,11 @@ test("the empty-state block is width-bounded, which is what stops it reading as 
   // staff column one short sentence lands adrift in ~900px of nothing. The
   // measurable fix is that the text block declares a max-width; jsdom does
   // no layout, so the declaration is the honest thing to pin.
-  const helper = src.slice(src.indexOf("function emptyStateHtml"), src.indexOf("function emptyStateHtml") + 2000);
+  // Bounded by the helper's own closing brace, not by a fixed 2,000
+  // characters. That window used to land inside emptyStateHtml() by luck of
+  // where it sat in cloud.js; once the code around it moved to
+  // src/community/*.js it started reading whatever followed instead.
+  const helper = emptyStateHelperSource();
   assert.match(helper, /max-width:34ch/, "the headline/explanation block is bounded");
   assert.match(helper, /padding:32px 20px/, "the spec's own container padding");
   assert.match(helper, /flex-direction:column;align-items:center;gap:10px/, "centred column with the spec's 10px gap");

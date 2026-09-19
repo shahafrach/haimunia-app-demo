@@ -14,7 +14,12 @@ import { test } from "node:test";
 import assert from "node:assert";
 import fs from "node:fs";
 
-const src = fs.readFileSync(new URL("../cloud.js", import.meta.url), "utf8");
+import { cloudSource } from "./helpers/community-src.mjs";
+// The community layer, not one file of it. `state` is still declared in
+// cloud.js, but the code reaching into it is spread across src/community/*.js
+// now - and "every state.<namespace>.<leaf> reference names a declared leaf"
+// is only worth anything if it covers every reference.
+const src = cloudSource();
 
 // The session/auth/config core, deliberately left flat at the root: every
 // domain reads it and no domain owns it. Adding to this list should be a

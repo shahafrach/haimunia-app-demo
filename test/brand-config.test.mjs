@@ -25,6 +25,7 @@ import { test } from "node:test";
 import assert from "node:assert";
 import { readFileSync } from "node:fs";
 import { bootApp } from "./helpers/boot.mjs";
+import { COMMUNITY_MODULES } from "./helpers/community-src.mjs";
 
 const root = new URL("../", import.meta.url);
 const read = (p) => readFileSync(new URL(p, root), "utf8");
@@ -92,7 +93,8 @@ test("the storage prefix is NOT configurable, and the reason is written down", (
 });
 
 test("the synthetic email domain is NOT configurable either", () => {
-  const cloud = read("cloud.js");
+  // usernameToEmail() is in src/community/auth.js now.
+  const cloud = read("src/community/auth.js");
   assert.match(cloud, /\$\{username\}@members\.haimuniya\.invalid/,
     "usernameToEmail must stay literal - the addresses are already in auth.users");
   assert.match(read("cloud-config.js"), /members\.haimuniya\.invalid/,
@@ -104,7 +106,9 @@ test("every display of the name goes through the helper - no literal left behind
   // page's window), and it carries a comment saying so. index.html,
   // manifest.json, terms.html and privacy.html are static and are listed in
   // PER_CLUB_SETUP.md instead.
-  for (const f of ["app.js", "cloud.js"]) {
+  // Every file of the community layer, not just cloud.js — a literal product
+  // name is exactly the kind of thing that rides along with moved code.
+  for (const f of ["app.js", "cloud.js", ...COMMUNITY_MODULES]) {
     const src = read(f);
     assert.ok(!src.includes('"האימוניה"'),
       `${f} still has a quoted literal product name - it should call brandName()`);

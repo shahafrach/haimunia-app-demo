@@ -12,6 +12,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { bootCommunity, waitFor } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
+import { cloudSource } from "./helpers/community-src.mjs";
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const VERIFIED = new Date().toISOString();
@@ -205,7 +206,7 @@ test("seed doc covers all six categories, keeps codes snake case, is idempotent,
 // celebration sheet literally read "attendance_first_class".
 test("the four live attendance achievements have Hebrew copy in the migration, in cloud.js and in the seed doc, and the three agree", () => {
   const mig = readFileSync(path.join(ROOT, "supabase", "migrations", "202609060008_attendance_achievement_copy.sql"), "utf8");
-  const cloud = readFileSync(path.join(ROOT, "cloud.js"), "utf8");
+  const cloud = cloudSource();
   const seed = readFileSync(path.join(ROOT, "docs", "community", "achievement-seed.md"), "utf8");
   const expected = {
     attendance_first_class: { name: "השיעור הראשון", icon: "👋" },
@@ -224,7 +225,7 @@ test("the four live attendance achievements have Hebrew copy in the migration, i
 });
 
 test("achMeta falls back to the definition's own name and icon before the bare code", () => {
-  const cloud = readFileSync(path.join(ROOT, "cloud.js"), "utf8");
+  const cloud = cloudSource();
   const fn = cloud.slice(cloud.indexOf("function achMeta(code, row)"), cloud.indexOf("function achCodeOf(row)"));
   assert.match(fn, /COMMUNITY_ACHIEVEMENT_META\[code\]/, "tier 1 is still the hand-written map");
   assert.match(fn, /row\.achievement_definitions/, "tier 2 is the definition row the caller already holds - no round trip");

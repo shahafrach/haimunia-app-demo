@@ -34,8 +34,12 @@ import assert from "node:assert";
 import fs from "node:fs";
 import { bootCommunity, waitFor, seedAdminStepUp, unlockAdminPanel, ADMIN_STEP_UP_PASSWORD } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
+import { cloudSource } from "./helpers/community-src.mjs";
 
-const src = fs.readFileSync(new URL("../cloud.js", import.meta.url), "utf8");
+// The community layer, not one file of it: cloud.js is being split into
+// src/community/*.js, and what this test asserts is a property of the layer.
+// Every pattern below is unchanged.
+const src = cloudSource();
 const VERIFIED = new Date().toISOString();
 
 function baseMock(overrides) {

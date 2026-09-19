@@ -12,9 +12,13 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import fs from "node:fs";
+import { cloudSource } from "./helpers/community-src.mjs";
 
 const sql = fs.readFileSync(new URL("../supabase/migrations/202608270011_admin_member_management.sql", import.meta.url), "utf8");
-const cloudJs = fs.readFileSync(new URL("../cloud.js", import.meta.url), "utf8");
+// The community layer, not one file of it: cloud.js is being split into
+// src/community/*.js, and what this test asserts is a property of the layer.
+// Every pattern below is unchanged.
+const cloudJs = cloudSource();
 
 test("every admin member-management RPC checks real is_admin, not the broader is_staff()", () => {
   for (const fn of ["admin_search_members(p_query text)", "admin_grant_coach(p_user_id uuid)", "admin_revoke_coach(p_user_id uuid)", "admin_remove_member(p_user_id uuid)"]) {

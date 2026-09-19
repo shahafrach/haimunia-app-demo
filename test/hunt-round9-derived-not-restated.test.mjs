@@ -6,8 +6,12 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import fs from "node:fs";
+import { cloudSource } from "./helpers/community-src.mjs";
 
-const cloudJs = fs.readFileSync(new URL("../cloud.js", import.meta.url), "utf8");
+// The community layer, not one file of it: cloud.js is being split into
+// src/community/*.js, and what this test asserts is a property of the layer.
+// Every pattern below is unchanged.
+const cloudJs = cloudSource();
 
 test("Escape closes whatever the dialog registry says is open", () => {
   // The Escape handler was a hand-maintained if/else chain naming fifteen
@@ -155,7 +159,11 @@ test("a brand-new member's first screen of the club is the feed", () => {
   // member, so that is where the reset belongs.
   const at = cloudJs.indexOf("const isFirstProfile = !state.profile;");
   assert.ok(at > -1, "saveProfile knows whether this is a first profile");
-  assert.ok(at < cloudJs.indexOf('from("profiles").update('),
+  // Searched from `at`, not from the start of the layer: savePrivacyField()
+  // in src/community/directory.js also writes `from("profiles").update(`, and
+  // it now sits earlier in the concatenation — so the bare indexOf compared
+  // saveProfile's flag against a different function's write.
+  assert.ok(cloudJs.indexOf('from("profiles").update(', at) > at,
     "and reads it BEFORE the write, since the write is what makes state.profile exist");
   assert.match(cloudJs, /if \(isFirstProfile\) state\.ui\.tab = "feed";/,
     "a first profile lands on the feed");

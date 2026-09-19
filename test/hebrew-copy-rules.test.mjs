@@ -8,8 +8,15 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import fs from "node:fs";
+import { COMMUNITY_MODULES, cloudSource } from "./helpers/community-src.mjs";
 
-const files = ["app.js", "cloud.js", "index.html"].map((f) => ({
+// Every file the app's Hebrew copy lives in, INCLUDING src/community/*.js.
+// These rules are about the language, not about a file: cloud.js is being
+// split per feature, and a list that names it by hand would quietly stop
+// covering whatever moved out of it — which for an RTL Hebrew app means the
+// slash-gender and final-form rules silently stop being enforced on most of
+// the community layer.
+const files = ["app.js", "cloud.js", "index.html", ...COMMUNITY_MODULES].map((f) => ({
   name: f, src: fs.readFileSync(new URL(`../${f}`, import.meta.url), "utf8"),
 }));
 
@@ -98,7 +105,7 @@ test("Hebrew abbreviations use gershayim, not an ASCII double quote", () => {
 // deciding whether to. The sibling ghost-reclaim sheet already repeats its
 // title verb; the moderation sheet did not.
 test("the moderation action sheet's primary repeats its title, and its dismissal is unambiguous", () => {
-  const src = files.find((f) => f.name === "cloud.js").src;
+  const src = cloudSource();
   const at = src.indexOf('data-community-action="mod-action-run"');
   assert.ok(at > -1, "the moderation run button should exist");
   const btn = src.slice(at, at + 200);

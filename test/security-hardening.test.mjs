@@ -1,9 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import fs from "node:fs";
+import { cloudSource } from "./helpers/community-src.mjs";
 
 const sql = fs.readFileSync(new URL("../supabase/migrations/202608270006_security_hardening.sql", import.meta.url), "utf8");
-const cloudJs = fs.readFileSync(new URL("../cloud.js", import.meta.url), "utf8");
+// The community layer, not one file of it: cloud.js is being split into
+// src/community/*.js, and what this test asserts is a property of the layer.
+// Every pattern below is unchanged.
+const cloudJs = cloudSource();
 const indexHtml = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
 
 test("legacy plaintext invite codes are removed and revoked", () => {
