@@ -148,8 +148,10 @@ the Hebrew governs for members.
   שחיפשתם.
 - **מידע טכני.** נתוני בקשה רגילים של שירות אינטרנט (חותמות זמן, לוגים
   של שגיאות, מידע ברמת דפדפן/מכשיר) — לצורך יציבות ומניעת שימוש לרעה.
-- **התראות.** אם המועדון יפעיל התראות דחיפה בעתיד, יישמר גם מזהה
-  ההתראות של הדפדפן שלכם. כרגע התכונה כבויה ולא נשמר שום מזהה כזה.
+- **התראות.** התראות דחיפה מופעלות מאז 17 בספטמבר 2026. אם הפעלתם
+  אותן בדפדפן מסוים ואישרתם את בקשת ההרשאה שלו, נשמר מזהה ההתראות של
+  אותו דפדפן. בלי ההפעלה הזו לא נשמר שום מזהה; כיבוי ההתראות מבטל את
+  המנוי ומסמן את המזהה כמבוטל.
 
 **מה לא נאסף:** אין תעודת זהות, אין מיקום, אין פרטי אשראי או חשבון בנק,
 אין מידע ביומטרי, אין תאריך לידה, אין נתוני נוכחות או רישום לשיעורים
@@ -263,10 +265,9 @@ the Hebrew governs for members.
   האחסון `ap-southeast-1` (סינגפור).
 - **Cloudflare Pages** מגישה את קובצי האפליקציה עצמם (הקוד שרץ בדפדפן שלכם).
   היא לא מקבלת את החשבון או יומן האימונים שלכם.
-- **שירות הגנה מפני בוטים** (Cloudflare Turnstile או hCaptcha) יכול
-  להיות מופעל על ידי המועדון במסכי פתיחת החשבון. כרגע הוא **אינו
-  מופעל**, ולכן שום מידע לא נשלח אליו. אם יופעל, הספק יקבל נתוני בקשה
-  ודפדפן לצורך אימות שאתם לא בוט.
+- **שירות הגנה מפני בוטים** (Cloudflare Turnstile) **מופעל** מאז
+  17 בספטמבר 2026 במסכי פתיחת החשבון והכניסה. Cloudflare מקבלת נתוני
+  בקשה ודפדפן לצורך אימות שאתם לא בוט.
 
 ## הבסיס לעיבוד המידע
 
@@ -529,9 +530,11 @@ time.
 - **Technical data.** Ordinary request metadata for a web service
   (timestamps, error logs, browser/device-level information), used for
   reliability and abuse prevention.
-- **Notifications.** If the club enables push notifications in future,
-  your browser's push identifier would also be stored. The feature is off
-  today and no such identifier is stored.
+- **Notifications.** Push notifications have been enabled since
+  2026-09-17. If you turn them on in a given browser and grant its
+  permission prompt, that browser's push identifier is stored. Without
+  that opt-in no such identifier is stored; turning them off unsubscribes
+  that browser and marks the identifier revoked.
 
 **What we do not collect:** no government ID, no location, no card or
 bank details, no biometric data, no date of birth, no class attendance or
@@ -663,11 +666,10 @@ Two points of accuracy about the toggles:
   region.
 - **Cloudflare Pages** serves the app's own files (the code that runs in your
   browser). It does not receive your account or training-log data.
-- **A bot-protection service** (Cloudflare Turnstile or hCaptcha) can be
-  switched on by the club for the account-creation screens. It is
-  **currently not enabled**, so nothing is sent to it. If it is enabled,
-  that provider receives request and browser data in order to verify that
-  you are not a bot.
+- **A bot-protection service** (Cloudflare Turnstile) has been
+  **enabled** since 2026-09-17 on the sign-in and account-creation
+  screens. Cloudflare receives request and browser data in order to
+  verify that you are not a bot.
 
 ## Basis for processing
 

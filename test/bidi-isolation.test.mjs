@@ -311,3 +311,124 @@ test("pathological input terminates and stays lossless", () => {
     assert.equal(stripped(bidiText(input)), input, `lossless for ${JSON.stringify(input.slice(0, 24))}…`);
   }
 });
+
+// ---------------------------------------------------------------------------
+// The CALL SITES, in the two files where this pair has already drifted once.
+//
+// Everything above tests the helper. This tests that the helper is reached.
+// Five of the original cloud.js <bdi> pass's call sites were carried into
+// src/community/* as bare esc() when cloud.js was split per feature
+// (docs/audit/ux-stash-review.md), and boards.js held the textbook version of
+// it: leaderboardRowHtml() next to renderRankedList's rowHtml, same visual
+// row, same data, one nameHtml()-wrapped and one not. A member's own typed
+// display name is the mixed-script case this whole file exists for — "דני
+// Smith" in an RTL row reorders — so a name interpolated into element TEXT
+// must go through bidiText(), which escapes and isolates in one step.
+//
+// Attributes and <option> text are deliberately NOT findings: <bdi> is an
+// element, so it cannot live in an attribute value, and it is not valid
+// inside <option>. Those keep bare esc(), and the scanner skips both.
+// ---------------------------------------------------------------------------
+
+// Every `${...}` in the file, with the HTML its own template literal has
+// emitted before it. A plain regex cannot do this: these renderers nest
+// templates inside interpolations inside templates, and the JS in between
+// carries `<` and `>` of its own (`memberCount > 0 ? …`, `(t) => …`). So walk
+// the source with a small stack instead, and let each template frame
+// accumulate only its own literal text.
+function eachInterpolation(src, visit) {
+  const stack = [{ code: true, braces: 0 }];
+  let i = 0;
+  while (i < src.length) {
+    const f = stack[stack.length - 1];
+    const c = src[i];
+    if (!f.code) {
+      if (c === "\\") { f.html += src.substr(i, 2); i += 2; continue; }
+      if (c === "`") { stack.pop(); i++; continue; }
+      if (c === "$" && src[i + 1] === "{") {
+        stack.push({ code: true, braces: 0, from: i + 2, tpl: f });
+        i += 2;
+        continue;
+      }
+      f.html += c;
+      i++;
+      continue;
+    }
+    if (c === "`") { stack.push({ code: false, html: "" }); i++; continue; }
+    if (c === '"' || c === "'") {
+      i++;
+      while (i < src.length && src[i] !== c) { if (src[i] === "\\") i++; i++; }
+      i++;
+      continue;
+    }
+    if (c === "/" && src[i + 1] === "/") { while (i < src.length && src[i] !== "\n") i++; continue; }
+    if (c === "/" && src[i + 1] === "*") { i = src.indexOf("*/", i) + 2; continue; }
+    if (c === "{") { f.braces++; i++; continue; }
+    if (c === "}") {
+      if (f.braces === 0 && f.from != null) {
+        visit(src.slice(f.from, i), f.tpl.html, f.from);
+        stack.pop();
+      } else f.braces--;
+      i++;
+      continue;
+    }
+    i++;
+  }
+}
+
+// `esc(<expr>)` where <expr> ends in an identifier ending in "name" — name,
+// mine.name, prof.display_name, captainName — landing in element TEXT.
+// Not nameValue, not title, not an attribute, not <option>.
+function bareNameSinks(src) {
+  const found = [];
+  eachInterpolation(src, (expr, html, at) => {
+    const m = expr.trim().match(/^esc\(([^()]*)\)$/);
+    if (!m) return;
+    const tail = (m[1].trim().match(/([A-Za-z_$][\w$]*)\s*$/) || [])[1] || "";
+    if (!/name$/i.test(tail)) return;
+    // Inside a start tag — an attribute value — if the last angle bracket
+    // still open is a `<`. Those are correct as they stand.
+    if (html.lastIndexOf("<") > html.lastIndexOf(">")) return;
+    const tag = (html.match(/<([a-zA-Z][\w-]*)[^<]*>[^<]*$/) || [])[1] || "";
+    if (tag.toLowerCase() === "option") return;
+    found.push(`${src.slice(0, at).split("\n").length}: esc(${m[1].trim()})`);
+  });
+  return found;
+}
+
+test("the scanner below really does catch a bare esc() name — it is not vacuously green", () => {
+  const sample = [
+    'const a = `<div class="log-row"><span>${esc(name)}</span></div>`;',            // a finding
+    'const b = rows.map((t) => `<div>${t.n > 0 ? `<span>${esc(t.name)}</span>` : ""}</div>`);', // a finding, nested
+    'const c = `<div><span>${bidiText(name)}</span></div>`;',                        // fixed
+    'const d = `<div title="${esc(t.name)}"${n > 0 ? " hidden" : ""}>x</div>`;',     // attribute
+    'const e = `<option value="${esc(p.id)}">${esc(name)}</option>`;',               // <option>
+    'const f = `<div><span>${esc(nameValue)}</span></div>`;',                        // not a name
+  ].join("\n");
+  assert.deepEqual(bareNameSinks(sample), ["1: esc(name)", "2: esc(t.name)"]);
+});
+
+test("no member display name renders through bare esc() in an RTL paragraph", () => {
+  for (const file of ["src/community/boards.js", "src/community/challenges.js"]) {
+    const found = bareNameSinks(communityFile(file));
+    assert.deepEqual(
+      found,
+      [],
+      `${file} renders a member-typed name into element text through esc() instead of bidiText():\n  ${found.join("\n  ")}`,
+    );
+  }
+});
+
+test("the two ranked-row renderers in boards.js both isolate the name", () => {
+  // renderRankedList's rowHtml goes through nameHtml(); leaderboardRowHtml()
+  // takes a pre-resolved name and must reach bidiText() itself. This is the
+  // pair that drifted; assert they agree rather than only that one is fixed.
+  const src = communityFile("src/community/boards.js");
+  const body = (name) => {
+    const at = src.indexOf(`function ${name}(`);
+    assert.notEqual(at, -1, `${name} must still exist in boards.js`);
+    return src.slice(at, src.indexOf("\n  }", at));
+  };
+  assert.match(body("leaderboardRowHtml"), /\$\{bidiText\(name\)\}/);
+  assert.match(src.slice(src.indexOf("const rowHtml =")), /\$\{nameHtml\(it\.display_name, it\.handle\)\}/);
+});
