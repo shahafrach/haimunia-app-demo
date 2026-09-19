@@ -127,6 +127,21 @@ changelog entry in the PR description instead** — write it as it should
 appear, and it can be lifted verbatim. A consolidation session updates these
 four after merges, bumps the version once, and runs `npm run sync-version`.
 
+**A branch that ADDS a file to a directory something else enumerates can
+break main while git reports no conflict.** The directories are
+`.github/workflows/`, `supabase/migrations/`, `supabase/tests/`,
+`scripts/browser-check/` and `src/` — each is read from disk by something
+that then asserts about the whole set: `run-all.mjs` discovers every check in
+its directory, `sw.js`'s precache list and `test/sw-precache.test.mjs` cover
+every `src/*.js` in `index.html`, `supabase start` applies every migration in
+order, `supabase test db` runs every file in `supabase/tests/`, and the
+workflow tests read every file in `.github/workflows/`. Two branches adding
+different files touch no common line, so git merges them silently, and the
+suite that matters — the one run on the *merge result* — is the one neither
+branch ran. **Before merging: update the branch from `main` and wait for all
+checks to go green on that merge.** A green run on a branch that is behind
+`main` proves nothing about either file's new neighbours.
+
 ---
 
 ## Automated review
