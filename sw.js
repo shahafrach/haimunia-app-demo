@@ -49,6 +49,7 @@ const OPTIONAL_ASSETS = [
   "./src/community/events.js",
   "./src/community/outward.js",
   "./src/community/achievements.js",
+  "./src/community/notifications.js",
   "./cloud.js",
   "./src/eventbus.js",
   "./src/analytics.js",

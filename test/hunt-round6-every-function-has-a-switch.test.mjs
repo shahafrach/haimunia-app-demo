@@ -21,10 +21,17 @@ const seedSql = fs.readFileSync(new URL("../supabase/migrations/202609150014_eve
 const NEW_KEYS = ["weekly_recap", "comments", "post_photos", "mentions", "outward_share"];
 
 test("each new feature has a toggle in the registry, marked clientOnly", () => {
+  // Scoped to the registry itself, not to the first `{ key: "..." }` anywhere
+  // in the layer: notifications.js's NOTIF_PREF_TYPES uses the same row shape
+  // and the same "weekly_recap" key, and it is a notification preference, not
+  // a club module toggle. Two lists that look alike is exactly the case a
+  // bare indexOf over a concatenation gets wrong.
+  const registry = cloudJs.slice(cloudJs.indexOf("const CLUB_MODULE_TOGGLES"), cloudJs.indexOf("const CLUB_MODULE_KEYS"));
+  assert.ok(registry.length > 0, "CLUB_MODULE_TOGGLES must still be a named registry");
   for (const key of NEW_KEYS) {
-    const at = cloudJs.indexOf(`{ key: "${key}",`);
+    const at = registry.indexOf(`{ key: "${key}",`);
     assert.ok(at > -1, `${key} must appear in CLUB_MODULE_TOGGLES`);
-    const row = cloudJs.slice(at, cloudJs.indexOf("\n", at));
+    const row = registry.slice(at, registry.indexOf("\n", at));
     // These hide a control rather than being enforced by RLS. The panel reads
     // this flag so it does not claim server enforcement it does not have.
     assert.match(row, /clientOnly: true/, `${key} is client-side only and must say so`);

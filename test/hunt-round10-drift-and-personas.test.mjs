@@ -5,9 +5,13 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import { readFileSync } from "node:fs";
+import { cloudSource } from "./helpers/community-src.mjs";
 
 const appJs = readFileSync(new URL("../app.js", import.meta.url), "utf8");
-const cloudJs = readFileSync(new URL("../cloud.js", import.meta.url), "utf8");
+// The community layer, not one file of it: cloud.js is being split into
+// src/community/*.js, and what this test asserts is a property of the layer.
+// Every pattern below is unchanged.
+const cloudJs = cloudSource();
 const tieBreak = readFileSync(new URL("../supabase/migrations/202609160002_the_tie_break_reaches_every_list.sql", import.meta.url), "utf8");
 const welcome = readFileSync(new URL("../supabase/migrations/202609160003_the_welcome_queue_is_for_members.sql", import.meta.url), "utf8");
 

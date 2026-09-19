@@ -17,8 +17,12 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import { readFileSync } from "node:fs";
+import { cloudSource } from "./helpers/community-src.mjs";
 
-const cloudJs = readFileSync(new URL("../cloud.js", import.meta.url), "utf8");
+// The community layer, not one file of it: cloud.js is being split into
+// src/community/*.js, and what this test asserts is a property of the layer.
+// Every pattern below is unchanged.
+const cloudJs = cloudSource();
 const appJs = readFileSync(new URL("../app.js", import.meta.url), "utf8");
 const indexHtml = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 
@@ -180,7 +184,14 @@ test("deleting a draft says draft, and runs the one delete function", () => {
 });
 
 test("the challenge staff toolbar breaks 3 + 1 on purpose, not by wrapping", () => {
-  const at = cloudJs.indexOf("const staffToolbar = (staff || pinBtn)");
+  // Anchored inside renderChallengeViewBody, not at the first match in the
+  // layer. The event detail dialog has a `staffToolbar` line that opens with
+  // the identical text — which is the whole point of this file: these two are
+  // siblings, and a bare indexOf over cloud.js plus src/community/*.js would
+  // silently assert the challenge rule against the event toolbar.
+  const from = cloudJs.indexOf("function renderChallengeViewBody(v)");
+  assert.ok(from > -1, "renderChallengeViewBody must still exist");
+  const at = cloudJs.indexOf("const staffToolbar = (staff || pinBtn)", from);
   assert.ok(at > -1);
   const line = cloudJs.slice(at, cloudJs.indexOf("\n", at));
   // Two rows, and the destructive one is the second, fenced by the same
