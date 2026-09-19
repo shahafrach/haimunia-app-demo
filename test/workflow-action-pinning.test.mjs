@@ -73,7 +73,26 @@ const FIRST_NODE24_RELEASE = {
 // declares no Node runtime of its own, so there is nothing here to be
 // deprecated. The steps INSIDE it are its author's problem, not a pin we
 // control.
-const NO_NODE_RUNTIME = new Set(["supabase/setup-cli"]);
+//
+// 2026-09-19, consolidation. This list gained a second entry the day it
+// shipped, and the way it happened is the point. This test and its
+// FIRST_NODE24_RELEASE map arrived in PR #13; claude-review.yml, which uses
+// anthropics/claude-code-action, arrived in PR #11. Both were green against
+// main at 18c9172 because neither branch could see the other's file, they
+// merged without a textual conflict, and main was red on the merge of the
+// second - a new workflow is in scope for a test that walks the whole
+// directory. If you add a workflow, run this file; if you add an action to
+// this list, check every workflow, not the one you were looking at.
+//
+// anthropics/claude-code-action is composite: `runs.using: "composite"`, read
+// from action.yml at the pinned SHA 4036a180 (v1.0.230) rather than from a
+// changelog, the same way every number in FIRST_NODE24_RELEASE above was
+// obtained. Its own inner steps pin oven-sh/setup-bun, which is upstream's
+// pin to keep current, not ours.
+const NO_NODE_RUNTIME = new Set([
+  "supabase/setup-cli",
+  "anthropics/claude-code-action",
+]);
 
 function semverAtLeast(actual, minimum) {
   const a = actual.split(".").map(Number);

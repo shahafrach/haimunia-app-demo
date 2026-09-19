@@ -1,3 +1,126 @@
+## A roster that reaches its end, a first set that gets questioned, and an automated reviewer — 2026-09-19
+
+Four branches merged today (#8, #11, #12, #13), consolidated here together with
+#10, which landed late on 2026-09-18 after the last reconcile and so is written
+up here for the first time. Two of the five changed what a member experiences;
+the other three changed what the next session knows before it starts.
+
+**The admin roster stopped early at clubs with a legacy tail, and now does
+not.** `admin_member_roster` ordered and paged on
+`coalesce(invite_redemptions.redeemed_at, profiles.created_at)` but returned
+only `redeemed_at`. A member with no `invite_redemptions` row — a signup
+abandoned before the profile form, or an account from before the invite gate —
+therefore carried a sort key no caller could see. Sending that row's
+`redeemed_at` means sending `null`, which the function reads as "no lower
+bound" and answers with the top of the list again; the client correctly
+declined to loop and stopped paging there, losing everyone below. The function
+now returns the coalesced value as `sort_key`, so the cursor pair
+`(sort_key, id)` is exactly the tuple the `WHERE` clause compares. `redeemed_at`
+is untouched and still `null` for a member who never redeemed an invite — the
+roster renders that as an em-dash, because it is the truth about them.
+`loadRoster()` falls back to `redeemed_at` when the column is absent, so client
+and migration could ship in either order. Every other cursor-paged function in
+the schema was checked rather than assumed — `admin_actions_page`, `notif_list`,
+`mod_queue`, `admin_invite_list`, `admin_incomplete_signups`, `feed_page` and
+`community_profile`'s three lists all already return what they sort on. This
+was the only one.
+
+**The first set of a new movement was never sanity-checked, which is the set
+most worth checking.** `saveSet()` asks "are you sure?" at 3× the athlete's own
+heaviest set of that exercise, but `heaviestLoggedWeightFor()` returns `0` with
+no history and the `reference > 0` guard made the whole condition false. So a
+typo on a movement's very first entry — 400 instead of 40 — saved in silence
+and founded the record every later PR, tier and celebration is measured
+against, with editing the entry the only way back. There is now a per-category
+ceiling (Squat 300, Deadlift 350, Press 200, Olympic 220, Pull 200, Other 250)
+used **only** where there is no proportion to use instead: the moment an athlete
+has one prior set of that movement, their own history takes over again. Each
+number sits far above anything anyone in this gym lifts rather than at what a
+member "should" — a guard that interrupts an honest PR would be worse than the
+typo it caught — and it remains a confirmation, never a rejection. `saveWod()`
+carried the identical `prevBest > 0` hole and was fixed in the same commit;
+because `bestWodScore()` is rx-scoped, a member's first Rx attempt at a load WOD
+they have scaled ten times also had no reference. Both call sites now share one
+predicate instead of carrying two copies of the rule, which is how the second
+copy came to be missed in the first place.
+
+**An automated reviewer for the rules a regex cannot check.**
+`.github/workflows/claude-review.yml` runs `anthropics/claude-code-action`
+(pinned to the SHA of v1.0.230, not a floating `@v1`) on every PR opened or
+updated and on any PR comment mentioning `@claude`. It walks all seven of
+CLAUDE.md's rules: the Supabase security surface, edits to applied migrations,
+sibling drift, CSS rules missing from a theme block, new files missing from the
+`sw.js` precache list, secrets in client files, and member health/payment/phone/
+email data. **It comments; it never gates** — every hard rule already has a
+deterministic guard that fails the build in `test.yml`, and this reviews what
+those cannot see. It runs with `contents: read`, so an `@claude` mention can
+read and comment but cannot push; it skips PRs from forks, and skips with a
+notice until the `CLAUDE_CODE_OAUTH_TOKEN` repository secret is set, which it
+still is not.
+
+**Read-only queries for which modules members actually use.**
+`docs/audit/usage-queries.sql` is ten blocks to paste into the Supabase SQL
+editor — every statement a SELECT, nothing creating a view or a function. All 28
+names in `src/analytics.js`'s `EVENTS` are mapped to a module: 19 to a
+`club_features.module_key` an admin can switch off, 9 to one of eight surfaces
+with no toggle of their own. Two of its findings are worth more than the
+queries, and are recorded in `docs/PROJECT_STATUS.md` rather than left in a file
+nobody opens: **eleven modules emit no analytics event at all**, so they cannot
+be judged by usage; and **the app computes the display mode in two places and
+never sends it**, so "share of sessions opened as an installed app" is not
+answerable from `analytics_events`. `docs/community/metrics.md` also gained the
+`write_failed` row its trigger table had been missing since the event was wired.
+
+**The authorization matrix caught up with 72 migrations.** PR #10 verified
+`docs/audit/AUTHORIZATION_MATRIX.md` against a real Postgres built from every
+migration, but did not re-read the per-table rows in section 1, written on
+2026-09-06 against migrations up to `202609060010`. The largest correction is
+`202609060011`, which re-gated sixteen policies on `is_community_member()` — so
+the bold ghost-session `Y` the document was largely a catalogue of is now `–`
+across `pins`, `clubs`, the role tables, the challenge tables, `events`,
+`event_attendees`, the achievement tables, `member_of_week` and
+`monthly_club_recaps`. `head_coach` appears as a real role with 13 permissions
+and `staff` with 6, neither of which was in the roles table at all; the admin
+account is documented as deliberately **not** a member of the club, which reads
+like a bug until it is written down; and the client-callable definer grants were
+recomputed mechanically at 99 names over 134 signatures — reconciled in the text
+against PR #10's 182, which counts every definer function in `public` rather
+than the subset a browser can invoke.
+
+**Also here, from the docs reconciliation:** `PRIVACY.md` and `privacy.html`
+named GitHub Pages as a data sub-processor, in Hebrew and English, in a document
+served to members — the most consequential stale line in the repository, and
+corrected in both. `/CLAUDE.md` was added as the file every future session reads
+first, with `docs/PROJECT_STATUS.md` as the state it points at so the rules and
+the numbers are not maintained in one file. The Node 20 deprecation warning is
+gone from the backup workflow and the restore drill, which matters on the one
+workflow whose job is to be believed when it goes red: `upload-artifact` to
+v6.0.0 and `download-artifact` to v7.0.0, the first release of each whose
+`action.yml` actually declares `node24`, read from the tag rather than from a
+changelog.
+
+**Merging two green branches produced a red `main`, which this consolidation
+fixed.** PR #13 added a test that walks every file in `.github/workflows/` and
+checks each pinned action's Node runtime; PR #11 added a workflow. Both were
+green against `main` at `18c9172`, neither branch contained the other's file,
+git reported no conflict, and the build broke on the second merge —
+`anthropics/claude-code-action` was not in the test's runtime map. It is a
+composite action, read as `runs.using: "composite"` from its `action.yml` at
+the pinned SHA rather than from a changelog, so it joins `supabase/setup-cli`
+in `NO_NODE_RUNTIME`. The lesson generalises past this one file and is written
+into `docs/handover/SHARED_CONTEXT.md`: a branch that **adds** a file to a
+directory something else enumerates — `.github/workflows/`,
+`supabase/migrations/`, `supabase/tests/`, `scripts/browser-check/`, `src/` —
+conflicts with that something else even when git says it does not, and the
+suite worth trusting is the one run on the merge result.
+
+**Still open, and now written down:** `.github/workflows/backup-database.yml`
+reasons from *"This repository is PUBLIC"* in its header comment and says so
+again at runtime when it refuses to run without a passphrase. The repository has
+been private since 2026-09-17. Its conclusion — encrypt the dump before it
+leaves the runner — is right either way, which is exactly why nobody has fixed
+the premise.
+
 ## A desk for the gym, fenced by two attributes — 2026-09-18
 
 **"Add an adaptive desktop layout to the app, for gym staff only. Do not change
