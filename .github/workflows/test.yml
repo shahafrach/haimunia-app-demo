@@ -1,11 +1,88 @@
 name: test
+# MINUTES. This repository went private on 2026-09-17 and burned through the
+# free Actions allowance on 2026-09-19. One full run of this workflow bills 37
+# minutes (28 node-tests + 4 browser-checks + 3 migration-check + 1 + 1,
+# measured on run 35435484944), so what triggers it matters as much as what it
+# does.
 on:
+  # ONE RUN PER PUSH, NOT TWO. An unqualified `push:` fired on every branch, so
+  # a push to a PR branch started a push run AND a pull_request run - two full
+  # 37-minute runs of the identical tree, in two different concurrency groups,
+  # so neither even cancelled the other. Pushes are now main-only; a PR branch
+  # is covered by the pull_request trigger, and the post-merge run on main is
+  # unchanged.
   push:
+    branches: [main]
+    # DOCUMENTATION-ONLY CHANGES DO NOT NEED 37 MINUTES OF RUNNERS.
+    #
+    # This list is deliberately NOT "docs/** and **/*.md". Six markdown
+    # files are read and asserted on by the suite, and three of them live
+    # under docs/:
+    #
+    #   PRIVACY.md                          community-backup-sync,
+    #                                       community-legal-pages
+    #   TERMS.md                            community-legal-pages
+    #   README.md                           production-not-demo
+    #   docs/community/achievement-seed.md  community-achievement-engine
+    #   docs/community/contracts.md         community-achievement-engine
+    #   docs/community/metrics.md           platform-analytics
+    #
+    # Ignoring those would let an edit that contradicts the code merge with
+    # the test that guards it never running. So this enumerates only the
+    # paths nothing reads, and every omission fails in the SAFE direction: a
+    # doc that is not listed simply costs a run. test/workflow-minutes.test.mjs
+    # derives the read set from test/*.mjs itself and fails if any of it ever
+    # falls inside this list, so the two cannot drift.
+    #
+    # docs/community/ is outside the list except for tickets/, because three
+    # of the seven files directly in it are on that read list.
+    #
+    # GitHub Actions does not support YAML anchors, so this list is repeated
+    # verbatim under pull_request. The same test asserts the two copies parse
+    # to the same set, which is the only thing that keeps them honest.
+    paths-ignore:
+      - 'docs/audit/**'
+      - 'docs/deploy/**'
+      - 'docs/handover/**'
+      - 'docs/ops/**'
+      - 'docs/visual-qa/**'
+      - 'docs/community/tickets/**'
+      - 'docs/DESIGN_HANDOFF.md'
+      - 'docs/PROJECT_STATUS.md'
+      - 'CHANGES.md'
+      - 'CLAUDE.md'
+      - 'CLAUDE_CODE_PROMPT.md'
+      - 'COMMUNITY_SETUP.md'
+      - 'README1.md'
+      - '2026-*.md'
   pull_request:
+    # The same list as the push trigger above, repeated because GitHub Actions
+    # has no YAML anchors. Read the reasoning there; do not edit one copy
+    # alone - test/workflow-minutes.test.mjs compares them.
+    paths-ignore:
+      - 'docs/audit/**'
+      - 'docs/deploy/**'
+      - 'docs/handover/**'
+      - 'docs/ops/**'
+      - 'docs/visual-qa/**'
+      - 'docs/community/tickets/**'
+      - 'docs/DESIGN_HANDOFF.md'
+      - 'docs/PROJECT_STATUS.md'
+      - 'CHANGES.md'
+      - 'CLAUDE.md'
+      - 'CLAUDE_CODE_PROMPT.md'
+      - 'COMMUNITY_SETUP.md'
+      - 'README1.md'
+      - '2026-*.md'
 permissions:
   contents: read
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # PER BRANCH, so a second push cancels the first branch's run mid-flight.
+  # head_ref is the source branch on a pull_request event; github.ref there is
+  # refs/pull/N/merge, which is per-PR rather than per-branch and does not
+  # group with anything else. Falls back to github.ref for the push-to-main
+  # run, where head_ref is empty.
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
 jobs:
   node-tests:

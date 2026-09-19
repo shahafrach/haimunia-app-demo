@@ -1,6 +1,7 @@
 name: claude-review
-# An automated review on every pull request, plus an @claude mention handler
-# for the PR conversation, using anthropics/claude-code-action.
+# An automated review when a pull request is OPENED, plus an @claude mention
+# handler for the PR conversation, using anthropics/claude-code-action. A later
+# push does not produce a review on its own - ask for one.
 #
 # WHAT THIS IS NOT. It is not a gate. Every hard rule in CLAUDE.md already has
 # a deterministic guard that fails the build in test.yml - migration
@@ -21,8 +22,17 @@ name: claude-review
 # IS its alert, while a red X on every PR from an advisory reviewer that has
 # not been set up yet is just noise nobody would read.
 on:
+  # OPENED ONLY, NOT synchronize. A review on every push cost a runner per push
+  # and mostly re-read a diff it had already reviewed - and this repository ran
+  # out of free Actions minutes on 2026-09-19. The first push of a PR still
+  # gets a full unprompted review; after that, ask for one. A push no longer
+  # produces one on its own, which also means the reviewer can no longer
+  # contradict itself across pushes without being asked.
+  #
+  # `reopened` is deliberately absent too: reopening a PR reviews a diff that
+  # was already reviewed when it was opened.
   pull_request:
-    types: [opened, synchronize]
+    types: [opened]
   # The two kinds of PR comment. issue_comment fires for the conversation tab;
   # pull_request_review_comment fires for a comment pinned to a line of the
   # diff. A review SUBMISSION body (pull_request_review) is deliberately not
