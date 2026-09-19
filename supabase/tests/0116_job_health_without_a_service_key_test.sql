@@ -137,8 +137,26 @@ select cron.schedule('pgtap-job-failed',  '31 * * * *', 'select 1');
 select cron.schedule('pgtap-job-healthy', '32 * * * *', 'select 1');
 select cron.schedule('pgtap-job-running', '33 * * * *', 'select 1');
 
-insert into cron.job_run_details (jobid, status, start_time, end_time)
-select j.jobid,
+-- runid IS SUPPLIED EXPLICITLY, and that is not a style choice.
+-- cron.job_run_details.runid defaults to nextval('cron.runid_seq'), the
+-- sequence is owned by supabase_admin with no grants on it at all, and
+-- `postgres` therefore holds INSERT and SELECT on the table but not USAGE on
+-- its sequence. Letting the default fire raises `permission denied for
+-- sequence runid_seq`, which aborts the file mid-transaction: pgTAP never
+-- reaches finish(), emits no plan, and the run reports "Dubious ... All 19
+-- subtests passed" - a failure that reads like a pass. Naming runid skips the
+-- default, so no sequence privilege is needed.
+--
+-- This costs the test nothing, because runid is not part of anything under
+-- assertion here. Neither job_health_check() nor scheduled_job_health() ever
+-- reads it: both only select jobid, status and start_time from this table and
+-- join on jobid, so the values below need to be unique and nothing more. They
+-- are taken from the current max so they cannot collide with rows pg_cron
+-- wrote itself, and the whole thing rolls back regardless.
+insert into cron.job_run_details (runid, jobid, status, start_time, end_time)
+select (select coalesce(max(d.runid), 0) from cron.job_run_details d)
+         + row_number() over (order by j.jobname),
+       j.jobid,
        case j.jobname when 'pgtap-job-failed'  then 'failed'
                       when 'pgtap-job-healthy' then 'succeeded'
                       else 'running' end,
