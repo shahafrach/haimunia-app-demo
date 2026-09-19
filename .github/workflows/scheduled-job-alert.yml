@@ -1,29 +1,51 @@
 name: scheduled-job-alert
-# Go-live guide, item A.5. public.scheduled_job_health() (202609060016) has
-# existed since the launch-readiness audit; nothing was ever wired to page a
-# human when it reports an unhealthy job. This workflow is that wiring - see
-# scripts/check-scheduled-job-health.mjs for the actual check and the reasons
+# Go-live guide, item A.5. Nothing pages a human when a pg_cron job stops
+# running, so this workflow is that wiring - see
+# scripts/check-scheduled-job-health.mjs for the check itself and the reasons
 # behind its exit-code discipline (checked-and-healthy, checked-and-unhealthy,
 # and could-not-check are three DIFFERENT outcomes, deliberately).
 #
-# Required repository secrets (Settings -> Secrets and variables -> Actions),
-# none of which are ever committed to this repo:
-#   SUPABASE_URL               - the production project's REST URL
-#   SUPABASE_SERVICE_ROLE_KEY  - scheduled_job_health() is service_role-only
-#                                by design; this key must never be logged
-#                                (the script only ever prints job names/
-#                                statuses, never the key itself)
-#   ALERT_WEBHOOK_URL          - a Slack or Discord incoming webhook URL (or
-#                                anything else that accepts {"text": "..."})
+# NO SERVICE-ROLE KEY. THAT IS THE POINT OF THIS FILE.
 #
-# Until all three secrets are set, this workflow's own failure IS the alert
-# (a red run in the Actions tab) - it fails closed, not silently.
+# This workflow used to carry SUPABASE_SERVICE_ROLE_KEY, because the only way
+# to ask "are the scheduled jobs healthy" was public.scheduled_job_health(),
+# which is service_role only by design - it returns every job's name, schedule
+# and last error. So a credential that bypasses every RLS policy on real
+# members' posts, profiles and training logs lived in GitHub Actions in order
+# to answer a yes/no question. The old version of this file called that an
+# accepted tradeoff and wrote down the shape of the fix; migration
+# 202609190001 is that fix.
 #
-# KNOWN BLIND SPOT: cannot detect VAULT-1 (recap-weekly / purge-abandoned-
-# profiles reporting healthy while their Edge Function call is silently
-# skipped due to unset Vault secrets) - see the script's own header comment
-# and GO_LIVE_GUIDE.md §A.4/§A.5 for why, and the manual check that closes it
-# until a proper automated one exists.
+# The check now runs INSIDE the database, hourly, as the pg_cron job
+# 'job-health-check'. It is what reads cron.job_run_details, and on a problem
+# it notifies the club's admins in-app through the ordinary notifications
+# path. This workflow reads only its verdict, via public.job_health_status():
+#
+#     ok              boolean      - is every scheduled job healthy
+#     failing_count   integer      - how many are not
+#     last_checked_at timestamptz  - when that in-database check last ran
+#
+# No job names, no schedules, no error text, no member data. So it runs with
+# the PUBLISHABLE key already committed in cloud-config.js and already served
+# to every browser - the same key, and the same argument, as the
+# edge-functions-deployed job in test.yml. There is no Supabase secret in this
+# path at all, which also means it works unchanged on a fork.
+#
+# THE JOB FAILS WHEN ok IS FALSE, **OR** WHEN last_checked_at IS OLDER THAN
+# TWO HOURS. The second half matters more than the first: `ok` is a stored
+# opinion, and if the hourly in-database check has died, a frozen `ok: true`
+# reads exactly like a healthy backend. That is the same silent-failure shape
+# as purge_due_accounts(), which sat unscheduled for the life of the project
+# because a job that does not run emits nothing at all. Two hours tolerates
+# exactly one missed hourly run and not two.
+#
+# One optional repository secret (Settings -> Secrets and variables ->
+# Actions), and it is the only secret left here:
+#   ALERT_WEBHOOK_URL - a Slack or Discord incoming webhook URL (or anything
+#                       else that accepts {"text": "..."}). With it unset,
+#                       this workflow's own red run IS the alert and the
+#                       message is printed to the log instead - it fails
+#                       closed, not silently.
 #
 # Two operational notes for whoever maintains this:
 #   - GitHub disables scheduled workflows after 60 days with no repository
@@ -33,26 +55,16 @@ name: scheduled-job-alert
 #   - A `schedule` trigger only fires from the DEFAULT branch. This is not
 #     live until it's on `main` - a file existing on a feature branch does
 #     not satisfy go-live item A.5.
-#
-# SUPABASE_SERVICE_ROLE_KEY bypasses every RLS policy on production member
-# data - a large blast radius for what is otherwise just a health ping.
-# That's an accepted, deliberate tradeoff here (scheduled_job_health() is
-# service_role-only by its own design, 202609060016/0018 revoke it from
-# anon/authenticated), not an oversight - if it's ever worth narrowing, the
-# shape would be a purpose-made Postgres role plus a SECURITY DEFINER
-# function returning only job name + healthy boolean, granted to that role
-# instead of service_role.
-#
-# Add SUPABASE_SERVICE_ROLE_KEY directly in GitHub's Settings -> Secrets
-# and variables -> Actions UI. Never paste it into a chat, a file, a commit,
-# or a workflow log - same rule that keeps it out of this repository.
 on:
   schedule:
-    # 06:00 UTC daily (08:00/09:00 Asia/Jerusalem depending on DST) - once a
-    # day is enough for jobs whose tightest cadence is 15 minutes
-    # (notif-batch-flush); this is a backstop, not the primary signal for
-    # anything that needs sub-day detection.
-    - cron: "0 6 * * *"
+    # Every six hours, on the hour. This was once a day while it cost a
+    # service-role key to run; it costs nothing now, and the in-database check
+    # it watches runs hourly, so a daily backstop would have left "the
+    # monitor itself is dead" undetected for up to 23 hours while the
+    # script's own staleness budget is two. Four runs a day bounds that at
+    # six. Members are not affected by this cadence either way - a real job
+    # failure reaches the admins in-app within the hour, from the database.
+    - cron: "0 */6 * * *"
   workflow_dispatch: {}
 permissions:
   contents: read
@@ -64,9 +76,9 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
-      - name: check scheduled_job_health() and alert on any unhealthy row
+      - name: check job_health_status() and alert if unhealthy or stale
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          # No SUPABASE_* secret. The URL and the publishable key are read
+          # from cloud-config.js, which is committed and public by design.
           ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
         run: node scripts/check-scheduled-job-health.mjs

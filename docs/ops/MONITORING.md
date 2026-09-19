@@ -16,27 +16,85 @@ Everything below exists so that class of failure is loud instead of silent.
 
 ## 1. Scheduled jobs (highest value — start here)
 
-`public.scheduled_job_health()` (migration `202609060016`, service_role
-only) returns one row per pg_cron job with its schedule, last run, that
-run's status, and a conservative `healthy` boolean.
+Since `202609190001` this is **automatic**, and it needs no credential.
+There are three surfaces, in order of how you will actually meet them.
 
-**The alert query:**
+### 1a. The hourly check, and the in-app alert
+
+`public.job_health_check()` runs every hour as the pg_cron job
+`job-health-check`. It flags every job that is inactive, recorded a
+`failed` run in the last 24 hours, has never run, or has not run within
+its own cadence window — and on a problem it notifies **every admin**
+in-app, through the ordinary notifications path, as a
+`job_health_alert` (title "תקלה בעבודות המתוזמנות", body = the count).
+
+Re-alerting is rate-limited on purpose: the first problem, any change to
+the set of failing jobs, and otherwise at most once every six hours. A
+gate that fires 168 times a week gets muted, and a muted gate is how
+`purge_due_accounts()` went unnoticed in the first place.
+
+A run that is **in progress** is not a failure — pg_cron writes a
+`running` row at the start of every run and `notif-batch-flush` runs every
+15 minutes, so treating in-progress as failure would page the admins about
+a job that is working. A genuinely stuck run is caught one cadence window
+later by the staleness clause.
+
+### 1b. The external backstop, with no service-role key
+
+`.github/workflows/scheduled-job-alert.yml` runs every six hours and calls
+`public.job_health_status()` — **the one function in `public` that is
+executable by `anon`** — with the publishable key from `cloud-config.js`.
+It returns three fields and takes no arguments:
+
+```sql
+select * from public.job_health_status();
+--  ok | failing_count |      last_checked_at
+```
+
+**It fails when `ok` is false, or when `last_checked_at` is older than two
+hours.** The second half is the more important one: `ok` is a stored
+opinion, and if the hourly check has itself died, a frozen `ok: true`
+reads exactly like a healthy backend. Two hours tolerates one missed
+hourly run and not two.
+
+This replaced a workflow that held `SUPABASE_SERVICE_ROLE_KEY` — a
+credential that bypasses every RLS policy on real member data — in GitHub
+Actions to answer a yes/no question. **Do not reintroduce it.** The only
+secret left in that workflow is the optional `ALERT_WEBHOOK_URL`.
+
+### 1c. The operator view, when you need the names
+
+`public.scheduled_job_health()` (migrations `202609060016` /
+`202609060018`, re-declared by `202609190001`, **service_role only**)
+returns one row per pg_cron job with its schedule, last run, that run's
+status, and a conservative `healthy` boolean. Run it from the SQL editor
+or psql when an alert has already told you something is wrong — never from
+CI, which is the whole point of 1b.
 
 ```sql
 select jobname, last_status, last_run, seconds_since_last_run
   from public.scheduled_job_health()
  where not healthy;
+
+-- or, the same names as the hourly check saw them:
+select failing_jobs, failing_count, last_checked_at
+  from public.job_health_state;
 ```
 
-**Alert if this returns any row.** `healthy` is false when a job is
-inactive, when its last run failed, when it has never run at all, or when
-it last ran more than 8 days ago (wider than the weekly jobs' cadence so a
-weekly job is not flagged the day before it is due).
+`healthy` is false when a job is inactive, when its last run failed, when
+it has never run at all, or when it last ran longer ago than
+`public.cron_cadence_window(its schedule)` allows — **35 days** for a
+monthly job, **9 days** weekly, **2 days** daily, **3 hours** for anything
+hourly or faster, i.e. roughly two of the job's own intervals. (A flat
+8-day window was `202609060016`'s original rule and was wrong: it made
+`recap_monthly` report unhealthy for ~23 days of every month. Fixed in
+`202609060018`; the expression now lives in one place,
+`cron_cadence_window()`, so the two checkers cannot drift apart.)
 
 A job that has never run reports `last_status = 'never run'` — the exact
 state `purge_due_accounts()` sat in.
 
-**Expected jobs** (10, as of `202609060016`):
+**Expected jobs** (11, as of `202609190001`):
 
 | Job | Cadence | If it stops |
 |---|---|---|
@@ -50,6 +108,7 @@ state `purge_due_accounts()` sat in.
 | `recap-weekly` | Mon 05:11 | No weekly recaps (needs Vault secrets set) |
 | `recap_monthly` | 1st 04:41 | No monthly club recap |
 | `community-health` | Mon 04:43 | `community_health_scores` stops updating |
+| `job-health-check` | hourly :53 | **Nothing is watching any of the others.** The `scheduled-job-alert` workflow catches this one specifically, via `last_checked_at` — see §1b. |
 
 `feed-weights-recompute` was deliberately **unscheduled** (`202609060015`,
 FEAT-010) because the function it called is an empty stub. Its absence is
