@@ -104,5 +104,9 @@ cd scripts/browser-check && npm ci && npx playwright install chromium
 node run-all.mjs                    # full real-Chromium suite; same jobs CI runs
 ```
 
-`npm test` and the browser-check suite both run in CI on every push and
-pull request (see `.github/workflows/test.yml`).
+`npm test` and the browser-check suite both run in CI on every pull request,
+and on a push to `main` (see `.github/workflows/test.yml`). A push to a
+feature branch does not start a run — the PR run already covers it, and
+Actions minutes are metered. A change that touches only documentation runs
+nothing — with six markdown files excepted, because tests assert against
+their text (see the `paths` list in that workflow).

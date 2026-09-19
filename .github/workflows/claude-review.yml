@@ -1,6 +1,6 @@
 name: claude-review
-# An automated review on every pull request, plus an @claude mention handler
-# for the PR conversation, using anthropics/claude-code-action.
+# One automated review when a pull request is opened, plus an @claude mention
+# handler for the PR conversation, using anthropics/claude-code-action.
 #
 # WHAT THIS IS NOT. It is not a gate. Every hard rule in CLAUDE.md already has
 # a deterministic guard that fails the build in test.yml - migration
@@ -22,7 +22,20 @@ name: claude-review
 # not been set up yet is just noise nobody would read.
 on:
   pull_request:
-    types: [opened, synchronize]
+    # `opened` ONLY - deliberately not `synchronize`. This review used to
+    # re-run the whole seven-point checklist on every push to an open PR,
+    # which on a branch that pushes ten times is ten reviews of largely the
+    # same diff, each one billed, and nine of them saying what the first one
+    # already said. Actions minutes are metered since the repository went
+    # private and the free allowance ran out on 2026-09-19.
+    #
+    # Nothing is lost that cannot be asked for: the two comment events below
+    # are unchanged, so `@claude` re-runs the review on the current diff at
+    # the moment it matters - after a push that answers a finding, or on a
+    # line of the diff. This is an advisory reader, not a gate, and the hard
+    # rules it walks all have deterministic guards in test.yml which DO run
+    # on every pull_request event.
+    types: [opened]
   # The two kinds of PR comment. issue_comment fires for the conversation tab;
   # pull_request_review_comment fires for a comment pinned to a line of the
   # diff. A review SUBMISSION body (pull_request_review) is deliberately not
@@ -43,8 +56,11 @@ permissions:
 # `contents: write` would give a token that can write to the repository to
 # whatever a PR comment says, which is a much larger decision than it looks.
 concurrency:
-  # Per PR, not per branch: a second push while a review is still running makes
-  # the first review stale - it describes a diff that no longer exists.
+  # Per PR, not per branch: a second trigger while a review is still running
+  # makes the first review stale - it describes a diff that no longer exists.
+  # Since the pull_request trigger is `opened` only, in practice this is two
+  # @claude mentions in quick succession, or a mention landing on top of the
+  # opening review; the newest question is the one worth answering.
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number }}
   cancel-in-progress: true
 jobs:

@@ -68,6 +68,26 @@ There is no phone column, no payment column and no health column in the
 schema, and there must not be one. Arbox owns bookings and payments; this app
 is what happens *after* training.
 
+**A workflow trigger is a budget line.** The repository has been private since
+2026-09-17, so every Actions job is billed, and the free monthly allowance ran
+out on 2026-09-19. One run of `test.yml` costs **37 billed minutes**
+(`node-tests` alone is 28), so `test.yml` runs on `pull_request` and on `push`
+to `main` **only** — never on a push to a feature branch, which would bill the
+same tree twice — skips a change that is entirely documentation, and cancels a
+superseded run. `claude-review.yml` reviews on `opened` and then only when
+asked with `@claude`.
+
+*Documentation is not the same as markdown.* Six markdown files are test
+fixtures — `README.md`, `PRIVACY.md`, `TERMS.md` and
+`docs/community/{achievement-seed,contracts,metrics}.md` — and the suite
+asserts against their text, so the filter is `paths` with negation
+(`**`, `!docs/**`, `!**/*.md`, then those six back) rather than a flat
+`paths-ignore`. Skipping a fixture would not lose a run, it would lose one
+*silently*, and the red would land on the next unrelated PR.
+`test/ci-minutes-budget.test.mjs` pins all of it, derives that fixture list
+from what the tests actually read, and asserts the two path lists stay twins.
+It checks shape, never duration: making a suite slower is not its business.
+
 ---
 
 ## Desktop
@@ -131,18 +151,20 @@ four after merges, bumps the version once, and runs `npm run sync-version`.
 
 ## Automated review
 
-**Every PR gets a Claude review, and `@claude` in a PR comment gets an
-answer.** `.github/workflows/claude-review.yml` runs
-`anthropics/claude-code-action` on `opened` and `synchronize`, and again on any
-PR comment containing `@claude` — the conversation tab or pinned to a line of
-the diff. It walks the rules above: the Supabase security surface (RLS
+**Every PR gets one Claude review when it is opened, and `@claude` in a PR
+comment gets an answer.** `.github/workflows/claude-review.yml` runs
+`anthropics/claude-code-action` on `opened`, and again on any PR comment
+containing `@claude` — the conversation tab or pinned to a line of the diff.
+It walks the rules above: the Supabase security surface (RLS
 policies, `SECURITY DEFINER` functions, `anon` grants), edits to applied
 migrations, sibling drift, a CSS rule missing from a theme block, a new file
 missing from the `sw.js` precache list, secrets in client files, and member
 health, payment, phone or email data.
 
 To trigger one by hand, comment `@claude` on the PR saying what you want looked
-at; a push to the branch re-runs the whole checklist. The workflow needs the
+at. A push to the branch deliberately does NOT re-run the checklist — ten
+pushes used to mean ten billed reviews of largely the same diff — so after a
+push that answers a finding, ask for the re-read. The workflow needs the
 `CLAUDE_CODE_OAUTH_TOKEN` repository secret — without it the job skips with a
 notice rather than failing. PRs from forks are skipped. It holds
 `contents: read`, so it reads, reviews and comments, but cannot push a fix:

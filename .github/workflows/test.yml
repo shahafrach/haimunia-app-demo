@@ -1,11 +1,90 @@
 name: test
+# BILLED MINUTES ARE THE CONSTRAINT. The repository went private on
+# 2026-09-17, so every job here is metered, and the free monthly allowance ran
+# out on 2026-09-19 - every run since has failed at "the job was not started"
+# rather than on a test. One full run of this workflow bills 37 minutes
+# (node-tests 28, browser-checks 4, migration-check 3, the two cheap jobs 1
+# each; measured on run 35435484944, the last green one before the quota went).
+# That number is what the trigger list below is shaped around: nothing here
+# makes a job faster, it only stops the same commit being tested three times.
 on:
+  # ONE RUN PER COMMIT, not three. `push:` with no filter plus `pull_request:`
+  # meant every push to a branch with an open PR started BOTH a push run and a
+  # pull_request run of all five jobs - 74 billed minutes for one commit, and
+  # the two runs test nearly the same tree. The PR run is the one worth
+  # keeping: it tests the merge commit, which is what actually lands.
+  #
+  # So: pull_request everywhere, and push only on main, which is the
+  # post-merge check that no earlier run covered (the merge commit a PR run
+  # tests is against the base at the time, not against the base as it is when
+  # the merge happens).
   push:
+    branches: [main]
+    # TWIN of the pull_request list below - a path that stops a run on one
+    # event and not the other is a filter that does nothing. GitHub Actions
+    # does not expand YAML anchors, so the list is written twice; change both,
+    # which the guard test asserts.
+    # SIX MARKDOWN FILES ARE TEST FIXTURES, not documentation, and the skip
+    # has to know the difference. `docs/**` and `**/*.md` would otherwise
+    # cover PRIVACY.md and TERMS.md (community-legal-pages,
+    # community-backup-sync assert their wording clause by clause), README.md
+    # (production-not-demo reads its first line), and
+    # docs/community/{achievement-seed,contracts,metrics}.md, which
+    # community-achievement-engine and platform-analytics assert the code
+    # matches. Skipping those would not lose a test run - it would lose it
+    # SILENTLY, and the red would surface on the next unrelated PR. Exactly
+    # the failure the migration-immutability rule exists to prevent, in
+    # markdown.
+    #
+    # Hence `paths` with negation rather than `paths-ignore`: GitHub's filter
+    # is sequential and a later positive pattern re-includes what an earlier
+    # negative one dropped (its own documented example is
+    # `*.md`, `!README.md`, `README*`), and `!` is a `paths` feature - the two
+    # keys cannot both be used on one event. `**` is everything.
+    #
+    # test/ci-minutes-budget.test.mjs derives the fixture list from what the
+    # suite actually reads, so a seventh fixture fails the build here instead
+    # of quietly leaving itself untested.
+    paths:
+      - "**"
+      - "!docs/**"
+      - "!**/*.md"
+      - "README.md"
+      - "PRIVACY.md"
+      - "TERMS.md"
+      - "docs/community/achievement-seed.md"
+      - "docs/community/contracts.md"
+      - "docs/community/metrics.md"
   pull_request:
+    # Twin of the push list above, which carries the whole argument for it -
+    # including why six markdown files are re-included. The two lists must
+    # stay identical, and the guard test asserts that.
+    #
+    # A change that is only documentation runs NOTHING. A change that touches
+    # documentation AND code runs everything - a path filter skips a run only
+    # when EVERY changed file fails to match.
+    paths:
+      - "**"
+      - "!docs/**"
+      - "!**/*.md"
+      - "README.md"
+      - "PRIVACY.md"
+      - "TERMS.md"
+      - "docs/community/achievement-seed.md"
+      - "docs/community/contracts.md"
+      - "docs/community/metrics.md"
 permissions:
   contents: read
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # Per branch. `github.head_ref` is the PR's own branch and is empty outside
+  # pull_request, where `github.ref` is refs/heads/main - so a PR groups with
+  # itself and with nothing else.
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  # A second push to a branch makes the first run's answer worthless before it
+  # finishes, and at 37 minutes a run that nobody will read is the single
+  # most expensive thing this workflow can do. This also applies to main:
+  # merges there are serial and rare, and the consolidation session's own
+  # back-to-back pushes are exactly the case worth cancelling.
   cancel-in-progress: true
 jobs:
   node-tests:
