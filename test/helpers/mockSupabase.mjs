@@ -18,6 +18,21 @@ export function createMockSupabase(seedTables = {}) {
   let authCb = null;
   let uidCounter = 0;
   const rpcHandlers = {};
+  // EDGE FUNCTIONS WERE NOT MOCKED AT ALL until COMM-379, and mgmtDb()
+  // has forwarded `functions.invoke` to this client since the management
+  // client was introduced - to a `functions` property that did not exist,
+  // so any call threw a TypeError inside the caller's own try-less await.
+  // adminResetPassword() is the only caller, which is why nothing caught
+  // it: every test of the reset stopped at the confirm dialog, and the
+  // half that actually reveals a one-time password had never been
+  // exercised in jsdom at all.
+  //
+  // Registered per name like onRpc(), and UNREGISTERED BY DEFAULT: an
+  // un-stubbed function returns a named error rather than a plausible
+  // success, so a test that forgets to register one fails loudly instead
+  // of passing on a fiction.
+  const functionHandlers = {};
+  const functionCalls = [];
   // COMM-110..114. Every feed_page/club_summary/telemetry call the client
   // made, in order, so a test can assert the arguments it sent rather than
   // only the rows it rendered.
@@ -314,6 +329,9 @@ export function createMockSupabase(seedTables = {}) {
     // ctx exposes { db, currentUser } so a handler can read/write mock
     // tables the same way the real Postgres function would.
     onRpc(name, handler) { rpcHandlers[name] = handler; },
+    // Same contract for a Supabase Edge Function: (body, ctx) => ({ data, error }).
+    onFunction(name, handler) { functionHandlers[name] = handler; },
+    functionCalls,
     client: {
       auth: {
         getSession: () => Promise.resolve({ data: { session: currentUser ? { user: currentUser } : null } }),
@@ -1490,6 +1508,15 @@ export function createMockSupabase(seedTables = {}) {
           return Promise.resolve({ data: prof.recovery_verified_at, error: null });
         }
         return Promise.resolve({ data: null, error: null });
+      },
+      functions: {
+        invoke: (name, opts) => {
+          const body = (opts && opts.body) || {};
+          functionCalls.push({ name, body });
+          const handler = functionHandlers[name];
+          if (handler) return Promise.resolve(handler(body, { db, currentUser }));
+          return Promise.resolve({ data: null, error: { message: `no stand-in registered for edge function ${name}` } });
+        },
       },
       storage: {
         from: (bucket) => ({

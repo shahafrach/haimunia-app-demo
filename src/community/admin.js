@@ -2721,6 +2721,18 @@
   // the coach lists: a member with no ping row is a member we have no data
   // about, which is a fact about our records and not about them. The label
   // now names the app, and the empty case says so.
+  //
+  // THE RESET BUTTON'S DISABLED REASON IS THE THIRD COPY OF ONE DEFECT.
+  // `title` is invisible on a touch screen, which is every screen this app
+  // ships to. ghostRowHtml() was fixed for that first (real device
+  // report, 2026-09-15), memberRoleButtonsHtml() above second, and the
+  // reset button at the bottom of this row was missed both times although
+  // it sits in the same row and is disabled by the same readOnly flag - so
+  // a head coach browsing the roster saw one greyed control with a reason
+  // and another right under it with none, which reads as a broken button
+  // rather than as a boundary. Its note now uses the same .footer-note
+  // element, class and placement as the role note, so the two cannot look
+  // like different kinds of message.
   function memberManagementRowHtml(m, opts) {
     opts = opts || {};
     const readOnly = !!opts.readOnly;
@@ -2735,21 +2747,88 @@
       </div>`}
       <div class="chip-row" style="margin-top:0;">
         <button class="chip-btn"${readOnly ? ' disabled title="זמין למנהל/ת בלבד"' : ""} data-community-action="admin-reset-password" data-id="${esc(m.id)}">איפוס סיסמה</button>
+        ${readOnly ? `<div class="footer-note" style="margin:6px 0 0;width:100%;">איפוס סיסמה זמין למנהל/ת בלבד.</div>` : ""}
       </div>
     </div>`;
   }
-  function renderMemberManagement() {
-    if (!isAdmin()) return "";
-    const results = state.members.results;
+  // ONE REVEAL SLOT, SO ONE RENDERER. state.admin.passwordResetResult is a
+  // single slot by design (adminResetPassword() refuses to overwrite an
+  // unread one), and the card that reveals it is now drawn from two places:
+  // this club-panel section, and renderPasswordResetPanel() on the system
+  // admin panel. Copying the markup would have been the fourth instance of
+  // this repository's characteristic defect in one file - and the copy that
+  // drifts is the one showing a one-time secret without saying whose it is,
+  // which is the exact bug the name on this card was added to fix.
+  //
+  // Both panels never render at once (renderManagePanel draws one mode), so
+  // there is no question of two cards for one slot.
+  function passwordResetResultHtml() {
     const pr = state.admin.passwordResetResult;
-    const passwordResetHtml = pr ? `<div class="chart-card" style="margin-bottom:10px;border:1px solid var(--brass);" data-password-reset-created="1">
+    if (!pr) return "";
+    return `<div class="chart-card" style="margin-bottom:10px;border:1px solid var(--brass);" data-password-reset-created="1">
       <div class="field-label" style="margin-bottom:4px;">${bidiText(`הסיסמה של ${pr.name || "חבר/ה"} אופסה — זו הפעם היחידה שהיא תוצג. מסרו אותה ישירות.`)}</div>
       <div class="flex gap-10" style="align-items:center;flex-wrap:wrap;">
         <code class="mono" style="font-size:15px;">${esc(pr.tempPassword)}</code>
         <button class="chip-btn" data-community-action="copy-invite-code" data-code="${esc(pr.tempPassword)}">העתקה</button>
         <button class="link-btn" data-community-action="close-password-reset-result">סגירה</button>
       </div>
-    </div>` : "";
+    </div>`;
+  }
+  // COMM-379. THE CONTROL THE SPLIT LEFT WITH NOBODY.
+  //
+  // renderManagePanel()'s own division of labour is explicit: "ADMIN runs
+  // the APP - bug reports, the audit log, who holds which role, password
+  // resets, and which modules are switched on." Password resets were named
+  // in that list and never moved. They live inside renderMemberManagement()
+  // below, which is rendered only from the CLUB panel's "המועדון" tab - and
+  // that function then self-gates on isAdmin(), so on the club panel a head
+  // coach cannot see it and on the admin panel nobody renders it at all.
+  // The one control the design assigned to the admin was the one control
+  // the admin had no screen for; the only way to reach it was to hold the
+  // club role as well and go looking on the other panel.
+  //
+  // Everything here is the existing path, reached from a new place:
+  // admin_search_members through searchMembers() (the same state.members
+  // slice, the same debounce), the same data-community-action that opens
+  // the same askConfirm() dialog, adminResetPassword() unchanged, and
+  // passwordResetResultHtml() above for the reveal. No new RPC, no new
+  // permission, no second copy of anything.
+  //
+  // DELIBERATELY RESET-ONLY, not memberManagementRowHtml(). That row also
+  // carries grant/promote/demote/remove, and this section is answering one
+  // question - "which member has lost their password" - on a panel whose
+  // whole premise is that running the club is somebody else's job. A row
+  // with five controls would have re-imported the club panel into the admin
+  // panel by the back door. The role controls are a real second gap and are
+  // called out in the PR rather than fixed here; they are a different
+  // decision from this one.
+  function renderPasswordResetPanel() {
+    if (!isAdmin()) return "";
+    const results = state.members.results;
+    const typed = state.members.search.trim();
+    const rows = results.map((m) => `<div class="log-row" style="justify-content:space-between;gap:10px;align-items:center;">
+      <span style="min-width:0;">
+        <span style="font-weight:700;">${nameHtml(m.display_name, m.handle)}</span>
+        <span style="color:var(--steel);font-size:11px;"> · <bdi>@${esc(m.handle)}</bdi> · ${memberRoleLabel(m)}</span>
+      </span>
+      <button class="chip-btn" data-community-action="admin-reset-password" data-id="${esc(m.id)}">איפוס סיסמה</button>
+    </div>`).join("");
+    const body = results.length
+      ? `<div class="log-list">${rows}</div>`
+      : typed.length >= 2
+        ? `<div class="empty">לא נמצאו חברים תואמים</div>`
+        : `<div class="empty">חיפוש לפי handle, שם, או מזהה משתמש (UUID)</div>`;
+    return `<div class="ach-section" style="margin-top:18px;" data-password-reset-panel="1">${sectionHead("var(--brass)", "איפוס סיסמה לחבר/ה", true)}
+      <div style="color:var(--steel);font-size:12px;line-height:1.6;margin-bottom:8px;">${bidiText("הכניסה לאפליקציה היא שם משתמש וסיסמה בלבד - אין כתובת מייל אמיתית לשלוח אליה קישור איפוס, ולכן האיפוס נעשה כאן. נוצרת סיסמה זמנית שמוצגת פעם אחת בלבד, ויש למסור אותה לחבר/ה ישירות.")}</div>
+      ${passwordResetResultHtml()}
+      <div class="search-box"><input id="adminPasswordResetSearch" placeholder="חיפוש לפי handle, שם, או הדבקת מזהה משתמש" aria-label="חיפוש חבר/ה לאיפוס סיסמה" value="${esc(state.members.search)}"/></div>
+      ${body}
+    </div>`;
+  }
+  function renderMemberManagement() {
+    if (!isAdmin()) return "";
+    const results = state.members.results;
+    const passwordResetHtml = passwordResetResultHtml();
     return `<div class="ach-section" style="margin-top:18px;">${sectionHead("var(--purple)", "ניהול חברים", true)}
       ${passwordResetHtml}
       <div class="search-box"><input id="adminMemberSearch" placeholder="חיפוש לפי handle, שם, או הדבקת מזהה משתמש" aria-label="חיפוש חברים לניהול" value="${esc(state.members.search)}"/></div>
@@ -3070,29 +3149,56 @@
   // message, and the next rerender silently put it back - which is exactly
   // "the toggles don't work". Same busy/anyBusy split renderMemberOfWeekPickForm
   // already uses: `busy` still labels only the row actually saving.
+  // PER ROW, NOT PER GROUP. The group blurb used to carry the whole
+  // enforcement story, naming 'directory' as the single client-only
+  // exception. That was true for one day. It was already wrong by
+  // 202609150014 (five more clientOnly rows), wronger by 202609160004, and
+  // 202609190002's seven would have made a prose sentence that has to list
+  // eleven exceptions - which is the point at which a sentence stops being
+  // read. The marker is on the row it describes now, derived from the same
+  // `clientOnly` flag the registry already carried, so it cannot drift from
+  // it: there is nothing to keep in sync.
+  //
+  // "בפיתוח" is the second marker and a different claim. clientOnly says
+  // WHERE a switch is enforced; planned says there is nothing behind it to
+  // enforce yet. An admin can switch a planned row today - that is what
+  // 202609190002 is for - and the row states plainly that doing so changes
+  // nothing until the feature lands.
+  function clubModuleMarkersHtml(m) {
+    const chip = (text, color) => `<span style="font-size:10px;line-height:1.6;color:${color};border:1px solid ${color};border-radius:999px;padding:0 6px;white-space:nowrap;">${esc(text)}</span>`;
+    return `${m.planned ? chip("בפיתוח", "var(--brass)") : ""}${chip(m.clientOnly ? "בתצוגה בלבד" : "נאכף בשרת", "var(--steel)")}`;
+  }
   function clubModuleRow(m, anyBusy) {
     const row = state.club.features[m.key] || { enabled: true, config: {} };
     const busy = state.club.moduleBusy === m.key;
+    // aria-describedby rather than folding the sentence into aria-label:
+    // the label is what the switch IS, the description is what it does, and
+    // a screen reader announcing both as one run-on name is how a 13-word
+    // checkbox name happens. Keyed on the module key, which is unique
+    // across both groups by CLUB_MODULE_KEYS' own construction.
+    const descId = m.desc ? `clubModuleDesc-${m.key}` : "";
     return `<label class="log-row" style="justify-content:space-between;gap:12px;cursor:pointer;">
-      <span style="font-size:13px;">${esc(m.label)}${busy ? " (שומר…)" : ""}</span>
-      <input type="checkbox" data-club-feature="${m.key}"${row.enabled ? " checked" : ""}${anyBusy ? " disabled" : ""} aria-label="${esc(m.label)}"/>
+      <span style="display:flex;flex-direction:column;gap:3px;min-width:0;">
+        <span style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:13px;">${esc(m.label)}${busy ? " (שומר…)" : ""}${clubModuleMarkersHtml(m)}</span>
+        ${m.desc ? `<span id="${descId}" style="color:var(--steel);font-size:11.5px;line-height:1.5;">${bidiText(m.desc)}</span>` : ""}
+      </span>
+      <input type="checkbox" data-club-feature="${m.key}"${row.enabled ? " checked" : ""}${anyBusy ? " disabled" : ""} aria-label="${esc(m.label)}"${descId ? ` aria-describedby="${descId}"` : ""}/>
     </label>`;
   }
   function renderClubModulesPanel() {
     if (!(hasPerm(PERM.CLUB_MANAGE_MODULES) || isAdmin())) return "";
     const anyBusy = !!state.club.moduleBusy;
-    // 'directory' is the one clientOnly row in this group (see
-    // CLUB_MODULE_TOGGLES' own comment) - called out inline rather than
-    // silently folded into a blanket "enforced on the server" claim that
-    // would be false for it.
+    // Which rows are server-enforced and which only hide a control is now
+    // stated on each row by clubModuleMarkersHtml() - see its comment for
+    // why that stopped being a sentence in the group blurb below.
     const communityRows = CLUB_MODULE_TOGGLES.map((m) => clubModuleRow(m, anyBusy)).join("");
     const coachRows = COACH_MODULE_TOGGLES.map((m) => clubModuleRow(m, anyBusy)).join("");
     return `<div class="ach-section" style="margin-top:18px;" data-club-modules-panel="1">${sectionHead("var(--green)", "מודולים למועדון", true)}
       <div style="font-weight:800;font-size:13px;margin:4px 0 6px;">תכני קהילה</div>
-      <div style="color:var(--steel);font-size:12px;line-height:1.6;margin-bottom:8px;">כיבוי מודול מסתיר אותו לגמרי מכל חברי המועדון - אין טאב, כרטיס, כפתור או התראה - ואוכף בשרת, לא רק בתצוגה. יוצא דופן: "ספריית חברים" מוסתרת רק בתצוגה, ולא ברמת הרשאות השרת.</div>
+      <div style="color:var(--steel);font-size:12px;line-height:1.6;margin-bottom:8px;">כיבוי מודול מסתיר אותו לגמרי מכל חברי המועדון - אין טאב, כרטיס, כפתור או התראה. כל שורה מסומנת: "נאכף בשרת" - גם מי שיעקוף את המסך לא יקבל את המידע; "בתצוגה בלבד" - ההסתרה היא במסך, וההרשאות בשרת נשארות כשהיו. שורה מסומנת "בפיתוח" היא מתג לפיצ'ר שעוד לא נבנה: אפשר להחליט עליו כבר עכשיו, והוא ייכנס לתוקף ביום שהפיצ'ר יעלה.</div>
       <div class="log-list">${communityRows}</div>
       <div style="font-weight:800;font-size:13px;margin:16px 0 6px;">כלי מאמנים</div>
-      <div style="color:var(--steel);font-size:12px;line-height:1.6;margin-bottom:8px;">שולט אילו חלקים מלוח המאמנים גלויים לצוות - נוחות ארגונית, לא הרשאה: הפעולות עצמן שמורות למי שמורשה/ית לבצע אותן בכל מקרה. "לוח מאמנים (הכל)" מכבה את כל הטאב.</div>
+      <div style="color:var(--steel);font-size:12px;line-height:1.6;margin-bottom:8px;">שולט אילו חלקים מלוח המאמנים גלויים לצוות. "לוח מאמנים (הכל)" מכבה את כל הטאב. גם כאן הסימון על כל שורה הוא הקובע: "בתצוגה בלבד" הוא נוחות ארגונית ולא הרשאה - הפעולות עצמן שמורות למי שמורשה/ית לבצע אותן בכל מקרה - ואילו "נאכף בשרת" עוצר את הפעולה עצמה, גם כשאיש אינו צופה במסך.</div>
       <div class="log-list">${coachRows}</div>
     </div>`;
   }

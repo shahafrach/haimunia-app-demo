@@ -1085,6 +1085,37 @@
     // itself (club_feature_enabled('streak_risk_nudges')), a real
     // server-enforced off switch on a scheduled job, not a UI hide.
     { key: "streak_risk_nudges", label: "תזכורות רצף אימונים לחברים" },
+    // ------------------------------------------------------------------
+    // SWITCHES THAT ARRIVE BEFORE THEIR FEATURES (202609190002).
+    //
+    // Everything above this line gates a surface that exists. These four,
+    // and the three at the end of COACH_MODULE_TOGGLES, name features a
+    // later branch will build; the key and the club_features row are here
+    // first so that branch wires one isModuleEnabled() gate and adds no
+    // migration of its own - supabase/migrations/ being the directory two
+    // open branches cannot both touch (CLAUDE.md, "Parallel work").
+    //
+    // planned: true is the honest half of that. Every other row in these
+    // arrays turns something off; these turn nothing off, because there is
+    // nothing behind them yet, and the panel says so on the row rather than
+    // leaving an admin to discover it by flipping the switch and watching
+    // the app not change. The branch that builds the feature clears the
+    // flag in the same commit that adds its gate.
+    //
+    // clientOnly: true for all seven, for the same reason: there is no RLS
+    // clause behind any of them, so the panel must not claim server
+    // enforcement. Whichever of the two a feature turns out to need, its
+    // own branch sets it then - that is a decision about a feature that
+    // exists, and cannot be made here.
+    //
+    // desc is new with these rows and deliberately optional. A one-line
+    // Hebrew sentence matters far more for a switch whose feature nobody
+    // has seen than for "אירועים", and clubModuleRow() renders it only when
+    // a row carries one, so no existing row changed.
+    { key: "onboarding_challenge", label: "אתגר כניסה לחבר/ה חדש/ה", desc: "אתגר ראשון קצר שמוצע אוטומטית למי שהצטרף/ה זה עתה למועדון.", clientOnly: true, planned: true },
+    { key: "benchmarks", label: "אימוני בנצ'מרק", desc: "האימונים המוכרים בשמם (Fran, Grace ודומיהם) ומעקב אחרי השיפור בהם לאורך זמן.", clientOnly: true, planned: true },
+    { key: "strength_percentages", label: "אחוזים ממשקל מקסימלי", desc: "חישוב משקלי עבודה לפי אחוז מהמקסימום האישי (1RM) של כל חבר/ה.", clientOnly: true, planned: true },
+    { key: "gym_display", label: "מסך תצוגה במועדון", desc: "מסך לצפייה בלבד שנתלה בחדר האימון ומציג את אימון היום ואת לוחות המובילים.", clientOnly: true, planned: true },
   ];
   const COACH_MODULE_TOGGLES = [
     { key: "coach_tools", label: "לוח מאמנים (הכל)", clientOnly: true },
@@ -1104,6 +1135,12 @@
     // detection keeps running either way (coach-engagement-decline is a
     // separate, untouched job), this only silences the push/in-app alert.
     { key: "engagement_alerts", label: "התראות ירידה במעורבות חבר/ה לצוות" },
+    // The coach-side three of 202609190002's seven. See the block in
+    // CLUB_MODULE_TOGGLES above for what planned/clientOnly mean here and
+    // why the keys exist before the features do.
+    { key: "coach_tasks", label: "משימות למאמן/ת", desc: "רשימת משימות שהמאמן/ת עובר/ת עליהן - לברך, לקלוט או לחזור אל מי שנעלם/ה.", clientOnly: true, planned: true },
+    { key: "owner_report", label: "דוח לבעלי המועדון", desc: "סיכום תקופתי על פעילות המועדון למי שמנהל/ת אותו.", clientOnly: true, planned: true },
+    { key: "arbox_attendance", label: "נוכחות מ-Arbox", desc: "משיכת נוכחות בשיעורים מ-Arbox במקום הסתמכות על דיווח עצמי בלבד.", clientOnly: true, planned: true },
   ];
   const CLUB_MODULE_KEYS = CLUB_MODULE_TOGGLES.concat(COACH_MODULE_TOGGLES).map((m) => m.key);
   // PERMISSION QUESTIONS HAVE TWO SUBJECTS NOW.
@@ -4453,6 +4490,12 @@
     // discoverable instead by opening itself whenever a report is waiting -
     // see openBugReportsByDefault().
     { id: "manageArea-bugs", label: "דיווחי תקלות", notInJumpRow: true },
+    // notInJumpRow for the same reason as the bug inbox directly above: the
+    // jump row is a memory aid for the seven sub-tabs this screen used to
+    // have, and password resets were never one of them - they were never on
+    // this panel at all until COMM-379 put them here. Nobody is looking for
+    // this area under an old name.
+    { id: "manageArea-passwords", label: "איפוס סיסמאות", notInJumpRow: true },
     { id: "manageArea-audit", label: "יומן פעולות" },
     { id: "manageArea-settings", label: "הגדרות" },
     { id: "manageArea-analytics", label: "אנליטיקס" },
@@ -4616,7 +4659,7 @@
     //
     // renderAdminAnalyticsDashboard() still includes renderRegistrationFunnel()
     // nested inside itself (see that function's own comment).
-    const [areaModeration, areaBugs, areaAudit, areaSettings, areaAnalytics, areaOnboarding] = MANAGE_ADMIN_AREAS;
+    const [areaModeration, areaBugs, areaPasswords, areaAudit, areaSettings, areaAnalytics, areaOnboarding] = MANAGE_ADMIN_AREAS;
     const adminAreas = [
       // FULLY DISJOINT, not a superset (2026-09-15, second revision).
       //
@@ -4636,6 +4679,13 @@
       // that quietly contains both jobs.
       isAdminMode ? "" : manageAdminArea(areaModeration, renderRestrictionsPanel() + renderModeration(), true),
       isAdminMode ? manageAdminArea(areaBugs, renderBugReports(), true) : "",
+      // COMM-379. "who holds which role, password resets" is in this
+      // panel's own charter three comments up, and the reset half had no
+      // screen here - see renderPasswordResetPanel()'s comment. Admin
+      // panel only: the club panel keeps reaching the same control through
+      // renderMemberManagement(), unchanged, so nothing an admin could do
+      // yesterday moved.
+      isAdminMode ? manageAdminArea(areaPasswords, renderPasswordResetPanel()) : "",
       isAdminMode ? manageAdminArea(areaAudit, renderAuditLog()) : "",
       // Module toggles decide which FEATURES of the app exist for this club -
       // that is app administration, not club running, so it moves to admin.
@@ -5432,6 +5482,24 @@
     const mt = state.ui.manageTab;
     const adminInput = document.getElementById("adminMemberSearch");
     if (adminInput) adminInput.addEventListener("input", () => searchMembers(adminInput.value));
+    // COMM-379. The system admin panel's own reset-only member lookup. Same
+    // searchMembers(), same state.members slice, same debounce - a second id
+    // rather than a second search, because the two boxes belong to two
+    // panels and renderManagePanel() draws exactly one of them per render,
+    // so they never coexist in the DOM and never fight over the state they
+    // share. Kept beside adminMemberSearch rather than near the panel it
+    // serves so a third one cannot be added without seeing these two.
+    const pwInput = document.getElementById("adminPasswordResetSearch");
+    if (pwInput) {
+      pwInput.addEventListener("input", () => searchMembers(pwInput.value));
+      // searchMembers() debounces the RPC but rerenders on its own for a
+      // query under two characters, and rerendering replaces the box being
+      // typed into. Same restore as rosterSearch below, and for the same
+      // reason: without it the third character of a search cannot be typed.
+      if (pwInput.value && (!document.activeElement || document.activeElement === document.body)) {
+        try { pwInput.focus(); pwInput.setSelectionRange(pwInput.value.length, pwInput.value.length); } catch (e) {}
+      }
+    }
     // Fresh-eyes audit: a pure client-side filter over already-loaded
     // roster items, no RPC and so no debounce needed - see
     // renderMemberRoster()'s own comment for why this is separate from
