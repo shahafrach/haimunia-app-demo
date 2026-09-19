@@ -51,8 +51,15 @@ test("there is exactly one definition: app.js and cloud.js bind the helper, they
     assert.doesNotMatch(src, /^\s*function bidiText\s*\(/m, `${name} must not re-declare bidiText`);
     assert.doesNotMatch(src, /^\s*function bidiHtml\s*\(/m, `${name} must not re-declare bidiHtml`);
   }
-  assert.match(appSrc, /const bidiText = SAFE\.bidiText;/);
-  assert.match(cloudSrc, /const bidiText = window\.BoxLogSafe\.bidiText;/);
+  // `var`, not `const`, in both: cloud.js stopped being an IIFE so that
+  // src/community/*.js can share its scope, which put its bidiText and
+  // app.js's in the same global lexical environment. Two `const`s there are a
+  // redeclaration SyntaxError; two `var`s binding the identical
+  // window.BoxLogSafe function are not. What this test is actually about -
+  // that neither file re-implements it - is unchanged, and the
+  // doesNotMatch pair above is what enforces it.
+  assert.match(appSrc, /var bidiText = SAFE\.bidiText;/);
+  assert.match(cloudSrc, /var bidiText = window\.BoxLogSafe\.bidiText;/);
   assert.match(cloudSrc, /const bidiHtml = window\.BoxLogSafe\.bidiHtml;/);
 });
 

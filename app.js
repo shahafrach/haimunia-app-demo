@@ -76,7 +76,7 @@ function isBarbellMovement(id) {
 //
 // SAFE is src/constants.js's `const SAFE = window.BoxLogSafe`, and
 // src/constants.js loads immediately before this file (index.html:1592-1596).
-const bidiText = SAFE.bidiText;
+var bidiText = SAFE.bidiText;
 // ---------- State ----------
 let entries = [];
 // staffhome is a valid id but not a reachable destination on its own:

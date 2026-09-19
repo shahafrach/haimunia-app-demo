@@ -8,12 +8,12 @@ import { fileURLToPath } from "node:url";
 import { JSDOM } from "jsdom";
 import FDBFactory from "fake-indexeddb/lib/FDBFactory";
 import FDBKeyRange from "fake-indexeddb/lib/FDBKeyRange";
+import { COMMUNITY_FILES } from "./community-src.mjs";
 
 const testDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const root = path.dirname(testDir);
 const htmlPath = path.join(root, "index.html");
 const appJsPath = path.join(root, "app.js");
-const cloudJsPath = path.join(root, "cloud.js");
 // app.js was split into a few self-contained files, loaded as separate
 // <script> tags in index.html, in the same order below. Real browsers
 // share one global *lexical* environment across classic <script> tags, so
@@ -58,6 +58,12 @@ const platformSrcPaths = [
 ];
 function readPlatformSrc() {
   return platformSrcPaths.map((p) => readFileSync(p, "utf8")).join("\n");
+}
+
+// The community layer: src/community/*.js and then cloud.js, in index.html
+// order, from the one list in community-src.mjs.
+function readCommunitySrc() {
+  return COMMUNITY_FILES.map((f) => readFileSync(path.join(root, f), "utf8")).join("\n");
 }
 
 function newDom(url, opts = {}) {
@@ -193,9 +199,14 @@ export async function bootCommunity(mock, opts = {}) {
   // this has to land before readAppSrc() is eval'd, not after.
   if (opts.serviceWorkerStub) window.navigator.serviceWorker = opts.serviceWorkerStub;
 
-  const cloudJs = readFileSync(cloudJsPath, "utf8");
+  // ONE eval for the whole community layer, for the same reason readAppSrc()
+  // concatenates the app's own src files (see the comment on appSrcPaths):
+  // cloud.js stopped being an IIFE so src/community/*.js can share its scope,
+  // real browsers share one global lexical environment across classic
+  // <script> tags, and jsdom's separate window.eval() calls do not. The order
+  // is index.html's, and COMMUNITY_FILES is the single list both read from.
   window.eval(readPlatformSrc());
-  window.eval(cloudJs);
+  window.eval(readCommunitySrc());
   window.eval(readAppSrc());
 
   await waitFor(() => window.document.getElementById("loading").style.display === "none", 5000);

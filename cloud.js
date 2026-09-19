@@ -1,5 +1,30 @@
-(function () {
-  "use strict";
+"use strict";
+// WHY THIS FILE IS NO LONGER AN IIFE.
+//
+// Splitting the community layer into src/community/*.js needs those files to
+// see what this one declares - state, rerender, client, setMessage - and a
+// separate classic <script> cannot reach into another script's IIFE. Real
+// browsers share one global LEXICAL environment across classic <script>
+// tags (the same property src/constants.js's own header describes, and the
+// reason test/helpers/boot.mjs concatenates the app's src files before
+// eval'ing them: jsdom does not reproduce it). Dropping the wrapper is what
+// puts this file and src/community/*.js in that one shared scope, with no
+// call-site changes anywhere.
+//
+// The body below is still indented two spaces. That is deliberate: it keeps
+// this commit's diff to the five lines that actually changed rather than
+// reindenting 22,000, and every source-text test that anchors on the old
+// indentation keeps matching.
+//
+// The cost is that these 1,132 top-level names are now global. Exactly five
+// of them already existed in a sibling classic script, and each is resolved
+// where it is declared: esc, cssSel and cleanStr are `var` here because
+// src/constants.js declares the same three with `var` (var + var is legal
+// and both bind the identical window.BoxLogSafe function); bidiText is `var`
+// here and in app.js for the same reason; and isIOSDevice was renamed to
+// communityIsIOSDevice, because app.js has its own near-copy and a silent
+// last-declaration-wins merge of two drifted implementations is precisely
+// the defect CLAUDE.md's "sibling drift" rule is about.
   // COMM-367/COMM-368. THE HTML escape for every template literal in this
   // file - ~370 call sites. Until COMM-367 this file carried its own
   // byte-identical local copy called esc(), so a hardening fix to the
@@ -15,7 +40,7 @@
   // index.html loads and a REQUIRED service-worker precache asset, so it is
   // always there - and an escape function is the one dependency that must
   // fail loudly rather than degrade to a no-op fallback that would ship XSS.
-  const esc = window.BoxLogSafe.esc;
+  var esc = window.BoxLogSafe.esc;
   // The accessible name for a count badge. Kept as ONE function that both
   // sub-tab bars call, rather than a string built inline at each bar: the
   // visible badge text was singular-guarded long ago and these aria-labels were
@@ -33,7 +58,7 @@
   }
   // Security hunt (2026-09-11): first real call site - navigateToNotifTarget()
   // below used a naive manual escape instead. See that call site's own comment.
-  const cssSel = window.BoxLogSafe.cssSel;
+  var cssSel = window.BoxLogSafe.cssSel;
   // Live bug hunt (2026-09-11): saveProfile()/postAnnouncement()/
   // setWeeklyChallenge() sanitized human-typed text with only
   // `.trim().slice(N)` - no control-char, bidi-override, or zero-width
@@ -43,7 +68,7 @@
   // search). app.js has used SAFE.cleanStr for every untrusted text field
   // since COMM-368; cloud.js never bound it at all, so it silently missed
   // the same coverage.
-  const cleanStr = window.BoxLogSafe.cleanStr;
+  var cleanStr = window.BoxLogSafe.cleanStr;
   const cfg = window.HAIMUNIA_CONFIG || {};
   const configured = /^https:\/\/[a-z0-9-]+\.supabase\.co$/i.test(cfg.supabaseUrl || "") && !!cfg.supabasePublishableKey;
   const client = configured && window.supabase ? window.supabase.createClient(cfg.supabaseUrl, cfg.supabasePublishableKey, {
@@ -1528,7 +1553,7 @@
   // restriction on where these may be used. bidiHtml is the already-escaped
   // variant, for a comment body whose @mentions mentionMarkersToHtml() has
   // turned into buttons.
-  const bidiText = window.BoxLogSafe.bidiText;
+  var bidiText = window.BoxLogSafe.bidiText;
   const bidiHtml = window.BoxLogSafe.bidiHtml;
 
   // ==========================================================================
@@ -17975,7 +18000,7 @@
   // iOS Safari does not implement the Push API unless the app is installed
   // to the home screen (Safari 16.4+ once installed is accepted product
   // scope, per the 2026-08-30 decision - a plain browser tab is not).
-  function isIOSDevice() {
+  function communityIsIOSDevice() {
     const ua = String(navigator.userAgent || "");
     return /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
   }
@@ -17987,7 +18012,7 @@
   // option (not just a title attribute) so a member on an unsupported
   // browser sees why, rather than a control that silently does nothing.
   function notifPushUnsupportedReason() {
-    if (isIOSDevice() && !isStandalonePwa()) {
+    if (communityIsIOSDevice() && !isStandalonePwa()) {
       return "כדי לקבל התראות דחיפה ב-iPhone/iPad יש קודם להוסיף את האפליקציה למסך הבית ולפתוח אותה משם.";
     }
     const hasApi = ("serviceWorker" in navigator) && (typeof window.PushManager !== "undefined") && (typeof Notification !== "undefined");
@@ -22373,4 +22398,3 @@
   if (window.HaimuniaEvents && window.PRODUCT_EVENTS && window.PRODUCT_EVENTS.MEMBER_JOINED) {
     window.HaimuniaEvents.on(window.PRODUCT_EVENTS.MEMBER_JOINED, () => { loadOnboardingProgress().then(rerender); });
   }
-})();

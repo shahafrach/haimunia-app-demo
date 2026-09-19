@@ -41,7 +41,10 @@ test("event map_link is only rendered as a clickable link when it actually start
 
 test("navigateToNotifTarget builds its post-id selector through the shared cssSel() helper, not a naive manual escape", async () => {
   const src = await import("node:fs").then((fs) => fs.readFileSync(new URL("../cloud.js", import.meta.url), "utf8"));
-  assert.match(src, /const cssSel = window\.BoxLogSafe\.cssSel;/, "cssSel must be bound from the shared safe-helpers module, same pattern as esc/bidiText");
+  // `var` since cloud.js stopped being an IIFE - src/constants.js declares
+  // cssSel with `var` too, and two `var`s at global scope are legal where two
+  // `const`s are not. Where it is bound FROM is the assertion.
+  assert.match(src, /var cssSel = window\.BoxLogSafe\.cssSel;/, "cssSel must be bound from the shared safe-helpers module, same pattern as esc/bidiText");
   assert.match(src, /const sel = '\[data-post-id="' \+ cssSel\(target\.post\) \+ '"\]';/,
     "the selector must be built with cssSel(), not a bare .replace() escape");
 });

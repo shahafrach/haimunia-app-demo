@@ -74,7 +74,10 @@ test("no file in this repo re-declares a shared helper - there is exactly one im
   }
   // COMM-367: cloud.js's own byte-identical copy, named safeText, is gone.
   assert.doesNotMatch(cloudSrc, /\bsafeText\b/);
-  assert.match(cloudSrc, /const esc = window\.BoxLogSafe\.esc;/);
+  // `var` for the same reason src/constants.js uses `var` for its own esc:
+  // cloud.js stopped being an IIFE, so both are global now and two `const`s
+  // would be a redeclaration SyntaxError. Same binding, same module.
+  assert.match(cloudSrc, /var esc = window\.BoxLogSafe\.esc;/);
 });
 
 test("index.html loads the shared module before everything that depends on it", () => {
