@@ -7,9 +7,13 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import fs from "node:fs";
+import { cloudSource } from "./helpers/community-src.mjs";
 
 const sql = fs.readFileSync(new URL("../supabase/migrations/202608270008_hebrew_handles.sql", import.meta.url), "utf8");
-const cloudJs = fs.readFileSync(new URL("../cloud.js", import.meta.url), "utf8");
+// The community layer, not one file of it: cloud.js is being split into
+// src/community/*.js, and what this test asserts is a property of the layer.
+// Every pattern below is unchanged.
+const cloudJs = cloudSource();
 
 test("the database handle constraint accepts Hebrew letters, same length bound as before", () => {
   assert.match(sql, /alter table public\.profiles drop constraint profiles_handle_check/i);

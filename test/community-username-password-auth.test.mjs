@@ -15,8 +15,12 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import fs from "node:fs";
+import { cloudSource } from "./helpers/community-src.mjs";
 
-const src = fs.readFileSync(new URL("../cloud.js", import.meta.url), "utf8");
+// The community layer, not one file of it: cloud.js is being split into
+// src/community/*.js, and what this test asserts is a property of the layer.
+// Every pattern below is unchanged.
+const src = cloudSource();
 
 test("the synthetic email is built locally from a username, never collected as real email, using the RFC 2606 .invalid TLD", () => {
   assert.match(src, /function usernameToEmail\(username\) \{ return `\$\{username\}@members\.haimuniya\.invalid`; \}/);

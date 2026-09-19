@@ -33,11 +33,13 @@ test("a trigger pins is_admin to its stored value on every update, so no client-
 
 test("cloud.js gates the profile form behind a redeemed invite code and wires the redeem form", async () => {
   const window = await bootApp();
-  // cloud.js isn't loaded in the jsdom boot (no window.HAIMUNIA_CONFIG /
-  // network), so this only asserts the source shape, matching the pattern
-  // the other cloud.js-facing tests in this repo already use.
-  const fs2 = await import("node:fs");
-  const src = fs2.readFileSync(new URL("../cloud.js", import.meta.url), "utf8");
+  // The community layer isn't loaded in the jsdom boot (no
+  // window.HAIMUNIA_CONFIG / network), so this only asserts the source shape,
+  // matching the pattern the other layer-facing tests in this repo use. The
+  // gate is spread over cloud.js and src/community/auth.js now, so it reads
+  // the layer rather than one file.
+  const { cloudSource } = await import("./helpers/community-src.mjs");
+  const src = cloudSource();
   assert.match(src, /state\.redemption/);
   assert.match(src, /async function loadRedemption\(\)/);
   assert.match(src, /async function redeemCode\(form\)/);
