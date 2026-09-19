@@ -133,5 +133,7 @@ not to become a new way to lose a write.
   encrypts with AES256 before anything leaves the runner, proves the ciphertext
   round-trips, and uploads only that. **Needs two repo secrets** (`SUPABASE_DB_URL`,
   `BACKUP_PASSPHRASE`) and refuses to run without them rather than reporting a
-  green backup of nothing. The encryption is not optional: this repository is
-  public and Actions artifacts on a public repo are world-readable.
+  green backup of nothing. The encryption is not optional: this repository has
+  been private since 2026-09-17, and an Actions artifact is still readable by
+  everyone with access to it and by anything holding a token with
+  `actions: read`, for the 90 days it is retained.

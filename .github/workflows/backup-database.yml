@@ -25,13 +25,18 @@ name: backup-database
 #                      cannot decrypt is not a backup, and one anybody can
 #                      decrypt is a leak.
 #
-# THE ENCRYPTION IS NOT OPTIONAL, AND HERE IS WHY. This repository is PUBLIC.
-# Workflow artifacts on a public repository are readable by anyone who can
-# reach the Actions API - there is no "private artifact on a public repo".
-# An unencrypted dump uploaded here would publish every member's profile,
-# handle, invite history and private training records to the open internet.
-# So the job refuses to run at all without the passphrase, the plaintext dump
-# never exists outside the runner, and only the ciphertext is uploaded.
+# THE ENCRYPTION IS NOT OPTIONAL, AND HERE IS WHY. This repository has been
+# PRIVATE since 2026-09-17, and that changes the size of the audience, not the
+# argument. A workflow artifact is readable by everyone who can read this
+# repository and by anything holding a token with `actions: read` on it - every
+# collaborator, every PAT one of them has issued, and every third-party action
+# any workflow here runs. It sits in GitHub's storage for the 90 days set
+# below, which outlives any later change to who has access or to whether this
+# repository is private at all. An unencrypted dump would put every member's
+# profile, handle, invite history and private training records behind nothing
+# but that. So the job refuses to run at all without the passphrase, the
+# plaintext dump never exists outside the runner, and only the ciphertext is
+# uploaded.
 #
 # TO RESTORE:
 #   gh run download <run-id> -n haimunia-db-backup
@@ -127,7 +132,9 @@ jobs:
           if [ -z "$BACKUP_PASSPHRASE" ]; then
             echo "BACKUP_PASSPHRASE is not set. Refusing to produce a dump"
             echo "that could only be uploaded in the clear - this repository"
-            echo "is public and its artifacts are world-readable."
+            echo "is private, but an artifact is still readable by everyone"
+            echo "with access to it, for 90 days, and this one is every"
+            echo "member's data."
             missing=1
           fi
           exit $missing

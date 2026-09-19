@@ -60,6 +60,19 @@ if (vendored !== declared) {
 // `sha256sum vendor/supabase.js`, paste it here, and say in the PR why the
 // bundle changed. That is the whole control - it makes an unexplained edit
 // impossible to land quietly.
+// 2.116.0 re-vendor (Dependabot #6): same procedure as the 2.115.0 one
+// below it, plus one check that earlier re-vendors could not make. `npm pack
+// @supabase/supabase-js@2.115.0` was unpacked first and its
+// `dist/umd/supabase.js` hashed: it came out at exactly the
+// f387e59357...31dd5 pinned below, so the outgoing vendor file was provably
+// the published bundle byte-for-byte and nothing local had ever been laid on
+// top of it. 2.116.0's bundle was then taken the same way (`npm pack`, no
+// build step of our own - this app has none), its first 2KB compared
+// byte-for-byte against 2.115.0's to confirm the minifier and output shape
+// are unchanged, and its version marker confirmed present as a bare local
+// (`=\`2.116.0\``, the pattern this script's third regex matches). 218318
+// bytes, up from 214101.
+//
 // 2.115.0 re-vendor (Dependabot #4): re-fetched `dist/umd/supabase.js`
 // straight from the published @supabase/supabase-js@2.115.0 npm tarball
 // (`npm pack`, no build step of our own - this app has none), diffed its
@@ -68,7 +81,7 @@ if (vendored !== declared) {
 // version marker match below is real (`Hn=\`2.115.0\`` present in the
 // bundle) before pinning this hash - not just copying whatever the
 // dependency bump proposed.
-const EXPECTED_SHA256 = "f387e5935730a6d9599a281986a176eafce5ebbe7514446222d21aa029e31dd5";
+const EXPECTED_SHA256 = "84ee9bf45695c1dd3ba1595b6bcfb0f09672434631351ffc8ebe9140545d5ff6";
 const actualSha = createHash("sha256").update(readFileSync(path.join(root, "vendor", "supabase.js"))).digest("hex");
 if (actualSha !== EXPECTED_SHA256) {
   console.error(`vendor/supabase.js content does not match its pinned hash.
