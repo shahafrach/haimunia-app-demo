@@ -37,7 +37,11 @@ import fs from "node:fs";
 import { bootCommunity, waitFor } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
 
-const src = fs.readFileSync(new URL("../cloud.js", import.meta.url), "utf8");
+import { cloudSource } from "./helpers/community-src.mjs";
+// The community layer, not one file of it: the datetime-local fields this
+// test counts are spread across cloud.js and src/community/*.js now, and
+// "every one goes through dateTimeField" is a claim about all of them.
+const src = cloudSource();
 const VERIFIED = "2026-08-01T00:00:00.000Z";
 const NOW = Date.now();
 const daysAgoIso = (days) => new Date(NOW - days * 86400000).toISOString();

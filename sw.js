@@ -46,6 +46,7 @@ const REQUIRED_ASSETS = [
 // wrap `bus.emit(...)` in a try/catch), so a failed fetch of any of these
 // must not take down offline support for the training log too.
 const OPTIONAL_ASSETS = [
+  "./src/community/events.js",
   "./cloud.js",
   "./src/eventbus.js",
   "./src/analytics.js",

@@ -27,6 +27,7 @@ const root = path.dirname(path.dirname(path.dirname(fileURLToPath(import.meta.ur
 
 /** The src/community/*.js files, in index.html load order. Repo-relative. */
 export const COMMUNITY_MODULES = [
+  "src/community/events.js",
 ];
 
 /** Every file of the community layer, in load order: the modules, then cloud.js. */
