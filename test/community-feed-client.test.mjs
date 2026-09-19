@@ -182,10 +182,14 @@ test("the first page is 20 items and load more asks for the next 20 with the cur
 });
 
 test("the cursor is opaque: the client never builds one and never uses an offset", async () => {
-  const fs = await import("node:fs");
-  const cloudJs = fs.readFileSync(new URL("../cloud.js", import.meta.url), "utf8");
-  const start = cloudJs.indexOf("async function fetchFeedPage()");
-  const body = cloudJs.slice(start, cloudJs.indexOf("\n  }", start));
+  // fetchFeedPage() is in src/community/feed.js now, and reading that one
+  // file keeps the slice honest: "the first `\n  }` after the declaration" is
+  // a function boundary only while the declaration is where you think it is.
+  const { communityFile } = await import("./helpers/community-src.mjs");
+  const feedJs = communityFile("src/community/feed.js");
+  const start = feedJs.indexOf("async function fetchFeedPage()");
+  assert.ok(start > -1, "fetchFeedPage must still be in src/community/feed.js");
+  const body = feedJs.slice(start, feedJs.indexOf("\n  }", start));
   assert.match(body, /p_cursor: state\.feed\.cursor/);
   assert.match(body, /rows\[rows\.length - 1\]\.next_cursor/);
   assert.doesNotMatch(body, /offset|p_offset|\.range\(/i);
