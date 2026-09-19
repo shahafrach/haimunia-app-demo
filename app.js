@@ -2267,6 +2267,49 @@ function emitCommunityPrCreated(entry, mov, detail) {
 // of some unrelated lift. Design spec 5.3.3 states the rule as ">= 3x the
 // member's best-ever for that exercise, and they have >= 1 prior entry".
 const ABSURD_WEIGHT_MULTIPLE = 3;
+// THE OTHER HALF OF THE SAME GUARD, and the case the multiple structurally
+// cannot cover: the first set of a movement. With no history the reference
+// is 0, `reference > 0` makes the whole condition false, and the set saves
+// unquestioned — so a first-ever set could carry any number at all,
+// including a slipped decimal, and the ONE set most worth questioning was
+// the one set never questioned. It is also the most expensive one to get
+// wrong: it founds the record. Every later PR, tier and celebration for that
+// movement is measured against it, the first-log celebration fires on it,
+// and the only way back is to find the entry and edit it.
+//
+// The comment above argues against absolute kg numbers, and it is right:
+// 100 kg is a warm-up for one member and impossible for another. This is
+// that argument's one exception, kept narrow in two ways. It applies ONLY
+// where there is no proportion to use instead (the moment an athlete has one
+// prior set of this movement, their own history takes over again), and each
+// number sits far above anything anyone in this room lifts rather than at
+// what a member "should" — a ceiling that questioned a real athlete's real
+// lift would be worse than the typo it caught. Per category, because a
+// deadlift and a strict press are not the same question. Still a
+// confirmation and never a rejection: "כן, זה נכון" saves the number as
+// typed, exactly as it does for the proportional half.
+const FIRST_SET_WEIGHT_CEILING = { Squat: 300, Deadlift: 350, Press: 200, Olympic: 220, Pull: 200, Other: 250 };
+// A movement with no category, an unrecognised one, or one that arrived
+// through an imported backup (catColor's own "__proto__" reasoning, hence
+// the hasOwnProperty lookup) gets the most forgiving ceiling there is —
+// computed from the table rather than restated, so adding a category cannot
+// leave this number quietly stale. With no category the lift could be any of
+// them, and the wrong direction to err is the one that questions a real set.
+const UNKNOWN_CATEGORY_WEIGHT_CEILING = Math.max(...Object.values(FIRST_SET_WEIGHT_CEILING));
+function firstSetWeightCeiling(category) {
+  return Object.prototype.hasOwnProperty.call(FIRST_SET_WEIGHT_CEILING, category)
+    ? FIRST_SET_WEIGHT_CEILING[category]
+    : UNKNOWN_CATEGORY_WEIGHT_CEILING;
+}
+// ONE predicate for both save paths. saveSet() and saveWod() each carried
+// their own copy of `!sanityConfirmed && best > 0 && weight >= best * N`,
+// and the second copy only exists because round 10 noticed the first one had
+// not been carried across — exactly the drift this repo keeps finding. The
+// first-set half is therefore written once, here, rather than twice.
+function weightNeedsSanityCheck(weight, reference, ceiling) {
+  if (!isFinite(weight) || weight <= 0) return false;
+  return reference > 0 ? weight >= reference * ABSURD_WEIGHT_MULTIPLE : weight >= ceiling;
+}
 // How many prior entries of the same kind an exercise needs before a result
 // can be celebrated as a personal record. Design spec 5.3.1: with nothing on
 // file every set trivially beats everything, so calling the first one a
@@ -2339,11 +2382,19 @@ async function saveSet(sanityConfirmed) {
   } else {
     if (!isFinite(weight) || !isFinite(reps) || !isFinite(sets)) return;
     const reference = heaviestLoggedWeightFor(selectedId, editId);
-    if (!sanityConfirmed && reference > 0 && weight >= reference * ABSURD_WEIGHT_MULTIPLE) {
-      const mov = movementById(selectedId);
+    const mov = movementById(selectedId);
+    if (!sanityConfirmed && weightNeedsSanityCheck(weight, reference, firstSetWeightCeiling(mov && mov.category))) {
+      const movSuffix = mov ? "-" + mov.name : "תרגיל הזה";
       askAppConfirm({
         title: `${weight} ק״ג — לוודא?`,
-        message: `הסט הכי כבד שלך ב${mov ? "-" + mov.name : "תרגיל הזה"} עד היום הוא ${reference} ק״ג.`,
+        // Two references, one question. With history the honest comparison is
+        // the athlete's own best; without it there is nothing to compare to
+        // and saying so is the whole message - a dialog that claimed a
+        // previous best of 0 ק״ג would be a lie in the one place the app is
+        // asking the member to trust it.
+        message: reference > 0
+          ? `הסט הכי כבד שלך ב${movSuffix} עד היום הוא ${reference} ק״ג.`
+          : `זה הסט הראשון שלך ב${movSuffix}, אז אין עדיין סט קודם להשוות אליו — והמשקל הזה גבוה מהטווח הרגיל.`,
         confirmLabel: "כן, זה נכון", cancelLabel: "תיקון",
         action: "save-set",
       });
@@ -4242,12 +4293,23 @@ async function saveWod(sanityConfirmed) {
   // overlay. Without this, a 400 typed where 40 was meant threw a full-screen
   // "שיא אישי חדש" and wrote a permanent fake record, with no way back except
   // finding and editing the entry.
-  if (w.scoreType === "load" && !sanityConfirmed && prevBest > 0
-      && wodWeight >= prevBest * ABSURD_WEIGHT_MULTIPLE) {
+  //
+  // The first-attempt half arrived with the same fix as saveSet()'s, through
+  // the shared predicate: prevBest is rx-scoped, so "no previous best" is not
+  // only a brand-new WOD - a member's first Rx attempt at a WOD they have
+  // scaled ten times has no Rx best either, and reached the celebration with
+  // nothing standing between it and a typo. A load WOD names no movement
+  // category (the built-in library has no load entries at all; these are
+  // Custom and Club WODs), so it takes the unknown-category ceiling, which is
+  // the most forgiving one by construction.
+  if (w.scoreType === "load" && !sanityConfirmed
+      && weightNeedsSanityCheck(wodWeight, prevBest, firstSetWeightCeiling(null))) {
     // savingWod is cleared by this function's own finally, not here.
     askAppConfirm({
       title: `${wodWeight} ק״ג — לוודא?`,
-      message: `התוצאה הטובה שלך ב-${w.name} עד היום היא ${prevBest} ק״ג.`,
+      message: prevBest > 0
+        ? `התוצאה הטובה שלך ב-${w.name} עד היום היא ${prevBest} ק״ג.`
+        : `זו התוצאה הראשונה שלך ב-${w.name}, אז אין עדיין תוצאה להשוות אליה — והמשקל הזה גבוה מהטווח הרגיל.`,
       confirmLabel: "כן, זה נכון", cancelLabel: "תיקון",
       action: "save-wod",
     });

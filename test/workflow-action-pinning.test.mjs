@@ -42,3 +42,62 @@ for (const file of workflowFiles) {
     }
   });
 }
+
+// 2026-09-18. A pin is a version as well as a SHA, and the two artifact
+// actions were pinned to majors that run on Node 20 - actions/upload-artifact
+// v4.6.2 and actions/download-artifact v4.3.0 - so every backup run and every
+// restore drill printed the runner's Node 20 deprecation warning. A warning
+// nobody can fix is a warning everybody learns to scroll past, which is worth
+// more than the warning itself on a workflow whose whole job is to be
+// believed when it is red.
+//
+// The pinning check above cannot see this: a SHA is equally opaque whatever
+// runtime it carries. So the version in the `# vX.Y.Z` comment - the thing a
+// human reads and the thing a bump changes - is checked against the first
+// release of each action that actually declares `runs.using: node24`.
+//
+// Each number below was read from that tag's own action.yml, by cloning the
+// tag, not from a changelog: the majors that merely ADDED Node 24 support
+// (upload-artifact v5, download-artifact v6) still default to node20 and are
+// deliberately not enough here.
+const FIRST_NODE24_RELEASE = {
+  "actions/checkout": "5.0.0",
+  "actions/setup-node": "5.0.0",
+  "actions/upload-artifact": "6.0.0",
+  "actions/download-artifact": "7.0.0",
+  // setup-deno is the one where the line is not a major: 2.0.0 is node20 and
+  // 2.0.5 is node24.
+  "denoland/setup-deno": "2.0.5",
+};
+// A composite action is a list of steps the runner executes itself - it
+// declares no Node runtime of its own, so there is nothing here to be
+// deprecated. The steps INSIDE it are its author's problem, not a pin we
+// control.
+const NO_NODE_RUNTIME = new Set(["supabase/setup-cli"]);
+
+function semverAtLeast(actual, minimum) {
+  const a = actual.split(".").map(Number);
+  const b = minimum.split(".").map(Number);
+  for (let i = 0; i < 3; i++) {
+    if ((a[i] || 0) !== (b[i] || 0)) return (a[i] || 0) > (b[i] || 0);
+  }
+  return true;
+}
+
+for (const file of workflowFiles) {
+  test(`every action in ${file} runs on a Node runtime GitHub has not deprecated`, () => {
+    const text = fs.readFileSync(path.join(workflowsDir, file), "utf8");
+    const lines = [...text.matchAll(/^\s*(?:-\s*)?uses:\s*([^@\s]+)@[0-9a-f]{40}\s*#\s*v?(\d+\.\d+\.\d+)/gm)];
+    const bare = [...text.matchAll(/^\s*(?:-\s*)?uses:\s*([^@\s.][^@\s]*)@/gm)].map((m) => m[1]);
+    assert.equal(lines.length, bare.length,
+      `${file}: every pinned action must carry a "# vX.Y.Z" comment saying which version the SHA is - without it neither a human nor this test can tell`);
+    for (const [, action, version] of lines) {
+      if (NO_NODE_RUNTIME.has(action)) continue;
+      const minimum = FIRST_NODE24_RELEASE[action];
+      assert.ok(minimum,
+        `${file}: "${action}" is not in FIRST_NODE24_RELEASE. Read its action.yml at the pinned tag, add the first version whose runs.using is node24, and pin at least that - or add it to NO_NODE_RUNTIME if it is a composite action`);
+      assert.ok(semverAtLeast(version, minimum),
+        `${file}: "${action}" is pinned to v${version}, which runs on Node 20 and makes every run of this workflow print a deprecation warning. v${minimum} is the first release that runs on Node 24`);
+    }
+  });
+}

@@ -62,18 +62,34 @@ select throws_ok(
   'the coach who can see every roster row still cannot promote anyone - admin_grant_coach keeps its own inline is_admin() check, untouched by this ticket. The client disabling the button is a courtesy; this is the boundary');
 
 -- =====================================================================
--- The shape is admin_search_members' shape, exactly
+-- The shape is admin_search_members' shape, plus the paging key
 -- =====================================================================
+-- Until 202609180001 these two result types were byte-identical, and this
+-- assertion said so. That migration appended ONE column to the roster,
+-- `sort_key timestamptz`, because the roster pages and admin_search_members
+-- does not: the roster sorts on coalesce(redeemed_at, created_at) and could
+-- not return it, so paging stopped at the first member with no
+-- invite_redemptions row (0115 walks that boundary). The shared-renderer
+-- guarantee this assertion actually protects - that one row template serves
+-- both surfaces, because every column the renderer reads exists in both
+-- shapes - is unchanged, and is what is asserted now: the roster's result
+-- type is admin_search_members' result type with sort_key appended, nothing
+-- renamed, nothing reordered, nothing dropped.
 select tests.clear_auth();
 select results_eq(
-  $$ select pg_catalog.pg_get_function_result(p.oid) =
-            (select pg_catalog.pg_get_function_result(q.oid) from pg_catalog.pg_proc q
-             join pg_catalog.pg_namespace m on m.oid = q.pronamespace
-             where m.nspname = 'public' and q.proname = 'admin_search_members')
+  $$ with search_shape as (
+       select pg_catalog.pg_get_function_result(q.oid) as t from pg_catalog.pg_proc q
+       join pg_catalog.pg_namespace m on m.oid = q.pronamespace
+       where m.nspname = 'public' and q.proname = 'admin_search_members')
+     select pg_catalog.pg_get_function_result(p.oid) =
+            -- Both are "TABLE(...)"; the roster's is the search's with one
+            -- more column inside the same parentheses.
+            rtrim(s.t, ')') || ', sort_key timestamp with time zone)'
      from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+     cross join search_shape s
      where n.nspname = 'public' and p.proname = 'admin_member_roster' $$,
   $$ values (true) $$,
-  'and the two result types are byte-identical, names, types and order - checkable by the type system rather than by convention, which is why this returns `table(...)` and not the setof jsonb contracts.md proposed');
+  'the roster returns admin_search_members'' exact shape with sort_key appended - names, types and order still checked by the type system rather than by convention, which is why this returns `table(...)` and not the setof jsonb contracts.md proposed');
 
 -- =====================================================================
 -- Every member appears

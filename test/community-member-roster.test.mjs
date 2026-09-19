@@ -4,14 +4,15 @@
 // pgTAP 0060 asserts the two `pg_get_function_result` strings are byte-
 // identical) rather than a second row template.
 //
-// GAP flagged here and in docs/community/backlog.md's COMM-377 paragraph:
-// admin_member_roster sorts and pages on
-// coalesce(invite_redemptions.redeemed_at, profiles.created_at), but only
-// ever returns redeemed_at - so once a page's last row has no
-// invite_redemptions row at all (redeemed_at null), there is no correct
-// next cursor. cloud.js's loadRoster() stops pagination there rather than
-// resending a null cursor (which the RPC reads as "start over"), one of
-// the tests below asserts exactly that behaviour.
+// THAT GAP IS CLOSED (202609180001). admin_member_roster sorts and pages on
+// coalesce(invite_redemptions.redeemed_at, profiles.created_at) and used to
+// return only redeemed_at - so once a page's last row had no
+// invite_redemptions row at all (redeemed_at null), there was no correct
+// next cursor and loadRoster() stopped rather than resend a null cursor
+// (which the RPC reads as "start over"). The RPC now returns that coalesced
+// value as sort_key, so the roster pages straight through such a row; the
+// old stop-early behaviour survives only as the un-migrated-server fallback,
+// and both are asserted below.
 import { test } from "node:test";
 import assert from "node:assert";
 import { bootCommunity, waitFor, seedAdminStepUp, unlockAdminPanel } from "./helpers/boot.mjs";
@@ -52,8 +53,15 @@ async function openAccountTab(window) {
   window.document.querySelector('[data-community-action="set-manage-tab"][data-tab="members"]').click();
 }
 
+// The RPC's real row shape since 202609180001: sort_key is
+// coalesce(redeemed_at, profiles.created_at), so it defaults to whatever
+// redeemed_at this row was given and a caller can override just one of them
+// to build the case that matters (a member with no invite_redemptions row:
+// redeemed_at null, sort_key their profile's created_at).
 function rosterRow(role, extra) {
-  return Object.assign({ id: `m-${role}`, handle: role, display_name: role, avatar_url: null, is_admin: false, role: "member", redeemed_at: "2026-08-01T00:00:00Z", last_activity_on: null }, extra || {});
+  const row = Object.assign({ id: `m-${role}`, handle: role, display_name: role, avatar_url: null, is_admin: false, role: "member", redeemed_at: "2026-08-01T00:00:00Z", last_activity_on: null }, extra || {});
+  if (!("sort_key" in row)) row.sort_key = row.redeemed_at;
+  return row;
 }
 
 test("a plain member never sees the roster, and admin_member_roster is never called", async () => {
@@ -278,26 +286,66 @@ test("Load more pages via the cursor, and existing search is untouched by the ro
   assert.ok(moreBtn, "a full 25-row first page still offers Load more");
   moreBtn.click();
   await waitFor(() => calls.length === 2, 3000);
-  assert.equal(calls[1].p_cursor, "2026-08-01T00:00:00Z", "pages on the last row's own redeemed_at, oldest-so-far");
+  assert.equal(calls[1].p_cursor, "2026-08-01T00:00:00Z", "pages on the last row's own sort_key, oldest-so-far");
   await waitFor(() => window.document.body.textContent.includes("older"), 3000);
 });
 
-test("GAP: pagination stops rather than looping once a page's last row has no invite_redemptions row (redeemed_at null)", async () => {
+// 202609180001. The case the roster used to give up on: the last row of a
+// full page is a member with NO invite_redemptions row, so redeemed_at is
+// null and the only date that can page past them is the created_at the RPC
+// sorted on - which it now returns as sort_key.
+test("a page ending on a member with no invite_redemptions row pages on sort_key and keeps going", async () => {
   const mock = seeded({}, "admin");
   const calls = [];
   mock.onRpc("admin_member_roster", (args) => {
     calls.push(args);
-    const page = Array.from({ length: 25 }, (_, i) => rosterRow(`p${calls.length}-${i}`, { id: `p${calls.length}-${i}`, redeemed_at: i === 24 ? null : `2026-08-${String(25 - i).padStart(2, "0")}T00:00:00Z` }));
+    if (calls.length === 1) {
+      return { data: Array.from({ length: 25 }, (_, i) => rosterRow(`p1-${i}`, {
+        id: `p1-${i}`,
+        // The 25th row is the boundary: no redemption, so the date the
+        // server ordered on is their profile's created_at and nothing else.
+        redeemed_at: i === 24 ? null : `2026-08-${String(25 - i).padStart(2, "0")}T00:00:00Z`,
+        sort_key: i === 24 ? "2026-07-15T00:00:00Z" : `2026-08-${String(25 - i).padStart(2, "0")}T00:00:00Z`,
+      })), error: null };
+    }
+    return { data: [rosterRow("older", { redeemed_at: "2026-07-01T00:00:00Z" })], error: null };
+  });
+  const window = await bootCommunity(mock, { syncEnabled: false });
+  await openAccountTab(window);
+  await waitFor(() => window.document.body.textContent.includes("p1-0"), 3000);
+  const moreBtn = window.document.querySelector('[data-community-action="roster-more"]');
+  assert.ok(moreBtn, "load more IS offered past a null-redeemed_at boundary row now that its sort_key came back with it");
+  moreBtn.click();
+  await waitFor(() => calls.length === 2, 3000);
+  assert.equal(calls[1].p_cursor, "2026-07-15T00:00:00Z",
+    "and the cursor is that row's sort_key - its profiles.created_at - never its null redeemed_at, which the RPC would read as 'no bound at all' and answer with the top of the list");
+  assert.equal(calls[1].p_cursor_id, "p1-24", "paired with the same row's id, the tie-break half 202609160002 added");
+  await waitFor(() => window.document.body.textContent.includes("older"), 3000);
+});
+
+test("against an UN-MIGRATED server (no sort_key column) pagination still stops rather than looping", async () => {
+  const mock = seeded({}, "admin");
+  const calls = [];
+  mock.onRpc("admin_member_roster", (args) => {
+    calls.push(args);
+    // Deliberately the pre-202609180001 row shape: sort_key deleted, not
+    // null. This is the client-ships-first half of the deploy window.
+    const page = Array.from({ length: 25 }, (_, i) => {
+      const row = rosterRow(`p${calls.length}-${i}`, { id: `p${calls.length}-${i}`, redeemed_at: i === 24 ? null : `2026-08-${String(25 - i).padStart(2, "0")}T00:00:00Z` });
+      delete row.sort_key;
+      return row;
+    });
     return { data: page, error: null };
   });
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openAccountTab(window);
   await waitFor(() => calls.length === 1, 3000);
-  // The last row of the first page has redeemed_at null - "load more" must
-  // not render, and a second call to admin_member_roster must never happen
-  // on its own (which would otherwise restart at the top, per the RPC's own
-  // `p_cursor is null or ...` clause, and loop the same 25 rows forever).
+  // Exactly the old behaviour: "load more" must not render, and a second
+  // call must never happen on its own (which would restart at the top, per
+  // the RPC's own `p_cursor is null or ...` clause, and loop the same 25
+  // rows forever). Degrading to the old stop-early is the point - the one
+  // thing that must not happen is the loop.
   await new Promise((r) => setTimeout(r, 50));
-  assert.equal(window.document.querySelector('[data-community-action="roster-more"]'), null, "load more is not offered past a null-redeemed_at boundary row");
+  assert.equal(window.document.querySelector('[data-community-action="roster-more"]'), null, "load more is not offered when neither sort_key nor redeemed_at can be a cursor");
   assert.equal(calls.length, 1, "admin_member_roster was called exactly once - pagination never looped");
 });

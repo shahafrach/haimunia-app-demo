@@ -50,9 +50,18 @@ test("saveWod got saveSet's absurd-weight guard, which every other saveSet fix r
   const at = appJs.indexOf("async function saveWod(sanityConfirmed)");
   assert.ok(at > -1, "saveWod takes the confirmation flag saveSet takes");
   const body = appJs.slice(at, at + 4000);
-  assert.match(body, /w\.scoreType === "load" && !sanityConfirmed && prevBest > 0/,
+  assert.match(body, /w\.scoreType === "load" && !sanityConfirmed/,
     "a load-format WOD is a max lift and reaches the same celebration overlay");
-  assert.match(body, /wodWeight >= prevBest \* ABSURD_WEIGHT_MULTIPLE/);
+  // 2026-09-18: the two copies of `best > 0 && weight >= best * N` became one
+  // shared predicate when the first-set ceiling was added - the point of this
+  // assertion is that saveWod still asks the same question saveSet asks, and
+  // it is now stronger than it was, because they are literally the same call.
+  assert.match(body, /weightNeedsSanityCheck\(wodWeight, prevBest, firstSetWeightCeiling\(null\)\)/,
+    "and asks it through the one predicate saveSet uses, not a second copy of the rule");
+  assert.match(appJs, /function weightNeedsSanityCheck\(weight, reference, ceiling\)/);
+  const setAt = appJs.indexOf("async function saveSet(sanityConfirmed)");
+  assert.match(appJs.slice(setAt, setAt + 4000), /weightNeedsSanityCheck\(weight, reference, firstSetWeightCeiling\(mov && mov\.category\)\)/,
+    "saveSet calls the same predicate - one rule, two save paths, which is what this test was always about");
   assert.match(body, /action: "save-wod",/);
   assert.match(appJs, /else if \(c\.action === "save-wod"\) saveWod\(true\);/,
     "and confirming it actually saves");
