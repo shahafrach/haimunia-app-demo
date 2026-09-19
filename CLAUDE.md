@@ -131,22 +131,25 @@ four after merges, bumps the version once, and runs `npm run sync-version`.
 
 ## Automated review
 
-**Every PR gets a Claude review, and `@claude` in a PR comment gets an
-answer.** `.github/workflows/claude-review.yml` runs
-`anthropics/claude-code-action` on `opened` and `synchronize`, and again on any
-PR comment containing `@claude` — the conversation tab or pinned to a line of
-the diff. It walks the rules above: the Supabase security surface (RLS
-policies, `SECURITY DEFINER` functions, `anon` grants), edits to applied
+**Every PR gets one Claude review when it is opened, and `@claude` in a PR
+comment gets an answer.** `.github/workflows/claude-review.yml` runs
+`anthropics/claude-code-action` on `opened`, and again on any PR comment
+containing `@claude` — the conversation tab or pinned to a line of the diff.
+It walks the rules above: the Supabase security surface (RLS policies,
+`SECURITY DEFINER` functions, `anon` grants), edits to applied
 migrations, sibling drift, a CSS rule missing from a theme block, a new file
 missing from the `sw.js` precache list, secrets in client files, and member
 health, payment, phone or email data.
 
 To trigger one by hand, comment `@claude` on the PR saying what you want looked
-at; a push to the branch re-runs the whole checklist. The workflow needs the
-`CLAUDE_CODE_OAUTH_TOKEN` repository secret — without it the job skips with a
-notice rather than failing. PRs from forks are skipped. It holds
-`contents: read`, so it reads, reviews and comments, but cannot push a fix:
-ask it what to change, not to change it.
+at. A push does NOT re-run the checklist — it used to, and on a private
+repository that is a runner per push for a re-read of a diff the reviewer has
+mostly already seen. Ask when a push is worth a second look.
+
+The workflow needs the `CLAUDE_CODE_OAUTH_TOKEN` repository secret — without
+it the job skips with a notice rather than failing. PRs from forks are
+skipped. It holds `contents: read`, so it reads, reviews and comments, but
+cannot push a fix: ask it what to change, not to change it.
 
 **It comments; it does not gate.** Every hard rule in this file already has a
 deterministic guard that fails the build in `test.yml`. A review finding is a
