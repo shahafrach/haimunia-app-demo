@@ -34,8 +34,12 @@ import assert from "node:assert";
 import fs from "node:fs";
 import { bootCommunity, waitFor, answerWodRx } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
+import { cloudSource } from "./helpers/community-src.mjs";
 
-const cloudJs = fs.readFileSync(new URL("../cloud.js", import.meta.url), "utf8");
+// The community layer, not one file of it: cloud.js is being split into
+// src/community/*.js, and what this test asserts is a property of the layer.
+// Every pattern below is unchanged.
+const cloudJs = cloudSource();
 const appJs = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
 // Every negative assertion below is about CODE. This feature's section is
 // mostly prose - it has to be, since most of what it is is a set of things
@@ -530,12 +534,15 @@ test("a cancelled board still opens by id, and detaching still works on it", asy
 
 test("nothing ranks: no position, no sort, and the ranked conventions are not borrowed", () => {
   const start = cloudJs.indexOf("// THE FEED WRITES ITSELF - club WOD sessions and boards");
-  const end = cloudJs.indexOf("async function loadInactiveMembers");
+  // End marker is the next thing still in cloud.js after this section:
+  // loadInactiveMembers() moved to src/community/coach-tools.js, and a marker
+  // that has moved EARLIER in the concatenation silently inverts the slice.
+  const end = cloudJs.indexOf("function activeRestrictionRow");
   // Comments stripped first: this section EXPLAINS at length why it is not a
   // leaderboard and names every convention it refuses to borrow, so a sweep
   // over the raw text would be tripped by the reasoning rather than by code.
+  assert.ok(start > -1 && end > start, "both section markers must still be in cloud.js, in this order");
   const section = stripComments(cloudJs.slice(start, end));
-  assert.ok(start > -1 && end > start);
   // The table has no score_value, score_direction or rank column BY DESIGN,
   // asserted as a catalog property in pgTAP. This is the client half of the
   // same promise: there is nothing here that could build a ranking even from
