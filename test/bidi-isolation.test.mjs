@@ -23,6 +23,7 @@ import { test } from "node:test";
 import assert from "node:assert";
 import fs from "node:fs";
 import { bootApp } from "./helpers/boot.mjs";
+import { COMMUNITY_MODULES, communityFile } from "./helpers/community-src.mjs";
 
 const helpersSrc = fs.readFileSync(new URL("../src/shared/safe-helpers.js", import.meta.url), "utf8");
 const appSrc = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
@@ -47,7 +48,9 @@ test("there is exactly one definition: app.js and cloud.js bind the helper, they
   // nobody sees a broken string — only a plausible, valid-looking, different
   // workout. A source-level assertion is the only thing that catches a fourth
   // copy being pasted back in later.
-  for (const [name, src] of [["app.js", appSrc], ["cloud.js", cloudSrc]]) {
+  // Every community file, not cloud.js alone: a fourth copy of bidiText is
+  // exactly the kind of thing that gets pasted into a new module.
+  for (const [name, src] of [["app.js", appSrc], ["cloud.js", cloudSrc], ...COMMUNITY_MODULES.map((f) => [f, communityFile(f)])]) {
     assert.doesNotMatch(src, /^\s*function bidiText\s*\(/m, `${name} must not re-declare bidiText`);
     assert.doesNotMatch(src, /^\s*function bidiHtml\s*\(/m, `${name} must not re-declare bidiHtml`);
   }

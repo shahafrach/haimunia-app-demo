@@ -13,6 +13,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { bootApp } from "./helpers/boot.mjs";
+import { COMMUNITY_MODULES } from "./helpers/community-src.mjs";
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
@@ -46,7 +47,11 @@ test("every localStorage/sessionStorage key is namespaced \"haimunia-demo:\", ne
 });
 
 test("source files contain no lingering reference to the production app's storage identifiers", async () => {
-  for (const file of ["app.js", "theme-init.js", "cloud.js", "sw.js"]) {
+  // src/community/*.js included: most of the layer's localStorage keys moved
+  // there when cloud.js was split, and a hand-maintained list would have kept
+  // passing while covering less and less. This app shares an origin with the
+  // production Box Log, so a bare "haimunia:" key is not a style problem.
+  for (const file of ["app.js", "theme-init.js", "cloud.js", "sw.js", ...COMMUNITY_MODULES]) {
     const src = readFileSync(path.join(root, file), "utf8");
     assert.ok(!src.includes('"box-log-db"'), `${file} should never reference the production DB name`);
     assert.ok(!/["']haimunia:/.test(src), `${file} should never use the bare "haimunia:" storage-key prefix`);
