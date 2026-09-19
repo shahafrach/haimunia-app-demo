@@ -20,9 +20,13 @@ import assert from "node:assert";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { cloudSource } from "./helpers/community-src.mjs";
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const cloudJs = fs.readFileSync(path.join(root, "cloud.js"), "utf8");
+// The community layer, not one file of it: cloud.js is being split into
+// src/community/*.js, and what this test asserts is a property of the layer.
+// Every pattern below is unchanged.
+const cloudJs = cloudSource();
 const indexHtml = fs.readFileSync(path.join(root, "index.html"), "utf8");
 
 test("A2: the section and card helpers emit real headings, so every screen built from them has structure", () => {

@@ -34,7 +34,7 @@ import assert from "node:assert";
 import fs from "node:fs";
 import { bootCommunity, waitFor, answerWodRx } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
-import { cloudSource } from "./helpers/community-src.mjs";
+import { cloudSource, communityFile } from "./helpers/community-src.mjs";
 
 // The community layer, not one file of it: cloud.js is being split into
 // src/community/*.js, and what this test asserts is a property of the layer.
@@ -533,16 +533,17 @@ test("a cancelled board still opens by id, and detaching still works on it", asy
 });
 
 test("nothing ranks: no position, no sort, and the ranked conventions are not borrowed", () => {
-  const start = cloudJs.indexOf("// THE FEED WRITES ITSELF - club WOD sessions and boards");
-  // End marker is the next thing still in cloud.js after this section:
-  // loadInactiveMembers() moved to src/community/coach-tools.js, and a marker
-  // that has moved EARLIER in the concatenation silently inverts the slice.
-  const end = cloudJs.indexOf("function activeRestrictionRow");
+  // The club WOD block is src/community/club.js now, and it is the last run
+  // in that file — so the section is "from its header to the end of the
+  // file", with no end marker to go stale. Two previous versions of this
+  // slice broke on a marker that moved; there is no longer one to move.
+  const clubJs = communityFile("src/community/club.js");
+  const start = clubJs.indexOf("// THE FEED WRITES ITSELF - club WOD sessions and boards");
+  assert.ok(start > -1, "the club WOD section header must still be in src/community/club.js");
   // Comments stripped first: this section EXPLAINS at length why it is not a
   // leaderboard and names every convention it refuses to borrow, so a sweep
   // over the raw text would be tripped by the reasoning rather than by code.
-  assert.ok(start > -1 && end > start, "both section markers must still be in cloud.js, in this order");
-  const section = stripComments(cloudJs.slice(start, end));
+  const section = stripComments(clubJs.slice(start));
   // The table has no score_value, score_direction or rank column BY DESIGN,
   // asserted as a catalog property in pgTAP. This is the client half of the
   // same promise: there is nothing here that could build a ranking even from
