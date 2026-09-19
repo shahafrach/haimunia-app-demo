@@ -1,3 +1,143 @@
+## The community layer becomes fourteen files, the Actions bill halves, and the scheduled jobs watch themselves — 2026-09-19
+
+Three branches merged after the last consolidation (#15, #17, #14). None of
+them changes what a member sees. All three change what it costs — in minutes,
+in secrets, or in the time it takes to find a function — to keep this app
+running.
+
+**Refactor — the community layer is now per-feature modules.** `cloud.js`
+(22,370 lines, one IIFE) is split into fourteen files under `src/community/` —
+auth, feed, comments, boards, challenges, events, notifications, directory,
+coach tools, club management, admin, posts, outward sharing and achievements —
+with no behaviour change. The modules are classic `<script>` files sharing one
+global lexical scope, so not one call site moved; `cloud.js` gave up its IIFE
+to make that scope shareable, which surfaced five names it had been hiding
+from `app.js` and `src/constants.js`. Four are the same binding under two
+declarations and are now declared compatibly; the fifth, `isIOSDevice`, was
+two drifted copies and is now two distinctly-named drifted copies rather than
+one silently winning. All fourteen modules are in the service worker's
+precache list as optional, and the app still loads offline after one online
+visit — verified in Chromium with the server stopped. `cloud.js` keeps the
+core — state, render, RPC, error table, dialog registry, permission gates and
+the `window.*` surface — at 6,756 lines.
+`docs/community/CLOUD_JS_MAP.md` maps what was in the file, what the split
+cost, and what is deliberately still open.
+
+Three things in that map are worth reading even if the split itself is not
+interesting. **The file's 45 section dividers were chronological, not
+functional** — all of auth lived inside a section titled for the engagement
+cluster, and `publishAchievement()` sat 9,000 lines from the rest of
+achievements. **60.3% of internal references cross a module boundary** and 48
+of the 105 module pairs are mutually dependent, which is a statement about the
+product's seams rather than the code's. And **the split was proved rather than
+asserted**: the extraction compares the multiset of non-blank lines removed
+from `cloud.js` against the multiset written to each new file and refuses to
+write if a line was lost, changed or invented.
+
+**The duplication the split exposed is listed, not merged.** 139 distinct code
+lines now appear verbatim in two or more modules, and five function pairs are
+near-copies across a boundary — the two skeleton renderers, invite share and
+outward share, the challenge and event overlays, and the two "find the
+companion post" helpers. Four of the repeated lines are pure presentational
+chrome (the modal-sheet padding in six modules, the overlay header row in
+five). Named in the map's §5 so the split does not multiply them quietly;
+none of it is collapsed here.
+
+**CI — the Actions bill, roughly halved.** `test.yml` ran the whole 37-minute
+suite twice for every push to a PR branch, once for `push` and once for
+`pull_request`; `push` is now limited to `main`. Its concurrency group is keyed
+on `head_ref` so a PR's successive pushes actually share one group.
+Documentation-only changes skip the workflow, but only for paths no test reads
+— six markdown files are asserted on by the suite, three of them under
+`docs/`, and `test/workflow-minutes.test.mjs` derives that set from the tests
+themselves and fails if any of it ever falls inside the ignore list.
+`claude-review` runs when a PR is opened and on `@claude`, no longer on every
+push. PR-side cost falls from ~375 to ~186 minutes for a five-push PR, and a
+docs-only PR from ~75 to zero.
+
+The `paths-ignore` list genuinely is two copies, one per trigger, because
+GitHub Actions has no YAML anchors — so it is guarded rather than trusted, and
+each of the six assertions in the new test file was verified by breaking its
+rule and watching the right one go red. `CLAUDE.md`'s *Automated review*
+section and `claude-review.yml`'s own header both said the workflow re-runs
+the checklist on every push; both stopped being true with this change and both
+were rewritten in it.
+
+**Scheduled-job monitoring without a service-role key.**
+`public.job_health_check()` now runs hourly as the pg_cron job
+`job-health-check`, flags any job that failed, stalled or never ran, and
+notifies every admin in-app (`job_health_alert`) — rate-limited to the first
+problem, any change in the failing set, and at most once every six hours after
+that. `public.job_health_status()` exposes only `ok`, `failing_count` and
+`last_checked_at`, and is the one function in `public` deliberately callable
+with the publishable key, so `scheduled-job-alert.yml` no longer needs
+`SUPABASE_SERVICE_ROLE_KEY` — that secret can be deleted from the repository's
+Actions settings. The workflow now runs every six hours and fails on a stale
+verdict as well as an unhealthy one. The per-cadence staleness window and the
+admin-roster query each moved into one shared function
+(`cron_cadence_window()`, `admin_alert_recipients()`) rather than gaining a
+third copy.
+
+That exception is the interesting part. `202609170001` and
+`supabase/tests/0113` hold the rule that **no function in `public` is
+anon-executable**, and there is no way around it here: the publishable key
+maps to `anon`, so "call it from CI with no secret" *means* "granted to anon".
+So the exception is narrowed rather than hidden — the function takes no
+arguments and selects three named columns from a one-row table, and `0113` now
+asserts the anon-executable set is *exactly* `{job_health_status()}`, with a
+`pronargs = 0` assertion so a future overload is not silently covered. It
+still fails the build the day a second function arrives without its revoke.
+`job_health_state` itself has RLS on, no policy and no grant to either client
+role.
+
+**And a latent bug, found while extracting the twin.** The per-cadence
+staleness `case` reached its first arm — 35 days — for any schedule that was
+not five space-separated fields, because `split_part()` returns `''` past the
+end of the string. An `@hourly` job could have been dead for a month before
+either checker said anything. The nickname forms now get their real cadence,
+anything unrecognised gets the *tightest* window, and a double space no longer
+shifts which field is read. No job in this schema uses those forms, so nothing
+was ever wrong in production.
+
+### Applied to production
+
+**`202609190001_job_health_without_a_service_key`, applied 2026-09-19.** 175
+migrations committed, 175 applied, **no drift** (owner-confirmed). It is the
+only migration in this wave.
+
+### The free Actions quota ran out
+
+**The free GitHub Actions allowance was exhausted on 2026-09-19 and resets on
+2026-10-01.** PR #17 is the response to it and not a fix for it: the bill
+halves, but the remaining minutes for September are gone. Until the reset,
+**database tests run locally before merge** — `supabase test db` against a
+local stack — rather than in CI's `migration-check` job. That is what #14's
+`0116` and its amended `0113` are waiting on, and it means the pgTAP suite is
+verified by the person merging rather than by a runner that records the
+result. Anything merged in that window should say in its PR which suites were
+run and where.
+
+This also explains the shape of #15's CI: every job in every run on that
+branch completed in 2–4 seconds with `runner_id: 0`, no runner name and no log
+artifact, including jobs its diff never touched. Jobs that never get a runner
+are not a code failure, and both suites passed locally on the merged commit.
+
+### A stash preserved, not reviewed
+
+**`archive/ux-audit-stash`** holds a git stash from 2026-09-06 —
+`0a43d34`, made on `fix/ux-audit-blockers` at `45b98fe`, which is **not an
+ancestor of `main`**. It touches `PRIVACY.md`, `app.js`, `cloud.js`,
+`index.html` and `privacy.html`, and its substance is UX-audit work: splitting
+the all-time-records headline so an estimated 1RM is never shown as a lift
+somebody actually made, gating the tenure badges behind at least one logged
+session so a self-typed signup date cannot earn three celebrations in ninety
+seconds, and deferring a celebration that would otherwise render on top of the
+first-run onboarding overlay. **None of it has been reviewed, and none of it is
+merged.** It is preserved on a branch rather than in a stash entry so it
+survives the container, and it will not replay cleanly: `cloud.js` has been
+split since, so the `cloud.js` half of it needs re-targeting at
+`src/community/`.
+
 ## A roster that reaches its end, a first set that gets questioned, and an automated reviewer — 2026-09-19
 
 Four branches merged today (#8, #11, #12, #13), consolidated here together with
