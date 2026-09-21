@@ -235,7 +235,7 @@
     // Same leader emphasis as renderRankedList's rowHtml - isSelf still owns
     // the border color when the two coincide.
     const style = isSelf ? ` style="border-color:var(--energy);"` : (isLeader ? ` style="border-color:var(--brass);background:linear-gradient(90deg, color-mix(in srgb, var(--brass) 14%, transparent), transparent);"` : "");
-    return `<div class="log-row" data-leaderboard-user="${esc(row.user_id)}"${isSelf ? ` data-leaderboard-self="1"` : ""}${style}><span>${isLeader ? "🏆 " : ""}${Number(row.rank)}. ${esc(name)}${isSelf ? " (את/ה)" : ""}</span><span class="mono" style="color:var(--brass);font-weight:${isLeader ? "800" : "400"};">${formatValue(row)}</span></div>`;
+    return `<div class="log-row" data-leaderboard-user="${esc(row.user_id)}"${isSelf ? ` data-leaderboard-self="1"` : ""}${style}><span>${isLeader ? "🏆 " : ""}${Number(row.rank)}. ${bidiText(name)}${isSelf ? " (את/ה)" : ""}</span><span class="mono" style="color:var(--brass);font-weight:${isLeader ? "800" : "400"};">${formatValue(row)}</span></div>`;
   }
   // COMM-212 / COMM-231. The friends empty state points at the members
   // directory, which is now the real people-finding surface (it ships its

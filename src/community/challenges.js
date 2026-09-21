@@ -928,7 +928,7 @@
     if (c.challenge_type === "team") {
       const agg = state.challenges.aggregates[c.id];
       const mine = agg && Array.isArray(agg.team_totals) ? agg.team_totals.find((t) => t.team_id === part.team_id) : null;
-      return mine ? `<div class="mono" style="color:var(--brass);font-size:12px;">${esc(mine.name)}: ${esc(mine.total)}</div>` : (part.team_id ? "" : `<div style="color:var(--steel);font-size:12px;">טרם נבחרה קבוצה</div>`);
+      return mine ? `<div class="mono" style="color:var(--brass);font-size:12px;">${bidiText(mine.name)}: ${esc(mine.total)}</div>` : (part.team_id ? "" : `<div style="color:var(--steel);font-size:12px;">טרם נבחרה קבוצה</div>`);
     }
     if (c.challenge_type === "consistency") {
       const weeks = Number((c.config && c.config.weeks) || 0);
@@ -1095,7 +1095,7 @@
       ? `<div class="log-list" style="margin-top:8px;">${contributors.map((row) => {
           const prof = row.profiles || {};
           const name = prof.display_name || (prof.handle ? "@" + prof.handle : "חבר/ה");
-          return `<div class="log-row"><span>${esc(name)}</span><span class="mono" style="color:var(--brass);">+${esc(row.delta)}</span></div>`;
+          return `<div class="log-row"><span>${bidiText(name)}</span><span class="mono" style="color:var(--brass);">+${esc(row.delta)}</span></div>`;
         }).join("")}</div>`
       : `<div class="empty">עדיין לא נאספה התקדמות משותפת.</div>`;
     return `<div class="chart-card" style="margin-bottom:10px;">
@@ -1156,7 +1156,7 @@
           <button class="chip-btn" data-community-action="challenge-team-rename" data-id="${esc(t.id)}"${renameBusy ? " disabled" : ""}>${renameBusy ? "שומר…" : "שמירה"}</button>
           <button class="chip-btn" data-community-action="challenge-team-delete" data-id="${esc(t.id)}"${(deleteBusy || memberCount > 0) ? " disabled" : ""}${memberCount > 0 ? ` title="יש לפנות את הקבוצה מחברים לפני מחיקתה"` : ""}>${deleteBusy ? "מוחק…" : "מחיקה"}</button>
         </div>
-        <div style="font-size:12px;color:var(--steel);">${participantsLabel(memberCount)} · ${esc(total)} סה״כ${captainName ? ` · 👑 ${esc(captainName)}` : ""}</div>
+        <div style="font-size:12px;color:var(--steel);">${participantsLabel(memberCount)} · ${esc(total)} סה״כ${captainName ? ` · 👑 ${bidiText(captainName)}` : ""}</div>
         <div class="flex gap-6" style="align-items:center;">
           <select class="text-input" data-challenge-team-captain-select="${esc(t.id)}" style="flex:1;"${(captainBusy || !teamMembers.length) ? " disabled" : ""} aria-label="קפטן/ית הקבוצה">${captainOptions}</select>
         </div>
@@ -1171,7 +1171,7 @@
         const busy = !!tm.reassignBusy[p.user_id];
         const options = `<option value="">ללא קבוצה</option>` + rawTeams.map((t) => `<option value="${esc(t.id)}"${p.team_id === t.id ? " selected" : ""}>${esc(t.name)}</option>`).join("");
         return `<div class="log-row" style="justify-content:space-between;gap:8px;">
-          <span>${esc(name)}</span>
+          <span>${bidiText(name)}</span>
           <select class="text-input" data-challenge-team-reassign-select="${esc(p.user_id)}"${busy ? " disabled" : ""} style="max-width:160px;" aria-label="קבוצה של ${esc(name)}">${options}</select>
         </div>`;
       }).join("")}</div>
@@ -1259,7 +1259,7 @@
       const d = v.coachEntry.drafts[p.user_id] || { delta: "", note: "" };
       const busy = !!v.coachEntry.busy[p.user_id];
       return `<div class="log-row" style="flex-direction:column;align-items:stretch;gap:6px;">
-        <div class="flex" style="justify-content:space-between;"><span>${esc(name)}</span><span class="mono" style="color:var(--brass);">${esc(p.progress_value)}</span></div>
+        <div class="flex" style="justify-content:space-between;"><span>${bidiText(name)}</span><span class="mono" style="color:var(--brass);">${esc(p.progress_value)}</span></div>
         <div class="flex gap-6">
           <input class="text-input" type="number" step="any" data-challenge-coach-delta="${esc(p.user_id)}" value="${esc(d.delta)}" placeholder="כמות" style="flex:1;"/>
           <button class="chip-btn primary" data-community-action="challenge-coach-submit" data-id="${esc(p.user_id)}"${busy ? " disabled" : ""}>${busy ? "שומר…" : "עדכון"}</button>
@@ -1290,7 +1290,7 @@
       <div class="log-list">${list.map((p) => {
         const prof = p.profiles || {};
         const name = prof.display_name || (prof.handle ? "@" + prof.handle : "חבר/ה");
-        return `<div class="log-row"><span>${esc(name)}</span>${p.status === "completed" ? `<span class="tag tag-brass">הושלם</span>` : ""}</div>`;
+        return `<div class="log-row"><span>${bidiText(name)}</span>${p.status === "completed" ? `<span class="tag tag-brass">הושלם</span>` : ""}</div>`;
       }).join("")}</div>
     </div>`;
   }
