@@ -44,7 +44,6 @@ const seedSql = fs.readFileSync(new URL("202609190002_seven_switches_before_thei
 // later edit moved a coach tool into the members' content list.
 const PLANNED = [
   { key: "gym_display", group: "CLUB_MODULE_TOGGLES" },
-  { key: "owner_report", group: "COACH_MODULE_TOGGLES" },
   { key: "arbox_attendance", group: "COACH_MODULE_TOGGLES" },
 ];
 const PLANNED_KEYS = PLANNED.map((p) => p.key);
@@ -83,6 +82,12 @@ const BUILT = [
   { key: "benchmarks", group: "CLUB_MODULE_TOGGLES", clientOnly: true },
   { key: "onboarding_challenge", group: "CLUB_MODULE_TOGGLES", clientOnly: false, migration: "202609220002" },
   { key: "coach_tasks", group: "COACH_MODULE_TOGGLES", clientOnly: false, migration: "202609220002" },
+  // 2026-09-22. The monthly owner report - seven figures about the month that
+  // just closed, and the list of members behind each one, for head_coach and
+  // above. owner_reports' one SELECT policy carries
+  // club_feature_enabled('owner_report'), so clientOnly comes off with
+  // planned.
+  { key: "owner_report", group: "COACH_MODULE_TOGGLES", clientOnly: false, migration: "202609220004" },
 ];
 const BUILT_KEYS = BUILT.map((b) => b.key);
 // Everything 202609190002 seeded, which is what the migration half checks:
@@ -204,8 +209,15 @@ test("a server-enforced key really does have a policy behind it, in the migratio
   // because `supabase test db` needs Docker and this suite is jsdom. What a
   // source read CAN establish is that the policy naming the key exists and
   // names it; supabase/tests/0118 and 0119 are what prove it bites.
+  // FOUND BY PREFIX, not by full filename. This read the one slug
+  // 202609220002 happens to have until a second migration claimed a BUILT row
+  // (202609220004), at which point a hard-coded name is a guard that only
+  // covers the key it was written for - and it would have failed by throwing
+  // ENOENT rather than by saying what was wrong.
   for (const b of BUILT.filter((x) => !x.clientOnly)) {
-    const sql = fs.readFileSync(new URL(`${b.migration}_coach_tasks_and_the_onboarding_challenge.sql`, MIGRATIONS_DIR), "utf8");
+    const file = fs.readdirSync(MIGRATIONS_DIR).find((f) => f.startsWith(`${b.migration}_`) && f.endsWith(".sql"));
+    assert.ok(file, `${b.key} names migration ${b.migration}, and no such file is in supabase/migrations/`);
+    const sql = fs.readFileSync(new URL(file, MIGRATIONS_DIR), "utf8");
     const policies = sql.split("create policy").slice(1)
       .filter((chunk) => chunk.slice(0, chunk.indexOf(";")).includes(`club_feature_enabled('${b.key}')`));
     assert.ok(policies.length > 0,

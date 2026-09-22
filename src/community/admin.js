@@ -4338,3 +4338,262 @@
       </div>
     </div>`;
   }
+
+  // =========================================================================
+  // The monthly owner report (202609220004)
+  // =========================================================================
+  // One screen for whoever runs the club: seven numbers about the month that
+  // just closed, and behind each number the list of people it is made of.
+  //
+  // WHAT THIS CODE IS AND IS NOT. It is a reader. Every figure is computed in
+  // Postgres by owner_report_generate() off the back of the existing monthly
+  // recap job, every list comes from owner_report_list(), and nothing here
+  // derives, re-sums or re-sorts a number - the same "the server holds the one
+  // definition" posture the monthly recap figures already follow. A figure
+  // recomputed in JavaScript is a second definition, and the whole promise of
+  // this screen is that a number and its list cannot disagree.
+  //
+  // THE RANK IS RE-ASSERTED ON EVERY ENTRY POINT, not just on the tab.
+  // renderManagePanel() does not build the tab for a coach, so in practice
+  // this is unreachable for one - but "unreachable because of how the tab bar
+  // happens to be built" is not the kind of thing to leave load-bearing, and
+  // both the table's policy and the RPC refuse them anyway.
+  //
+  // READS GO THROUGH mgmtDb(). This screen only ever renders inside the club
+  // management panel, which is a separate identity (see makeMgmtClient), so
+  // the JWT the policy resolves owner_report_viewer() against has to be the
+  // management account's and not the member's.
+  const OWNER_REPORT_METRICS = [
+    // key      the metric name owner_report_list() takes, unchanged.
+    // column   the owner_reports column holding its figure.
+    // unit     what the figure counts. Five are members; the two task rows
+    //          are TASKS, and the list behind them is one row per member with
+    //          that member's own count - so those two say both numbers rather
+    //          than letting a leader read a list of 2 under a figure of 3.
+    { key: "active",       column: "active_members",       unit: "members", accent: "var(--green)",
+      label: "התאמנו החודש", hint: "חברים שרשמו לפחות אימון אחד בחודש שנסגר." },
+    { key: "new",          column: "new_members",          unit: "members", accent: "var(--teal)",
+      label: "הצטרפו החודש", hint: "מי שמימש/ה קוד הזמנה בחודש שנסגר." },
+    { key: "stopped",      column: "stopped_members",      unit: "members", accent: "var(--red)",
+      label: "הפסיקו להגיע", hint: "התאמנו בחודש הקודם ולא הגיעו אף פעם בחודש שנסגר." },
+    { key: "strong_start", column: "strong_start_members", unit: "members", accent: "var(--brass)",
+      label: "התחלה טובה", hint: "חברים חדשים שהגיעו למספר האימונים שהוגדר כבר בחודש הראשון." },
+    { key: "tasks_opened", column: "coach_tasks_opened",   unit: "tasks",   accent: "var(--steel)",
+      label: "משימות שנפתחו", hint: "משימות למאמן/ת שנפתחו בחודש שנסגר." },
+    { key: "tasks_closed", column: "coach_tasks_closed",   unit: "tasks",   accent: "var(--steel)",
+      label: "משימות שנסגרו", hint: "משימות שנסגרו בחודש שנסגר, גם אם נפתחו לפניו." },
+    // The one NOW figure on a screen of month figures, and it says so in its
+    // own label rather than in a footnote: at_risk_members is recomputed
+    // every time the report is regenerated, because "currently flagged" is
+    // not a question about last month.
+    { key: "at_risk",      column: "at_risk_members",      unit: "members", accent: "var(--red)",
+      label: "מסומנים בסיכון כרגע", hint: "חברים עם סימון מעורבות פתוח ברגע זה — לא נתון של החודש שנסגר." },
+  ];
+  function ownerReportMetric(key) { return OWNER_REPORT_METRICS.find((m) => m.key === key) || null; }
+  // "ספטמבר 2026" out of "2026-09-01". Built off the ISO string rather than
+  // off a Date the browser might shift a timezone: the month is the row's
+  // identity, and a report that called itself August on a phone in a western
+  // timezone would be the same class of bug as a wrong figure.
+  function ownerReportMonthLabel(iso) {
+    const m = /^(\d{4})-(\d{2})/.exec(String(iso || ""));
+    if (!m) return String(iso || "");
+    const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, 1));
+    try {
+      return d.toLocaleDateString("he-IL", { month: "long", year: "numeric", timeZone: "UTC" });
+    } catch (e) { return `${Number(m[2])}/${m[1]}`; }
+  }
+  function ownerReportRow() {
+    const o = state.ownerReport;
+    if (!o.months.length) return null;
+    return o.months.find((r) => r.month_start === o.month) || o.months[0];
+  }
+  // WRITTEN THROUGH THE FULL state.ownerReport.<leaf> PATH, not through a
+  // local alias. test/community-state-namespaces.test.mjs asserts that every
+  // declared leaf is referenced that way somewhere - a leaf only ever touched
+  // through an alias reads as dead state to the guard, and the guard is right
+  // to say so: that is also how a typo'd leaf survives forever.
+  async function loadOwnerReport() {
+    if (!state.user || !isClubLeader() || !isModuleEnabled("owner_report")) return;
+    if (state.ownerReport.loading) return;
+    state.ownerReport.loading = true;
+    state.ownerReport.error = false;
+    rerender();
+    // Twelve months, newest first. A club reads this one month at a time and
+    // pages back at most a year; an unbounded read of a table that grows one
+    // row a month is a habit rather than a need.
+    const { data, error } = await mgmtDb()
+      .from("owner_reports")
+      .select("*")
+      .order("month_start", { ascending: false })
+      .limit(12);
+    state.ownerReport.loading = false;
+    state.ownerReport.loaded = true;
+    // A FAILED READ IS NOT AN EMPTY REPORT. Seven zeros under a header that
+    // says "last month" is a statement about the club, and it is exactly the
+    // wrong one to make when the request failed.
+    state.ownerReport.error = !!error;
+    if (!error) {
+      state.ownerReport.months = data || [];
+      const months = state.ownerReport.months;
+      const still = state.ownerReport.month && months.some((r) => r.month_start === state.ownerReport.month);
+      if (!still) state.ownerReport.month = months.length ? months[0].month_start : null;
+    }
+    rerender();
+  }
+  function setOwnerReportMonth(month) {
+    const o = state.ownerReport;
+    if (!month || o.month === month) return;
+    o.month = month;
+    // The open drill-down belonged to the month that was on screen, so it
+    // closes rather than being silently re-labelled with another month's
+    // header above another month's names.
+    closeOwnerReportMetric();
+  }
+  function closeOwnerReportMetric() {
+    state.ownerReport.list = { metric: null, loading: false, loaded: false, error: false, rows: [] };
+    rerender();
+  }
+  // Tapping a number. One metric open at a time, deliberately: seven lists on
+  // one screen is not a report, and the figure a leader tapped is the one
+  // they are thinking about.
+  async function openOwnerReportMetric(metric) {
+    const o = state.ownerReport;
+    const def = ownerReportMetric(metric);
+    const row = ownerReportRow();
+    if (!def || !row || !isClubLeader() || !isModuleEnabled("owner_report")) return;
+    // A second tap on the open one closes it, the same toggle every
+    // disclosure on these panels uses.
+    if (o.list.metric === metric && (o.list.loaded || o.list.loading)) return closeOwnerReportMetric();
+    o.list = { metric, loading: true, loaded: false, error: false, rows: [] };
+    rerender();
+    const { data, error } = await mgmtDb().rpc("owner_report_list", {
+      p_month_start: row.month_start, p_metric: metric, p_limit: 500,
+    });
+    // The month or the metric may have moved while the request was in the
+    // air - a leader tapping two numbers quickly. Whatever came back belongs
+    // to the request that was made, not to the one on screen now.
+    if (o.list.metric !== metric) return;
+    o.list.loading = false; o.list.loaded = true;
+    o.list.error = !!error;
+    o.list.rows = error ? [] : (data || []);
+    rerender();
+  }
+  // What `value` means, per metric. It is a different number in each list and
+  // rendering it as a bare integer beside a name would be the kind of figure
+  // a reader assigns their own meaning to.
+  function ownerReportValueText(metricKey, value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return "";
+    if (metricKey === "tasks_opened" || metricKey === "tasks_closed") {
+      return n === 1 ? "משימה אחת" : `${n} משימות`;
+    }
+    if (metricKey === "at_risk") {
+      return n <= 0 ? "סומן/ה היום" : n === 1 ? "סומן/ה אתמול" : `מסומן/ת ${n} ימים`;
+    }
+    if (metricKey === "stopped") {
+      return n === 1 ? "אימון אחד בחודש הקודם" : `${n} אימונים בחודש הקודם`;
+    }
+    return n === 1 ? "אימון אחד" : n ? `${n} אימונים` : "בלי אימונים";
+  }
+  function renderOwnerReportList() {
+    const l = state.ownerReport.list;
+    if (!l.metric) return "";
+    const def = ownerReportMetric(l.metric);
+    if (!def) return "";
+    // Same render-time block filter every other member list in this app
+    // applies: a leader who has blocked somebody is not handed them here.
+    const rows = (l.rows || []).filter((r) => !r || !isBlockedUser(r.user_id));
+    let body;
+    if (l.loading) {
+      body = `<div aria-busy="true">${`<div class="log-row" aria-hidden="true"><span style="height:12px;width:45%;background:var(--border);border-radius:6px;display:inline-block;"></span></div>`.repeat(3)}</div>`;
+    } else if (l.error) {
+      body = `<div class="empty" role="alert">לא ניתן היה לטעון את הרשימה.<div class="chip-row" style="justify-content:center;margin-top:6px;"><button class="chip-btn" data-community-action="owner-report-metric" data-metric="${esc(l.metric)}">ניסיון חוזר</button></div></div>`;
+    } else if (!rows.length) {
+      body = `<div class="empty">אין חברים ברשימה הזאת החודש.</div>`;
+    } else {
+      body = `<div class="log-list">${rows.map((r) => `<div class="log-row" data-owner-report-member="${esc(r.user_id)}">
+        <span>${nameHtml(r.display_name, r.handle)}</span>
+        <span style="color:var(--steel);font-size:12px;">${bidiText(ownerReportValueText(l.metric, r.value))}</span>
+      </div>`).join("")}</div>`;
+    }
+    // The count of NAMES, which for the two task metrics is deliberately not
+    // the figure above it - see OWNER_REPORT_METRICS.
+    const count = l.loaded && !l.error
+      // "שם אחד" / "N שמות" rather than a count of members. שם is masculine
+      // and genderless in this construction, so there is no slash form to get
+      // wrong: the feminine of אחד is irregular, so no slash can join the two
+      // halves at all, and test/hebrew-copy-rules.test.mjs holds that rule -
+      // over the raw source, so the wrong form must not even appear in a
+      // comment explaining why it is wrong. Which is how this comment now
+      // reads the way it does.
+      ? `<span style="color:var(--steel);font-size:12px;">${esc(rows.length === 1 ? "שם אחד" : `${rows.length} שמות`)}</span>`
+      : "";
+    return `<div class="chart-card" style="margin-top:12px;" data-owner-report-list="${esc(l.metric)}">
+      <div class="flex" style="justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:6px;">
+        <span style="font-weight:800;">${esc(def.label)}</span>${count}
+      </div>
+      <div style="color:var(--steel);font-size:12px;line-height:1.6;margin-bottom:8px;">${bidiText(def.hint)}</div>
+      ${body}
+      <div class="chip-row" style="margin-top:10px;"><button class="chip-btn" data-community-action="owner-report-list-close">סגירה</button></div>
+    </div>`;
+  }
+  function renderOwnerReportFigures(row) {
+    const open = state.ownerReport.list.metric;
+    return `<div class="log-list" data-owner-report-figures="1">${OWNER_REPORT_METRICS.map((m) => {
+      const n = Number(row[m.column]);
+      const shown = Number.isFinite(n) ? n : 0;
+      const isOpen = open === m.key;
+      // EVERY FIGURE IS A BUTTON, including a zero. A zero with no way in is
+      // a figure a leader cannot check, and "nobody stopped attending" is
+      // exactly the number somebody will want to confirm rather than trust.
+      return `<button class="log-row" data-community-action="owner-report-metric" data-metric="${esc(m.key)}"
+        data-owner-report-figure="${esc(m.key)}" aria-expanded="${isOpen ? "true" : "false"}"
+        style="width:100%;text-align:right;background:transparent;border:1px solid ${isOpen ? m.accent : "var(--border)"};border-radius:10px;padding:10px 12px;cursor:pointer;min-height:44px;">
+        <span style="display:flex;flex-direction:column;gap:2px;min-width:0;">
+          <span style="font-weight:700;">${esc(m.label)}</span>
+          <span style="color:var(--steel);font-size:12px;line-height:1.6;">${bidiText(m.hint)}</span>
+        </span>
+        <span style="font-weight:800;font-size:19px;color:${m.accent};">${esc(String(shown))}</span>
+      </button>`;
+    }).join("")}</div>`;
+  }
+  function renderOwnerReportMonthBar() {
+    const o = state.ownerReport;
+    if (o.months.length < 2) return "";
+    return `<div class="chip-row" data-owner-report-months="1" style="margin:0 0 10px;">${o.months.map((r) =>
+      `<button class="chip-btn${r.month_start === o.month ? " selected" : ""}" data-community-action="owner-report-month" data-month="${esc(r.month_start)}">${esc(ownerReportMonthLabel(r.month_start))}</button>`).join("")}</div>`;
+  }
+  function renderOwnerReport() {
+    // Re-asserted here rather than trusted from the tab bar - see this
+    // cluster's header.
+    if (!isClubLeader()) return `<div class="empty">אין לך הרשאה לצפות בדוח הזה.</div>`;
+    if (!isModuleEnabled("owner_report")) return "";
+    const o = state.ownerReport;
+    const row = ownerReportRow();
+    let body;
+    if (o.loading && !o.loaded) {
+      const sk = `<div class="log-row" aria-hidden="true"><span style="height:12px;width:50%;background:var(--border);border-radius:6px;display:inline-block;"></span></div>`;
+      body = `<div aria-busy="true" data-owner-report-skeleton="1">${sk.repeat(4)}</div>`;
+    } else if (o.error) {
+      body = `<div class="empty" role="alert">לא ניתן היה לטעון את הדוח.<div class="chip-row" style="justify-content:center;margin-top:6px;"><button class="chip-btn primary" data-community-action="owner-report-retry">ניסיון חוזר</button></div></div>`;
+    } else if (!row) {
+      // THE HONEST EMPTY STATE, and the one this feature genuinely needs: the
+      // report is produced by the monthly recap job, which runs once a month,
+      // so a club that switched the module on today has nothing to show until
+      // the month closes. Saying "אין נתונים" would read as a statement about
+      // the club rather than about the calendar.
+      body = emptyStateHtml({
+        key: "owner-report", icon: "chart",
+        headline: "הדוח הראשון יופיע בתחילת החודש הבא",
+        body: "הדוח נוצר פעם בחודש, יחד עם סיכום החודש של הקהילה, ומסכם את החודש שנסגר.",
+        when: "כשהחודש ייסגר יופיעו כאן המספרים, וכל מספר יפתח את רשימת החברים שמאחוריו.",
+      });
+    } else {
+      body = renderOwnerReportMonthBar()
+        + renderOwnerReportFigures(row)
+        + renderOwnerReportList()
+        + `<div class="footer-note" style="margin:12px 0 0;">${bidiText(`עודכן: ${shortHebDate(row.generated_at)}. הנתונים נשארים במועדון — אין כאן ייצוא ואף שם לא יוצא מהמסך הזה.`)}</div>`;
+    }
+    const title = row ? `דוח ${ownerReportMonthLabel(row.month_start)}` : "הדוח החודשי";
+    return `<div class="ach-section" style="margin-top:6px;" data-owner-report="1">${sectionHead("var(--brass)", esc(title), true)}${body}</div>`;
+  }

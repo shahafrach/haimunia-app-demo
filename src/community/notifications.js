@@ -178,6 +178,23 @@
     // there is no in-app screen for this, and resolveNotifTarget() would
     // otherwise land the admin on the feed, which is worse than no link.
     job_health_alert:      { category: "community",  mode: "immediate", pref: "job_health_alert",    icon: "⚙️", title: "תקלה בעבודות המתוזמנות" },
+    // 202609220004. head_coach and above only, by owner_report_recipients() -
+    // the same no-server-pref-arm shape as new_report/new_bug_report above,
+    // so its pref key is its own literal type name, matching
+    // notif_pref_key()'s identity fallback.
+    //
+    // IT DOES GET A SETTINGS ROW, unlike job_health_alert, and that is not an
+    // inconsistency: notif_push_pending() only ever pushes a type the
+    // recipient has EXPLICITLY switched to push, on exactly this key, so
+    // without a row in NOTIF_PREF_TYPES a head coach could never receive this
+    // as a push at all. The row is staffOnly, so a member never sees a toggle
+    // for something they are never sent.
+    //
+    // NO DEEP LINK on the server side, for the reason job_health_alert states:
+    // the screen is a tab of the club MANAGEMENT panel, not a Community
+    // sub-tab, so resolveNotifTarget() would land the reader on the feed, and
+    // a link to the wrong place is worse than no link.
+    owner_report_ready:    { category: "club",       mode: "immediate", pref: "owner_report_ready",  icon: "📈", title: "דוח החודש של המועדון מוכן" },
     achievement_unlocked:  { category: "training",   mode: "immediate", pref: "achievement_unlocked",icon: "🏅", title: "פתחת הישג חדש" },
     friend_achievement:    { category: "training",   mode: "batched",   pref: "friend_achievements", icon: "🎉", title: "חברים פתחו הישגים" },
     challenge_ending_soon: { category: "challenges", mode: "immediate", pref: "challenges",          icon: "⏳", title: "אתגר מסתיים בקרוב" },
@@ -248,6 +265,10 @@
     { key: "weekly_recap",        label: "סיכום שבועי" },
     { key: "monthly_club_recap",  label: "סיכום חודשי" },
     { key: "new_report",          label: "דיווחים חדשים לבדיקה", staffOnly: true },
+    // 202609220004. staffOnly, like new_report: only head_coach and above are
+    // ever sent one, and this row is also the only way to turn it into a
+    // push - see NOTIF_TYPES.owner_report_ready.
+    { key: "owner_report_ready",  label: "הדוח החודשי של המועדון", staffOnly: true },
     { key: "streak_at_risk",              label: "תזכורת רצף אימונים" },
     { key: "engagement_decline_flagged",  label: "התרעת ירידה במעורבות חבר/ה", staffOnly: true },
   ];

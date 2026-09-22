@@ -724,64 +724,103 @@
     s.items = (Array.isArray(data) ? data : []).filter(Boolean);
     rerender();
   }
-  function classmateRowHtml(item) {
-    const name = item.display_name || (item.handle ? "@" + item.handle : "חבר/ה");
-    // THE FOLLOW CONTROL IS ALWAYS RENDERED, and that is the one place this
-    // row deliberately differs from memberRowHtml()/followListRowHtml(),
-    // which both write `allow_follows === false ? "" : button`. Those two read
-    // profiles directly and get the column; attendance_classmates_today()
-    // returns four keys and allow_follows is not one of them, on purpose -
-    // contracts.md: "this is not a follow strip, it is 'who trained today',
-    // and hiding a classmate who simply does not want followers would be
-    // wrong." Copying the guard here would compare undefined to false, never
-    // hide anything, and read as if it were doing something. So the control
-    // is shown for everyone and a refusal is the server's to make:
-    // follows_insert_self (202608280003) enforces allow_follows on the
-    // insert, and follow() already turns a rejected write into the same
-    // "עדכון המעקב נכשל" message every other follow button in this file
-    // produces. No new follow mechanism, no new error path, no pre-filter
-    // that would leak another member's setting into the card.
-    return `<div class="log-row" data-classmate-user="${esc(item.user_id)}">
-      <button class="link-btn" data-community-action="view-profile" data-id="${esc(item.user_id)}" style="padding:0;display:flex;gap:10px;align-items:center;color:inherit;text-align:right;">
-        ${avatarHtml(name, 32, item.avatar_url)}
-        <span style="min-width:0;"><span style="font-weight:700;display:block;">${esc(name)}</span>${item.handle ? `<span style="color:var(--steel);font-size:12px;"><bdi>@${esc(item.handle)}</bdi></span>` : ""}</span>
-      </button>
-      <div class="chip-row" style="margin-top:0;">${followButtonHtml(item.user_id)}</div>
-    </div>`;
-  }
-  function renderClassmatesTodayCard() {
+  // THE SAME CARD, DRAWN AS A STRIP, at the top of the feed instead of a few
+  // cards down the rail. This is now the only renderer of it -
+  // renderClassmatesTodayCard(), the stacked-log-list form, is gone rather
+  // than left beside this one unreferenced. Every word about privacy above this function still
+  // applies unchanged and is the reason this is safe to move: the rows come
+  // from attendance_classmates_today(), which enforces the reciprocity rule
+  // (the caller's own show_attendance) and each member's own visibility
+  // server-side, blockFilteredList() drops the block edges, and an empty
+  // answer - which is what most of the club gets, because show_attendance
+  // defaults to false - still renders NOTHING AT ALL. Moving where a card is
+  // drawn does not move where its boundary is enforced, and this branch adds
+  // no new read.
+  //
+  // WHY A STRIP. In the rail it competed for one of two slots above the feed
+  // against the pinned note and today's programming, and lost to both often
+  // enough that the post-class moment it exists for usually arrived below
+  // them. A horizontal row of faces costs about a quarter of the height the
+  // stacked log-list did, so it fits above the feed without taking a slot
+  // from anything.
+  //
+  // data-classmates-today="ready" moves WITH it, unchanged, because
+  // noteClassmatesCardView() finds the card by that attribute - it is how
+  // cloud.js learns the card is on screen rather than merely fetched, and
+  // the strip must count as the same view the card did, not as a second one.
+  function renderClassmatesTodayStrip() {
     const s = blockFilteredList(state.members.classmatesToday);
-    // The three no-card branches, all of which return the same empty string:
-    // a failed fetch, a load that has not answered yet, and an answer with no
-    // rows. The middle one is why there is no skeleton here - see below.
+    // THE THREE NO-CARD BRANCHES, inherited unchanged from the card and
+    // written out for the same reason they were written out there.
     //
-    // This first line is belt-and-braces and says so: loadClassmatesToday()
-    // already empties items on an error, so the `!s.items.length` check below
-    // would catch it anyway. It is written out because "error omits the card"
+    // A FAILED FETCH is belt-and-braces and says so: loadClassmatesToday()
+    // already empties items on an error, so the `!s.items.length` check
+    // below would catch it anyway. It stays because "error omits the card"
     // is one of COMM-307's four named frontend states, and a state that is
     // only satisfied as a side effect of another branch is one refactor away
     // from becoming a retry button.
     if (s.error) return "";
-    // LOADING RENDERS NOTHING, deliberately, and this is the one frontend
-    // state where COMM-307's wording and COMM-115's actual slot disagree, so
-    // it is written down rather than left to a reader to notice. The other
-    // card in this slot (renderUpcomingEventCard, COMM-217) has no skeleton
-    // either: a card that is omitted entirely more often than it renders
-    // cannot hold a placeholder open, because the placeholder would then be
-    // the thing most members see - a grey box that appears on every visit to
-    // the Feed sub-tab and vanishes. show_attendance defaults to FALSE, so
-    // out of the box this card is empty for every member of the club, which
-    // makes "usually nothing" the common case and not the edge one. Reusing
-    // the log-list skeleton the directory and the boards use would be reusing
-    // the wrong pattern for this slot; the pattern this slot actually has is
-    // the upcoming-event card's, and it is to show nothing until there is
-    // something. A reload with rows already on screen keeps them (the
-    // condition is `!s.items.length`), the same way the leaderboard holds its
-    // previous rows under a refresh.
+    // LOADING RENDERS NOTHING, and so does an answer with no rows. There is
+    // deliberately no skeleton: show_attendance defaults to FALSE, so out of
+    // the box this is empty for every member of the club, which makes
+    // "usually nothing" the common case and not the edge one - a placeholder
+    // would then be the thing most members see, a grey box that appears on
+    // every visit to the Feed sub-tab and vanishes. The pattern this slot has
+    // is the upcoming-event card's: show nothing until there is something. A
+    // reload with rows already on screen keeps them (the condition is
+    // `!s.items.length`), the same way the leaderboard holds its previous
+    // rows under a refresh.
     if (!s.items.length) return "";
-    return `<div class="chart-card" style="margin-top:10px;margin-bottom:10px;" data-classmates-today="ready">
-      <div style="font-weight:800;font-size:14px;">💪 התאמנו היום גם</div>
-      <div class="log-list" style="margin-top:8px;">${s.items.map(classmateRowHtml).join("")}</div>
+    // THE FOLLOW CONTROL SURVIVES THE MOVE, and it is the same
+    // followButtonHtml() the card rendered.
+    //
+    // IT IS ALWAYS RENDERED, which is where this differs from
+    // memberRowHtml()/followListRowHtml() - both of those write
+    // `allow_follows === false ? "" : button`. Those two read profiles
+    // directly and get the column; attendance_classmates_today() returns
+    // four keys and allow_follows is not one of them, on purpose -
+    // contracts.md: "this is not a follow strip, it is 'who trained today',
+    // and hiding a classmate who simply does not want followers would be
+    // wrong." Copying the guard here would compare undefined to false, never
+    // hide anything, and read as if it were doing something. So the control
+    // is shown for everyone and a refusal is the SERVER'S to make:
+    // follows_insert_self (202608280003) enforces allow_follows on the
+    // insert, and follow() already turns a rejected write into the same
+    // "עדכון המעקב נכשל" message every other follow button produces. No new
+    // follow mechanism, no new error path, and no pre-filter that would leak
+    // another member's setting into the strip.
+    //
+    // It is .classmate-chip-follow only for size; the
+    // element, the action, the data-id and the follow() path behind it are
+    // untouched. Dropping it here would have been the quiet kind of
+    // regression this move is not: the strip is a new layout for the card,
+    // not a smaller feature.
+    //
+    // The chip is a <button> and the follow control is a second <button>, so
+    // they are siblings inside the cell rather than nested - a button inside
+    // a button is invalid HTML and only one of the two would ever be
+    // clickable.
+    const faces = s.items.map((item) => {
+      const name = item.display_name || (item.handle ? "@" + item.handle : "חבר/ה");
+      return `<div class="classmate-cell" data-classmate-user="${esc(item.user_id)}">
+        <button class="classmate-chip" data-community-action="view-profile" data-id="${esc(item.user_id)}">
+          ${avatarHtml(name, 44, item.avatar_url)}
+          <span class="classmate-chip-name">${esc(name)}</span>
+          ${/* THE HANDLE IS NOT DROPPED, only unprinted. The card printed it
+                under the name and a 62px cell cannot, but the handle is what
+                tells two members with the same display name apart - so it
+                stays in the accessible name, where a screen reader reads it
+                and where the sighted reader gets it on the profile one tap
+                away. .sr-only is index.html's existing utility; this adds no
+                rule of its own. */""}
+          ${item.handle ? `<span class="sr-only"><bdi>@${esc(item.handle)}</bdi></span>` : ""}
+        </button>
+        <span class="classmate-chip-follow">${followButtonHtml(item.user_id)}</span>
+      </div>`;
+    }).join("");
+    return `<div class="classmates-strip" data-classmates-today="ready">
+      <h3 class="field-label" style="margin:0 0 6px;">💪 התאמנו היום</h3>
+      <div class="classmates-strip-row">${faces}</div>
     </div>`;
   }
   // COMM-307's analytics, called from afterRenderCommunity() for the same

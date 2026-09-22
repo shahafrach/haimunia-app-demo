@@ -382,14 +382,37 @@
     const c = state.onboarding.stepContent[step];
     return (c && typeof c.body === "string") ? c.body : "";
   }
+  // EVERY LABEL THE COMPOSER HAS EVER CARRIED, newest first.
+  //
+  // The welcome card's body is STORED (onboarding_step_content, seeded by
+  // 202609150007) and the composer's label is a constant in cloud.js, so a
+  // rename moves one and not the other. That is not a hypothetical: it is the
+  // exact defect this card was already fixed for once - "the first card a new
+  // member saw pointed at a button not on the screen" - and the social feed
+  // pass, which renamed the label to "מה עשית היום?", would have recreated it
+  // for every club whose row still carries the seeded sentence.
+  //
+  // So a stored body is corrected AT RENDER TIME, and no member reads an
+  // instruction naming a control that is not there.
+  //
+  // THIS LIST IS A STOPGAP AND SHOULD NOT SURVIVE. The real repair is one
+  // UPDATE on onboarding_step_content, guarded on `updated_by is null`
+  // exactly as 202609150007's own correction is, so a club that has written
+  // its own words keeps them. This branch deliberately adds no migration
+  // (CLAUDE.md, "Parallel work": one open branch adds a migration at a time),
+  // so that UPDATE and the deletion of this list are one follow-up commit.
+  const RETIRED_COMPOSER_LABELS = ["מה קורה היום?", "כתיבת פוסט"];
+  function withCurrentComposerLabel(body) {
+    let out = String(body || "");
+    for (const retired of RETIRED_COMPOSER_LABELS) out = out.split(retired).join(POST_COMPOSER_PLACEHOLDER);
+    return out;
+  }
   function renderOnboardingWelcomeStep() {
-    // Names the composer by the label it ACTUALLY carries. This fallback and
-    // the seeded row (202609150007) both used to say "כתיבת פוסט", which the
-    // feed redesign had already replaced with the fake-input row below - so
-    // the first card a new member saw pointed at a button not on the screen.
-    // POST_COMPOSER_PLACEHOLDER is the single definition of that label, and
-    // first-run-copy.test.mjs asserts this sentence still contains it.
-    const bodyRaw = onboardingStepBodyRaw("welcome") || `כאן רואים מה קורה במועדון, ואפשר לשתף אימונים ושיאים ולהגיב לחברים אחרים. השורה "${POST_COMPOSER_PLACEHOLDER}" בראש הפיד פותחת את השיתוף הראשון שלכם.`;
+    // Names the composer by the label it ACTUALLY carries - in the fallback
+    // below through POST_COMPOSER_PLACEHOLDER, which is the single definition
+    // of that label, and in a stored body through withCurrentComposerLabel()
+    // above. first-run-copy.test.mjs asserts both.
+    const bodyRaw = withCurrentComposerLabel(onboardingStepBodyRaw("welcome")) || `כאן רואים מה קורה במועדון, ואפשר לשתף אימונים ושיאים ולהגיב לחברים אחרים. השורה "${POST_COMPOSER_PLACEHOLDER}" בראש הפיד פותחת את השיתוף הראשון שלכם.`;
     return renderOnboardingCard(onboardingStepTitle("welcome", "ברוכים הבאים לקהילה!"), bidiText(bodyRaw), "welcome");
   }
   function renderOnboardingFirstWeekStep() {
@@ -1122,6 +1145,54 @@
   }
   function closeClubWodBoard() { state.club.wodBoardView = null; rerender(); }
 
+  // THE FEED CARD'S OWN BOARD READ. The session card groups a whole day's
+  // results into one card, and to do that it needs the board: a count, the
+  // faces and the viewer's own row. club_wod_boards() only ever returns
+  // TODAY (see loadClubWodBoards' comment), so a card for Thursday sitting
+  // in Saturday's feed had no board at all and used to render a bare title.
+  //
+  // Same shape as ensureReactionsLoaded(): asked from the render and fetched
+  // once per session id, never once per post. The ceiling is the
+  // four-sessions-per-day cap times the days in the loaded feed pages.
+  // ASKED, not "in flight". A board that comes back null or errored must not
+  // be asked for again on the next render, and the next render is one
+  // reaction or one resolved photo URL away - deleting the flag on failure
+  // would turn a single unreadable session into one RPC per frame for as long
+  // as that card is on screen. So the key is set on the way OUT and never
+  // cleared here; loadFeed() clears the whole map, which is the retry path
+  // (the pull gesture, the new-posts pill, a scope change and the error
+  // state's own button all go through it).
+  const clubWodBoardAsked = {};
+  function resetClubWodBoardAsks() {
+    for (const k of Object.keys(clubWodBoardAsked)) delete clubWodBoardAsked[k];
+  }
+  function ensureClubWodBoardLoaded(sessionId) {
+    if (!sessionId || !client || !state.user) return;
+    if (!isModuleEnabled("club_wod")) return;
+    if (clubWodBoardAsked[sessionId]) return;
+    if (state.club.wodBoards.some((b) => b && b.session_id === sessionId)) return;
+    clubWodBoardAsked[sessionId] = true;
+    client.rpc("club_wod_board", { p_session_id: sessionId }).then(function (res) {
+      if (res && !res.error && res.data) {
+        // NOT applyClubWodBoard(): that function is the today-strip's own
+        // fold and would append a past day's board to the strip, putting
+        // Thursday's programming under a "היום" eyebrow. This cache is the
+        // feed's, and the two stay separate.
+        state.club.wodBoardsById[sessionId] = res.data;
+        scheduleRerender();
+      }
+    }, function () { /* asked and failed; loadFeed() is the retry */ });
+  }
+  // One lookup, both caches: the today strip's list first (it is the fresher
+  // of the two - every write folds into it) and the feed's own by-id cache
+  // second.
+  function clubWodBoardFor(sessionId) {
+    if (!sessionId) return null;
+    return state.club.wodBoards.find((b) => b && b.session_id === sessionId)
+      || state.club.wodBoardsById[sessionId]
+      || null;
+  }
+
   // ---- The member's two writes ---------------------------------------------
   // Neither is queued through HaimuniaOutbox, and that is a decision rather
   // than an omission: an attach that leaves the device now and lands tomorrow
@@ -1288,22 +1359,105 @@
     // has never seen simply renders without it - club_wods_list() returns
     // retired rows precisely so this stays resolvable.
     const wod = (state.club.clubWods || []).find((w) => w && w.id === m.club_wod_id) || null;
-    const board = sessionId ? state.club.wodBoards.find((b) => b && b.session_id === sessionId) : null;
-    // The count comes ONLY from a board actually read from the server. It is
-    // viewer-relative there (counted over the same filtered set as the list),
-    // so it is never derived, guessed or defaulted to 0 here.
-    const countHtml = board
-      ? `<div style="color:var(--steel);font-size:12px;margin-top:6px;">${Number(board.result_count || 0) === 0 ? "עדיין לא צורפו תוצאות" : `${Number(board.result_count)} מהמועדון צירפו תוצאה`}</div>`
-      : "";
-    const inner = `<div class="post-title">${bidiText(name)}</div>
+    if (sessionId) ensureClubWodBoardLoaded(sessionId);
+    const board = clubWodBoardFor(sessionId);
+    const result = `<div class="post-result-block">
+      <div class="post-title">${bidiText(name)}</div>
       ${when ? `<div style="color:var(--steel);font-size:12px;">${esc(clubWodDateLabel(when))}</div>` : ""}
       ${clubWodProgrammingHtml(wod)}
-      ${post.body ? `<div class="post-body" style="white-space:pre-wrap;margin-top:6px;">${bidiText(String(post.body).slice(0, POST_BODY_MAX))}</div>` : ""}
-      ${countHtml}`;
+      ${clubWodSessionRollupHtml(board, sessionId)}</div>`;
     const extra = sessionId
-      ? `<button class="chip-btn primary" data-community-action="open-club-wod-board" data-id="${esc(sessionId)}" data-source="feed">פתיחת הלוח</button>`
+      ? `<button class="chip-btn primary" data-community-action="open-club-wod-board" data-id="${esc(sessionId)}" data-source="feed">${board && Number(board.result_count || 0) > 0 ? "הלוח המלא" : "פתיחת הלוח"}</button>`
       : "";
-    return postCardShell(post, inner + postMediaHtml(post), { extra });
+    return postCardShell(post, postCardBody(post, result), { extra });
+  }
+
+  // ---- ONE CARD PER SESSION (the feed's club-WOD roll-up) ------------------
+  //
+  // The club's results for one day used to reach the feed twice: as this
+  // session card, which said only how many people had attached, and again as
+  // one ordinary workout card per member who had ALSO shared their own result
+  // - so a busy morning pushed everything else off the screen with fifteen
+  // near-identical cards for the same WOD. Now the session card carries the
+  // day and those individual cards are folded into it (feedGroupedPostIds,
+  // src/community/feed.js).
+  //
+  // WHAT THIS CARD SHOWS, and one thing it deliberately does NOT.
+  //
+  // It shows the count, the faces, three results and the viewer's own row.
+  // The three are THE FIRST THREE THE BOARD RETURNS, which is attach order -
+  // who got there first - and the card says so in as many words ("הראשונים
+  // שצירפו"). It is NOT a top three by score, and that is a data fact before
+  // it is a product one: club_wod_board_json returns no score column at all
+  // ("Ordered by attached_at, never by score: there is no ranking here and no
+  // column to build one from"), result_text is free text whose shape depends
+  // on the score type, and it is null for every member whose
+  // show_workout_results is off - which is the DEFAULT. Ranking what is left
+  // would rank a self-selected subset and present it as the club's top three,
+  // and the gaps in it would themselves disclose who had chosen to hide a
+  // figure. A real score-ranked board needs a score column on
+  // club_wod_results and a migration to add it; this branch adds no
+  // migrations. Same reasoning governs the viewer's own line below.
+  const CLUB_WOD_FACES_SHOWN = 6;
+  const CLUB_WOD_RESULTS_SHOWN = 3;
+  function clubWodSessionRollupHtml(board, sessionId) {
+    if (!board) return sessionId ? `<div class="footer-note" style="margin:6px 0 0;">טוען את הלוח…</div>` : "";
+    const results = Array.isArray(board.results) ? board.results : [];
+    const total = Number(board.result_count || 0);
+    if (!total && !results.length) {
+      return `<div style="color:var(--steel);font-size:12px;margin-top:8px;">עדיין לא צורפו תוצאות — אפשר להיות הראשון/ה</div>`;
+    }
+    const faces = results.slice(0, CLUB_WOD_FACES_SHOWN)
+      .map((r) => `<span class="stacked-avatar">${avatarHtml(r.display_name || r.handle || "חבר/ה", 28, r.avatar_url)}</span>`).join("");
+    const extraFaces = total - Math.min(results.length, CLUB_WOD_FACES_SHOWN);
+    const facesHtml = `<div class="stacked-avatars">${faces}${extraFaces > 0 ? `<span class="stacked-avatar stacked-avatar-more">+${extraFaces}</span>` : ""}</div>`;
+    const top = results.slice(0, CLUB_WOD_RESULTS_SHOWN).map((r) => {
+      const figure = r.result_text
+        ? `<span class="mono" style="color:var(--brass);font-weight:700;">${esc(r.result_text)}</span>`
+        : r.result_hidden
+        ? `<span style="color:var(--steel);font-size:12px;">התוצאה מוסתרת</span>`
+        : `<span style="color:var(--steel);font-size:12px;">השתתפ/ה</span>`;
+      return `<div class="log-row"${r.is_viewer ? ` style="border-color:var(--energy);"` : ""}>
+        <span class="flex gap-8" style="align-items:center;min-width:0;">${avatarHtml(r.display_name || r.handle || "חבר/ה", 24, r.avatar_url)}<span style="font-weight:700;font-size:13px;">${nameHtml(r.display_name, r.handle)}${r.is_viewer ? " (את/ה)" : ""}</span></span>
+        <span style="text-align:left;">${figure}</span>
+      </div>`;
+    }).join("");
+    return `<div class="club-wod-rollup" style="margin-top:10px;">
+      <div class="flex gap-8" style="align-items:center;flex-wrap:wrap;">
+        ${facesHtml}
+        <span style="color:var(--steel);font-size:12px;">${/* The singular is written about the RESULT, not about the member, and
+              that is grammar rather than taste: the feminine of אחד is the
+              irregular אחת, so "one member" cannot be written as a slash form
+              at all (test/hebrew-copy-rules.test.mjs, rule 2). A sentence
+              about the result needs no gender, so there is nothing to join. */ ""}${esc(total === 1 ? "תוצאה אחת צורפה" : total + " מהמועדון צירפו תוצאה")}</span>
+      </div>
+      ${top ? `<div class="field-label" style="margin:10px 0 4px;">הראשונים שצירפו</div><div class="log-list">${top}</div>` : ""}
+      ${clubWodViewerLineHtml(board)}
+    </div>`;
+  }
+
+  // THE VIEWER'S OWN RESULT AND PLACE, on the card, once they have logged
+  // one - the sixth thing asked for, and the honest form of it. "Place" here
+  // is the board's own order, which is the order people attached in, so the
+  // line says "צירפת שלישי/ת מתוך 8" rather than dressing that up as a rank
+  // among results. See the block comment above for why a score-ranked place
+  // is not computable from what the server returns.
+  function clubWodViewerLineHtml(board) {
+    const viewer = board.viewer || {};
+    if (!viewer.attached) return "";
+    const results = Array.isArray(board.results) ? board.results : [];
+    const idx = results.findIndex((r) => r && r.is_viewer);
+    const total = Number(board.result_count || 0) || results.length;
+    const figure = viewer.result_text
+      ? `<span class="mono" style="color:var(--brass);font-weight:800;">${esc(viewer.result_text)}</span>`
+      : `<span style="color:var(--steel);">בלי תוצאה מספרית</span>`;
+    const place = idx >= 0 && total
+      ? `<span style="color:var(--steel);font-size:12px;">${esc("צירפת במקום " + (idx + 1) + " מתוך " + total)}</span>`
+      : "";
+    return `<div class="club-wod-viewer-line log-row" style="margin-top:10px;border-color:var(--energy);">
+      <span style="font-weight:700;font-size:13px;">התוצאה שלך</span>
+      <span class="flex gap-8" style="align-items:center;">${place}${figure}</span>
+    </div>`;
   }
 
   // ONE result row. No index, no position, no trophy - see rule 2 above.

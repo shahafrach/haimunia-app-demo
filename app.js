@@ -2569,6 +2569,21 @@ async function saveSet(sanityConfirmed) {
         mov ? `נשמר: ${mov.name} — ${celebrationLabel}` : "נשמר");
     }
     if (emitPR && prDetail) emitCommunityPrCreated(entry, mov, prDetail);
+    // THE FEED FILLS ITSELF FROM REAL TRAINING. Last, deliberately, and after
+    // the PR announcement above: the community layer only offers the plain
+    // "לשתף עם המועדון?" prompt when nothing richer is already claiming this
+    // moment - a PR prompt, an achievement celebration, or the full-screen
+    // card celebrateAfterSave() may have just opened - so this has to run
+    // once every one of them has had its say. It is a courtesy signal and
+    // nothing more: it writes nothing, it is a no-op when cloud.js was never
+    // loaded (the member never opened the Community tab), and it cannot open
+    // anything the member has switched off.
+    //
+    // NEVER ON AN EDIT, the same gate the PR announcement above and all three
+    // celebration gates already take: correcting Tuesday's typo on Thursday
+    // is not a session, and the feed is supposed to fill itself from real
+    // training rather than from bookkeeping.
+    if (!existing) offerCommunityWorkoutShare("strength_entry", entry.id);
   }
   } finally { savingSet = false; }
 }
@@ -2870,13 +2885,33 @@ function runToastAction() {
 }
 function renderToastBar() {
   if (!pendingToast) return "";
-  // Sits above #bottomNavWrap (z-index:30) and below every .modal-overlay
-  // (z-index:50), so it never covers the tab bar it floats over and never
-  // paints over a dialog. pointer-events are off on the full-width rail and
-  // back on only for the toast itself, so it never eats a tap meant for the
-  // content underneath. role="status" so a screen reader hears it without
-  // focus being yanked out of the list being edited.
-  return `<div id="appToastBar" role="status" aria-live="polite" style="position:fixed; left:0; right:0; bottom:calc(env(safe-area-inset-bottom,0px) + 84px); z-index:45; display:flex; justify-content:center; padding:0 16px; pointer-events:none;">
+  // Painted into #appToastDock (index.html), a position:absolute child of
+  // #bottomNavWrap, so it sits entirely ABOVE the save bar and the tab bar
+  // rather than on top of them.
+  //
+  // UX REVIEW, FINDING 1. This used to be its own `position:fixed;
+  // bottom:calc(env(safe-area-inset-bottom,0px) + 84px); z-index:45`
+  // element. 84px was a hand-tuned offset against a bottom nav that is
+  // 138px tall on the viewport it was tuned for, so it cleared neither
+  // half of it: measured at 390x844 the toast occupied y=704-760 while
+  // #bottomBarBtn - the save button that had just been tapped - sits at
+  // y=716-768, a 44px overlap, and document.elementFromPoint() at the save
+  // button's own centre returned this card for the full five-second window. The member
+  // saw "the set was saved" written across the control they would use to
+  // save the next one, and a tap aimed at it hit the toast instead. The
+  // offset is gone rather than enlarged: the dock derives the clearance
+  // from the wrapper's own height, which is the only number that stays
+  // correct when the save bar is hidden, when an install dock is stacked
+  // in, or on a device with a large safe-area inset. See #appToastDock.
+  //
+  // No z-index of its own any more: inside the wrapper it inherits 30, so
+  // it is above the page content and still below every .modal-overlay
+  // (z-index:50) - it must never paint over a dialog. pointer-events are
+  // off on the full-width rail (and on the dock) and back on only for the
+  // card itself, so it never eats a tap meant for the content underneath.
+  // role="status" so a screen reader hears it without focus being yanked
+  // out of the list being edited.
+  return `<div id="appToastBar" role="status" aria-live="polite" style="display:flex; justify-content:center; padding:0 16px; pointer-events:none;">
       <div class="flex items-center gap-10" style="pointer-events:auto; width:100%; max-width:420px; min-height:56px; background:var(--surface); border:1px solid var(--brass); border-radius:14px; padding:10px 10px 10px 14px; box-shadow:0 10px 30px rgba(0,0,0,.35);">
         <span style="flex:1; min-width:0; color:var(--chalk); font-size:13px; font-weight:700;">${bidiText(pendingToast.label)}</span>
         ${pendingToast.action ? `<button class="chip-btn" data-action="toast-action">${esc(pendingToast.action.label)}</button>` : ""}
@@ -3138,7 +3173,7 @@ async function deleteMeasurementEntry(id) {
     offerUndo(`${type ? type.name : "המדידה"} — ${removed.value} ס״מ נמחקה`, () => restoreMeasurementEntry(removed));
   }
   // Full render(), not renderMeasureArea(): the undo toast just offered
-  // above is part of #content's own outer shell (renderToastBar(), see
+  // above is painted by render()'s own write to #appToastDock (see
   // render()), not the measurements section - renderMeasureArea() alone
   // would leave the toast built in memory but never actually painted,
   // exactly the same reason deleteMeasureType() (the sibling this mirrors)
@@ -4244,6 +4279,21 @@ function communityShareCandidateFor(type, id) {
   return null;
 }
 
+// The one call saveSet() and saveWod() make into the community layer after a
+// save that actually landed on disk. cloud.js owns every decision behind it -
+// the member's "stop offering" switch, the club's feed module, the profile
+// privacy toggles, whether another prompt is already on screen, and whether
+// this record has been offered before; this end only knows what was saved.
+//
+// Read off window and guarded, like claimCommunityAchievements and
+// renderShareControl: cloud.js is loaded lazily and a device that has never
+// opened the Community tab must keep logging exactly as it did before. A bare
+// identifier here would be a ReferenceError in the middle of a save.
+function offerCommunityWorkoutShare(type, id) {
+  if (typeof window.offerWorkoutSharePrompt !== "function") return;
+  try { window.offerWorkoutSharePrompt(type, id); } catch (e) { /* the community layer owns its own failures; a save never fails for one */ }
+}
+
 const TEXT_SCALE_KEY = "haimunia-demo:textScale";
 let textScalePref = "normal";
 function loadTextScalePref() {
@@ -4668,6 +4718,13 @@ async function saveWod(sanityConfirmed) {
     celebrateAfterSave(celebratePR ? `${w.name} — ${formatWodEntry(entry)}` : null,
       `נשמר: ${w.name} — ${formatWodEntry(entry)}`);
   }
+  // Same call, same position and the same reasoning as saveSet()'s - a logged
+  // WOD is exactly as much a shareable session as a logged set, and the two
+  // save paths drifting on this is the defect CLAUDE.md's "sibling drift"
+  // rule names. See offerCommunityWorkoutShare() for what it does and does
+  // not do - including the never-on-an-edit gate, which this side needs for
+  // exactly the reason celebratePR above needs it.
+  if (!existing) offerCommunityWorkoutShare("wod_entry", entry.id);
   } finally { savingWod = false; }
 }
 // Live bug hunt (2026-09-11): same two-tab staleness fix as startEditEntry()
@@ -5126,7 +5183,7 @@ function renderLogTab() {
     <div class="day-empty">${ICONS.emptyDay}<span>${isToday ? "עדיין לא נרשמו סטים היום. כאן מתעדים את האימון שהושלם." : `עדיין לא נרשמו סטים ב-${esc(dayLabel)}.`}</span></div>` : `
     <h2 class="section-label">${isToday ? "סיכום האימון" : `סיכום ${esc(dayLabel)}`}</h2>
     <div class="chart-card" style="margin-bottom:8px;">${renderDayEntriesListHtml(dayEntries, [])}</div>
-    <button class="link-btn" data-action="view-log-date-calendar" style="display:flex; align-items:center; justify-content:space-between; width:100%; margin-bottom:0;">
+    <button class="link-btn link-btn--tap" data-action="view-log-date-calendar" style="display:flex; align-items:center; justify-content:space-between; width:100%; margin-bottom:0;">
       <span>הערות לאימון ופרטי היום · ${bidiText(entrySummary(dayEntries[0]))}</span>
       <span class="flex items-center gap-6">לוח השנה${ICONS.chevronsLeft}</span>
     </button>`}
@@ -5255,7 +5312,7 @@ function renderLogTab() {
       // where the full control (live round count, block label, panel)
       // still gets the same weight it always did.
       if (!ladderMode) {
-        return `<button data-action="toggle-ladder-mode" class="link-btn" aria-pressed="false" style="display:block; margin-bottom:12px; font-size:12.5px;">${ICONS.ladder} רישום סולם / סופרסט</button>`;
+        return `<button data-action="toggle-ladder-mode" class="link-btn link-btn--tap" aria-pressed="false" style="display:block; margin-bottom:12px; font-size:12.5px;">${ICONS.ladder} רישום סולם / סופרסט</button>`;
       }
       return `
       <button data-action="toggle-ladder-mode" class="movement-btn active" aria-pressed="true" style="margin-bottom:0;">
@@ -5281,7 +5338,7 @@ function renderLogTab() {
           <button class="format-chip ${selectedId === ladderPartnerId ? "active" : ""}" style="padding:8px 10px; font-size:12.5px;" data-action="ladder-switch-exercise" data-id="${esc(ladderPartnerId)}" role="radio" aria-checked="${selectedId === ladderPartnerId}">${bidiText(partner.name)}</button>
         </div>`;
         })() : `
-        <button data-action="open-picker" data-target="partner" class="link-btn" style="display:block; margin-bottom:10px; font-size:12.5px;">${ICONS.repeat} הוספת תרגיל שני (סופרסט)</button>`}
+        <button data-action="open-picker" data-target="partner" class="link-btn link-btn--tap" style="display:block; margin-bottom:10px; font-size:12.5px;">${ICONS.repeat} הוספת תרגיל שני (סופרסט)</button>`}
         ${rounds.length ? `<div class="flex wrap gap-8">
           ${rounds.map((r, i) => `
             <span class="flex items-center gap-6 mono" style="background:var(--surface2); border-radius:10px; padding:6px 10px; font-size:13px; font-weight:700;">
@@ -5750,13 +5807,21 @@ function renderCalDetail() {
 
     <h3 class="section-label" style="margin-top:16px;">איך היה האימון היום</h3>
     <textarea id="sessionNoteInput" class="text-input" dir="auto" maxlength="${LIMITS.notesLen}" rows="3" placeholder="הרגשה, אנרגיה, מה עבד ומה פחות..." aria-label="איך היה האימון היום" style="resize:vertical; min-height:64px; font-family:inherit; margin-bottom:8px;">${esc(calNoteDate === calSelectedDate ? calNoteText : "")}</textarea>
-    <button data-action="save-session-note" data-date="${esc(calSelectedDate)}" class="link-btn" style="display:block;">שמירת הערה</button>
+    <button data-action="save-session-note" data-date="${esc(calSelectedDate)}" class="link-btn link-btn--tap" style="display:block;">שמירת הערה</button>
     </div>
   `;
 }
 
 function daysAgoLabel(iso) {
-  if (!iso) return "מעולם לא";
+  // UX review, finding 2, wording half. This returned "מעולם לא" ("never"),
+  // which is the same false-by-construction assertion 202609060020 took out
+  // of the coach lists and admin.js took out of the roster: an absence of
+  // rows in the log is a fact about the log, not a verdict on the member,
+  // and on this screen it is read by someone who may well have trained the
+  // category for years before installing the app. "טרם נרשם" ("not recorded
+  // yet") says what is actually true, and it is a statement about the
+  // record. The colour half of the finding is in renderVolumeReport().
+  if (!iso) return "טרם נרשם";
   const diff = daysSinceISODate(iso);
   if (diff === 0) return "היום";
   if (diff === 1) return "לפני יום";
@@ -5785,9 +5850,29 @@ function renderVolumeReport() {
     // headroom (4.78/4.81) and improves every other state too, checked
     // against both themes' real token values, not assumed.
     let flagColor = "var(--steel)", flagBg = "rgba(138,143,151,.10)", flagText = daysAgoLabel(lastDate);
-    if (diff === null) { flagColor = "var(--red-text)"; flagBg = "rgba(216,69,60,.10)"; }
-    else if (diff <= 7) { flagColor = "var(--green-text)"; flagBg = "rgba(75,155,95,.10)"; }
-    else if (diff > 14) { flagColor = "var(--red-text)"; flagBg = "rgba(216,69,60,.10)"; }
+    // UX REVIEW, FINDING 2. `diff === null` used to take this row's
+    // var(--red-text) on rgba(216,69,60,.10) - byte-for-byte the `diff > 14`
+    // styling below it - so a category the member has never logged and a
+    // category they have let lapse for a month rendered as the same alarm.
+    // Measured at 390x844 with a single set logged, five of the six rows
+    // were red - on a screen the member had done nothing wrong on yet, and
+    // on a brand-new install it is all six. That is the fastest way there
+    // is to teach someone that red here means nothing.
+    //
+    // Never-logged now keeps the neutral default declared above, and red is
+    // left to mean exactly one thing: trained, and overdue. The two neutral
+    // rows are told apart by their words, not their colour - "טרם נרשם"
+    // against "לפני 9 ימים" - because they are the same kind of fact: no
+    // action is being asked for.
+    //
+    // The null branch is explicitly separated rather than deleted: `null <=
+    // 7` coerces to 0 <= 7 and is TRUE, so falling through would paint every
+    // never-logged category as trained-this-week green, which is worse than
+    // the defect being fixed.
+    if (diff !== null) {
+      if (diff <= 7) { flagColor = "var(--green-text)"; flagBg = "rgba(75,155,95,.10)"; }
+      else if (diff > 14) { flagColor = "var(--red-text)"; flagBg = "rgba(216,69,60,.10)"; }
+    }
     return `
       <div class="report-row">
         <div class="flex items-center gap-8">
@@ -6783,7 +6868,10 @@ function render() {
   // overlays, for the same reason cloud.js concatenates its own last (see
   // COMM-234 there): every overlay here shares .modal-overlay and the same
   // fixed z-index:50, so two open at once stack by DOM order alone. The undo
-  // bar sits below both at z-index:45 and is not an overlay at all.
+  // bar is not in this concatenation at all any more and is not an overlay
+  // either: it is written to #appToastDock below, inside #bottomNavWrap,
+  // where it inherits that wrapper's z-index:30 and so still loses to every
+  // one of these.
   // Immersive club redesign: one attribute drives every scene page's chrome
   // (header overlay, hidden brand-stripe, dark bottom bar) via CSS alone -
   // see body[data-scene] rules in index.html. Stamped on <body>, not #app:
@@ -6813,7 +6901,15 @@ function render() {
     // field out from under the member's own cursor.
     try { typed = document.activeElement.value; } catch (e) { typed = null; }
   }
-  document.getElementById("content").innerHTML = content + cloudOverlay + renderToastBar() + renderAppConfirmSheet();
+  document.getElementById("content").innerHTML = content + cloudOverlay + renderAppConfirmSheet();
+  // The toast is NOT part of #content any more - it is painted into its own
+  // dock inside #bottomNavWrap so that it can be positioned against the
+  // bottom nav instead of against the viewport (finding 1; see
+  // renderToastBar()). Written on every render, including the one the
+  // expiry timer fires, so clearing pendingToast still clears the bar.
+  // Guarded because several unit tests build a #content in isolation.
+  const toastDock = document.getElementById("appToastDock");
+  if (toastDock) toastDock.innerHTML = renderToastBar();
   const contentPanel = document.getElementById("content");
   const activeNavItem = getNavItems().find((i) => i.tab === tab);
   if (activeNavItem && document.getElementById(activeNavItem.rowId)) contentPanel.setAttribute("aria-labelledby", activeNavItem.rowId);
