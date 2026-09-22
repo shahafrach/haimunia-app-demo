@@ -302,13 +302,36 @@ test("the seed covers both inactive states and the never-opened-the-app member",
 });
 
 test("exercise names in the seed stay in English, the vernacular in an Israeli box", () => {
-  assert.match(seed, /'Back Squat'/);
-  assert.match(seed, /'Deadlift'/);
+  // The two names moved when section 6 stopped inventing its own movement
+  // strings and started letting pr_share derive them from a seeded
+  // record_type='movement' row. They are deliberately names src/constants.js
+  // does NOT already ship: only a CUSTOM movement is ever synced to
+  // private_records, so a built-in id has no server row for pr_share's title
+  // lookup to find, and seeding "Back Squat" as a custom movement would be a
+  // state the app's own addMovement() refuses to create (it matches on name
+  // first). The rule this test exists for is unchanged: English, untranslated.
+  assert.match(seed, /'Sandbag Clean'/);
+  assert.match(seed, /'Yoke Carry'/);
   assert.doesNotMatch(seed, /'סקוואט אחורי'|'הרמת מת'/, "movement names are not translated");
 });
 
 test("the seed populates all three of Celebrate's non-attendance sources", () => {
-  assert.match(seed, /post_type = 'POST_PR'/, "PRs");
+  // PRs, through pr_share() and nothing else. This assertion used to read
+  // /post_type = 'POST_PR'/ and pinned the exact write 202609110004 now
+  // refuses: an authenticated caller setting POST_PR directly raises 'post
+  // type requires server-verified evidence' unless the
+  // app.allow_pr_achievement_write pin is on, which only pr_share()/
+  // ach_share() set - and only after reading the caller's own
+  // private_records row. The seed aborted there, so the whole file stopped
+  // running on a fresh local stack while this test stayed green: it was
+  // pinning the shape, not the outcome.
+  assert.match(seed, /public\.pr_share\(/, "PRs, published the way the app publishes them");
+  // Anchored to the start of a line so the seed's own prose about the write
+  // it no longer makes does not trip its own guard.
+  assert.doesNotMatch(seed, /^\s*set post_type = 'POST_PR'/m,
+    "a direct POST_PR write is refused by workout_posts_guard_privileged_type (202609110004)");
+  assert.doesNotMatch(seed, /set_config\('app\.allow_pr_achievement_write'/,
+    "and setting the guard's own pin from the seed would forge the evidence the guard exists to demand");
   assert.match(seed, /show_prs = true/, "and opts those authors in, since show_prs defaults false and gates the Celebrate branch");
   assert.match(seed, /\['yael_b','367'/, "an anniversary whose crossing falls inside the Celebrate window");
   assert.match(seed, /insert into public\.challenge_participants[\s\S]*completed_at/, "a challenge completion");
