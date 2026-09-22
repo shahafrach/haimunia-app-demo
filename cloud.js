@@ -384,9 +384,12 @@
     // ---- club: the box itself and its club-wide surfaces ----
     // `row` is the caller's own club record. features/featuresLoaded is the
     // club_features module map; moduleBusy (COMM-321) is which module_key (if
-    // any) has an in-flight toggle write.
+    // any) has an in-flight toggle write, and configBusy (202609220002) the
+    // same for a threshold save. Two fields rather than one because the two
+    // writes disable different things: a toggle in flight greys every switch
+    // on the panel, a threshold save greys only its own module's fields.
     club: {
-      row: null, features: {}, featuresLoaded: false, moduleBusy: null,
+      row: null, features: {}, featuresLoaded: false, moduleBusy: null, configBusy: null,
       announcements: [], announcementSaving: false, streaks: [],
       inactiveMembers: [], newMembers: [], activitySignal: null,
       weeklyChallenge: null, weeklyLeaderboard: [],
@@ -704,6 +707,13 @@
       view: null, form: null,
       _rtId: null,
       _consistencyWeekLogged: {}, _consistencySessionCounts: {},
+      // 202609220002. The caller's own onboarding challenge, exactly as
+      // onboarding_challenge_state() returns it - {state, goal_sessions,
+      // window_days, progress, days_left, ...}. `state` is deliberately null
+      // rather than "none" until the first read: "we have not asked" and "we
+      // asked and they are not eligible" render differently, and defaulting
+      // to the second would flash a decision at a member we had not made yet.
+      onboarding: { data: null, loading: false, loaded: false, error: false, busy: false },
     },
 
     // ---- events (COMM-213..217) ----
@@ -885,6 +895,13 @@
       // all three actions on one row share it, so a row disables itself
       // entirely rather than only the one control that was tapped.
       engage: { items: [], loading: false, loaded: false, error: false, profiles: {}, reachedOut: {}, busy: null },
+      // 202609220002. coach_tasks_refresh() rows exactly as returned, already
+      // ordered as a work queue (overdue first) - never re-sorted here, the
+      // same rule celebrate.items follows. busy holds the id of whichever
+      // task has a close or a contact in flight. contactDrafts is the
+      // optional note beside each task, keyed by MEMBER id rather than task
+      // id, because one note is one contact even when it closes four tasks.
+      tasks: { items: [], loading: false, loaded: false, error: false, busy: null, contactDrafts: {} },
       // COMM-315. Coach Dashboard's own recognition section: Member of the
       // Week, one rotating category a week (consistency streak -> most PRs ->
       // challenge completion -> coach's pick, member_of_week_category() -
@@ -1168,7 +1185,22 @@
     // Hebrew sentence matters far more for a switch whose feature nobody
     // has seen than for "אירועים", and clubModuleRow() renders it only when
     // a row carries one, so no existing row changed.
-    { key: "onboarding_challenge", label: "אתגר כניסה לחבר/ה חדש/ה", desc: "אתגר ראשון קצר שמוצע אוטומטית למי שהצטרף/ה זה עתה למועדון.", clientOnly: true, planned: true },
+    // BUILT 2026-09-22 (202609220002). planned came off with the feature, and
+    // so did clientOnly: onboarding_challenge_state()/_respond() refuse while
+    // the key is off, and onboarding_challenge_offers' own SELECT policy
+    // carries club_feature_enabled('onboarding_challenge'). That is a real
+    // server gate, so the panel may say so.
+    //
+    // The description no longer says "אוטומטית". It is offered automatically
+    // and ACCEPTED deliberately, and the distinction is the whole feature -
+    // an admin reading this row must not switch on something they think
+    // enrolls their members.
+    { key: "onboarding_challenge", label: "אתגר כניסה לחבר/ה חדש/ה", desc: "אתגר קצר שמוצע לכל מי שהצטרף/ה זה עתה, ומתחיל רק אם בחרו לקבל אותו.",
+      settings: [
+        { id: "goal_sessions", label: "מספר אימונים ליעד", def: 8, min: 1, max: 60 },
+        { id: "window_days", label: "אורך האתגר בימים", def: 30, min: 1, max: 365 },
+        { id: "offer_within_days", label: "עד כמה ימים מההצטרפות מציעים", def: 30, min: 1, max: 365 },
+      ] },
     // planned: true came off with the feature (2026-09-22), the same handover
     // 202609190002 set up and strength_percentages below went through first:
     // the marker comes off in the commit that adds the gate. The benchmark
@@ -1209,7 +1241,21 @@
     // The coach-side three of 202609190002's seven. See the block in
     // CLUB_MODULE_TOGGLES above for what planned/clientOnly mean here and
     // why the keys exist before the features do.
-    { key: "coach_tasks", label: "משימות למאמן/ת", desc: "רשימת משימות שהמאמן/ת עובר/ת עליהן - לברך, לקלוט או לחזור אל מי שנעלם/ה.", clientOnly: true, planned: true },
+    // BUILT 2026-09-22 (202609220002). Both markers come off: coach_tasks'
+    // own SELECT and UPDATE policies carry club_feature_enabled('coach_tasks'),
+    // so switching it off stops a coach reading a task even with a hand-made
+    // request - which is what "נאכף בשרת" means and what clientOnly would
+    // have denied.
+    { key: "coach_tasks", label: "משימות למאמן/ת", desc: "רשימת משימות שהמאמן/ת עובר/ת עליהן - לברך, לקלוט או לחזור אל מי שנעלם/ה.",
+      settings: [
+        { id: "welcome_by_day", label: "ברכה עד יום", def: 7, min: 1, max: 180 },
+        { id: "first_class_followup_days", label: "מעקב אחרי אימון ראשון (ימים)", def: 3, min: 0, max: 60 },
+        { id: "low_attendance_window_days", label: "חלון בדיקת נוכחות (ימים)", def: 21, min: 1, max: 180 },
+        { id: "low_attendance_min_sessions", label: "מינימום אימונים בחלון", def: 2, min: 1, max: 30 },
+        { id: "checkin_day", label: "שיחת מעקב ביום", def: 60, min: 1, max: 365 },
+        { id: "no_contact_days", label: "התראה אחרי ימים ללא קשר", def: 30, min: 1, max: 365 },
+        { id: "onboarding_window_days", label: "חלון קליטה (ימים)", def: 90, min: 1, max: 730 },
+      ] },
     { key: "owner_report", label: "דוח לבעלי המועדון", desc: "סיכום תקופתי על פעילות המועדון למי שמנהל/ת אותו.", clientOnly: true, planned: true },
     { key: "arbox_attendance", label: "נוכחות מ-Arbox", desc: "משיכת נוכחות בשיעורים מ-Arbox במקום הסתמכות על דיווח עצמי בלבד.", clientOnly: true, planned: true },
   ];
@@ -5488,6 +5534,13 @@
     // feed_leaderboard() call the first time a member lands on the Boards
     // sub-tab, not on every session boot.
     if (state.ui.tab === "boards" && state.user && !state.leaderboard.loaded && !state.leaderboard.loading) loadConsistencyLeaderboard();
+    // 202609220002. The member's own onboarding challenge, fetched the first
+    // time they open the sub-tab its card lives on - the same lazy shape the
+    // leaderboard above uses, and the same reason: a member who never opens
+    // Boards costs the server nothing. onboarding_challenge_state() is the
+    // call that CREATES the offer, so this is also where an eligible new
+    // member is first offered it.
+    if (state.ui.tab === "boards" && state.user && !state.challenges.onboarding.loaded && !state.challenges.onboarding.loading) loadOnboardingChallenge();
     // COMM-231. The directory's own paginated roster, fetched the first time
     // a member lands on the Directory sub-tab.
     if (state.ui.tab === "directory" && state.user && !state.members.directory.loaded && !state.members.directory.loading) loadDirectory(true);
@@ -5526,6 +5579,10 @@
     // too (COMM-226: no code path reaches coach_engagement_flags outside
     // the flag-gated staff surface).
     if (state.ui.tab === "coach" && isStaff()) {
+      // 202609220002. Same lazy shape as the three below it. The module gate
+      // is inside loadCoachTasks() rather than here, so there is one place
+      // that decides whether this feature reads anything.
+      if (!state.coach.tasks.loaded && !state.coach.tasks.loading) loadCoachTasks();
       if (!state.coach.celebrate.loaded && !state.coach.celebrate.loading) loadCoachCelebrate();
       if (!state.coach.welcome.loaded && !state.coach.welcome.loading) loadCoachWelcome();
       if (!state.coach.memberOfWeek.loaded && !state.coach.memberOfWeek.loading) loadCoachMemberOfWeek();
@@ -5556,6 +5613,12 @@
     });
     document.querySelectorAll("[data-coach-contact-note]").forEach((el) => {
       el.addEventListener("input", () => { state.coach.welcome.contactDrafts[el.dataset.coachContactNote] = el.value; });
+    });
+    // 202609220002. The task list's own note field, same no-rerender-on-input
+    // shape and for the same reason. Keyed by MEMBER id, not task id: one
+    // note is one contact even when that contact closes four tasks.
+    document.querySelectorAll("[data-coach-task-note]").forEach((el) => {
+      el.addEventListener("input", () => { state.coach.tasks.contactDrafts[el.dataset.coachTaskNote] = el.value; });
     });
     // COMM-315. Same no-rerender-on-input shape as the two listeners just
     // above. The reason field's live 500-char counter is DOM-patched
@@ -5761,6 +5824,12 @@
     document.querySelectorAll(".manage-area").forEach((el) => {
       el.addEventListener("toggle", () => { state.admin.openAreas[el.id] = el.open; });
     });
+    // 202609220002. The per-module threshold disclosures, same persistence
+    // and the same store. Without it, saving a value rerenders the panel and
+    // the fields an admin is working in fold shut under them.
+    document.querySelectorAll(".club-module-settings").forEach((el) => {
+      el.addEventListener("toggle", () => { state.admin.openAreas[el.id] = el.open; });
+    });
     // Same persistence, deliberately NOT the .manage-area class - see
     // renderInviteManagement()'s own comment for why this one disclosure
     // keeps its own styling instead of adopting that system's look.
@@ -5897,6 +5966,10 @@
          </button>`
       : "";
     const sections = [
+      // 202609220002, first in the rail. "דורש תשומת לב" is the one place on
+      // this screen allowed to be a to-do list, and this is the only section
+      // in it that literally is one.
+      renderCoachTasksSection(),
       state.featureFlags.coachEngage ? renderCoachEngageSection() : "",
       renderCoachCelebrateSection(),
       renderCoachWelcomeSection(),
@@ -5910,6 +5983,7 @@
   // app.js after it renders the staff home.
   window.staffHomeAfterRender = function () {
     if (!state.user || !isStaff()) return;
+    if (!state.coach.tasks.loaded && !state.coach.tasks.loading) loadCoachTasks();
     if (!state.coach.celebrate.loaded && !state.coach.celebrate.loading) loadCoachCelebrate();
     if (!state.coach.welcome.loaded && !state.coach.welcome.loading) loadCoachWelcome();
     if (state.featureFlags.coachEngage && !state.coach.engage.loaded && !state.coach.engage.loading) loadCoachEngageFlags();
@@ -6404,6 +6478,15 @@
       const item = state.coach.celebrate.items.find((it) => celebrateItemKey(it) === el.dataset.key);
       if (item) congratulateCelebrateItem(item);
     }
+    // 202609220002 the onboarding challenge. Two taps, and they are the only
+    // two things in the app that can enrol a member in it.
+    else if (action === "save-club-feature-config") saveClubFeatureConfig(el.dataset.key);
+    else if (action === "onboarding-challenge-accept") onboardingChallengeRespond(true);
+    else if (action === "onboarding-challenge-decline") onboardingChallengeRespond(false);
+    // 202609220002 coach tasks.
+    else if (action === "coach-tasks-retry") { state.coach.tasks.loaded = false; loadCoachTasks(); }
+    else if (action === "coach-task-contact") coachTaskContact(el.dataset.id);
+    else if (action === "coach-task-dismiss") coachTaskDismiss(el.dataset.id);
     else if (action === "coach-welcome-retry") loadCoachWelcome();
     else if (action === "coach-welcome-member") coachWelcomeMember(el.dataset.id);
     else if (action === "coach-assign-self") coachAssignCoach(el.dataset.id, state.user && state.user.id);
@@ -6697,7 +6780,7 @@
         state.members.classmatesToday = { items: [], loading: false, loaded: false, error: false };
         state.club.streaks = []; state.club.announcements = []; state.club.announcementSaving = false;
         state.club.weeklyChallenge = null; state.club.weeklyLeaderboard = []; state.club.inactiveMembers = [];
-        state.club.newMembers = []; state.club.activitySignal = null; state.club.moduleBusy = null; state.club.features = {}; state.club.featuresLoaded = false;
+        state.club.newMembers = []; state.club.activitySignal = null; state.club.moduleBusy = null; state.club.configBusy = null; state.club.features = {}; state.club.featuresLoaded = false;
         state.admin.reports = []; state.admin.modQueue = []; state.admin.modQueueLoaded = false;
         state.admin.modQueueStatus = "open"; state.admin.modQueueLoading = false; state.admin.modQueueError = false;
         state.admin.modAction = null; state.admin.modContext = null; state.admin.reportSheet = null; state.admin.pins = [];

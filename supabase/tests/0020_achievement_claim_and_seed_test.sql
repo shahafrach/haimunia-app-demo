@@ -31,16 +31,22 @@ select * from no_plan();
 -- the seed shape
 -- =====================================================================
 select tests.set_auth(tests.uid('m1'));
+-- 28, not 27, since 202609220002. The twenty-eighth is
+-- 'onboarding_challenge_done', the first CHALLENGE_COMPLETED definition ever
+-- to have a producer - the onboarding challenge's completion trigger. The
+-- number is bumped rather than the assertion narrowed on purpose: this file
+-- is where "how many badges does this club have" is written down, and a
+-- migration that adds one should have to come here and say so.
 select results_eq(
   $$ select count(*)::int from public.achievement_definitions
      where trigger_type <> 'ATTENDANCE_RECORDED' $$,
-  $$ values (27) $$,
-  '27 non-attendance achievement definitions are present');
+  $$ values (28) $$,
+  '28 non-attendance achievement definitions are present');
 select results_eq(
   $$ select count(*)::int from public.achievement_definitions
      where trigger_type <> 'ATTENDANCE_RECORDED' and enabled $$,
-  $$ values (27) $$,
-  'all 27 non-attendance rows are enabled');
+  $$ values (28) $$,
+  'all 28 non-attendance rows are enabled');
 select results_eq(
   $$ select count(*)::int from public.achievement_definitions
      where trigger_type = 'ATTENDANCE_RECORDED' $$,
@@ -84,8 +90,8 @@ select results_eq(
 select tests.clear_auth();
 select results_eq(
   $$ select count(*)::int from public.achievement_definitions $$,
-  $$ values (31) $$,
-  'sanity: 27 non-attendance plus 4 attendance rows, 31 total, before the re-run');
+  $$ values (32) $$,
+  'sanity: 28 non-attendance plus 4 attendance rows, 32 total, before the re-run');
 insert into public.achievement_definitions
   (code, name, description, category, trigger_type, threshold, repeatable, visibility, icon, enabled, config)
 values
@@ -96,7 +102,7 @@ on conflict (code) do update set
   visibility = excluded.visibility, icon = excluded.icon, enabled = excluded.enabled, config = excluded.config;
 select results_eq(
   $$ select count(*)::int from public.achievement_definitions $$,
-  $$ values (31) $$,
+  $$ values (32) $$,
   're-running the seed for one row changes no row count');
 
 -- A gameable metric definition to prove the community/challenge/club branch
