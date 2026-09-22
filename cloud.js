@@ -361,6 +361,13 @@
       // other surface a member is shown.
       roles: {},
       blockedIds: [], blocksLoaded: false, profileView: null,
+      // 202609220006. The management accounts THIS caller must not be shown,
+      // as the server answered them - empty for a staff viewer, because
+      // management_user_ids() applies the staff exemption itself rather than
+      // leaving the client to re-derive it. Same load-once-then-filter-at-
+      // render shape as blockedIds above; see isManagementAccount() in
+      // src/community/directory.js for why that is the shape.
+      managementIds: [], managementLoaded: false,
       // Live bug hunt (2026-09-11): blockedIds merges BOTH directions (who I
       // blocked AND who blocked me) into one set, by design, for the
       // comment/reaction-hiding check (isBlockedUser()) - it never needed to
@@ -2138,7 +2145,7 @@
       // that at read time now (see weeklyChallengeIsValid), so there is no
       // ordering left to preserve and no reason to serialise a round trip in
       // front of thirteen parallel ones.
-      await Promise.all([loadPermissions(), loadFeed(), loadStreaks(), loadAnnouncements(), loadWeeklyChallenge(), loadClubWods(), loadClubWodBoards(), loadClubSummary(), loadBlockedIds(), loadFollowingIds(), loadMyAchievements(), loadNotifUnread(), loadNotifPrefs(), loadPins(), loadEvents(), loadOnboardingProgress(), loadOnboardingStepContent()]);
+      await Promise.all([loadPermissions(), loadFeed(), loadStreaks(), loadAnnouncements(), loadWeeklyChallenge(), loadClubWods(), loadClubWodBoards(), loadClubSummary(), loadBlockedIds(), loadManagementIds(), loadFollowingIds(), loadMyAchievements(), loadNotifUnread(), loadNotifPrefs(), loadPins(), loadEvents(), loadOnboardingProgress(), loadOnboardingStepContent()]);
       if (isStaff()) await Promise.all([loadInactiveMembers(), loadNewMembers(), loadActivitySignal()]);
       if (hasPerm(PERM.COMMENT_MODERATE) || isAdmin()) await loadModQueue();
       if (hasPerm(PERM.MEMBER_RESTRICT) || hasPerm(PERM.COMMENT_MODERATE) || isAdmin()) await loadRestrictions();
@@ -2883,10 +2890,17 @@
   window.renderShareControl = function (type, id) {
     if (!window.isCommunitySignedIn || !window.isCommunitySignedIn()) return "";
     const key = shareKey(type, id);
-    if (!state.posts.openShare[key]) return `<button data-community-action="toggle-share" data-type="${esc(type)}" data-id="${esc(id)}" aria-label="שיתוף לקהילה" style="color:var(--steel);padding:4px;">📤</button>`;
+    // The glyph is SHARE_ICONS.club (src/community/outward.js), the same one
+    // the "ההישגים שלי" rows now draw for "share this to the club" - it was
+    // an outbox-tray emoji here and an arrow emoji there, two different
+    // pictures of one action, each rendered by whatever emoji font the phone
+    // happened to ship. See that constant's own comment. (Named rather than
+    // typed, so test/member-surface-polish.test.mjs can assert this function
+    // contains no emoji at all.)
+    if (!state.posts.openShare[key]) return `<button data-community-action="toggle-share" data-type="${esc(type)}" data-id="${esc(id)}" aria-label="שיתוף לקהילה" style="color:var(--steel);padding:4px;line-height:0;">${SHARE_ICONS.club}</button>`;
     return `<div class="flex items-center gap-6" style="flex-wrap:wrap;">
       ${isModuleEnabled("post_photos") ? `<input type="file" id="photo-${esc(id)}" accept="image/jpeg,image/png,image/webp" class="file-input-hidden"/>
-      <label class="chip-btn" for="photo-${esc(id)}" style="cursor:pointer;padding:5px 9px;font-size:11px;">📷</label>` : ""}
+      <label class="chip-btn" for="photo-${esc(id)}" style="cursor:pointer;padding:5px 9px;font-size:11px;">${SHARE_ICONS.camera}<span class="sr-only">הוספת תמונה</span></label>` : ""}
       <button class="chip-btn" data-community-action="publish" data-type="${esc(type)}" data-id="${esc(id)}" data-visibility="followers" style="padding:5px 9px;font-size:11px;">לעוקבים</button>
       <button class="chip-btn primary" data-community-action="publish" data-type="${esc(type)}" data-id="${esc(id)}" data-visibility="public" style="padding:5px 9px;font-size:11px;">לכולם</button>
       <button class="link-btn" data-community-action="toggle-share" data-type="${esc(type)}" data-id="${esc(id)}" aria-label="ביטול שיתוף" style="padding:5px;">✕</button>
@@ -4275,7 +4289,7 @@
     // gates above it: this screen is all there is until a profile exists,
     // and the whole screen changing to the real tabbed UI afterward is the
     // confirmation, not just a toast that's easy to miss.
-    if (!state.profile) return `<div class="chart-card">${renderJoinProgress(3)}<div style="font-weight:800;font-size:18px;margin-bottom:6px;">השלמת פרופיל</div><div style="color:var(--steel);font-size:13px;line-height:1.7;margin-bottom:14px;">כמעט סיימתם — עוד רגע אחד ותהיו בפנים. ${CLUB_NAME_HINT_TEXT}</div><form id="communityProfile">${field("communityProfile", "displayName", CLUB_NAME_LABEL, `<input class="text-input" name="displayName" dir="auto" placeholder="למשל דנה כהן" required/>`)}<div class="footer-note" style="margin:-6px 0 12px;">${CLUB_NAME_HINT_TEXT}</div><label class="field"><span class="field-label">קצת עליי</span><textarea class="text-input" name="bio" maxlength="160" placeholder="כמה מילים עליי"></textarea></label><button class="save-btn" type="submit" style="margin-top:12px;">שמירת פרופיל</button></form>${state.ui.message ? `<div class="footer-note" role="status" style="margin-top:10px;color:var(--brass);">${esc(state.ui.message)}</div>` : ""}</div>`;
+    if (!state.profile) return `<div class="chart-card">${renderJoinProgress(3)}<div style="font-weight:800;font-size:18px;margin-bottom:6px;">השלמת פרופיל</div><div style="color:var(--steel);font-size:13px;line-height:1.7;margin-bottom:14px;">כמעט סיימתם — עוד רגע אחד ותהיו בפנים. ${CLUB_NAME_HINT_TEXT}</div><form id="communityProfile">${field("communityProfile", "displayName", CLUB_NAME_LABEL, `<input class="text-input" name="displayName" dir="auto" placeholder="למשל דנה כהן" required/>`)}<div class="footer-note" style="margin:6px 0 12px;">${CLUB_NAME_HINT_TEXT}</div><label class="field"><span class="field-label">קצת עליי</span><textarea class="text-input" name="bio" maxlength="160" placeholder="כמה מילים עליי"></textarea></label><button class="save-btn" type="submit" style="margin-top:12px;">שמירת פרופיל</button></form>${state.ui.message ? `<div class="footer-note" role="status" style="margin-top:10px;color:var(--brass);">${esc(state.ui.message)}</div>` : ""}</div>`;
     // COMM-016. Credentials are set and the profile row exists, but the
     // account has not been stamped recoverable yet, so is_community_member()
     // still blocks every write. Try once automatically (guarded inside
@@ -4648,7 +4662,7 @@
     const feedTab = clubTopHtml + railAbove + feedHtml + announcementsHtml;
 
     // ---- Boards tab: weekly challenge + streaks, top-3-plus-your-rank ----
-    const challengeSetter = staff ? `<form id="communityWeeklyChallenge" class="chart-card admin-card" style="margin-top:10px;"><div style="font-weight:800;margin-bottom:10px;">קביעת אתגר שבועי<span class="admin-tag">ניהול</span></div>${field("communityWeeklyChallenge", "title", "שם האתגר", `<input class="text-input" name="title" placeholder="שם האתגר" required/>`)}${field("communityWeeklyChallenge", "comparisonKey", "על מה מתחרים", renderChallengeKeyPicker())}<div style="color:var(--steel);font-size:11px;margin:-6px 0 10px;">רק תרגילים ואימונים שקיימים באפליקציה — כך התוצאות שחברי המועדון משתפים נספרות לאתגר מעצמן.</div><div class="flex gap-16 field">${dateField("communityWeeklyChallenge", "startsOn", "תאריך התחלה", `<input class="text-input" name="startsOn" type="date" required/>`)}${dateField("communityWeeklyChallenge", "endsOn", "תאריך סיום", `<input class="text-input" name="endsOn" type="date" required/>`)}</div><button class="chip-btn primary" type="submit" style="margin-top:10px;">קביעת אתגר</button></form>` : "";
+    const challengeSetter = staff ? `<form id="communityWeeklyChallenge" class="chart-card admin-card" style="margin-top:10px;"><div style="font-weight:800;margin-bottom:10px;">קביעת אתגר שבועי<span class="admin-tag">ניהול</span></div>${field("communityWeeklyChallenge", "title", "שם האתגר", `<input class="text-input" name="title" placeholder="שם האתגר" required/>`)}${field("communityWeeklyChallenge", "comparisonKey", "על מה מתחרים", renderChallengeKeyPicker())}<div style="color:var(--steel);font-size:11px;margin:6px 0 10px;">רק תרגילים ואימונים שקיימים באפליקציה — כך התוצאות שחברי המועדון משתפים נספרות לאתגר מעצמן.</div><div class="flex gap-16 field">${dateField("communityWeeklyChallenge", "startsOn", "תאריך התחלה", `<input class="text-input" name="startsOn" type="date" required/>`)}${dateField("communityWeeklyChallenge", "endsOn", "תאריך סיום", `<input class="text-input" name="endsOn" type="date" required/>`)}</div><button class="chip-btn primary" type="submit" style="margin-top:10px;">קביעת אתגר</button></form>` : "";
     // Three states, not two. state.club.weeklyChallenge comes from the
     // leaderboard VIEW, which is empty until someone posts a matching result,
     // so treating "no rows" as "no challenge" told every member there was
@@ -4716,7 +4730,7 @@
     const account = `<form id="communityProfile" class="chart-card"><div style="font-weight:800;font-size:16px;margin-bottom:12px;">הפרופיל שלי</div>
       ${avatarControl}
       ${field("communityProfile", "displayName", CLUB_NAME_LABEL, `<input class="text-input" name="displayName" dir="auto" value="${esc(p.display_name || "")}" placeholder="למשל דנה כהן" required/>`)}
-      <div class="footer-note" style="margin:-6px 0 12px;">${CLUB_NAME_HINT_TEXT}</div>
+      <div class="footer-note" style="margin:6px 0 12px;">${CLUB_NAME_HINT_TEXT}</div>
       <label class="field"><span class="field-label">קצת עליי</span><textarea class="text-input" name="bio" maxlength="160" placeholder="כמה מילים עליי">${esc(p.bio || "")}</textarea></label>
       <div class="chip-row"><button class="chip-btn primary" type="submit">שמירת פרופיל</button><button class="chip-btn" type="button" data-community-action="migrate">סנכרון היסטוריה פרטית</button></div>
     </form>`;
@@ -6500,7 +6514,9 @@
     // COMM-231 members directory.
     else if (action === "directory-retry") loadDirectory(true);
     else if (action === "directory-more") loadDirectory(false);
-    else if (action === "block") askConfirm({ title: "חסימת משתמש", message: "לחסום את {subject}? לא תראו זה את זה בקהילה.", subject: subjectNameFor(el.dataset.id), confirmLabel: "חסימה", destructive: true, action: "block", payload: { userId: el.dataset.id } });
+    // Opened from the member card's "⋯" menu as well as from a post's -
+    // either way the menu has served its purpose once the confirm is up.
+    else if (action === "block") { state.posts.openMenu = null; askConfirm({ title: "חסימת משתמש", message: "לחסום את {subject}? לא תראו זה את זה בקהילה.", subject: subjectNameFor(el.dataset.id), confirmLabel: "חסימה", destructive: true, action: "block", payload: { userId: el.dataset.id } }); }
     // Live bug hunt (2026-09-11): unblock()'s dispatch - no confirm sheet,
     // same "no confirm needed for a reversible toggle" shape the club-module
     // toggles already use (block() itself still confirms - it's the one
@@ -6729,6 +6745,10 @@
     else if (action === "composer-remove-photo") composerRemovePhoto(el.dataset.id);
     else if (action === "composer-retry-photo") composerRetryPhoto(el.dataset.id);
     else if (action === "toggle-post-menu") togglePostMenu(el.dataset.id);
+    // The member card's own overflow menu (src/community/directory.js). Same
+    // single state.posts.openMenu slot as the post menu above, so only one
+    // menu is ever open and Escape already closes both.
+    else if (action === "toggle-member-menu") toggleMemberMenu(el.dataset.id);
     else if (action === "post-save") postSaveToggle(el.dataset.id);
     else if (action === "post-hide") postHide(el.dataset.id);
     else if (action === "post-edit-caption") postStartCaptionEdit(el.dataset.id);
@@ -6803,7 +6823,6 @@
     else if (action === "bugs-set-status") setBugReportStatus(el.dataset.id, el.dataset.status);
     else if (action === "notif-open") openNotif(el.dataset.id);
     else if (action === "notif-toggle-group") { const c = state.notif.center; if (c) { c.expanded[el.dataset.key] = !c.expanded[el.dataset.key]; rerender(); } }
-    else if (action === "notif-pref") setNotifPref(el.dataset.type, el.dataset.channel);
     else if (action === "notif-push-disable") disableNotifPush();
     // The self-test is a click and nothing else reaches it, which is half of
     // what makes "never asked on first load" true of the permission prompt
@@ -7225,6 +7244,7 @@
         state.engagement.reactorsFor = null;
         state.members.search = ""; state.members.results = []; state.members.profileView = null; state.members.roles = {};
         state.members.blockedIds = []; state.members.blocksLoaded = false;
+        state.members.managementIds = []; state.members.managementLoaded = false;
         state.members.suggestions = { items: [], loading: false, loaded: false, error: false, busy: {} };
         state.members.directory = { items: [], loading: false, loadingMore: false, loaded: false, error: false, end: false, cursor: null, query: "", searchResults: null, searchLoading: false };
         state.members.classmatesToday = { items: [], loading: false, loaded: false, error: false };
@@ -7407,6 +7427,28 @@
     else if ("avatarFile" in t.dataset) { const f = t.files && t.files[0]; if (f) avatarPhotoSelected(f); try { t.value = ""; } catch (err) {} }
     else if ("composerDecorative" in t.dataset) composerToggleDecorative(t.dataset.composerDecorative, t.checked);
     else if ("composerVisibility" in t.dataset) composerSetVisibility(t.value);
+    // COMM-144/229 notification preferences. One <select> per type now (see
+    // rowFor() in src/community/notifications.js), so the channel arrives as
+    // a change event rather than as a [data-community-action="notif-pref"]
+    // click.
+    //
+    // DELEGATED HERE, not bound per element in afterRenderCommunity(), and
+    // that is not a style choice. afterRenderCommunity() runs more than once
+    // against the same nodes, so a per-element addEventListener stacks: one
+    // member action fired setNotifPref() three times, and because the push
+    // branch runs BEFORE the "already this channel" early return, that was
+    // three permission prompts and three pushManager.subscribe() calls for
+    // one tap. Caught by test/community-web-push.test.mjs, which counts both.
+    // This listener is bound once, for the life of the document, exactly
+    // like every [data-community-action] click.
+    //
+    // rerender() afterwards unconditionally, not only on success:
+    // setNotifPref() deliberately returns without touching state when the
+    // push permission prompt is declined, and without this the select would
+    // keep showing "התראת דחיפה" for a preference that was never written.
+    else if ("notifPrefSelect" in t.dataset) {
+      Promise.resolve(setNotifPref(t.dataset.type, t.value)).then(() => rerender());
+    }
     // 202609220005. The tagging sheet's checkboxes. `change`, not `click`, so
     // a keyboard toggle on the label counts the same as a tap.
     else if ("partnerPick" in t.dataset) toggleTrainingPartnerPick(t.dataset.partnerPick);

@@ -24,7 +24,7 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import fs from "node:fs";
-import { bootCommunity, waitFor } from "./helpers/boot.mjs";
+import { bootCommunity, waitFor, notifPrefControl } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
 
 const VERIFIED = new Date().toISOString();
@@ -352,7 +352,7 @@ test("no published month means no card and no row", async () => {
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openCommunity(window);
   clickTab(window, "account");
-  await waitFor(() => !!window.document.querySelector('[data-community-action="notif-pref"]'), 5000);
+  await waitFor(() => !!notifPrefControl(window, "mentions"), 5000);
   await new Promise((r) => setTimeout(r, 300));
   assert.equal(window.document.querySelector("[data-monthly-recap-section]"), null);
   assert.equal(events(mock, "monthly_recap_viewed").length, 0);

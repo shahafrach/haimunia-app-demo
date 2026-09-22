@@ -707,6 +707,11 @@ client was already built against.
 
 ### people_suggestions(p_limit int default 10) returns setof jsonb
 
+**Amended by 202609220006:** the `eligible` CTE gained one clause, `and not
+hide_management_from_member(sc.cand)`, so a management account is never
+suggested to a member however strong the shared signal. Nothing else in the
+function changed. See "Management accounts" under "## Realtime and search".
+
 - Shipped in 202608290015. COMM-232. Re-created in 202608310003 (COMM-302)
   with the **same signature** and an **additive** returned shape.
 - Purpose: "אנשים שאולי תכירו" for the directory strip.
@@ -3547,6 +3552,10 @@ never calls `client.channel()` directly.
   own row, mirroring `profiles_read_authenticated` (202608280003)
   literally: `deleted_at is null`, no `blocks` row between caller and
   target in either direction, and (`visible_to_club` or `is_admin()`).
+  **Amended by 202609220006:** and `not hide_management_from_member(p.id)`,
+  so a management account never appears in a member's results. One added
+  clause; nothing else in the function changed. See "Management accounts"
+  below.
 - `events`: matches `title` `ilike`, mirroring `events_read` (202608280010)
   literally: `status <> 'draft'`, or the caller is `created_by`, or the
   caller holds `community.event.manage`. This is the actual policy
@@ -3572,6 +3581,57 @@ never calls `client.channel()` directly.
   handoff for qa" in `docs/community/backlog.md` for the full boundary
   table, and `test/community-realtime-search-rls.test.mjs` for the static
   assertions.
+
+### Management accounts (202609220006)
+
+Three functions, and the reason there are three rather than one.
+
+- `is_management_account(p_uid uuid) returns boolean` - the SUBJECT. True
+  when the account's redeemed role ranks at or above `staff` (40 in
+  `public.roles`) or it carries the legacy `profiles.is_admin` flag, which
+  `my_role_code()` (202608280001) already folds in the same way. Says
+  nothing about who is asking. **Coach (20) and head coach (30) are
+  deliberately not management**: they are people a member trains with, and
+  the directory groups them above everyone else on purpose (COMM-160's
+  badge, `splitDirectoryStaff` in `src/community/directory.js`). The rank is
+  read from `public.roles` rather than written as the literal 40, so a tier
+  inserted between `head_coach` and `staff` later lands on the correct side
+  without an edit.
+- `hide_management_from_member(p_uid uuid) returns boolean` - the RULE.
+  `is_management_account(p_uid) and not is_staff()`. The staff exemption
+  lives here and only here, so no caller has to re-derive it.
+- `management_user_ids() returns setof uuid` - the ids THIS caller must not
+  be shown. **Empty for a staff caller and empty for a non-community-member,
+  both by construction.** It exists because the members directory (COMM-231)
+  reads `public.profiles` directly from the client - there is no directory
+  RPC to add a clause to - so the client has to filter that surface itself,
+  and handing it a list that is already correct for the caller is what keeps
+  the staff rule from existing twice.
+
+All three: security definer, `set search_path = ''`, revoked from `public,
+anon`, granted to `authenticated`. None stores anything; every one reads what
+`roles`, `invite_redemptions` and `profiles` already say, so 202609220006 adds
+no table, no column and no policy.
+
+Both `community_search()` (above) and `people_suggestions()` were re-created
+by the same migration with ONE added `where` clause each and no other change,
+so a management row does not reach a member's browser on the surfaces where
+that is preventable. That is defence in depth beside the id list, not a
+second rule: all three read `hide_management_from_member()`.
+
+Client half, `src/community/directory.js`: `loadManagementIds()` at sign-in
+(beside `loadBlockedIds()`), `isManagementAccount()`, and
+`withoutManagement()` applied AT RENDER TIME at the three member-row surfaces
+- the directory roster, the directory's search results and its client-side
+substring fallback, and the suggestions strip - for the reason
+`blockFilteredList()` already documents at length. A failed
+`management_user_ids()` call hides nobody rather than emptying the roster: the
+list is staff privacy, not access control, and a directory that failed closed
+on a transient error would be a blank roster.
+
+Covered by `supabase/tests/0123_management_accounts_test.sql` (pgTAP, first
+real run is CI), `test/member-surface-polish.test.mjs` and
+`scripts/browser-check/member-surface-polish-390.mjs`.
 
 ### Search UI (COMM-228)
 

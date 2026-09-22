@@ -23,7 +23,7 @@
 // test/community-analytics-surfaces.test.mjs.
 import { test } from "node:test";
 import assert from "node:assert";
-import { bootCommunity, waitFor } from "./helpers/boot.mjs";
+import { bootCommunity, waitFor, notifPrefOption, pickNotifPref } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
 
 const VERIFIED = new Date().toISOString();
@@ -418,9 +418,9 @@ test("push_opt_in is recorded once the subscription row is written, with the con
   stubPushApis(window);
   await openCommunity(window);
   clickTab(window, "account");
-  await waitFor(() => !!window.document.querySelector('[data-community-action="notif-pref"][data-type="mentions"][data-channel="push"]'), 4000);
+  await waitFor(() => !!notifPrefOption(window, "mentions", "push"), 4000);
 
-  window.document.querySelector('[data-community-action="notif-pref"][data-type="mentions"][data-channel="push"]').click();
+  pickNotifPref(window, "mentions", "push");
   await waitFor(() => mock.db.push_subscriptions.length === 1, 4000);
   await waitFor(() => events(mock, "push_opt_in").length === 1, 4000);
 
@@ -430,7 +430,7 @@ test("push_opt_in is recorded once the subscription row is written, with the con
 
   // A device has one subscription however many types route through it, so
   // a second type switched to Push is not a second opt-in.
-  window.document.querySelector('[data-community-action="notif-pref"][data-type="comment_on_post"][data-channel="push"]').click();
+  pickNotifPref(window, "comment_on_post", "push");
   await waitFor(() => mock.db.notification_preferences.some((r) => r.type === "comment_on_post" && r.channel === "push"), 4000);
   assert.equal(events(mock, "push_opt_in").length, 1);
 });
@@ -442,9 +442,9 @@ test("a denied permission records no opt-in", async () => {
   window.Notification = { permission: "default", requestPermission: async () => "denied" };
   await openCommunity(window);
   clickTab(window, "account");
-  await waitFor(() => !!window.document.querySelector('[data-community-action="notif-pref"][data-type="mentions"][data-channel="push"]'), 4000);
+  await waitFor(() => !!notifPrefOption(window, "mentions", "push"), 4000);
 
-  window.document.querySelector('[data-community-action="notif-pref"][data-type="mentions"][data-channel="push"]').click();
+  pickNotifPref(window, "mentions", "push");
   await waitFor(() => window.document.body.textContent.includes("לא אושרה הרשאת התראות"), 4000);
   assert.equal(events(mock, "push_opt_in").length, 0);
   assert.equal(mock.db.push_subscriptions.length, 0);

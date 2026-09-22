@@ -66,6 +66,27 @@ export function createMockSupabase(seedTables = {}) {
     const role = roleOf(uid);
     return !!role && (MOCK_ROLE_PERMS[role] || []).indexOf(code) >= 0;
   }
+  // 202609220006. public.roles.rank, the same six tiers 202608280001 seeds.
+  // Named here rather than inlined so is_management_account's cut (>= staff)
+  // and is_staff's (>= coach) are both readable as ranks instead of as lists
+  // of role codes, exactly as they are in the schema.
+  const MOCK_ROLE_RANK = { member: 10, coach: 20, head_coach: 30, staff: 40, admin: 50, owner: 60 };
+  function rankOf(uid) { return MOCK_ROLE_RANK[roleOf(uid)] || 0; }
+  // public.is_management_account(uuid): rank staff-or-above, or the legacy
+  // profiles.is_admin flag (which roleOf already folds in as 'admin').
+  function isManagementAccount(uid) {
+    const prof = rows("profiles").find((p) => p.id === uid);
+    if (!prof || prof.deleted_at) return false;
+    return rankOf(uid) >= MOCK_ROLE_RANK.staff;
+  }
+  // public.hide_management_from_member(uuid): the rule - management AND the
+  // caller is not staff. One definition here too, read by
+  // management_user_ids(), community_search() and people_suggestions()
+  // below, so the mock cannot disagree with itself about it any more than
+  // the schema can.
+  function hideManagementFromMember(callerId, uid) {
+    return isManagementAccount(uid) && rankOf(callerId) < MOCK_ROLE_RANK.coach;
+  }
   function auditRow(adminId, actionType, targetType, targetId, before, after) {
     return {
       id: `aa-${++uidCounter}`, admin_id: adminId, action_type: actionType,
@@ -391,6 +412,18 @@ export function createMockSupabase(seedTables = {}) {
         // only under RLS, any row through the function) is Postgres and is
         // asserted in pgTAP, not here; this only proves the client calls the
         // RPC with the right ids and reads the response shape it returns.
+        // 202609220006. management_user_ids() - the ids THIS caller must not
+        // be shown. Empty for a staff caller by construction, because the
+        // staff exemption lives in hideManagementFromMember() and not at the
+        // call site, exactly as it does in the schema.
+        if (name === "management_user_ids") {
+          const uid = currentUser && currentUser.id;
+          if (!uid) return Promise.resolve({ data: null, error: { message: "not authorized" } });
+          return Promise.resolve({
+            data: rows("profiles").filter((p) => hideManagementFromMember(uid, p.id)).map((p) => p.id),
+            error: null,
+          });
+        }
         if (name === "member_roles") {
           const ids = new Set((args && Array.isArray(args.p_ids) ? args.p_ids : []).map(String));
           const data = rows("invite_redemptions")
@@ -1307,6 +1340,8 @@ export function createMockSupabase(seedTables = {}) {
             if (!like(p.handle) && !like(p.display_name)) return false;
             const blocked = rows("blocks").some((b) => (b.blocker_id === uid && b.blocked_id === p.id) || (b.blocker_id === p.id && b.blocked_id === uid));
             if (blocked) return false;
+            // 202609220006: a management account is not offered to a member.
+            if (hideManagementFromMember(uid, p.id)) return false;
             return p.visible_to_club !== false || isAdminCaller;
           }).slice(0, limit).map((p) => ({
             id: p.id, handle: p.handle, display_name: p.display_name,
@@ -1438,6 +1473,8 @@ export function createMockSupabase(seedTables = {}) {
             if (rows("follows").some((f) => (f.follower_id === uid && f.followed_id === p.id) || (f.follower_id === p.id && f.followed_id === uid))) continue;
             if (rows("blocks").some((b) => (b.blocker_id === uid && b.blocked_id === p.id) || (b.blocker_id === p.id && b.blocked_id === uid))) continue;
             if (p.visible_to_club === false || p.allow_follows === false) continue;
+            // 202609220006, same rule as community_search above.
+            if (hideManagementFromMember(uid, p.id)) continue;
             const sharedChallenges = new Set(rows("challenge_participants")
               .filter((r) => r.user_id === p.id && r.status !== "withdrawn"
                 && myChallenges.some((m) => m.challenge_id === r.challenge_id) && liveChallenge(r.challenge_id))

@@ -40,10 +40,35 @@ test("every member list is filtered when it renders, not when a block happens", 
 });
 
 test("the two surfaces that ignored a block now use it", () => {
-  assert.match(cloudJs, /const s = blockFilteredList\(state\.members\.suggestions\);/,
+  // 202609220006 threaded a SECOND render-time filter through the
+  // suggestions strip - management accounts, withoutManagement() - so that
+  // line no longer reads `const s = blockFilteredList(...)`. The property
+  // this test exists for is untouched and is what is asserted: the strip
+  // renders from the block-filtered slice, never from the raw cache.
+  assert.match(cloudJs, /blockFilteredList\(state\.members\.suggestions\)/,
     "people you may know");
   assert.match(cloudJs, /const s = blockFilteredList\(state\.members\.classmatesToday\);/,
     "trained with you today");
+  assert.doesNotMatch(cloudJs, /state\.members\.suggestions\.items\.map\(suggestionCardHtml\)/,
+    "and never straight off the cache");
+});
+
+test("the second render-time filter is layered on the first, not instead of it", () => {
+  // Same lesson as the block filter above, on the same rows: a management
+  // account is dropped WHEN THE ROW RENDERS, so the three member-row caches
+  // (directory page, directory search results, suggestions) need no purging
+  // and a surface added later inherits the behaviour by calling the helper.
+  const at = cloudJs.indexOf("function withoutManagement(rows)");
+  assert.ok(at > -1, "there is one shared render-time filter for it too");
+  const body = cloudJs.slice(at, cloudJs.indexOf("\n  }", at));
+  assert.match(body, /rows\.filter\(\(m\) => !m \|\| !isManagementAccount\(m\.id \|\| m\.user_id\)\)/,
+    "keyed on either id shape these rows use, exactly like blockFilteredList");
+  assert.match(body, /kept\.length === rows\.length \? rows :/,
+    "and the original array is returned unchanged when nothing was filtered");
+  // Every member-row surface goes through it.
+  assert.match(cloudJs, /if \(!q\) return withoutManagement\(d\.items\);/, "the directory roster");
+  assert.match(cloudJs, /if \(Array\.isArray\(d\.searchResults\)\) return withoutManagement\(d\.searchResults\);/, "its server search results");
+  assert.match(cloudJs, /withoutManagement\(state\.members\.people\)\.map\(searchMemberRowHtml\)/, "and community search");
 });
 
 test("the coach's new-member list is filtered too", () => {

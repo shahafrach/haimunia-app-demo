@@ -122,10 +122,19 @@ test("allow_follows=false on another member hides the follow button but keeps bl
   const search = window.document.getElementById("communityPeopleSearch");
   search.value = "noam";
   search.dispatchEvent(new window.Event("input", { bubbles: true }));
-  await waitFor(() => !!window.document.querySelector('[data-community-action="block"]'), 3000);
+  // 202609220006 moved block off the row and into the card's "⋯" menu, so
+  // the row's own arrival is now marked by the menu button rather than by a
+  // visible block chip. The two facts this test is about are unchanged: no
+  // follow control for a member who disallows follows, and blocking them is
+  // still offered.
+  await waitFor(() => !!window.document.querySelector('[data-community-action="toggle-member-menu"][data-id="u2"]'), 3000);
 
   assert.equal(window.document.querySelector('[data-community-action="follow"]'), null, "no follow button for a member who disallows follows");
-  assert.ok(window.document.querySelector('[data-community-action="block"]'), "block is still offered");
+  assert.equal(window.document.querySelector('[data-community-action="block"]'), null, "and block is not a chip on the row any more");
+
+  window.document.querySelector('[data-community-action="toggle-member-menu"][data-id="u2"]').click();
+  await waitFor(() => !!window.document.querySelector('[data-member-menu="u2"] [data-community-action="block"]'), 3000);
+  assert.ok(window.document.querySelector('[data-member-menu="u2"] [data-community-action="block"]'), "block is still offered, one tap further in");
 });
 
 test("canViewProfileField forwards target and field to the RPC and returns its boolean", async () => {

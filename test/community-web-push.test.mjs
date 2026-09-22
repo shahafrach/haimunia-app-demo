@@ -32,7 +32,7 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import fs from "node:fs";
-import { bootCommunity, waitFor, waitForCommunityGate } from "./helpers/boot.mjs";
+import { bootCommunity, waitFor, waitForCommunityGate, notifPrefControl, notifPrefOption, notifPrefValue, pickNotifPref } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
 
 const VERIFIED = new Date().toISOString();
@@ -55,7 +55,7 @@ async function openAccount(window) {
   window.document.getElementById("tabCommunityBtn").click();
   await waitFor(() => !!window.document.getElementById("communityClubTop"), 4000);
   window.document.querySelector('[data-community-action="set-tab"][data-tab="account"]').click();
-  await waitFor(() => !!window.document.querySelector('[data-community-action="notif-pref"]'), 4000);
+  await waitFor(() => !!notifPrefControl(window, "comment_on_post"), 4000);
 }
 
 // A faithful-enough stand-in for the browser's Push API: one mutable
@@ -126,9 +126,9 @@ test("with the flag explicitly off, the push option does not render at all - rea
   stubPushApis(window);
   await openAccount(window);
 
-  const push = window.document.querySelector('[data-community-action="notif-pref"][data-type="comment_on_post"][data-channel="push"]');
-  assert.equal(push, null, "no push button in the DOM at all while the flag is off - not merely disabled");
-  const row = window.document.querySelector('[data-community-action="notif-pref"][data-type="comment_on_post"]').closest(".log-row");
+  const push = notifPrefOption(window, "comment_on_post", "push");
+  assert.equal(push, null, "no push option in the DOM at all while the flag is off - not merely disabled");
+  const row = notifPrefControl(window, "comment_on_post").closest(".log-row");
   assert.doesNotMatch(row.textContent, /בקרוב|דחיפה/, "no push mention anywhere on the row");
   assert.equal(mock.db.push_subscriptions.length, 0, "no subscription exists while the flag is off");
   assert.equal(mock.db.notification_preferences.length, 0, "nothing was written");
@@ -142,10 +142,10 @@ test("flag on: choosing Push asks permission, subscribes with the VAPID key, wri
   const push = stubPushApis(window);
   await openAccount(window);
 
-  const btn = window.document.querySelector('[data-community-action="notif-pref"][data-type="mentions"][data-channel="push"]');
-  assert.equal(btn.disabled, false, "Push is offered once the flag is on and the browser supports it");
+  const pushOption = notifPrefOption(window, "mentions", "push");
+  assert.equal(pushOption.disabled, false, "Push is offered once the flag is on and the browser supports it");
 
-  btn.click();
+  pickNotifPref(window, "mentions", "push");
   await waitFor(() => mock.db.push_subscriptions.length === 1, 4000);
 
   assert.equal(push.calls.requestPermission, 1, "the browser permission prompt was triggered");
@@ -166,7 +166,7 @@ test("flag on: choosing Push asks permission, subscribes with the VAPID key, wri
   await waitFor(() => mock.db.notification_preferences.some((r) => r.type === "mentions" && r.channel === "push"), 4000);
 
   // Populated state: an active subscription shows "פעיל" next to the push option.
-  await waitFor(() => /פעיל/.test(window.document.querySelector('[data-community-action="notif-pref"][data-type="mentions"]').closest(".log-row").textContent), 4000);
+  await waitFor(() => /פעיל/.test(notifPrefControl(window, "mentions").closest(".log-row").textContent), 4000);
   // The device-level status/turn-off control appears once subscribed.
   assert.ok(window.document.querySelector('[data-community-action="notif-push-disable"]'), "a device-level turn-off control is offered");
 });
@@ -177,13 +177,13 @@ test("permission denied: the exact Hebrew copy is shown, the toggle reverts to I
   const push = stubPushApis(window, { deny: true });
   await openAccount(window);
 
-  window.document.querySelector('[data-community-action="notif-pref"][data-type="events"][data-channel="push"]').click();
+  pickNotifPref(window, "events", "push");
   await waitFor(() => /לא אושרה הרשאת התראות/.test(window.document.getElementById("content").textContent), 4000);
 
   assert.equal(push.calls.subscribe, 0, "subscribe is never called once permission is denied");
   assert.equal(mock.db.push_subscriptions.length, 0);
   assert.equal(mock.db.notification_preferences.length, 0, "the preference write never happens");
-  assert.ok(window.document.querySelector('[data-community-action="notif-pref"][data-type="events"][data-channel="in_app"]').className.includes("selected"), "the control reads In-app, not Push");
+  assert.equal(notifPrefValue(window, "events"), "in_app", "the control reads In-app, not Push");
 });
 
 test("a device that is already subscribed does not re-prompt when a second type also switches to push", async () => {
@@ -193,12 +193,12 @@ test("a device that is already subscribed does not re-prompt when a second type 
   await openAccount(window);
 
   // First switch loads this device's existing subscription status.
-  window.document.querySelector('[data-community-action="notif-pref"][data-type="comment_on_post"][data-channel="push"]').click();
+  pickNotifPref(window, "comment_on_post", "push");
   await waitFor(() => mock.db.notification_preferences.some((r) => r.type === "comment_on_post" && r.channel === "push"), 4000);
   const promptsAfterFirst = push.calls.requestPermission;
   const subscribesAfterFirst = push.calls.subscribe;
 
-  window.document.querySelector('[data-community-action="notif-pref"][data-type="reactions"][data-channel="push"]').click();
+  pickNotifPref(window, "reactions", "push");
   await waitFor(() => mock.db.notification_preferences.some((r) => r.type === "reactions" && r.channel === "push"), 4000);
 
   assert.equal(push.calls.requestPermission, promptsAfterFirst, "no new permission prompt for the second type");
@@ -215,9 +215,9 @@ test("flag on, a browser with no Push API: the option is disabled with a real ex
   // PushManager nor Notification.
   await openAccount(window);
 
-  const btn = window.document.querySelector('[data-community-action="notif-pref"][data-type="comment_on_post"][data-channel="push"]');
-  assert.ok(btn.disabled);
-  const row = btn.closest(".log-row");
+  const pushOption = notifPrefOption(window, "comment_on_post", "push");
+  assert.ok(pushOption.disabled);
+  const row = notifPrefControl(window, "comment_on_post").closest(".log-row");
   assert.match(row.textContent, /לא תומך בהתראות דחיפה/);
   assert.doesNotMatch(row.textContent, /בקרוב/, "the flag-on reason replaces the flag-off placeholder copy");
 });
@@ -229,9 +229,9 @@ test("flag on, iOS Safari without an installed PWA: the option is disabled with 
   stubIOSNonStandalone(window);
   await openAccount(window);
 
-  const btn = window.document.querySelector('[data-community-action="notif-pref"][data-type="comment_on_post"][data-channel="push"]');
-  assert.ok(btn.disabled);
-  assert.match(btn.closest(".log-row").textContent, /להוסיף את האפליקציה למסך הבית/);
+  const pushOption = notifPrefOption(window, "comment_on_post", "push");
+  assert.ok(pushOption.disabled);
+  assert.match(notifPrefControl(window, "comment_on_post").closest(".log-row").textContent, /להוסיף את האפליקציה למסך הבית/);
 });
 
 // ===== revoke: never deletes the row ===================================
@@ -258,7 +258,7 @@ test("a permission revoked outside the app is detected on the next load and mark
   const push = stubPushApis(window);
   await openAccount(window);
 
-  window.document.querySelector('[data-community-action="notif-pref"][data-type="comment_on_post"][data-channel="push"]').click();
+  pickNotifPref(window, "comment_on_post", "push");
   await waitFor(() => mock.db.push_subscriptions.length === 1, 4000);
   assert.equal(mock.db.push_subscriptions[0].revoked_at, null);
 
@@ -279,7 +279,7 @@ test("a permission revoked outside the app is detected on the next load and mark
   await mock.client.auth.signInWithPassword({ email: "dana@members.haimuniya.invalid", password: "CorrectHorse9" });
   await waitFor(() => !!window.document.querySelector(".subtabbar"), 4000);
   window.document.querySelector('[data-community-action="set-tab"][data-tab="account"]').click();
-  await waitFor(() => !!window.document.querySelector('[data-community-action="notif-pref"]'), 4000);
+  await waitFor(() => !!notifPrefControl(window, "comment_on_post"), 4000);
 
   await waitFor(() => mock.db.push_subscriptions[0].revoked_at, 5000);
   assert.equal(mock.db.push_subscriptions.length, 1, "the row is never deleted, only marked");
@@ -380,7 +380,7 @@ test("the default is now ON: a member who set nothing sees the push option", asy
   stubPushApis(window);
   await openAccount(window);
 
-  const push = window.document.querySelector('[data-community-action="notif-pref"][data-type="comment_on_post"][data-channel="push"]');
+  const push = notifPrefOption(window, "comment_on_post", "push");
   assert.ok(push, "the push option renders for a member who has never touched the escape hatch");
   assert.ok(!push.disabled, "and it is live, not the old 'בקרוב' placeholder");
 });
@@ -398,14 +398,14 @@ test("the admin's club-wide kill switch removes the push option for every member
   stubPushApis(window);
   await openAccount(window);
 
-  const push = window.document.querySelector('[data-community-action="notif-pref"][data-type="comment_on_post"][data-channel="push"]');
-  assert.equal(push, null, "no push button while the club module is off");
+  const push = notifPrefOption(window, "comment_on_post", "push");
+  assert.equal(push, null, "no push option while the club module is off");
 
   // The other two channels are untouched: this switch is push only, and a
   // member must still be able to choose between in-app and off.
-  assert.ok(window.document.querySelector('[data-community-action="notif-pref"][data-type="comment_on_post"][data-channel="in_app"]'),
+  assert.ok(notifPrefOption(window, "comment_on_post", "in_app"),
     "in-app notifications keep working - the bell and the notification centre are not part of this switch");
-  assert.ok(window.document.querySelector('[data-community-action="notif-pref"][data-type="comment_on_post"][data-channel="off"]'));
+  assert.ok(notifPrefOption(window, "comment_on_post", "off"));
 });
 
 test("with the module on, the push option is back - so the test above measures the switch", async () => {
@@ -413,6 +413,6 @@ test("with the module on, the push option is back - so the test above measures t
   const window = await bootCommunity(mock, { syncEnabled: false });
   stubPushApis(window);
   await openAccount(window);
-  assert.ok(window.document.querySelector('[data-community-action="notif-pref"][data-type="comment_on_post"][data-channel="push"]'),
+  assert.ok(notifPrefOption(window, "comment_on_post", "push"),
     "a guard that cannot come back on is not measuring the thing it names");
 });
