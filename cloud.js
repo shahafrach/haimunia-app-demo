@@ -949,15 +949,29 @@
       // names but does not itself carry a display name for: the published
       // member once published is non-null, and last week's member so the
       // free-selection form can name them in its grey-out note rather than a
-      // coach discovering the rule by hitting it. pickHandle/pickReason are
-      // the free-selection ("coach's pick") form's two inputs, read only at
-      // publish time - no rerender on input, the same no-focus-loss shape
-      // welcome's assignDrafts/contactDrafts already use; the live
-      // character counter under the reason field is DOM-patched directly on
-      // input instead, the same way composerSetBody's own counter is. busy
-      // holds the user_id of whichever candidate publish is in flight, or the
-      // literal "pick" for the free-selection form's own publish.
-      memberOfWeek: { loading: false, loaded: false, error: false, envelope: null, publishedProfile: null, previousProfile: null, pickHandle: "", pickReason: "", busy: null, publishErr: "" },
+      // coach discovering the rule by hitting it.
+      //
+      // THE FREE-SELECTION ("coach's pick") FORM'S OWN FIELDS. pickReason is
+      // the typed reason, read only at publish time - no rerender on input,
+      // the same no-focus-loss shape welcome's assignDrafts/contactDrafts
+      // already use; the live character counter under it is DOM-patched
+      // directly on input instead, the same way composerSetBody's own counter
+      // is. The member half used to be pickHandle, a free-text username a
+      // coach had to already know and spell; it is now a real picker, and
+      // these five fields are what that costs:
+      //   pickQuery     what is typed in the search box (never sent as-is)
+      //   pickResults   community_search's members group for that query, or
+      //                 null when the suggestions come from the roster the
+      //                 Directory tab already loaded
+      //   pickSearching a request is in flight, so "no matches" is not yet
+      //                 an honest thing to say
+      //   pickUserId    the chosen member - the ONLY thing publish reads
+      //   pickChosen    that member's {display_name, handle, avatar_url} for
+      //                 the chosen row, so the choice survives a rerender
+      //                 without a second profiles read
+      // busy holds the user_id of whichever candidate publish is in flight,
+      // or the literal "pick" for the free-selection form's own publish.
+      memberOfWeek: { loading: false, loaded: false, error: false, envelope: null, publishedProfile: null, previousProfile: null, pickQuery: "", pickResults: null, pickSearching: false, pickUserId: null, pickChosen: null, pickReason: "", busy: null, publishErr: "" },
       // COMM-309. Coach Dashboard's sixth section: the monthly club recap
       // staff preview. row is a single monthly_club_recaps row - the newest
       // month, draft or published, exactly as RLS hands it to a staff/
@@ -3548,6 +3562,42 @@
       ${slot4}
     </div>`;
   }
+  // THE SAME STATE, ONE LINE, for a screen that stacks several of them.
+  //
+  // emptyStateHtml()'s four slots are right for a surface where the empty
+  // state IS the screen - the Boards challenge list a member lands on, an
+  // analytics card that fills a pane. They are wrong for the coach board,
+  // which renders SEVEN sections in one scroll and on a quiet week showed
+  // six of those cards back to back - found in real phone screenshots at
+  // 390px: 32px of padding, a 28px icon, a headline and two paragraphs
+  // each, so a coach with nothing to do scrolled roughly two screens of
+  // illustrated apologies to establish it. Six explanations of what would
+  // fill a list is not six times as informative as one. (The line form
+  // measures 41-62px per section at 390px, all seven inside one screen -
+  // scripts/browser-check/staff-surface-polish-390.mjs pins both numbers.)
+  //
+  // So the coach board's sections say it in one short line, and
+  // renderCoachBoardSummary() carries the single "nothing needs attention"
+  // statement for all of them at the top of the tab. Nothing else changes
+  // hands: same `.empty` class, same data-empty-state key (every existing
+  // selector and test still resolves), plus data-empty-variant="line" so
+  // the four-slot guard in
+  // test/audit-followup-cloud-empty-states-dates.test.mjs can tell the two
+  // apart instead of asserting one contract over both.
+  //
+  // ONE HELPER, not a second near-copy: the eleven drifted empty states are
+  // exactly why emptyStateHtml() was extracted in the first place, and two
+  // sibling builders in one file is how that drift starts again. This sits
+  // directly under its sibling for the same reason.
+  //
+  // Tone rules §2.1 still hold and are unchanged by the shorter form: the
+  // line names what WILL be here rather than what is missing, and never
+  // renders red - absence is not an error. What it drops is the icon and
+  // the second paragraph, neither of which is information.
+  function emptyLineHtml(opts) {
+    const o = opts || {};
+    return `<div class="empty" data-empty-state="${esc(o.key || "")}" data-empty-variant="line" style="padding:10px 2px;text-align:start;font-size:13px;color:var(--steel);line-height:1.6;">${bidiText(o.text)}</div>`;
+  }
 
   // ==========================================================================
   // COMM-101..108, COMM-180  posts cluster.
@@ -4785,24 +4835,66 @@
     // COMM-228. One box, three labeled groups (members, events, challenges).
     const people = renderCommunitySearch();
 
+    // ---- ONE STAFF AREA, not two staff sections loose among the settings ----
+    //
+    // Redesign (Manage tab): moderation, member/role management, invites,
+    // onboarding-content editing, the feature-flag panel, and every
+    // analytics/health surface used to render inline here, one after another
+    // on this one scrolling tab. They now live in their own management
+    // destinations (renderManagePanel) instead - moved verbatim, same
+    // functions, same permission gates, just a different mount point. These
+    // two lists stayed behind (out of that phase's scope), and staff still
+    // sees a pointer to where the rest went.
+    //
+    // What was wrong in the phone screenshots at 390px: the two lists are `.ach-section`s
+    // with their own coloured dots, so "חברים חדשים" and
+    // "לא נכנסו לאפליקציה לאחרונה" read as two more of the member's own
+    // settings, sitting after the club search with nothing to say they are
+    // staff-only or that a member does not see them - and the pointer note
+    // then floated below both, detached from anything. They are one thing: a
+    // staff area. It is now labelled as one, once, with the two lists and the
+    // pointer inside it, and it is the last thing on the tab before sign-out
+    // so it never interrupts a member setting again.
+    //
+    // ONE staff gate, not three. This used to be three separate staff-gated
+    // slices of this function (community-coach-tier.test.mjs counts those, by
+    // matching the ternary literally - which is why this comment describes
+    // the shape rather than spelling it); it is one now, and the count moves
+    // with it.
+    //
     // Post-Phase-3 Hebrew copy fix: "חברים חדשים" - the exact phrase COMM-107's
     // welcome post and the coach-tools "Welcome" section already use for the
     // same concept (מתאמנים was this list's own one-off).
-    const newMembersHtml = staff ? renderCoachNewMembersSection() : "";
-    const inactiveHtml = staff ? renderCoachAppActivitySection() : "";
-
-    // Redesign (Manage tab): moderation, member/role management, invites,
-    // onboarding-content editing, the feature-flag panel, and every
-    // analytics/health surface used to render inline here, one after
-    // another on this one scrolling tab. They now live in their own "ניהול"
-    // bottom-tab (renderManageApp, staff-only) instead - moved verbatim,
-    // same functions, same permission gates, just a different mount point.
-    // newMembersHtml/inactiveHtml stay here on purpose (out of that phase's
-    // scope) and staff still sees a pointer to where the rest went. Both are
-    // now one call each - see renderCoachNewMembersSection() and
-    // renderCoachAppActivitySection() above, which are defined outside this
-    // function so its staff-gate count stays at the asserted 5.
-    const movedToManageNote = staff ? `<div class="footer-note" style="color:var(--steel);text-align:center;margin:16px 0 4px;">כלי ניהול עברו ל"ניהול" בתפריט התחתון</div>` : "";
+    //
+    // THE POINTER NOW POINTS SOMEWHERE THAT EXISTS. It sent a coach to a
+    // "ניהול" item in the bottom tab bar, and there has been no such item
+    // there since 2026-09-15: management split into two
+    // destinations, "ניהול המועדון" and "ניהול מערכת", and both were made
+    // main:false in app.js's getNavItems() - which is exactly what moves a
+    // row OUT of the bottom bar and INTO the header's ☰ menu, handing the
+    // sixth bottom slot back to the five member tabs. A coach following the
+    // old sentence tapped along a bottom bar of five member tabs looking for
+    // a sixth that was deliberately removed. Both names are given because the
+    // split is real: the club's roster, invites, moderation and numbers are
+    // under one, bug reports, the audit log, roles and module toggles under
+    // the other.
+    //
+    // The two lists keep their own `.ach-section` + sectionHead exactly as
+    // they were - renderCoachAppActivitySection()'s dot is red only when
+    // there is genuinely something to act on, which is information and not
+    // decoration. What is new is the rule down the inline-start edge
+    // (border-INLINE-start, so it answers RTL rather than picking a side) and
+    // the reduced top margin on the first of them: the two dotted heads now
+    // read as two items inside one labelled block instead of as two more
+    // sections in the settings list they were sitting in.
+    const staffArea = staff ? `<div class="ach-section" data-account-staff-area="1" style="margin-top:18px;">
+      ${sectionHead("var(--steel)", "אזור צוות המועדון", true)}
+      <div style="color:var(--steel);font-size:12px;line-height:1.6;margin:-2px 0 10px;">${bidiText("החלק הזה מוצג לצוות המועדון בלבד. חברי המועדון לא רואים אותו.")}</div>
+      <div style="border-inline-start:3px solid var(--border);padding-inline-start:12px;">
+        ${renderCoachNewMembersSection()}${renderCoachAppActivitySection()}
+      </div>
+      <div class="footer-note" style="color:var(--steel);margin:12px 0 4px;">${bidiText("שאר כלי הניהול נמצאים בתפריט (☰) שבראש המסך, תחת \"ניהול המועדון\" ו\"ניהול מערכת\".")}</div>
+    </div>` : "";
     // COMM-153's member-facing surface, deliberately FIRST - see
     // renderMyRestrictionPanel() for why it outranks the profile form. It is
     // not staff-gated and adds no sixth staff-conditional slice to this
@@ -4819,7 +4911,7 @@
     // neighbour (privacy), ahead of the glossary/search/staff sections
     // rather than trailing all of them - still a settings-style panel, just
     // no longer the very last thing on the screen.
-    const accountTab = restrictionPanel + account + renderMyAchievements() + recapEntry + monthlyRecapEntry + privacyPanel + renderSharePromptPrefPanel() + blockedMembersPanel + renderNotifPrefsPanel() + termMarkPanel + people + newMembersHtml + inactiveHtml + movedToManageNote
+    const accountTab = restrictionPanel + account + renderMyAchievements() + recapEntry + monthlyRecapEntry + privacyPanel + renderSharePromptPrefPanel() + blockedMembersPanel + renderNotifPrefsPanel() + termMarkPanel + people + staffArea
       + `<button class="link-btn" data-community-action="sign-out" style="display:block;margin:20px auto 0;">התנתקות</button>`
       + `<button class="link-btn" data-community-action="delete-account" style="display:block;margin:10px auto 8px;color:var(--red-text);">בקשת מחיקת חשבון</button>`;
 
@@ -5933,8 +6025,14 @@
     // member is first offered it.
     if (state.ui.tab === "boards" && state.user && !state.challenges.onboarding.loaded && !state.challenges.onboarding.loading) loadOnboardingChallenge();
     // COMM-231. The directory's own paginated roster, fetched the first time
-    // a member lands on the Directory sub-tab.
-    if (state.ui.tab === "directory" && state.user && !state.members.directory.loaded && !state.members.directory.loading) loadDirectory(true);
+    // a member lands on the Directory sub-tab - or on the Coach sub-tab,
+    // whose member-of-the-week picker offers the same roster as its
+    // suggestions (see renderMemberOfWeekPickForm). Same list, same read,
+    // same lazy shape; a coach who opens the board is exactly the caller who
+    // is about to need it, and nobody else pays for it. It stays one load:
+    // `loaded` is shared, so whichever tab is opened first is the only one
+    // that fetches.
+    if ((state.ui.tab === "directory" || state.ui.tab === "coach") && state.user && !state.members.directory.loaded && !state.members.directory.loading) loadDirectory(true);
     // COMM-232. The suggestions strip now renders on the Directory sub-tab -
     // see the PLACEMENT NOTE above renderPeopleSuggestions().
     if (state.ui.tab === "directory" && state.user && !state.members.suggestions.loaded && !state.members.suggestions.loading) loadPeopleSuggestions();
@@ -6017,9 +6115,20 @@
     // counter is - a full rerender here would cost the textarea its focus
     // and caret position on every keystroke, exactly what those two
     // listeners already avoid.
-    document.querySelectorAll("[data-mow-pick-handle]").forEach((el) => {
-      el.addEventListener("input", () => { state.coach.memberOfWeek.pickHandle = el.value; });
+    // The member-of-the-week picker's search box. UNLIKE its four neighbours
+    // this one DOES rerender - the suggestion list under it is the whole
+    // point, and a list that only refreshes when something else happens to
+    // rerender is not a search. Debounced and focus-restored below for
+    // exactly the reasons the two search boxes in afterRenderCommunity()
+    // already are: one request per typed word, and a rerender must not take
+    // the caret out from under the coach mid-word.
+    document.querySelectorAll("[data-mow-pick-search]").forEach((el) => {
+      el.addEventListener("input", () => memberOfWeekPickSearchDebounced(el.value));
     });
+    const mowPickInput = document.querySelector("[data-mow-pick-search]");
+    if (mowPickInput && mowPickInput.value && (!document.activeElement || document.activeElement === document.body)) {
+      try { mowPickInput.focus(); mowPickInput.setSelectionRange(mowPickInput.value.length, mowPickInput.value.length); } catch (e) { /* not a text input in this browser */ }
+    }
     document.querySelectorAll("[data-mow-pick-reason]").forEach((el) => {
       el.addEventListener("input", () => {
         state.coach.memberOfWeek.pickReason = el.value;
@@ -6937,6 +7046,8 @@
     else if (action === "coach-mow-retry") loadCoachMemberOfWeek();
     else if (action === "coach-mow-publish-candidate") memberOfWeekPublishCandidate(el.dataset.id);
     else if (action === "coach-mow-publish-pick") memberOfWeekPublishPick();
+    else if (action === "coach-mow-pick-select") memberOfWeekPickSelect(el.dataset.id);
+    else if (action === "coach-mow-pick-clear") memberOfWeekPickClear();
     else if (action === "coach-engage-retry") loadCoachEngageFlags();
     else if (action === "coach-engage-reach-out") coachEngageReachOut(el.dataset.id);
     else if (action === "coach-engage-review") coachEngageResolveFlag(el.dataset.id, "reviewed");
@@ -7288,7 +7399,7 @@
         state.coach.celebrate = { items: [], loading: false, loaded: false, error: false, congratulated: {}, busy: null };
         state.coach.welcome = { members: [], loading: false, loaded: false, error: false, contactedIds: {}, assignDrafts: {}, contactDrafts: {}, busy: null, welcomed: {} };
         state.coach.engage = { items: [], loading: false, loaded: false, error: false, profiles: {}, reachedOut: {}, busy: null };
-        state.coach.memberOfWeek = { loading: false, loaded: false, error: false, envelope: null, publishedProfile: null, previousProfile: null, pickHandle: "", pickReason: "", busy: null, publishErr: "" };
+        state.coach.memberOfWeek = { loading: false, loaded: false, error: false, envelope: null, publishedProfile: null, previousProfile: null, pickQuery: "", pickResults: null, pickSearching: false, pickUserId: null, pickChosen: null, pickReason: "", busy: null, publishErr: "" };
         state.coach.monthlyRecap = { loading: false, loaded: false, error: false, row: null, busy: null, publishErr: "" };
         announcementsViewLogged = false; monthlyRecapViewLogged = false; /* Same reason as the classmates guard on the next line: the next member to sign in on this device gets their own first view of each inline surface, never the previous session's already-counted one. */
         classmatesCardViewLogged = false; /* COMM-307: the next member to sign in on this device gets a fresh card and a fresh classmates_card_viewed, never the previous session's rows or its already-counted view. */

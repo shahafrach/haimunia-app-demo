@@ -434,14 +434,16 @@ test("staff get a when-line pointing at the create button already on screen, not
   assert.ok(window.document.querySelector('[data-community-action="open-challenge-form"]'), "and that control is genuinely on screen");
 });
 
-test("the monthly recap empty state is a when-line, because a scheduled job fills it and no coach can press anything", () => {
+test("the monthly recap empty state names the schedule, because a scheduled job fills it and no coach can press anything", () => {
   // recap_monthly_generate() runs on cron ('41 4 1 * *'), so the only honest
-  // fourth slot is the schedule. Source-level: reaching this state at runtime
+  // thing to say is the schedule. It says it in one line now rather than in a
+  // four-slot card: this state lives on the coach board, which stacks seven
+  // sections, and six such cards is what a quiet week used to look like. See
+  // emptyLineHtml() in cloud.js. Source-level: reaching this state at runtime
   // needs the coach dashboard, which the existing follow-up suite already
   // drives.
   const site = src.slice(src.indexOf('key: "coach-monthly-recap"'), src.indexOf('key: "coach-monthly-recap"') + 1200);
-  assert.match(site, /headline: "התקציר החודשי של המועדון ייבנה מעצמו"/, "a forward-looking headline");
-  assert.match(site, /when: "משימה מתוזמנת מייצרת אותו ב-1 בכל חודש/, "a when-line naming the real schedule");
+  assert.match(site, /text: "התקציר נבנה לבד ב-1 בכל חודש/, "one line naming the real schedule");
   assert.equal(/action:/.test(site), false, "and no button, because nothing a coach can press generates the row");
   // Must not promise the publish button to a coach who will not get one: it
   // is gated on analytics-view-or-admin, narrower than preview access.
@@ -449,11 +451,16 @@ test("the monthly recap empty state is a when-line, because a scheduled job fill
 });
 
 test("neither new empty state opens with a word the spec's tone rules ban", () => {
-  for (const key of ["challenges-active", "coach-monthly-recap"]) {
+  // challenges-active keeps its four-slot headline for the member on Boards;
+  // coach-monthly-recap is one of the coach board's one-line states. Tone
+  // rule 1 is about the first words a coach reads either way, so each is
+  // checked against whichever field carries them.
+  const cases = [["challenges-active", /headline: "([^"]+)"/], ["coach-monthly-recap", /text: "([^"]+)"/]];
+  for (const [key, field] of cases) {
     const site = src.slice(src.indexOf(`key: "${key}"`), src.indexOf(`key: "${key}"`) + 1200);
-    const headline = /headline: "([^"]+)"/.exec(site);
-    assert.ok(headline, `${key} declares a headline`);
-    assert.ok(!/^(אין|עדיין לא|מעולם לא)\b/.test(headline[1]), `${key} headline opens with a banned word: ${headline[1]}`);
+    const opening = field.exec(site);
+    assert.ok(opening, `${key} declares its opening line`);
+    assert.ok(!/^(אין|עדיין לא|מעולם לא)\b/.test(opening[1]), `${key} opens with a banned word: ${opening[1]}`);
   }
 });
 
