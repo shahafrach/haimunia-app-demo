@@ -18,10 +18,19 @@
 --
 -- WHY THE ASSERTIONS ARE CONTAINMENT, NOT EQUALITY. `supabase start` applies
 -- every migration, which schedules nine real jobs, and the CI stack is
--- seconds old - so most of them have genuinely never run and are genuinely
--- flagged. That is correct behaviour, not noise to design around, and it is
--- why this file asserts that the manufactured job IS in the failing set and
--- that the healthy one is NOT, rather than asserting a count.
+-- seconds old - so what the real jobs contribute to the failing set depends
+-- on the state of a stack this file did not build. That is not noise to
+-- design around, and it is why this file asserts that the manufactured job IS
+-- in the failing set and that the healthy one is NOT, rather than asserting a
+-- count.
+--
+-- (When this was written those real never-run jobs were all flagged, and the
+-- comment here said so. 202609220001 gave a never-run job one cadence window
+-- of grace from when the check first saw it, so seconds after `supabase
+-- start` most of them are now inside their first window and flagged by
+-- nothing. Every assertion below was already written not to care, which is
+-- the point of containment; supabase/tests/0117 is where that rule is
+-- asserted.)
 
 \set rls_helpers_included true
 create extension if not exists pgtap with schema extensions;
