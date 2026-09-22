@@ -4615,8 +4615,10 @@ async function saveWod(sanityConfirmed) {
   // threshold is not needed here - a WOD result is one attempt, not a set, so
   // "is there a previous best" IS the question - but the answer had the wrong
   // sign.
-  const isPR = w.scoreType === "emom" ? false
-    : (prevBest !== null && (scoreLowerIsBetter(w.scoreType) ? val < prevBest : val > prevBest));
+  // ONE LINE, deliberately: test/hunt-round8-wod-log.test.mjs pins this
+  // decision by slicing the source from `const isPR` to the next newline, so
+  // wrapping it hides the `prevBest !== null &&` that guard exists to protect.
+  const isPR = w.scoreType === "emom" ? false : (prevBest !== null && (scoreLowerIsBetter(w.scoreType) ? val < prevBest : val > prevBest));
   entry.isPR = isPR;
 
   // Live bug hunt (2026-09-11): same write-before-mutate fix as saveSet()
