@@ -676,16 +676,25 @@
     // input was still accepted and stored raw.
     const title = cleanStr(form.elements.title.value, 120);
     // Live bug hunt (2026-09-11): this used to slice at 2000, but the
-    // announcement's OWN feed card (POST_ANNOUNCEMENT, produced server-side
-    // from this row) renders through the same postBodyHtml() every other
-    // post type does, hard-capped at POST_BODY_MAX (1000) with no ellipsis
-    // and no "read more" - anything past 1000 was silently invisible to
-    // every member reading the card, mid-word, with zero indication
-    // anything was missing. Capped at input time instead, matching every
-    // other post-composing surface in this file (the main composer's own
-    // textarea already uses maxlength="${POST_BODY_MAX}") - an admin now
-    // gets immediate feedback from the textarea's own maxlength (updated
-    // alongside this) rather than typing content that quietly vanishes.
+    // announcement's own feed card renders through the same postBodyHtml()
+    // every other post type does, hard-capped at POST_BODY_MAX (1000) with
+    // no ellipsis and no "read more". Capped at input time instead, matching
+    // every other post-composing surface in this file (the main composer's
+    // own textarea already uses maxlength="${POST_BODY_MAX}"), so an admin
+    // gets immediate feedback from the textarea's own maxlength rather than
+    // typing content that quietly vanishes.
+    //
+    // THE CARD. When this comment was first written it said the card was
+    // "produced server-side from this row", and nothing did that: there was
+    // no trigger and no RPC, so an announcement reached the archive and the
+    // notification centre and never the feed. Since 202609220006 the
+    // announcements_feed_card_insert trigger writes it, in the insert's own
+    // transaction: an authorless POST_ANNOUNCEMENT carrying
+    // metadata.announcement_id, which is what lets the chronological feed
+    // hold it in the coach tier until this row's expires_at. The card's body
+    // is cut at 1000 server-side as well, for a row written some other way.
+    // Nothing here writes workout_posts - the insert below is the whole
+    // client side of it.
     const body = String(form.elements.body.value || "").trim().slice(0, POST_BODY_MAX);
     const priorityRaw = String((form.elements.priority && form.elements.priority.value) || "normal");
     const priority = ANNOUNCEMENT_PRIORITY_OPTIONS.some((o) => o.value === priorityRaw) ? priorityRaw : "normal";

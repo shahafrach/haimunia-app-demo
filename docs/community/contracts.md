@@ -4379,8 +4379,11 @@ resolve correctly rather than falling off the `case`.
 
 ### member_of_week_publish(p_week_start date, p_user_id uuid, p_reason text) returns uuid (202609010001)
 
-- Purpose: the **only** writer of `member_of_week`, and the first and only
-  producer of a `POST_ANNOUNCEMENT` row anywhere in this schema.
+- Purpose: the **only** writer of `member_of_week`, and the first producer of
+  a `POST_ANNOUNCEMENT` row in this schema. (It was the only one until
+  202609220006, which added `announcements_feed_card_insert` - see the section of that name at the end of this file. Its
+  cards carry no `announcement_id`, because there is no announcements row
+  behind them.)
 - Params: `p_week_start` normalised as above, null meaning the current week;
   `p_user_id` required; `p_reason` trimmed, control characters stripped
   (`0x01`-`0x08`, `0x0B`-`0x1F`, keeping tab and newline — the same class
@@ -8189,3 +8192,42 @@ feature; the one-day window is what bounds the feed), a "hide this one
 number" per-row flag (a twelfth toggle would fragment a model members
 already understand — detach is the per-row control), and paging the board
 (one board is one club-day).
+
+## An announcement becomes its feed card (202609220006)
+
+### Trigger announcements_feed_card_insert → announcement_feed_card_insert()
+
+- AFTER INSERT on `announcements`, SECURITY DEFINER, not callable by any
+  client role. Writes one `POST_ANNOUNCEMENT` row in the same transaction:
+  `author_id` **null**, `visibility = 'club'`, `status = 'active'`,
+  `published_at` = the announcement's `created_at`, `title` = its title,
+  `body` = `left(body, 1000)`, `source_type = 'announcement'`,
+  `source_id` = the announcement's id, `occurred_on` = `created_at::date`,
+  `metadata` = `{title, announcement_id, priority}`.
+- `metadata.announcement_id` is the key `feed_page()`'s chronological order
+  (202609220003) resolves `announcements.expires_at` through: the card is in
+  the coach tier until the announcement expires, then falls to the stream.
+  With no expiry it takes the `coach_top_hours` fallback.
+- Writes nothing when the row is already soft-deleted, already expired, or
+  while `club_features.announcements` is off.
+- One card per announcement: `workout_posts_announcement_card_idx`, a partial
+  unique index on `metadata ->> 'announcement_id'` for `POST_ANNOUNCEMENT`.
+- Takes `app.allow_unrated_post_insert` around its one INSERT and restores the
+  previous value: publishing an announcement spends no `post_create` token.
+- No new policy, grant or RPC. Who may publish is still
+  `announcements_insert_admin` (`is_staff()`).
+- No backfill of announcements written before this migration.
+
+### Trigger announcements_feed_card_sync → announcement_feed_card_sync()
+
+- AFTER UPDATE OF `title, body, priority, deleted_at` OR DELETE on
+  `announcements`. A soft-delete or a hard delete soft-deletes the card (under
+  `app.allow_moderation_write`, restored afterwards); a title, body or
+  priority edit is copied onto it. `expires_at` is not copied — the feed reads
+  it live.
+
+### Client
+
+None. `postAnnouncement()` in `src/community/club.js` inserts the row as
+before; `renderAnnouncementPostCard` already rendered an authorless
+`POST_ANNOUNCEMENT` with `metadata.title`.

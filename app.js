@@ -6205,6 +6205,23 @@ function benchmarkItem(base) {
   });
 }
 function benchmarkItems() { return benchmarkWodItems().concat(benchmarkLiftItems()); }
+// The module's one event: a member opened a benchmark's history. Opening, not
+// collapsing. Reached through window.* because src/analytics.js is an
+// OPTIONAL precache asset and this screen must work without it - offline, or
+// with no community session, this is a silent no-op (an unconfigured
+// analyticsTrack() drops the row by contract). kind, whether a retest is due
+// and whether there is a best at all: never the score, never the benchmark's
+// name, never a lift's exercise id (a custom one is minted per device).
+function trackBenchmarkOpened(id) {
+  if (typeof window.analyticsTrack !== "function" || !window.ANALYTICS_EVENTS) return;
+  const item = benchmarkItems().find((i) => i.id === id);
+  if (!item) return;
+  try {
+    window.analyticsTrack(window.ANALYTICS_EVENTS.BENCHMARK_OPENED, {
+      kind: item.kind === "lift" ? "lift" : "wod", retest_due: !!item.retestDue, has_best: !!item.best,
+    });
+  } catch (e) { /* a measurement never breaks the screen it measures */ }
+}
 function formatBenchmarkValue(item, value) { return formatWodScore(item.scoreType, value); }
 
 function renderBenchmarkAttemptRow(item, attempt) {
@@ -8520,6 +8537,7 @@ document.addEventListener("click", (e) => {
   else if (action === "toggle-benchmark") {
     benchmarkExpandedId = benchmarkExpandedId === el.dataset.id ? null : el.dataset.id;
     renderBenchmarkArea();
+    if (benchmarkExpandedId) trackBenchmarkOpened(benchmarkExpandedId);
   }
   else if (action === "log-benchmark") {
     // The same three lines select-benchmark runs in the WOD tab's catalogue,

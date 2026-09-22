@@ -754,6 +754,10 @@
     // off is skipped silently, so re-reading is the only honest way to know
     // what the card should print.
     await loadTrainingPartners([postId]);
+    // What LANDED, read back off the server's answer, not what was ticked: a
+    // member who turned tagging off is skipped silently. A count only - who
+    // trained beside whom is a social graph this table must not hold.
+    track(A.TRAINING_PARTNERS_TAGGED, { count: (state.posts.partners[postId] || []).length });
     if (state.posts.partnersPanel === p) state.posts.partnersPanel = null;
     setMessage("התיוגים נשמרו");
     rerender();
