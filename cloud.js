@@ -1128,6 +1128,14 @@
           { value: "chronological", label: "כרונולוגי - החדש למעלה" },
           { value: "ranked", label: "מותאם אישית - לפי דירוג" },
         ] },
+        // How long the lifted block lasts, in the chronological order only.
+        // A coach post counts from when it was published; an announcement
+        // uses its own expiry date when it has one and this only when it
+        // does not. Without a bound the top of the feed fills with coach
+        // cards and the order stops meaning what it says, so this number is
+        // what keeps "newest first" true - min/max mirror the server's own
+        // clamp and the server clamps whatever arrives regardless.
+        { id: "coach_top_hours", label: "שעות שפוסט מאמן/ת נשאר למעלה", def: 72, min: 1, max: 336 },
       ] },
     { key: "leaderboards", label: "טבלאות מובילים" },
     { key: "directory", label: "ספריית חברים", clientOnly: true },

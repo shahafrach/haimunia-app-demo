@@ -9,9 +9,10 @@ begin;
 -- not a right answer and a wrong one - they are two different promises,
 -- and which one a gym wants is the gym's to decide.
 --
---   chronological (the default):  pinned posts, then coach posts and club
---                                 announcements, then today's programming,
---                                 then every other post newest first.
+--   chronological (the default):  pinned posts, then the coach posts and
+--                                 club announcements that are still current,
+--                                 then today's programming, then every other
+--                                 post newest first.
 --   ranked:                       exactly what feed_page has done since
 --                                 202608280019 - eight weighted components,
 --                                 per-member weights (COMM-303) and the
@@ -39,24 +40,37 @@ begin;
 --     the pinned strip, so only post pins are a feed ordering question);
 --   * a COACH post or a club ANNOUNCEMENT, the two post types the 'coach'
 --     scope and the ranked order's coach component already agree name the
---     coach's voice;
+--     coach's voice - each for as long as it is still news, see below;
 --   * TODAY'S club WOD, while it is today's. Tomorrow it is an ordinary post
 --     in the stream, which is where a member looking for today's workout
 --     needs yesterday's not to be.
 -- Their relative order is the order the request named them in, and it is the
 -- only part of this that is a preference rather than a consequence.
 --
--- THE COACH TIER IS NOT TIME-BOUNDED, AND THAT IS WORTH A DECISION rather
--- than a comment. Pins are capped at three slots and today's WOD stops being
--- today's tomorrow, so both of those tiers are self-limiting. The coach tier
--- is not: every coach post and club announcement inside the 90-day window
--- sorts above the stream, so a club that posts a couple a week accumulates a
--- first page of twenty-odd coach cards, and "newest first" stops being what
--- a member sees when they open the app. The request said coach announcements
--- stay on top and this does exactly that; the fix, if the club wants one, is
--- one more predicate on the v_tier_coach arm - lift a coach post only while
--- it is recent, or only while its announcement has not expired - and it is
--- left for the owner to choose rather than invented here.
+-- EVERY TIER IS BOUNDED, and that is what keeps the lifted block from
+-- eating the page. Pins are capped at three slots and today's WOD stops
+-- being today's tomorrow; those two bound themselves. The coach tier is
+-- bounded in time, differently for each of its two shapes:
+--
+--   * a COACH POST stays up for `coach_top_hours` from publication -
+--     72 hours shipped, a number in the same club_features.config object
+--     the order lives in, read through club_feature_number() and clamped
+--     to [1, 336] hours server-side. Without it, a club posting a couple a
+--     week accumulates a first page of twenty-odd coach cards and "newest
+--     first" stops being what a member sees when they open the app.
+--   * an ANNOUNCEMENT stays up until announcements.expires_at, the instant
+--     the club itself typed into the announcement form and the same one
+--     announcements_read stops serving the row at - so the feed and the
+--     announcements list agree on when an announcement stops being current
+--     rather than each holding an opinion. An announcement with no expiry
+--     falls back to the same `coach_top_hours`: nobody said when it stops
+--     mattering, which is not the same as it never doing so.
+--
+-- The expiry branch is correct and, today, unexercised: nothing in this
+-- schema turns a public.announcements row into a feed card, and the only
+-- producer of a POST_ANNOUNCEMENT row is member_of_week_publish(), which
+-- writes no announcement_id. Every announcement card in production is
+-- therefore on the hours fallback. Written up on the tier itself.
 --
 -- DIVERSITY DOES NOT RUN ON A CHRONOLOGICAL PAGE. The COMM-112 pass exists
 -- to move a card up past a better-scoring one to break a run of three
@@ -156,8 +170,13 @@ comment on function public.club_feature_choice(text, text, text, text[]) is
 -- does not comment on is byte-identical to what was there.
 --
 -- The edits, all of them:
---   * four tier constants and two order variables in the declarations;
---   * the club_feature_choice() read, next to the weights lookup;
+--   * four tier constants, two order variables and the coach-tier hours in
+--     the declarations;
+--   * the club_feature_choice() and club_feature_number() reads, next to
+--     the weights lookup;
+--   * announcement_ref on the cand CTE, beside the challenge and event refs
+--     it is modelled on (a select-list column: the candidate FILTER is
+--     untouched);
 --   * the per-member weights lookup wrapped in `if not v_chrono`, because
 --     its only consumer is arithmetic this order never evaluates;
 --   * `and not v_chrono` on the authors and counted CTEs, so
@@ -240,6 +259,13 @@ declare
   -- =========================================================================
   v_order text;
   v_chrono boolean;
+  -- How long the coach tier lasts. A club setting rather than a constant,
+  -- read through club_feature_number() (202609220002) with the same shape
+  -- coach_tasks' thresholds use: 72 hours shipped, clamped to [1, 336] (two
+  -- weeks) server-side, and an empty field in the panel means the default
+  -- rather than zero. It bounds a coach post from its publication and an
+  -- announcement that carries no expiry of its own.
+  v_coach_top_hours  numeric := 72;
   v_tier_pinned      constant numeric := 3;  -- staff pinned it to the top
   v_tier_coach       constant numeric := 2;  -- a coach post or a club announcement
   v_tier_club_wod    constant numeric := 1;  -- today's programming, while it is today's
@@ -377,6 +403,11 @@ begin
   v_order := public.club_feature_choice('feed', 'order', 'chronological',
                                         array['chronological', 'ranked']);
   v_chrono := v_order = 'chronological';
+  -- Read only where it is used. The ranked order has no tiers, so a ranked
+  -- page does not pay for this second config read.
+  if v_chrono then
+    v_coach_top_hours := public.club_feature_number('feed', 'coach_top_hours', 72, 1, 336);
+  end if;
 
   -- --- per-user weights (COMM-303) ---------------------------------------
   -- The eight defaults out, this member's eight resolved weights back. For a
@@ -484,7 +515,19 @@ begin
                case when coalesce(p.metadata ->> 'challenge_id', '') ~ '^[0-9a-fA-F]{8}-'
                     then (p.metadata ->> 'challenge_id')::uuid else p.source_id end as challenge_ref,
                case when coalesce(p.metadata ->> 'event_id', '') ~ '^[0-9a-fA-F]{8}-'
-                    then (p.metadata ->> 'event_id')::uuid else p.source_id end as event_ref
+                    then (p.metadata ->> 'event_id')::uuid else p.source_id end as event_ref,
+               -- 202609220003, for the announcement tier's expiry bound, and
+               -- the one ref of the three that does NOT fall back to
+               -- source_id. The two above may: a challenge card's source_id
+               -- IS its challenge. An announcement card's is not its
+               -- announcement - member_of_week_publish() writes
+               -- source_type 'announcement' with the MEMBER_OF_WEEK row's id
+               -- in source_id, so falling back the way the other two do
+               -- would be joining public.announcements on a primary key from
+               -- a different table. Metadata only, the same key shape the two
+               -- above prefer, and no match simply means no expiry to read.
+               case when coalesce(p.metadata ->> 'announcement_id', '') ~ '^[0-9a-fA-F]{8}-'
+                    then (p.metadata ->> 'announcement_id')::uuid else null end as announcement_ref
         from public.workout_posts p
         where p.deleted_at is null
           and p.status = 'active'
@@ -587,11 +630,51 @@ begin
                  when exists (
                    select 1 from public.pins pn
                    where pn.target_type = 'post' and pn.target_id = c.pid) then v_tier_pinned
-                 -- The coach's voice, in both of the shapes it takes. Same two
-                 -- post types the 'coach' scope filters on and the ranked
-                 -- order's v_coach_post arm names, so the three cannot drift
-                 -- into three different ideas of what a coach post is.
-                 when c.ptype in ('POST_COACH', 'POST_ANNOUNCEMENT') then v_tier_coach
+                 -- The coach's voice, in both of the shapes it takes - and
+                 -- in both of them it is lifted FOR A WHILE, not forever.
+                 -- Same two post types the 'coach' scope filters on and the
+                 -- ranked order's v_coach_post arm names, so the three
+                 -- cannot drift into three different ideas of what a coach
+                 -- post is; what differs is when each stops being news.
+                 --
+                 -- A COACH POST: v_coach_top_hours from when it was
+                 -- published. A club that posts twice a week would otherwise
+                 -- accumulate a first page of coach cards until the 90-day
+                 -- window dropped them, and "newest first" would stop being
+                 -- what a member sees when they open the app.
+                 when c.ptype = 'POST_COACH' then
+                   case when c.pub > v_anchor - (v_coach_top_hours::double precision * interval '1 hour')
+                        then v_tier_coach else v_tier_stream end
+                 -- AN ANNOUNCEMENT: until it expires, and the club already
+                 -- says when that is. announcements.expires_at is the date
+                 -- staff typed into the announcement form, the same instant
+                 -- announcements_read stops serving the row to a member, so
+                 -- the feed and the announcements list now agree about when
+                 -- an announcement stops being current instead of each
+                 -- having an opinion. An announcement with no expiry, and a
+                 -- card that names no announcement at all, fall back to the
+                 -- same hours a coach post gets - "no expiry" means nobody
+                 -- said when this stops mattering, not that it never does.
+                 --
+                 -- TODAY THAT FALLBACK IS EVERY CARD. The only producer of a
+                 -- POST_ANNOUNCEMENT row in this schema is
+                 -- member_of_week_publish() (202609010001), which writes no
+                 -- announcement_id, and nothing turns a public.announcements
+                 -- row into a feed card at all - there is no trigger and no
+                 -- RPC that does it, whatever src/community/club.js's
+                 -- "produced server-side from this row" comment says. The
+                 -- expiry branch is therefore correct and unexercised in
+                 -- production: it is here so that the day something does
+                 -- post an announcement to the feed, writing the
+                 -- announcement_id metadata key every other linked card
+                 -- already writes is all that is needed.
+                 when c.ptype = 'POST_ANNOUNCEMENT' then
+                   case when coalesce(
+                              (select an.expires_at from public.announcements an
+                                where an.id = c.announcement_ref and an.deleted_at is null),
+                              c.pub + (v_coach_top_hours::double precision * interval '1 hour')
+                            ) > v_anchor
+                        then v_tier_coach else v_tier_stream end
                  -- TODAY'S programming, and only today's. Read off
                  -- club_wod_sessions rather than the card's own metadata: the
                  -- session row is the fact, the metadata is a copy of it, and
@@ -837,6 +920,6 @@ end $function$;
 revoke all on function public.feed_page(text, integer, text) from public, anon;
 grant execute on function public.feed_page(text, integer, text) to authenticated;
 comment on function public.feed_page(text, integer, text) is
-  'One page of the club feed, in whichever order club_features.config -> feed -> order names: chronological (the default) or ranked. CHRONOLOGICAL sorts on a tier and then on published_at descending, id descending, with no arithmetic - pinned posts, then coach posts and club announcements, then today''s club WOD (by its club_wod_sessions row, so a cancelled session cannot qualify), then everything else newest first - and it does NOT run the COMM-112 diversity pass, because a card that moves is the opposite of what a dated order promises. RANKED is unchanged from 202608280019/202608310006: eight weighted components, per-member weights through feed_weights_resolve(), the repetition penalty and the diversity pass. THE TWO ORDERS SHARE ONE CANDIDATE QUERY, so what a member may see is identical in both: deleted and non-active posts, hidden_posts, the caller''s own reports, block edges in either direction, post_visible_to_viewer() and the COMM-111 scopes. Both are cut on the same (ordering value, published_at, id) keyset with the same opaque cursor and the same frozen anchor, inside the same 90-day window and 600-row candidate cap. feed_score carries the tier rather than a score on a chronological page. AUTH unchanged: auth.uid() (''not authorized'') then is_community_member() (''recovery method required'').';
+  'One page of the club feed, in whichever order club_features.config -> feed -> order names: chronological (the default) or ranked. CHRONOLOGICAL sorts on a tier and then on published_at descending, id descending, with no arithmetic - pinned posts, then coach posts and club announcements that are still current, then today''s club WOD (by its club_wod_sessions row, so a cancelled session cannot qualify), then everything else newest first - and it does NOT run the COMM-112 diversity pass, because a card that moves is the opposite of what a dated order promises. RANKED is unchanged from 202608280019/202608310006: eight weighted components, per-member weights through feed_weights_resolve(), the repetition penalty and the diversity pass. THE TWO ORDERS SHARE ONE CANDIDATE QUERY, so what a member may see is identical in both: deleted and non-active posts, hidden_posts, the caller''s own reports, block edges in either direction, post_visible_to_viewer() and the COMM-111 scopes. Both are cut on the same (ordering value, published_at, id) keyset with the same opaque cursor and the same frozen anchor, inside the same 90-day window and 600-row candidate cap. feed_score carries the tier rather than a score on a chronological page. HOW LONG THE COACH TIER LASTS: a coach post for club_features.config -> feed -> coach_top_hours (default 72, clamped [1, 336] by club_feature_number) from publication; an announcement until announcements.expires_at, resolved through the card''s metadata announcement_id and NOT through source_id, or the same hours from publication when it names no announcement or that announcement has no expiry. AUTH unchanged: auth.uid() (''not authorized'') then is_community_member() (''recovery method required'').';
 
 commit;

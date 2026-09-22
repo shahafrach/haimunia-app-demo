@@ -36,8 +36,11 @@ async function openModuleSettings(window) {
 function orderControl(window) {
   return window.document.querySelector('[data-club-feature-setting="feed"][data-setting-key="order"]');
 }
+function hoursControl(window) {
+  return window.document.querySelector('[data-club-feature-setting="feed"][data-setting-key="coach_top_hours"]');
+}
 
-test("the feed switch carries one setting, and it is a choice between the two orders", async () => {
+test("the feed switch carries two settings: the order, and how long the lifted block lasts", async () => {
   const window = await bootCommunity(seeded(), { syncEnabled: false });
   await openModuleSettings(window);
 
@@ -48,6 +51,33 @@ test("the feed switch carries one setting, and it is a choice between the two or
     "exactly the two orders the server implements, and no third");
   assert.equal(el.value, "chronological",
     "a club that has never chosen sees the shipped default - the same one club_feature_choice() falls back to");
+
+  // The coach tier's bound. A number, and one where the panel's own
+  // "empty field = the default" rule applies, so it is a text box and not a
+  // second select: 72 is a starting point a club moves, not a choice.
+  const hours = hoursControl(window);
+  assert.ok(hours, "and a control for how long a coach post stays lifted");
+  assert.equal(hours.type, "number");
+  assert.equal(hours.placeholder, "72", "the shipped default is the placeholder");
+  assert.equal(hours.value, "", "not pre-filled, so 'nobody set this' stays visible");
+  assert.equal(hours.min, "1");
+  assert.equal(hours.max, "336", "the range mirrors club_feature_number()'s clamp, which is the real one");
+});
+
+test("the hours save alongside the order, and clearing them means the default rather than zero", async () => {
+  const mock = seeded([{ club_id: "club-1", module_key: "feed", enabled: true, config: { order: "chronological", coach_top_hours: 24 } }]);
+  const calls = [];
+  mock.onRpc("admin_set_club_feature", (args) => { calls.push(args); return { data: null, error: null }; });
+  const window = await bootCommunity(mock, { syncEnabled: false });
+  await openModuleSettings(window);
+
+  assert.equal(hoursControl(window).value, "24", "what the club set is what the club sees");
+  hoursControl(window).value = "";
+  window.document.querySelector('[data-community-action="save-club-feature-config"][data-key="feed"]').click();
+  await waitFor(() => calls.length === 1, 3000);
+
+  assert.deepEqual(calls[0].p_config, { order: "chronological" },
+    "the cleared field is gone from the object entirely - a written 0 would be a real, clamped, very different number");
 });
 
 test("what the club chose is what the club sees, and a word this build does not know reads as the default", async () => {

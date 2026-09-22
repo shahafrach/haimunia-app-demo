@@ -6,6 +6,13 @@
 --      coach posts and announcements, and TODAY'S club WOD above the stream
 --      and in that sequence - and yesterday's WOD back in the stream, where
 --      a member hunting for today's workout needs it not to be.
+--   1b. Is the lifted block bounded? A coach post drops into the stream
+--      after the club's `coach_top_hours` (72 shipped); an announcement
+--      holds its place until its own expires_at and falls back to those
+--      same hours when it has none. Both bounds, both directions, plus the
+--      hours really being the club's number rather than a constant that
+--      happens to equal it: moving it to 1 moves a post, a word instead of
+--      a number reads as the default, and 100000 clamps to 336.
 --   2. Does the switch switch? 'ranked' really is the old order (the pin
 --      stops leading, because a pin has never carried weight there),
 --      'chronological' is the default when nobody has chosen, and a value
@@ -46,8 +53,15 @@ insert into public.workout_posts (id, author_id, post_type, visibility, body, pu
   -- Older than everything in the stream, so only the pin can explain it
   -- leading the page.
   ('c1200000-0000-4000-8000-000000000004', tests.uid('m1'),    'POST_TEXT',         'club', 'pinned but old', now() - interval '2 days'),
-  -- Older still: a coach announcement is lifted for what it is, not for when.
-  ('c1200000-0000-4000-8000-000000000005', tests.uid('coach'), 'POST_ANNOUNCEMENT', 'club', 'announcement',   now() - interval '4 days'),
+  -- The coach tier, in every combination that decides it. Inside the 72
+  -- hours or outside it; carrying an announcement with a live expiry, one
+  -- with an expiry that has passed, or no announcement at all.
+  ('c1200000-0000-4000-8000-000000000005', tests.uid('coach'), 'POST_ANNOUNCEMENT', 'club', 'announcement fresh',   now() - interval '2 hours'),
+  ('c1200000-0000-4000-8000-00000000000c', tests.uid('coach'), 'POST_COACH',        'club', 'coach fresh',          now() - interval '30 minutes'),
+  ('c1200000-0000-4000-8000-00000000000d', tests.uid('coach'), 'POST_COACH',        'club', 'coach stale',          now() - interval '4 days'),
+  ('c1200000-0000-4000-8000-00000000000e', tests.uid('coach'), 'POST_ANNOUNCEMENT', 'club', 'announcement live',    now() - interval '5 days'),
+  ('c1200000-0000-4000-8000-00000000000f', tests.uid('coach'), 'POST_ANNOUNCEMENT', 'club', 'announcement stale',   now() - interval '6 days'),
+  ('c1200000-0000-4000-8000-000000000010', tests.uid('coach'), 'POST_ANNOUNCEMENT', 'club', 'announcement expired', now() - interval '7 days'),
   ('c1200000-0000-4000-8000-000000000006', tests.uid('coach'), 'POST_CLUB_WOD',     'club', 'wod today',      now() - interval '6 hours'),
   ('c1200000-0000-4000-8000-000000000007', tests.uid('coach'), 'POST_CLUB_WOD',     'club', 'wod yesterday',  now() - interval '30 hours'),
   -- The three that must never reach a page, whatever the order.
@@ -66,6 +80,21 @@ values ('customwod-0120', 'Fixture WOD', '', 'time', tests.uid('coach'));
 insert into public.club_wod_sessions (wod_id, session_date, post_id, published_by) values
   ('customwod-0120', current_date,     'c1200000-0000-4000-8000-000000000006', tests.uid('coach')),
   ('customwod-0120', current_date - 1, 'c1200000-0000-4000-8000-000000000007', tests.uid('coach'));
+
+-- Two real announcements behind two of the cards, one live and one already
+-- expired, linked the way every other linked card in this schema links:
+-- through the metadata key, never through source_id (member_of_week_publish
+-- writes source_type 'announcement' with a MEMBER_OF_WEEK id in source_id,
+-- so source_id is the wrong thing to join announcements on).
+insert into public.announcements (id, author_id, title, body, expires_at, created_at) values
+  ('a1200000-0000-4000-8000-000000000001', tests.uid('coach'), 'live',    'still on', now() + interval '2 days', now() - interval '5 days'),
+  ('a1200000-0000-4000-8000-000000000002', tests.uid('coach'), 'expired', 'over',     now() - interval '1 hour', now() - interval '7 days');
+update public.workout_posts
+   set metadata = metadata || '{"announcement_id": "a1200000-0000-4000-8000-000000000001"}'::jsonb
+ where id = 'c1200000-0000-4000-8000-00000000000e';
+update public.workout_posts
+   set metadata = metadata || '{"announcement_id": "a1200000-0000-4000-8000-000000000002"}'::jsonb
+ where id = 'c1200000-0000-4000-8000-000000000010';
 
 insert into public.pins (target_type, target_id, slot, pinned_by, note)
 values ('post', 'c1200000-0000-4000-8000-000000000004', 0, tests.uid('admin'), 'read this');
@@ -91,30 +120,125 @@ select is(
 
 select results_eq(
   $$ select body from public.feed_page(null, 20, 'for_you') $$,
-  $$ values ('pinned but old'), ('announcement'), ('wod today'),
-            ('stream newest'), ('stream middle'), ('stream oldest'), ('wod yesterday') $$,
-  'pinned, then the coach announcement, then today''s WOD, then every other post newest first');
+  $$ values ('pinned but old'),
+            ('coach fresh'), ('announcement fresh'), ('announcement live'),
+            ('wod today'),
+            ('stream newest'), ('stream middle'), ('stream oldest'), ('wod yesterday'),
+            ('coach stale'), ('announcement stale'), ('announcement expired') $$,
+  'pinned, then the coach voice that is still current, then today''s WOD, then every other post newest first');
 
 -- Said again as its own assertion, because it is the whole promise and a
 -- reader should not have to derive it from the list above.
 select results_eq(
-  $$ select body from public.feed_page(null, 20, 'for_you') offset 3 $$,
-  $$ values ('stream newest'), ('stream middle'), ('stream oldest'), ('wod yesterday') $$,
-  'below the lifted tiers it is published_at descending and nothing else - yesterday''s WOD is an ordinary post again');
+  $$ select body from public.feed_page(null, 20, 'for_you') offset 5 $$,
+  $$ values ('stream newest'), ('stream middle'), ('stream oldest'), ('wod yesterday'),
+            ('coach stale'), ('announcement stale'), ('announcement expired') $$,
+  'below the lifted tiers it is published_at descending and nothing else - yesterday''s WOD, and the coach voice that has aged out, are ordinary posts again');
 
 -- The page boundary, which is where an order that sorts on two things at
--- once goes wrong: page one ends INSIDE the lifted tiers, so the cursor
--- carries a tier rather than a score and page two has to pick up in the
--- stream below it without repeating or dropping a post.
+-- once goes wrong: page one ends INSIDE the coach tier, so the cursor
+-- carries a tier rather than a score and page two has to pick up at the
+-- next post down - across two tier boundaries - without repeating or
+-- dropping one.
 select results_eq(
   $$ select body from public.feed_page(null, 3, 'for_you') $$,
-  $$ values ('pinned but old'), ('announcement'), ('wod today') $$,
-  'a three-post page is the three lifted posts');
+  $$ values ('pinned but old'), ('coach fresh'), ('announcement fresh') $$,
+  'a three-post page stops in the middle of the coach tier');
 select results_eq(
   $$ select body from public.feed_page(
        (select next_cursor from public.feed_page(null, 3, 'for_you') limit 1), 3, 'for_you') $$,
-  $$ values ('stream newest'), ('stream middle'), ('stream oldest') $$,
-  'and the cursor picks up in the stream, newest first, with nothing repeated and nothing skipped');
+  $$ values ('announcement live'), ('wod today'), ('stream newest') $$,
+  'and the cursor picks up at the next post down, with nothing repeated and nothing skipped');
+
+-- =====================================================================
+-- 1b. the coach tier is bounded, and the bound is the club's own number
+-- =====================================================================
+-- Both halves of it, as their own assertions rather than left to be read
+-- out of the long list above. Without a bound the top of the feed fills
+-- with coach cards until the 90-day window drops them, and the order stops
+-- meaning what it says. feed_score carries the TIER on a chronological
+-- page, so it is the honest thing to assert on: 2 is the coach tier, 0 the
+-- stream.
+select results_eq(
+  $$ select feed_score from public.feed_page(null, 20, 'for_you') where body = 'coach fresh' $$,
+  $$ values (2::numeric) $$,
+  'a coach post thirty minutes old is in the coach tier');
+select results_eq(
+  $$ select feed_score from public.feed_page(null, 20, 'for_you') where body = 'coach stale' $$,
+  $$ values (0::numeric) $$,
+  'one four days old has fallen to the stream - dropped out of the lifted block, not off the page');
+
+select results_eq(
+  $$ select feed_score from public.feed_page(null, 20, 'for_you') where body = 'announcement live' $$,
+  $$ values (2::numeric) $$,
+  'an announcement five days old whose expires_at is still ahead stays lifted - the club said when it stops mattering');
+select results_eq(
+  $$ select feed_score from public.feed_page(null, 20, 'for_you') where body = 'announcement expired' $$,
+  $$ values (0::numeric) $$,
+  'one whose expires_at has passed is in the stream, and no number of hours brings it back');
+select results_eq(
+  $$ select feed_score from public.feed_page(null, 20, 'for_you') where body = 'announcement stale' $$,
+  $$ values (0::numeric) $$,
+  'and one with no announcement behind it falls back to the same hours a coach post gets');
+
+-- THE NUMBER IS A CLUB SETTING, and this is what proves the tier reads it
+-- rather than a constant that happens to be 72: move it to one hour and the
+-- two-hour-old announcement leaves the lifted block while the
+-- thirty-minute-old coach post stays.
+select tests.set_auth(tests.uid('owner'));
+select lives_ok(
+  $$ select public.admin_set_club_feature('feed', true, '{"coach_top_hours": 1}'::jsonb) $$,
+  'an admin shortens the coach tier to one hour');
+select tests.set_auth(tests.uid('m2'));
+select results_eq(
+  $$ select feed_score from public.feed_page(null, 20, 'for_you') where body = 'announcement fresh' $$,
+  $$ values (0::numeric) $$,
+  'the two-hour-old announcement is in the stream now');
+select results_eq(
+  $$ select feed_score from public.feed_page(null, 20, 'for_you') where body = 'coach fresh' $$,
+  $$ values (2::numeric) $$,
+  'and the thirty-minute-old coach post is still lifted - the hours moved, nothing else did');
+select results_eq(
+  $$ select feed_score from public.feed_page(null, 20, 'for_you') where body = 'announcement live' $$,
+  $$ values (2::numeric) $$,
+  'the announcement with an expiry of its own does not consult the hours at all');
+
+-- A rubbish value is not an outage here either: club_feature_number() falls
+-- back to the shipped default, the same discipline club_feature_choice()
+-- carries for the order.
+select tests.set_auth(tests.uid('owner'));
+select lives_ok(
+  $$ select public.admin_set_club_feature('feed', true, '{"coach_top_hours": "soon"}'::jsonb) $$,
+  'somebody writes a word where the hours belong');
+select tests.set_auth(tests.uid('m2'));
+select results_eq(
+  $$ select feed_score from public.feed_page(null, 20, 'for_you') where body = 'announcement fresh' $$,
+  $$ values (2::numeric) $$,
+  'and the feed is back on the shipped 72 hours rather than raising');
+
+-- And the clamp is the server's: 100000 hours is not eleven years of lifted
+-- coach posts, it is 336.
+select tests.set_auth(tests.uid('owner'));
+select lives_ok(
+  $$ select public.admin_set_club_feature('feed', true, '{"coach_top_hours": 100000}'::jsonb) $$,
+  'an admin types a number far outside the range');
+select tests.set_auth(tests.uid('m2'));
+select is(
+  public.club_feature_number('feed', 'coach_top_hours', 72, 1, 336), 336::numeric,
+  'the server clamps it to the top of the range rather than honouring it');
+select results_eq(
+  $$ select feed_score from public.feed_page(null, 20, 'for_you') where body = 'announcement stale' $$,
+  $$ values (2::numeric) $$,
+  'so a six-day-old announcement IS lifted at the clamped 336 hours - the clamp is a real number, not a refusal');
+
+select tests.set_auth(tests.uid('owner'));
+select lives_ok( $$ select public.admin_set_club_feature('feed', true, '{}'::jsonb) $$,
+  'the club clears the setting, which is how the panel says "use the shipped default"');
+select tests.set_auth(tests.uid('m2'));
+select results_eq(
+  $$ select feed_score from public.feed_page(null, 20, 'for_you') where body = 'announcement stale' $$,
+  $$ values (0::numeric) $$,
+  'and 72 hours applies again');
 
 -- =====================================================================
 -- 2. hidden, blocked and removed stay out - of the CHRONOLOGICAL page
@@ -173,9 +297,12 @@ select isnt(
 -- change the SET of posts, only their sequence.
 select set_eq(
   $$ select body from public.feed_page(null, 20, 'for_you') $$,
-  $$ values ('pinned but old'), ('announcement'), ('wod today'),
-            ('stream newest'), ('stream middle'), ('stream oldest'), ('wod yesterday') $$,
-  'the ranked page holds exactly the same posts - hidden, blocked, removed and deleted are out of both orders');
+  $$ values ('pinned but old'),
+            ('coach fresh'), ('announcement fresh'), ('announcement live'),
+            ('wod today'),
+            ('stream newest'), ('stream middle'), ('stream oldest'), ('wod yesterday'),
+            ('coach stale'), ('announcement stale'), ('announcement expired') $$,
+  'the ranked page holds exactly the same posts - hidden, blocked, removed and deleted are out of both orders, and an aged-out coach post was never removed from either');
 
 -- =====================================================================
 -- 4. a word nobody implemented is not an outage
