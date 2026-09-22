@@ -37,7 +37,7 @@
 // of follow(), not just the initial insert.
 import { test } from "node:test";
 import assert from "node:assert";
-import { bootCommunity, waitFor } from "./helpers/boot.mjs";
+import { bootCommunity, chooseFeedScope, waitFor } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
 
 const VERIFIED = new Date().toISOString();
@@ -269,7 +269,7 @@ test("following someone through the profile surface's own Follow button makes th
   window.document.querySelector('[data-community-action="close-profile"]').click();
   await waitFor(() => !window.document.getElementById("profileViewTitle"), 4000);
   window.document.querySelector('[data-community-action="set-tab"][data-tab="feed"]').click();
-  await waitFor(() => !!window.document.querySelector('[data-community-action="feed-scope"][data-scope="following"]'), 4000);
-  window.document.querySelector('[data-community-action="feed-scope"][data-scope="following"]').click();
+  await waitFor(() => !!window.document.getElementById("communityFeedFilters"), 4000);
+  chooseFeedScope(window, "following");
   await waitFor(() => !!window.document.querySelector('[data-post-id="p1"]'), 4000);
 });

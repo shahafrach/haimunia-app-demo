@@ -152,19 +152,23 @@ const SCROLL_REBUILD_TRIPWIRE = 6;
 const scroll = await burst("scroll the feed to the bottom (pagination)", async () => {
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
 });
-await burst("switch to feed filter tab", async () => {
-  const b = await page.$('#communityFeedFilters [role="tab"]:nth-child(2)');
-  if (b) await b.click();
+// selectOption, not a click on a chip: the four role="tab" chips this used
+// to drive are one <select> now (the Community tab was stacking three
+// navigation layers and a filter is not one of them). Same action for the
+// member, same setFeedScope() underneath, same thing being measured - how
+// many full rebuilds one deliberate scope change costs.
+await burst("switch to feed filter scope", async () => {
+  await page.selectOption("#communityFeedFilters", { index: 1 });
 });
 // BACK TO THE DEFAULT SCOPE FIRST. The burst above leaves the feed on the
-// second chip ("אחרי מי שאני עוקב/ת"), which has no posts in this fixture -
+// second scope ("אחרי מי שאני עוקב/ת"), which has no posts in this fixture -
 // so the two bursts below found no card, clicked nothing, and reported a
 // perfectly clean "0 full rebuilds" for two interactions that never happened.
 // Both of them matter more now that a card carries a comment preview and a
 // reaction summary, so they are made to run against a feed that has cards in
 // it. (Found while fixing a real regression this file caught on the scroll
 // burst - see loadCommentsFor's scheduleRerender.)
-await page.click('#communityFeedFilters [role="tab"]:nth-child(1)');
+await page.selectOption("#communityFeedFilters", { index: 0 });
 await page.waitForSelector('#communityFeedList .post-card', { timeout: 5000 });
 await burst("tap a reaction", async () => {
   const b = await page.$('#communityFeedList .post-card [data-community-action="cheer"]');

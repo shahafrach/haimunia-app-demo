@@ -17,7 +17,7 @@
 // would only ever be asserting itself.
 import { test } from "node:test";
 import assert from "node:assert";
-import { bootCommunity, waitFor } from "./helpers/boot.mjs";
+import { bootCommunity, chooseFeedScope, waitFor } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
 
 const VERIFIED = new Date().toISOString();
@@ -109,17 +109,21 @@ test("cloud.js contains no sort of the feed rows", async () => {
 // waited on is class attendance, which is Arbox's responsibility rather than
 // this app's, so "soon" had no owner and no date. These two tests now pin the
 // removal from both ends - it is not offered, and it cannot be reached.
-test("every filter chip is a scope a member can actually select", async () => {
+test("every filter option is a scope a member can actually select", async () => {
   const window = await bootCommunity(seeded([row(1)]), { syncEnabled: false });
   await openFeed(window);
-  const chips = window.document.querySelectorAll('[data-community-action="feed-scope"]');
-  const scopes = Array.prototype.slice.call(chips).map((c) => c.dataset.scope);
+  // The filter is one <select> now, not four chips on a rail of their own -
+  // the third stacked navigation layer this screen carried. What is pinned
+  // here is unchanged: the same four scopes, in the same order, none of them
+  // unselectable.
+  const select = window.document.getElementById("communityFeedFilters");
+  const scopes = Array.prototype.slice.call(select.options).map((o) => o.value);
   assert.deepEqual(scopes, ["for_you", "following", "achievements", "coach"]);
   assert.equal(
-    window.document.querySelector('[data-scope="my_classes"]'), null,
-    "the parked My Classes chip is gone, not merely hidden",
+    window.document.querySelector('[value="my_classes"]'), null,
+    "the parked My Classes scope is gone, not merely hidden",
   );
-  const disabled = Array.prototype.slice.call(chips).filter((c) => c.disabled);
+  const disabled = Array.prototype.slice.call(select.options).filter((o) => o.disabled);
   assert.deepEqual(disabled, [], "no filter advertises a scope that cannot be chosen");
 });
 
@@ -130,7 +134,7 @@ test("choosing a filter sends the scope to feed_page and restarts the feed", asy
   ]);
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openFeed(window, 2);
-  window.document.querySelector('[data-community-action="feed-scope"][data-scope="achievements"]').click();
+  chooseFeedScope(window, "achievements");
   await waitFor(() => mock.callsTo("feed_page").some((a) => a.p_scope === "achievements"), 3000);
   await waitFor(() => renderedIds(window).length === 1, 3000);
   assert.deepEqual(renderedIds(window), ["p2"], "only the achievement post survives the scope");
@@ -143,15 +147,18 @@ test("a scope this client no longer offers can never reach the server", async ()
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openFeed(window);
   const before = mock.callsTo("feed_page").length;
-  // There is no my_classes chip to click any more, so this forges one - the
-  // case that matters is a crafted or stale data-scope reaching the handler,
-  // not a button the UI renders. feedScopeDef() falls back to for_you for any
-  // id it does not know, so the unknown scope must never go out on the wire.
-  const row0 = window.document.getElementById("communityFeedFilters");
+  // There is no my_classes control to drive any more - and since the filter
+  // became a <select>, there is no feed-scope BUTTON on this screen at all.
+  // This forges one anyway, because the case that matters is a crafted or
+  // stale data-scope reaching the handler (an old build's cached markup, a
+  // scripted tap), not a control the UI renders. feedScopeDef() falls back
+  // to for_you for any id it does not know, so the unknown scope must never
+  // go out on the wire - and cloud.js keeps that click branch alive for
+  // exactly this reason.
   const forged = window.document.createElement("button");
   forged.setAttribute("data-community-action", "feed-scope");
   forged.setAttribute("data-scope", "my_classes");
-  row0.appendChild(forged);
+  window.document.getElementById("communityFeedTop").appendChild(forged);
   forged.click();
   await new Promise((r) => setTimeout(r, 50));
   assert.equal(
@@ -246,8 +253,8 @@ test("an empty default feed shows the welcome card, not an error", async () => {
 test("an empty non-default scope shows that scope's own empty line, not the welcome", async () => {
   const window = await bootCommunity(seeded([]), { syncEnabled: false });
   window.document.getElementById("tabCommunityBtn").click();
-  await waitFor(() => !!window.document.querySelector('[data-community-action="feed-scope"][data-scope="following"]'), 4000);
-  window.document.querySelector('[data-community-action="feed-scope"][data-scope="following"]').click();
+  await waitFor(() => !!window.document.getElementById("communityFeedFilters"), 4000);
+  chooseFeedScope(window, "following");
   await waitFor(() => /אין עדיין פוסטים ממי שאתם עוקבים אחריו/.test(window.document.getElementById("content").textContent), 4000);
   assert.equal(window.document.querySelector('[data-feed-welcome="ready"]'), null);
   assert.equal(window.document.querySelector('[data-community-action="feed-retry"]'), null);

@@ -132,6 +132,13 @@ test("change visibility calls post_set_visibility with the picked label", async 
   assert.deepEqual(mock.db.__setVis, { post_id: "own1", visibility: "friends" });
 });
 
+// The card still leaves on the confirm and post_delete still carries the
+// right id - what changed is the ORDER. The RPC is held for the undo window
+// now (deferCommunityDelete, cloud.js), so the card goes first and the write
+// follows when the toast's window closes. settleToast(false) is that closing,
+// the same call app.js makes on pagehide; the five-second clock itself is
+// exercised for real in community-delete-undo.test.mjs rather than waited out
+// in every test that deletes something.
 test("delete goes through the single confirm dialog then post_delete, and removes the card", async () => {
   const mock = seeded();
   const window = await bootCommunity(mock, { syncEnabled: false });
@@ -141,9 +148,11 @@ test("delete goes through the single confirm dialog then post_delete, and remove
   window.document.querySelector('[data-community-action="post-delete"]').click();
   await waitFor(() => !!window.document.querySelector('[data-community-action="confirm-yes"]'), 3000);
   window.document.querySelector('[data-community-action="confirm-yes"]').click();
+  await waitFor(() => window.document.querySelector('[data-post-id="own1"]') === null, 3000);
+  assert.equal(mock.db.__deleted, undefined, "nothing goes out while the undo is still on screen");
+  window.settleToast(false);
   await waitFor(() => !!mock.db.__deleted, 3000);
   assert.deepEqual(mock.db.__deleted, { post_id: "own1" });
-  await waitFor(() => window.document.querySelector('[data-post-id="own1"]') === null, 3000);
 });
 
 // The two functions the six tests above mock actually exist, with the

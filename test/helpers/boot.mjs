@@ -258,6 +258,28 @@ export function answerWodRx(window, rx = true) {
   window.setWodRx(rx);
 }
 
+// The feed's scope filter, driven the way a member drives it.
+//
+// It was four role="tab" chips, so every caller clicked
+// [data-community-action="feed-scope"][data-scope="..."] directly. It is one
+// <select> now (the three-stacked-navigation-layers finding) - the chips
+// were the third navigation rail on a screen that already carries the bottom
+// bar and the community sub-tabs. Setting .value does not fire "change" on
+// its own, which is why the event is dispatched by hand: that is the same
+// path a real picker takes, and cloud.js's document-level change listener is
+// what reads it.
+//
+// ONE helper rather than this three-line dance copied into six test files -
+// that copying is exactly how the next change to this control leaves five
+// call sites pinning a shape the product no longer has.
+export function chooseFeedScope(window, scope) {
+  const select = window.document.getElementById("communityFeedFilters");
+  if (!select) throw new Error("the feed scope filter is not on screen");
+  select.value = scope;
+  select.dispatchEvent(new window.Event("change", { bubbles: true }));
+  return select;
+}
+
 export function waitFor(check, timeoutMs = 2000, intervalMs = 5) {
   const start = Date.now();
   return new Promise((resolve, reject) => {

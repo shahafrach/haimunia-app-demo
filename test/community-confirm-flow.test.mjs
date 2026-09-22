@@ -53,7 +53,19 @@ test("block, delete-account, and migrate all route through askConfirm with a des
 });
 
 test("deletePost is scoped to the caller's own post, and only the author sees a delete action (report otherwise)", () => {
-  assert.match(src, /async function deletePost\(postId\) \{\s*if \(!state\.user\) return;\s*const \{ error \} = await client\.from\("workout_posts"\)\.delete\(\)\.eq\("id", postId\)\.eq\("author_id", state\.user\.id\);/);
+  // The author scoping is the security claim and it is unchanged: the row
+  // filter still carries author_id, so the query can only ever delete the
+  // caller's own post whatever the client is told to pass as an id.
+  // What moved is WHEN it runs - the write is now held for the undo window
+  // (deferCommunityDelete, cloud.js), so the query lives inside commit()
+  // rather than at the top of the function. Asserted as two separate facts
+  // rather than one long literal, so the next reader can tell which half
+  // they broke.
+  const deletePostFn = src.slice(src.indexOf("async function deletePost(postId) {"), src.indexOf("async function publishWorkout("));
+  assert.match(deletePostFn, /if \(!state\.user\) return;/, "a signed-out caller deletes nothing");
+  assert.match(deletePostFn, /await client\.from\("workout_posts"\)\.delete\(\)\.eq\("id", postId\)\.eq\("author_id", state\.user\.id\)/,
+    "the delete is still scoped to the caller's own post");
+  assert.match(deletePostFn, /deferCommunityDelete\(\{/, "and it goes out through the undo window, not straight from the tap");
   // The delete control MOVED, and that is the point of this line rather than
   // a weakening of it. It used to be an inline chip on the legacy (no
   // post_type) feed card, sitting loose beside the reaction and comment

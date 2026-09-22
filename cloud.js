@@ -3170,6 +3170,54 @@
     else rerender();
   }
 
+  // ---- The five-second undo, for the community's own destructive writes ---
+  //
+  // THE ASYMMETRY THIS CLOSES. Deleting a logged set on the offline side
+  // confirms AND offers an undo (askAppConfirm + offerUndo, app.js): a
+  // confirmation stops the accident, an undo repairs the one that got
+  // through anyway. Deleting a post or a comment — the two deletes that
+  // happen in front of the whole club — confirmed and then went straight to
+  // the server, and the sheets said so in as many words ("הפעולה לא ניתנת
+  // לביטול"). Same app, same finger, two different promises.
+  //
+  // THE WRITE IS HELD, NOT REVERSED, and the schema is what decides that
+  // rather than convenience. A post delete is a hard delete of the
+  // workout_posts row (its comments, reactions and impressions follow by
+  // cascade) and a comment delete is comment_delete()'s soft delete, which
+  // has no client-callable inverse — there is no restore RPC and this branch
+  // adds no migration. Re-inserting either after the fact would mint a new
+  // id and leave every reply, reaction and notification pointing at a row
+  // that no longer exists. So: the row leaves the screen at once, the toast
+  // holds the actual write open for the toast's own window, and "בטלו" means
+  // the write never happens at all. What a member sees is identical to the
+  // log's undo; what reaches Postgres is strictly safer.
+  //
+  // ONE CLOCK, and it is app.js's. showToast()'s onExpire fires when the
+  // toast's window closes without being tapped — timeout, a newer toast
+  // replacing it, or pagehide — so the held write and the toast can never
+  // disagree about when five seconds are up, which two timers eventually
+  // would. `settled` is belt and braces on top of that: onExpire and the
+  // undo are mutually exclusive by construction there, and a double delivery
+  // from anywhere still cannot send the write twice or send it after an undo.
+  //
+  // NO TOAST AVAILABLE (app.js not loaded yet, or a build without it) is not
+  // a reason to drop a delete the member confirmed: commit() runs at once,
+  // which is exactly the behaviour this replaced.
+  function deferCommunityDelete(opts) {
+    opts.remove();
+    let settled = false;
+    const once = (fn) => () => { if (settled) return; settled = true; fn(); };
+    // ARMED BEFORE THE REPAINT, not after it. offerUndo() only STORES the
+    // toast; app.js's render() is what paints it, and rerender() is that
+    // render. Calling them the other way round leaves the member watching
+    // their post vanish with no undo on screen at all - the same ordering
+    // trap app.js's own deleteEntry() documents at its call site.
+    const haveToast = typeof window.offerUndo === "function";
+    if (haveToast) window.offerUndo(opts.label, once(() => { opts.restore(); rerender(); }), once(opts.commit));
+    rerender();
+    if (!haveToast) once(opts.commit)();
+  }
+
   // Splices aria-invalid/aria-describedby onto an already-built <input>/
   // <textarea> string when that field has a live validation error, and
   // renders the matching visible error text right under the field — the
@@ -3385,8 +3433,15 @@
       </div>
     </div>`;
   }
-  function sectionHead(color, title, adminTag) {
-    return `<div class="ach-section-head"><span class="ach-section-dot" style="background:${color};"></span><h2 class="ach-section-title">${title}</h2>${adminTag ? `<span class="admin-tag">ניהול</span>` : ""}</div>`;
+  // `trailing` is an optional control that rides the END of the head row
+  // (margin-inline-start:auto on the control itself, so it answers RTL
+  // rather than a hardcoded side). One caller uses it — the feed's scope
+  // filter, which used to be a stacked rail of its own; see filterHtml.
+  // An optional fourth argument rather than a second head renderer: a
+  // near-copy of this markup somewhere else is exactly the sibling drift
+  // this file keeps paying for.
+  function sectionHead(color, title, adminTag, trailing) {
+    return `<div class="ach-section-head"><span class="ach-section-dot" style="background:${color};"></span><h2 class="ach-section-title">${title}</h2>${adminTag ? `<span class="admin-tag">ניהול</span>` : ""}${trailing || ""}</div>`;
   }
   // ==========================================================================
   // Five-persona UX audit, defect 1. Empty states.
@@ -4427,27 +4482,40 @@
     // The club header stays first and alone: it is identity and the bell, not
     // content, and it is the one thing that should never compete for a slot.
     // Announcements are now the ARCHIVE and sit below the feed.
-    // COMM-111 filter chips. Every chip here is now selectable - the parked
-    // "השיעורים שלי" chip was removed (see FEED_SCOPES). setFeedScope still
-    // refuses a `parked` scope on the way in; nothing sets that flag today,
-    // and the guard stays for a future one. The real protection against a
-    // scope this client no longer offers is feedScopeDef(), which falls back
-    // to for_you for any id it does not know - so a crafted data-scope can
-    // never put an unknown scope on the wire.
-    // Launch-readiness audit, A5 (axe, aria-required-children - CRITICAL).
-    // The PARKED chips were plain <button aria-disabled>, with no role="tab",
-    // while the live ones had it. A role="tablist" whose children are not all
-    // tabs is a broken ARIA structure: assistive tech is told "this is a set
-    // of tabs" and then handed something that is not one, so the whole set
-    // can be mis-announced or skipped. A disabled tab is still a tab -
-    // aria-disabled is the right way to say "not selectable yet", not
-    // dropping the role.
-    // No parked branch any more: every chip in FEED_SCOPES is a scope a member
-    // can actually select. The aria-required-children fix that branch carried
-    // (a role="tablist" whose children were not all tabs) is moot now that
-    // there is nothing disabled left to render, but the note above stays as
-    // the reason the live chips each carry role="tab".
-    const filterHtml = `<div class="chip-row" id="communityFeedFilters" role="tablist" aria-label="סינון הפיד" style="margin:0 0 10px;">${FEED_SCOPES.map((s) => `<button class="chip-btn${state.feed.scope === s.id ? " selected" : ""}" id="feedScope-${s.id}" data-community-action="feed-scope" data-scope="${s.id}" role="tab" aria-controls="communityFeedPanel" aria-selected="${state.feed.scope === s.id ? "true" : "false"}" tabindex="${state.feed.scope === s.id ? "0" : "-1"}">${esc(s.label)}</button>`).join("")}</div>`;
+    // COMM-111's filter, and it is no longer a rail.
+    //
+    // WHAT IT WAS. Four .chip-btn role="tab"s in their own .chip-row under
+    // the sub-tab bar. Measured at 390x844 in Chromium: 96px tall, because
+    // the four Hebrew labels wrap onto two lines. That put THREE stacked
+    // navigation layers on this one screen - the bottom bar, the community
+    // sub-tabs, and this - before a member reached a single post, which is
+    // the UX finding this answers.
+    //
+    // WHAT IT IS. One control, riding the "הפיד שלי" section head it was
+    // always about (sectionHead's `trailing` slot). Every scope is still
+    // reachable, in the same FEED_SCOPES order, with the current one shown
+    // as the closed value - nothing was dropped to make room. The two
+    // remaining layers are the bottom bar and the sub-tab bar, and both are
+    // navigation; this is a filter, which is why it is the one that stopped
+    // pretending to be a third.
+    //
+    // A NATIVE <select>, not a bespoke popover. It is the pattern this file
+    // already uses for every other one-of-N choice (composer visibility,
+    // the weekly-challenge key, club WOD session, team captain), it is
+    // operable by keyboard and screen reader without a line of JS, and on a
+    // phone it opens the OS picker instead of a hand-rolled sheet this
+    // codebase would then have to trap focus in. It also ends the
+    // aria-required-children problem the chips carried permanently rather
+    // than by convention: there is no tablist here to get wrong.
+    //
+    // setFeedScope() still refuses a `parked` scope on the way in; nothing
+    // sets that flag today, and the guard stays for a future one. The real
+    // protection against a scope this client no longer offers is
+    // feedScopeDef(), which falls back to for_you for any id it does not
+    // know - so a forged option value can never put an unknown scope on the
+    // wire. The "השיעורים שלי" option was removed from FEED_SCOPES itself,
+    // not hidden here (see that list's own comment).
+    const filterHtml = `<select class="text-input feed-scope-select" id="communityFeedFilters" data-feed-scope-select aria-label="סינון הפיד" aria-controls="communityFeedPanel">${FEED_SCOPES.map((sc) => `<option value="${esc(sc.id)}"${state.feed.scope === sc.id ? " selected" : ""}>${esc(sc.label)}</option>`).join("")}</select>`;
 
     // ONE CARD PER CLUB-WOD SESSION. The individual result posts a session
     // card now carries are dropped from the list here rather than inside
@@ -4519,14 +4587,22 @@
     // passed it and a member who did not never saw it at all.
     // classmatesTodayHtml is not concatenated here either, and is not a rail
     // card any more: it is the strip inside feedHtml just below.
-    // Launch-readiness audit follow-up (COMM-329). The scope chips were
-    // already declared role="tab" inside a role="tablist", but there was no
-    // element for them to control: the list they swap is rendered under three
-    // different ids depending on state (loading / error / items), and the
-    // empty state has no container of its own at all. One stable wrapper is
-    // what completes the pattern - a plain block div inside a plain block
-    // .ach-section, so nothing about the layout moves.
-    const feedPanel = `<div id="communityFeedPanel" role="tabpanel" aria-labelledby="feedScope-${state.feed.scope}">${renderNewPostsPill()}${feed}${feedMoreHtml}</div>`;
+    // Launch-readiness audit follow-up (COMM-329). The list the filter swaps
+    // is rendered under three different ids depending on state (loading /
+    // error / items), and the empty state has no container of its own at
+    // all, so the control had nothing stable to point at. One wrapper fixes
+    // that - a plain block div inside a plain block .ach-section, so nothing
+    // about the layout moves.
+    // role="region", not role="tabpanel": the four chips that made this a
+    // tabpanel are one <select> now (see filterHtml), and a tabpanel with no
+    // tablist anywhere is a half-declared pattern - a screen reader is told
+    // to expect tabs and never finds any. A region named by the scope in
+    // force says the true thing instead, and it still changes when the
+    // filter does, which is what a member navigating by landmark needs.
+    // The name is built here rather than through aria-labelledby: the label
+    // is now the SELECT'S VALUE, and a select's accessible name is its own
+    // label ("סינון הפיד"), not the option showing in it.
+    const feedPanel = `<div id="communityFeedPanel" role="region" aria-label="${esc("הפיד שלי — " + feedScopeDef(state.feed.scope).label)}">${renderNewPostsPill()}${feed}${feedMoreHtml}</div>`;
     // communityPullRefresh is the pull gesture's own indicator and nothing
     // else: it is a zero-height strip whose height is written directly by the
     // touchmove handler (src/community/feed.js), never by a render - a feed
@@ -4534,7 +4610,7 @@
     // do. communityFeedTop is what the "פוסטים חדשים" pill scrolls back to.
     const feedHtml = `<div class="ach-section" id="communityFeedTop">
       <div id="communityPullRefresh" class="pull-refresh" data-ready="0" aria-hidden="true"><span class="pull-refresh-mark"></span></div>
-      ${sectionHead("var(--blue)", "הפיד שלי")}${composeBtn}${classmatesTodayHtml}${filterHtml}${feedPanel}</div>`;
+      ${sectionHead("var(--blue)", "הפיד שלי", false, filterHtml)}${composeBtn}${classmatesTodayHtml}${feedPanel}</div>`;
 
     // COMM-155. The pinned strip sits above everything else on the Club home.
     // 202609080002. Directly under the club header and ABOVE the feed list:
@@ -6404,12 +6480,12 @@
     // toggles already use (block() itself still confirms - it's the one
     // that actually cuts off interaction).
     else if (action === "unblock") unblock(el.dataset.id);
-    else if (action === "delete-post") askConfirm({ title: "הסרת שיתוף", message: "להסיר את השיתוף מהפיד? הפעולה לא ניתנת לביטול.", confirmLabel: "הסרה", destructive: true, action: "delete-post", payload: { postId: el.dataset.id } });
+    else if (action === "delete-post") askConfirm({ title: "הסרת שיתוף", message: "להסיר את השיתוף מהפיד? אפשר יהיה לבטל למשך כמה שניות.", confirmLabel: "הסרה", destructive: true, action: "delete-post", payload: { postId: el.dataset.id } });
     else if (action === "compare") compare(el.dataset.key, el.dataset.id);
     else if (action === "delete-account") askConfirm({ title: "מחיקת חשבון", message: "הפרופיל והשיתופים יוסרו מיד. המחיקה הסופית תתבצע לאחר 30 יום. להמשיך?", confirmLabel: "מחיקה", destructive: true, action: "delete-account" });
     else if (action === "share-achievement") publishAchievement(el.dataset.id, el.dataset.title, el.dataset.rule);
     else if (action === "toggle-comments") toggleComments(el.dataset.id);
-    else if (action === "delete-comment") askConfirm({ title: "מחיקת תגובה", message: "למחוק את התגובה? הפעולה לא ניתנת לביטול.", confirmLabel: "מחיקה", destructive: true, action: "delete-comment", payload: { commentId: el.dataset.id, postId: el.dataset.post } });
+    else if (action === "delete-comment") askConfirm({ title: "מחיקת תגובה", message: "למחוק את התגובה? אפשר יהיה לבטל למשך כמה שניות.", confirmLabel: "מחיקה", destructive: true, action: "delete-comment", payload: { commentId: el.dataset.id, postId: el.dataset.post } });
     else if (action === "comment-reply") { const p = el.dataset.post; state.engagement.replyTo[p] = state.engagement.replyTo[p] === el.dataset.id ? null : el.dataset.id; if (state.engagement.replyTo[p]) state.engagement.openReplies[el.dataset.id] = true; rerender(); }
     else if (action === "toggle-replies") { const id = el.dataset.id; if (state.engagement.openReplies[id]) delete state.engagement.openReplies[id]; else state.engagement.openReplies[id] = true; rerender(); }
     else if (action === "comment-edit") startCommentEdit(el.dataset.id, el.dataset.post);
@@ -6635,7 +6711,7 @@
     else if (action === "post-change-visibility") postStartVisibilityEdit(el.dataset.id);
     else if (action === "visibility-pick") postApplyVisibility(el.dataset.value);
     else if (action === "visibility-cancel") { state.posts.visibilityEdit = null; rerender(); }
-    else if (action === "post-delete") askConfirm({ title: "מחיקת פוסט", message: "הפוסט יוסר מהפיד. הפעולה אינה ניתנת לביטול מיידי.", confirmLabel: "מחיקה", destructive: true, action: "post-delete-rpc", payload: { postId: el.dataset.id } });
+    else if (action === "post-delete") askConfirm({ title: "מחיקת פוסט", message: "הפוסט יוסר מהפיד. אפשר יהיה לבטל למשך כמה שניות.", confirmLabel: "מחיקה", destructive: true, action: "post-delete-rpc", payload: { postId: el.dataset.id } });
     else if (action === "welcome-member") welcomeNewMember(el.dataset.id, "feed_card");
     else if (action === "view-profile") viewCommunityProfile(el.dataset.id);
     else if (action === "close-profile") closeCommunityProfile();
@@ -6665,6 +6741,14 @@
     else if (action === "outward-download") outwardDownloadImage();
     else if (action === "outward-retry") refreshOutwardShareCard();
     else if (action === "outward-close") closeOutwardShare();
+    // KEPT AFTER THE CHIPS WENT. Nothing renders data-community-action=
+    // "feed-scope" any more - the filter is a <select> wired off "change"
+    // (see the change listener). This branch stays as the second half of
+    // feedScopeDef()'s defence in depth, which test/community-feed-client
+    // exercises by forging exactly this element: an old build's cached
+    // markup, or a crafted tap, must land on setFeedScope() and be refused
+    // there rather than reaching the wire. Delete it only together with
+    // that test's reasoning.
     else if (action === "feed-scope") setFeedScope(el.dataset.scope);
     else if (action === "feed-load-more") loadMoreFeed();
     // The "פוסטים חדשים" pill: the member asked for the new rows, so the
@@ -7287,6 +7371,12 @@
     // The weekly-challenge picker, kept in state so a rejected submit (missing
     // title or dates) re-renders the form with the coach's choice still made.
     else if ("challengeKey" in t.dataset) state.club.challengeKeyDraft = t.value;
+    // The feed's scope filter, which was four role="tab" buttons on a rail
+    // of its own until the three-stacked-navigation-layers finding. Same
+    // immediate-on-change shape as composerVisibility above; setFeedScope()
+    // is unchanged and still does its own no-op and parked-scope checks, so
+    // this is a new way to reach it, not a second copy of it.
+    else if ("feedScopeSelect" in t.dataset) setFeedScope(t.value);
     else if ("prFile" in t.dataset) { const f = t.files && t.files[0]; if (f) prPromptAddPhoto(f); }
     // Five-persona UX audit, outward sharing. The name switch repaints the
     // card rather than only remembering the choice, because the preview IS

@@ -218,6 +218,12 @@ test("COMM-122: deleting an own comment goes through the shared confirm dialog",
   window.document.querySelector('[data-post-id="p1"] [data-community-action="delete-comment"]').click();
   await waitFor(() => !!window.document.getElementById("communityConfirmTitle"), 3000);
   window.document.querySelector('[data-community-action="confirm-yes"]').click();
+  // comment_delete() is HELD for the undo window now, so the RPC has not
+  // gone out yet at this point - settleToast(false) is what closes that
+  // window, the same call app.js makes on pagehide. The undo itself is
+  // exercised in community-delete-undo.test.mjs.
+  await waitFor(() => !/למחוק אותי/.test(card(window).textContent), 3000);
+  window.settleToast(false);
 
   // Bug fix: this used to be a hard DELETE (row gone entirely). It now
   // routes through comment_delete()'s soft delete - the row survives with
@@ -247,6 +253,10 @@ test("COMM-122 bug fix: deleting a parent comment with a real reply keeps the re
   window.document.querySelector('[data-post-id="p1"] [data-community-action="delete-comment"]').click();
   await waitFor(() => !!window.document.getElementById("communityConfirmTitle"), 3000);
   window.document.querySelector('[data-community-action="confirm-yes"]').click();
+  // Same held write as the test above: the comment leaves the thread at
+  // once, the RPC waits out the undo window.
+  await waitFor(() => !/הורה/.test(card(window).textContent), 3000);
+  window.settleToast(false);
 
   await waitFor(() => mock.db.post_comments.find((c) => c.id === "c1")?.status === "removed", 3000);
   assert.equal(mock.db.post_comments.find((c) => c.id === "c2").parent_comment_id, "c1",
