@@ -36,7 +36,10 @@
 //      DISMISS, never confirm/submit - the same lesson app-dialog-
 //      keyboard.mjs pins for the destructive confirm sheet.
 //
-// COVERAGE NOTE. Two of CLOUD_DIALOGS's 14 entries are not exercised here:
+// COVERAGE NOTE. Two of CLOUD_DIALOGS's 17 entries are not exercised here
+// (the registry has since gained outwardShare, clubWodBoard and
+// workoutPrompt; the first is covered by
+// test/community-outward-share.test.mjs and the last is covered below):
 // reclaimInvite (a ghost-member reclaim sheet gated on a grace-period that
 // has elapsed - meaningful seed data for it is a small project on its own)
 // and clubWodBoard (needs a live club-WOD session plus feed placement).
@@ -49,13 +52,14 @@
 // HOW A DIALOG IS OPENED. Wherever a real, reachable user action exists
 // (a button on the Add/Calendar/WOD/Community tabs, the nav menu, a
 // directory row) this drives that action, the same as every other browser-
-// check script. Two cloud dialogs have no such trigger by design - prPrompt
-// and achUnlock only ever appear as the client's own reaction to a PR/
-// achievement being detected - so those two are opened the same way
+// check script. Three cloud dialogs have no such trigger by design - prPrompt,
+// achUnlock and workoutPrompt only ever appear as the client's own reaction to
+// a PR, an achievement or a logged workout - so those are opened the same way
 // test/community-dialog-focus.test.mjs does in jsdom: emitting the real
 // product-bus event / calling the real public consumer function
 // (window.HaimuniaEvents.emit(...PR_CREATED...), window.claimCommunity-
-// Achievements(...)) rather than a synthetic click on nothing.
+// Achievements(...), window.offerWorkoutSharePrompt(...)) rather than a
+// synthetic click on nothing.
 //
 // Usage:
 //   node dialog-back-button.mjs
@@ -377,6 +381,36 @@ async function runCloudMemberDialogs(browser) {
   // ---- achUnlock: same reasoning, opened via the real public consumer ---
   await page.evaluate(() => window.claimCommunityAchievements(["first_pr"]));
   await checkBackCloses(page, "achUnlock", '[data-cloud-dialog="achUnlock"]');
+
+  // ---- workoutPrompt: the share prompt after an ordinary logged workout.
+  // Same reasoning as the two above - it has no on-screen trigger by design,
+  // it is the client's own reaction to a save - so it is opened through the
+  // one public entry point app.js itself calls
+  // (window.offerWorkoutSharePrompt), after logging a real set through
+  // app.js's real save path, because the prompt refuses to open for a record
+  // it cannot find in the member's own log.
+  const loggedSetId = await page.evaluate(async () => {
+    await window.addMovement("Back Button Deadlift", "Deadlift");
+    window.applyFieldValue("step", "weight", 100);
+    window.applyFieldValue("step", "reps", 5);
+    window.applyFieldValue("step", "sets", 1);
+    await window.saveSet();
+    // The first save of this member's life opens the full-screen arrival
+    // card, and the prompt deliberately stands down while it is up.
+    window.closeCelebration();
+    return entries[0].id;
+  });
+  await page.evaluate((id) => window.offerWorkoutSharePrompt("strength_entry", id), loggedSetId);
+  await page.waitForSelector('[data-cloud-dialog="workoutPrompt"]', { timeout: 5000 });
+  const postsBeforeWorkoutPromptBack = await page.evaluate(() => (window.__mock.db.workout_posts || []).length);
+  await checkBackCloses(page, "workoutPrompt", '[data-cloud-dialog="workoutPrompt"]');
+  const postsAfterWorkoutPromptBack = await page.evaluate(() => (window.__mock.db.workout_posts || []).length);
+  // The same DISMISS-never-submit rule this file pins for the destructive
+  // confirm sheet and the composer, asked of the one prompt whose whole
+  // premise is that nothing is ever shared without an explicit tap.
+  check("workoutPrompt: closing via back did not share anything",
+    postsAfterWorkoutPromptBack === postsBeforeWorkoutPromptBack,
+    `expected ${postsBeforeWorkoutPromptBack}, got ${postsAfterWorkoutPromptBack}`);
 
   // ---- profileView (directory row) --------------------------------------
   await page.evaluate(() => {

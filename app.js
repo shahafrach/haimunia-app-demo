@@ -2569,6 +2569,21 @@ async function saveSet(sanityConfirmed) {
         mov ? `נשמר: ${mov.name} — ${celebrationLabel}` : "נשמר");
     }
     if (emitPR && prDetail) emitCommunityPrCreated(entry, mov, prDetail);
+    // THE FEED FILLS ITSELF FROM REAL TRAINING. Last, deliberately, and after
+    // the PR announcement above: the community layer only offers the plain
+    // "לשתף עם המועדון?" prompt when nothing richer is already claiming this
+    // moment - a PR prompt, an achievement celebration, or the full-screen
+    // card celebrateAfterSave() may have just opened - so this has to run
+    // once every one of them has had its say. It is a courtesy signal and
+    // nothing more: it writes nothing, it is a no-op when cloud.js was never
+    // loaded (the member never opened the Community tab), and it cannot open
+    // anything the member has switched off.
+    //
+    // NEVER ON AN EDIT, the same gate the PR announcement above and all three
+    // celebration gates already take: correcting Tuesday's typo on Thursday
+    // is not a session, and the feed is supposed to fill itself from real
+    // training rather than from bookkeeping.
+    if (!existing) offerCommunityWorkoutShare("strength_entry", entry.id);
   }
   } finally { savingSet = false; }
 }
@@ -4244,6 +4259,21 @@ function communityShareCandidateFor(type, id) {
   return null;
 }
 
+// The one call saveSet() and saveWod() make into the community layer after a
+// save that actually landed on disk. cloud.js owns every decision behind it -
+// the member's "stop offering" switch, the club's feed module, the profile
+// privacy toggles, whether another prompt is already on screen, and whether
+// this record has been offered before; this end only knows what was saved.
+//
+// Read off window and guarded, like claimCommunityAchievements and
+// renderShareControl: cloud.js is loaded lazily and a device that has never
+// opened the Community tab must keep logging exactly as it did before. A bare
+// identifier here would be a ReferenceError in the middle of a save.
+function offerCommunityWorkoutShare(type, id) {
+  if (typeof window.offerWorkoutSharePrompt !== "function") return;
+  try { window.offerWorkoutSharePrompt(type, id); } catch (e) { /* the community layer owns its own failures; a save never fails for one */ }
+}
+
 const TEXT_SCALE_KEY = "haimunia-demo:textScale";
 let textScalePref = "normal";
 function loadTextScalePref() {
@@ -4668,6 +4698,13 @@ async function saveWod(sanityConfirmed) {
     celebrateAfterSave(celebratePR ? `${w.name} — ${formatWodEntry(entry)}` : null,
       `נשמר: ${w.name} — ${formatWodEntry(entry)}`);
   }
+  // Same call, same position and the same reasoning as saveSet()'s - a logged
+  // WOD is exactly as much a shareable session as a logged set, and the two
+  // save paths drifting on this is the defect CLAUDE.md's "sibling drift"
+  // rule names. See offerCommunityWorkoutShare() for what it does and does
+  // not do - including the never-on-an-edit gate, which this side needs for
+  // exactly the reason celebratePR above needs it.
+  if (!existing) offerCommunityWorkoutShare("wod_entry", entry.id);
   } finally { savingWod = false; }
 }
 // Live bug hunt (2026-09-11): same two-tab staleness fix as startEditEntry()

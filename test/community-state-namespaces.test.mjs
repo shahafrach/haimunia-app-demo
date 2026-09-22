@@ -187,7 +187,36 @@ test("the dialog registry keeps DOM keys and state paths separate", () => {
   // a new one, deliberately: this is the box's programming, a club-wide
   // surface beside clubWods, and the namespace pin above is a review trigger
   // that a genuinely club-shaped feature should not be spending.
-  assert.equal(entries.length, 16, "every dialog entry needs a key and an isOpen getter");
+  //
+  // 17 since the share prompt added "workoutPrompt" - the short
+  // "לשתף עם המועדון?" sheet a member sees after an ordinary logged workout.
+  // Treated as the review trigger this pin is meant to be:
+  //
+  //   WHY A DIALOG AND NOT A REUSE. The two candidates were the PR prompt and
+  //   askConfirm. The PR prompt is the right shape but the wrong subject: it
+  //   is built entirely out of a PR_CREATED record (movement, new_result,
+  //   previous_result, improvement), it carries a note field, a photo
+  //   uploader and an outward-share exit, and it writes through pr_share().
+  //   None of that exists for a plain logged set. askConfirm is a title, a
+  //   message and two buttons - close, but it is the app's DESTRUCTIVE
+  //   confirmation surface, and routing an invitation to publish through the
+  //   dialog that also asks "delete this permanently?" is how the two stop
+  //   reading differently. The prompt is deliberately the smallest sheet in
+  //   this registry: a heading, the entry it is about, and two buttons.
+  //
+  //   WHY IT SITS BESIDE prPrompt. The two can never be open at once -
+  //   offerSharePrompt() in src/community/share-prompt.js opens one prompt
+  //   per moment and parks the rest - so their relative order settles
+  //   nothing. What the position does say is that both stay below
+  //   confirmSheet, outwardShare and termSheet, each of which can be stacked
+  //   on top of a prompt, and above nothing that can cover them.
+  //
+  // The half that is THIS file's own assertion: state.posts.workoutPrompt
+  // must default to null like every other dialog flag, and it lives in the
+  // existing `posts` namespace - "composing, own-post controls, sharing" -
+  // rather than spending the namespace pin above on a surface that is
+  // already exactly that.
+  assert.equal(entries.length, 17, "every dialog entry needs a key and an isOpen getter");
   const state = readStateLiteral();
   for (const [, key, path] of entries) {
     const value = path.split(".").slice(1).reduce((o, k) => (o == null ? o : o[k]), state);

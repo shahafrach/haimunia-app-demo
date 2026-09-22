@@ -332,7 +332,16 @@ test("subjectSentenceHtml escapes both halves and isolates only the name, and no
   const dialogs = src.slice(src.indexOf("const CLOUD_DIALOGS = ["), src.indexOf("];", src.indexOf("const CLOUD_DIALOGS = [")));
   assert.deepEqual([...dialogs.matchAll(/\{ key: "([^"]+)"/g)].map((m) => m[1]), [
     "confirmSheet", "outwardShare", "termSheet", "reportSheet", "modAction", "reclaimInvite", "modContext",
-    "notifCenter", "achUnlock", "prPrompt", "composer", "profileView",
+    "notifCenter", "achUnlock", "prPrompt",
+    // 17 since the share prompt added "workoutPrompt", the short
+    // "לשתף עם המועדון?" sheet after an ordinary logged workout. The full
+    // reasoning - why a new dialog rather than a reuse of the PR prompt or
+    // askConfirm, and why its position beside prPrompt settles nothing
+    // because the two can never be open together - is written out beside the
+    // matching count pin in community-state-namespaces.test.mjs, so the two
+    // pins do not drift into two different half-explanations.
+    "workoutPrompt",
+    "composer", "profileView",
     "challengeView", "eventView", "recapView",
     // 16 since 202609080002 added "clubWodBoard", the club WOD board. Treated
     // as the review trigger this pin is meant to be:

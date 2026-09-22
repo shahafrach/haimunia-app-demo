@@ -303,7 +303,13 @@
     // inline compare strip, scoped to the one post that asked for it.
     posts: {
       composer: null, composerTrigger: null, openMenu: null, savedIds: {},
-      captionEdit: null, visibilityEdit: null, prPrompt: null, openShare: {},
+      captionEdit: null, visibilityEdit: null, prPrompt: null, workoutPrompt: null, openShare: {},
+      // workoutPrompt is the share prompt after an ordinary logged workout
+      // (src/community/share-prompt.js): { type, id, title, resultText,
+      // publishing, error } while open, null when closed. Here rather than in
+      // a namespace of its own for the same reason prPrompt and outwardShare
+      // are - this domain is already "composing, own-post controls, sharing",
+      // and its subject is a post about one of the member's own records.
       comparison: [], comparisonForPostId: null,
       // Five-persona UX audit, outward sharing. The share-outside-the-app
       // sheet: { subject, caption, showName, spec, status, previewUrl, blob,
@@ -2033,6 +2039,15 @@
   // getElementById that does not care which tab set it.
   function openPrivacySettings() {
     closeClubWodBoard();
+    // Both share prompts carry a link here (the show_workout_results note),
+    // and navigating out from under an open modal leaves it painted over the
+    // panel the member came to read. Dropped rather than closed through
+    // dismissWorkoutSharePrompt()/dismissPrPrompt(), either of which would
+    // release the next parked prompt on top of the screen they just asked
+    // for - and, in the PR prompt's case, would burn the record as dismissed
+    // for a tap that was about privacy, not about the share.
+    state.posts.workoutPrompt = null;
+    state.posts.prPrompt = null;
     if (typeof window.switchToCommunityTopTab === "function") window.switchToCommunityTopTab();
     state.ui.manageScrollTo = "communityPrivacyPanel";
     setCommunityTab("account");
@@ -2216,7 +2231,13 @@
   // result for a repeated key instead of writing again, which is what makes
   // the retry below safe: without it, a queued post that actually landed
   // before the connection dropped would be posted twice on reconnect.
-  const OUTBOX_ACTIONS = ["post_create", "add_post_comment", "toggle_reaction", "event_rsvp", "chal_record_progress"];
+  // pr_share and ach_share joined the list with the share prompt: a member
+  // who trains where there is no signal - which is most basements and half
+  // the gyms in the country - was being offered a share that could only fail.
+  // Both already take p_idempotency_key with a default (202609060019 /
+  // 202609110004 / 202609120001), which is the precondition for being in here
+  // at all and is what test/community-outbox-rpc-contract.test.mjs checks.
+  const OUTBOX_ACTIONS = ["post_create", "add_post_comment", "toggle_reaction", "event_rsvp", "chal_record_progress", "pr_share", "ach_share"];
   // Deliberately NOT in OUTBOX_ACTIONS. That list is what communityRpc()
   // consults to decide whether a member's write can be queued, and every
   // entry in it is an RPC name; this one is a table insert and is queued by
@@ -2590,6 +2611,13 @@
       const { error } = await client.from("analytics_events").insert(payload);
       if (error) throw new Error(error.message || "analytics insert failed");
     });
+    // The share prompt's workout write (src/community/posts.js). Registered
+    // here beside the analytics one, and for the same reason: it is a table
+    // upsert, not an RPC, so it cannot ride the OUTBOX_ACTIONS handler above,
+    // which calls client.rpc(). Unlike the analytics row it is a MEMBER
+    // WRITE - not silent - so a permanent failure surfaces in the banner with
+    // its own retry, exactly like a queued post.
+    window.HaimuniaOutbox.registerHandler(WORKOUT_SHARE_OUTBOX_ACTION, workoutShareOutboxHandler);
   }
 
   async function flushCommunityOutbox() {
@@ -3689,7 +3717,7 @@
     // can ever be under it, since the board is only opened from the feed or
     // the club-home strip.
     return renderClubWodBoardOverlay()
-      + renderPostComposer() + renderPrSharePrompt() + renderAchievementUnlockCelebration() + renderCommunityProfileOverlay() + renderNotificationCenter()
+      + renderPostComposer() + renderPrSharePrompt() + renderWorkoutSharePrompt() + renderAchievementUnlockCelebration() + renderCommunityProfileOverlay() + renderNotificationCenter()
       + renderReportSheet() + renderModActionSheet() + renderGhostReclaimSheet() + renderModContextOverlay() + renderChallengeViewOverlay() + renderEventViewOverlay() + renderRecapViewOverlay()
       // Third-to-last, for the same DOM-order/z-order reason as the two
       // below it: a `?` marker can sit inside a challenge, event or recap
@@ -4417,7 +4445,7 @@
     // neighbour (privacy), ahead of the glossary/search/staff sections
     // rather than trailing all of them - still a settings-style panel, just
     // no longer the very last thing on the screen.
-    const accountTab = restrictionPanel + account + renderMyAchievements() + recapEntry + monthlyRecapEntry + privacyPanel + blockedMembersPanel + renderNotifPrefsPanel() + termMarkPanel + people + newMembersHtml + inactiveHtml + movedToManageNote
+    const accountTab = restrictionPanel + account + renderMyAchievements() + recapEntry + monthlyRecapEntry + privacyPanel + renderSharePromptPrefPanel() + blockedMembersPanel + renderNotifPrefsPanel() + termMarkPanel + people + newMembersHtml + inactiveHtml + movedToManageNote
       + `<button class="link-btn" data-community-action="sign-out" style="display:block;margin:20px auto 0;">התנתקות</button>`
       + `<button class="link-btn" data-community-action="delete-account" style="display:block;margin:10px auto 8px;color:var(--red-text);">בקשת מחיקת חשבון</button>`;
 
@@ -4556,6 +4584,12 @@
       toggle_reaction: "לייק",
       event_rsvp: "הרשמה לאירוע",
       chal_record_progress: "עדכון התקדמות",
+      pr_share: "שיתוף שיא",
+      ach_share: "שיתוף מדליה",
+      // Not an OUTBOX_ACTION - a table upsert with its own handler, see
+      // registerOutboxHandlers() - but it reaches this banner the same way
+      // every other member write does, so it needs a Hebrew noun here too.
+      workout_share: "שיתוף אימון",
       // The queue's own actions are the five above, but a row queued by an
       // OLDER build can name an action this table has never heard of - the
       // same case outbox.js reports as "unsupported action". The fallback
@@ -5158,6 +5192,12 @@
     { key: "notifCenter", isOpen: () => state.notif.center, close: function () { closeNotifCenter(); } },
     { key: "achUnlock", isOpen: () => state.achievements.unlock, close: function () { dismissAchievementUnlock(); } },
     { key: "prPrompt", isOpen: () => state.posts.prPrompt, close: function () { dismissPrPrompt(); } },
+    // Beside the PR prompt: same kind of surface, same moment, and the two
+    // can never be open at once (offerSharePrompt(), share-prompt.js), so
+    // their relative order settles nothing. Both stay below the three that
+    // can stack on top of a prompt. See the pinned reasoning in
+    // test/community-state-namespaces.test.mjs.
+    { key: "workoutPrompt", isOpen: () => state.posts.workoutPrompt, close: function () { dismissWorkoutSharePrompt(); } },
     { key: "composer", isOpen: () => state.posts.composer, close: function () { tryCloseComposer(); } },
     { key: "profileView", isOpen: () => state.members.profileView, close: function () { closeCommunityProfile(); } },
     { key: "challengeView", isOpen: () => state.challenges.view, close: function () { closeChallengeView(); } },
@@ -5579,6 +5619,13 @@
     // COMM-018. Each privacy toggle persists on change, no save button.
     document.querySelectorAll("[data-privacy-field]").forEach((el) => {
       el.addEventListener("change", () => savePrivacyField(el.dataset.privacyField, el.checked));
+    });
+    // The share-prompt switch, same no-save-button shape as the privacy
+    // toggles above it. Local rather than a profiles column - see its own
+    // comment in src/community/share-prompt.js for why, and why this branch
+    // adds no migration to say so.
+    document.querySelectorAll("[data-share-prompt-pref]").forEach((el) => {
+      el.addEventListener("change", () => setSharePromptsEnabled(el.checked));
     });
     // Design spec 3.5. Per-device and localStorage-backed, so unlike the
     // privacy toggles above it there is no server write and nothing to roll
@@ -6255,6 +6302,8 @@
     else if (action === "following-toggle") toggleFollowListSection(el.dataset.side);
     else if (action === "following-retry") retryFollowList(el.dataset.side);
     else if (action === "following-unfollow") unfollowFromFollowingList(el.dataset.id);
+    else if (action === "workout-share") shareWorkoutSharePrompt();
+    else if (action === "workout-not-now") dismissWorkoutSharePrompt();
     else if (action === "pr-share") sharePrPrompt();
     else if (action === "pr-not-now") dismissPrPrompt();
     else if (action === "pr-add-note") { if (state.posts.prPrompt) { state.posts.prPrompt.showNote = true; rerender(); } }
@@ -6681,6 +6730,7 @@
         state.posts.openShare = {}; state.posts.comparisonForPostId = null; state.posts.comparison = [];
         state.posts.composer = null; state.posts.composerTrigger = null; state.posts.openMenu = null; state.posts.savedIds = {};
         state.posts.captionEdit = null; state.posts.visibilityEdit = null; state.posts.prPrompt = null;
+        state.posts.workoutPrompt = null; resetSharePromptQueue();
         // Five-persona UX audit, outward sharing. Through the closer rather
         // than a bare null: the sheet owns an object URL over a Blob, and a
         // sign-out that only dropped the reference would leak it for the life
