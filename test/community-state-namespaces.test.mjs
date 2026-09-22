@@ -78,6 +78,13 @@ test("the state root is the session core plus per-domain namespaces, nothing els
     // read together by the outbox banner.
     "outbox",
     "coach",
+    // 202609220004. The monthly owner report: the twelve months of
+    // owner_reports rows, which of them is on screen, and the one open
+    // drill-down. A namespace rather than root scalars because the
+    // drill-down carries its own loading/loaded/error triple - a failed list
+    // read must not blank the seven figures that loaded fine - and those
+    // three names are exactly the ones the flat root used to collide on.
+    "ownerReport",
   ], "the namespace set changed - update this list and docs/community/backlog.md's COMM-365 row");
 });
 

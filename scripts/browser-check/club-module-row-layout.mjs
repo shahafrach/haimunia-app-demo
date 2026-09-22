@@ -44,9 +44,10 @@ function check(label, ok, detail = "") {
 //
 // SEEDED, not PLANNED, and the rename is the point. THE GEOMETRY IS MEASURED
 // FOR ALL SEVEN whether or not a feature has shipped - a switch pushed off a
-// 390px screen is a bug either way - but four of the seven are BUILT now
-// (strength_percentages 2026-09-21, benchmarks 2026-09-22, and since
-// 202609220002 coach_tasks and onboarding_challenge), and the marker checks
+// 390px screen is a bug either way - but five of the seven are BUILT now
+// (strength_percentages 2026-09-21, benchmarks 2026-09-22, since
+// 202609220002 coach_tasks and onboarding_challenge, and since 202609220004
+// owner_report), and the marker checks
 // below are the half that has to tell them apart. Calling the whole list
 // PLANNED is how this file came to read a בפיתוח marker off a row that had,
 // correctly, just stopped carrying one.
@@ -59,16 +60,19 @@ const SEEDED = ["onboarding_challenge", "benchmarks", "strength_percentages", "g
 // always removes בפיתוח, but it only removes בתצוגה בלבד when the gate
 // is a real policy rather than a display hide. Asserting one shape for every
 // built row would force one of these two groups to lie.
-const STILL_PLANNED = ["gym_display", "owner_report", "arbox_attendance"];
+const STILL_PLANNED = ["gym_display", "arbox_attendance"];
 // Built, but the gate is a display hide in app.js over the member's own data:
 // no בפיתוח, and בתצוגה בלבד STAYS.
 const BUILT_CLIENT_ONLY = ["strength_percentages", "benchmarks"];
-// Built with a real RLS clause behind the key (202609220002): no בפיתוח, and
-// the row may claim נאכף בשרת.
-const BUILT_ENFORCED = ["coach_tasks", "onboarding_challenge"];
-// 202609220002. The same two rows now also render a collapsed threshold
-// disclosure BELOW the label - a second block in the same row whose fields
-// must not overflow either.
+// Built with a real RLS clause behind the key - 202609220002 for the first
+// two, 202609220004 for owner_report: no בפיתוח, and the row may claim
+// נאכף בשרת.
+const BUILT_ENFORCED = ["coach_tasks", "onboarding_challenge", "owner_report"];
+// 202609220002, extended by 202609220004. These rows also render a collapsed
+// threshold disclosure BELOW the label - a second block in the same row whose
+// fields must not overflow either. owner_report has ONE field where
+// coach_tasks has seven, which is the interesting end of the range: a lone
+// number input beside a long Hebrew label is where a too-wide field shows.
 const WITH_SETTINGS = BUILT_ENFORCED;
 
 const target = await resolveLocalOnlyTarget();
