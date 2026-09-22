@@ -963,7 +963,32 @@
   function ensureAnalyticsConfigured() {
     if (analyticsConfigured || !client || !window.HaimuniaAnalytics) return false;
     analyticsConfigured = true;
-    window.HaimuniaAnalytics.configure({ client, getUserId: () => (state.user ? state.user.id : null) });
+    window.HaimuniaAnalytics.configure({
+      client,
+      getUserId: () => (state.user ? state.user.id : null),
+      // OFFLINE. An event recorded with no connection used to be dropped
+      // outright. It now rides the community outbox as a SILENT row, which
+      // means it is persisted in IndexedDB, drained on the same reconnect
+      // the member's own queued writes are, and never shown to anybody:
+      // it cannot become `failed`, cannot appear in the outbox banner and
+      // cannot hold up a queued post behind it. See src/outbox.js.
+      //
+      // Returns true only once the enqueue has been ACCEPTED, and returns
+      // false rather than throwing if the queue is unavailable - the old
+      // behaviour, a dropped row, is the correct fallback for a
+      // measurement.
+      queueRow: (row) => {
+        if (!window.HaimuniaOutbox || !state.user) return false;
+        try {
+          Promise.resolve(window.HaimuniaOutbox.enqueue(
+            ANALYTICS_OUTBOX_ACTION,
+            { row },
+            { userId: state.user.id, silent: true }
+          )).catch(() => {});
+          return true;
+        } catch (err) { return false; }
+      },
+    });
     // app_opened. One row per page load, written from the first moment there
     // is anything to write it with - which is also the earliest moment the
     // row can carry a user_id, and this event is only worth having per
@@ -2183,6 +2208,12 @@
   // the retry below safe: without it, a queued post that actually landed
   // before the connection dropped would be posted twice on reconnect.
   const OUTBOX_ACTIONS = ["post_create", "add_post_comment", "toggle_reaction", "event_rsvp", "chal_record_progress"];
+  // Deliberately NOT in OUTBOX_ACTIONS. That list is what communityRpc()
+  // consults to decide whether a member's write can be queued, and every
+  // entry in it is an RPC name; this one is a table insert and is queued by
+  // src/analytics.js rather than by communityRpc(). Keeping it out is what
+  // stops a future caller from reaching it through the member-write path.
+  const ANALYTICS_OUTBOX_ACTION = "analytics_event";
 
   function isOfflineError(error) {
     if (typeof navigator !== "undefined" && navigator.onLine === false) return true;
@@ -2529,6 +2560,27 @@
         if (error) throw new Error(error.message || "rpc failed");
       });
     });
+    // The one SILENT action (src/outbox.js): an analytics row recorded while
+    // the device was offline. It is a table insert rather than an RPC,
+    // because analytics_events takes a direct RLS insert and always has -
+    // which is also why it is registered here, separately, instead of being
+    // added to OUTBOX_ACTIONS, whose handler above calls client.rpc().
+    //
+    // Nothing here surfaces anything. A row that will not go is deleted by
+    // the queue rather than shown to the member; see the silent-row rules.
+    window.HaimuniaOutbox.registerHandler(ANALYTICS_OUTBOX_ACTION, async (args, row) => {
+      if (!client || !state.user) throw new Error("session expired");
+      if (row && row.userId && row.userId !== state.user.id) throw new Error("session mismatch, queued for a different member");
+      const payload = Object.assign({}, args && args.row);
+      // The row was built when the member was offline and carries the user
+      // id from that moment. flush() and the check above already refuse a
+      // row belonging to somebody else, so this only re-stamps a row queued
+      // before the session resolved - an event recorded on a cold offline
+      // boot, which is precisely the case worth keeping.
+      if (!payload.user_id) payload.user_id = state.user.id;
+      const { error } = await client.from("analytics_events").insert(payload);
+      if (error) throw new Error(error.message || "analytics insert failed");
+    });
   }
 
   async function flushCommunityOutbox() {
@@ -2548,8 +2600,13 @@
   async function refreshOutboxState() {
     if (!window.HaimuniaOutbox) return;
     const rows = await window.HaimuniaOutbox.list();
-    state.outbox.pending = rows.filter((r) => r.status === "pending").length;
-    state.outbox.failed = rows.filter((r) => r.status === "failed");
+    // `!r.silent` on both: these two feed the member-facing outbox banner
+    // and its retry/discard list, and a telemetry row is not something a
+    // member is waiting on or can act on. The queue itself already refuses
+    // to mark a silent row failed; this is the second half of the same rule,
+    // on the side that draws the screen.
+    state.outbox.pending = rows.filter((r) => r.status === "pending" && !r.silent).length;
+    state.outbox.failed = rows.filter((r) => r.status === "failed" && !r.silent);
   }
 
   async function retryOutboxItem(id) {

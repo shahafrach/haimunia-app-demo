@@ -22,6 +22,8 @@ below in the same change.
   product event bus bridge, see "Events that come from the bus" below.
 - Nothing awaits an analytics call. A failed write is invisible to the
   member and no call site reads the return value.
+- An event recorded offline is queued rather than dropped; see "Offline"
+  below.
 
 ## Schema and versioning
 
@@ -53,6 +55,57 @@ Set `window.HAIMUNIA_ANALYTICS_DEBUG = true` from a console, or pass
 console and nothing is written. The global wins over the configure option,
 which is what makes it usable on a device that is already running. Unset it
 to go back to writing.
+
+## Offline
+
+An event recorded with no connection is **queued, not dropped**.
+
+It used to be dropped: `analyticsTrack()` did a direct
+`client.from("analytics_events").insert(row)` ending in `.catch(() => false)`,
+so offline the fetch rejected and the row was gone. That is defensible for a
+lost packet and indefensible as the offline story of an offline-first app — a
+member who trains in a basement with no signal, logs the session there and
+syncs on the way home was missing from every number this table feeds, and
+`attendance_recorded`, the one event that can make somebody WCAM-active
+without ever opening the Community tab, is the event most likely to be
+recorded with no signal.
+
+The row now rides the existing community outbox (`src/outbox.js`) as a
+**silent row**: persisted in IndexedDB, drained on the same reconnect a
+member's own queued writes use, and attributed to the member who was offline
+rather than to whoever happened to drain it.
+
+`navigator.onLine === false` skips the request entirely; otherwise the insert
+is attempted first and the row is queued on a rejection or an error, because
+`onLine` is a reliable **no** and an unreliable yes. The `HAND_PROP_KEYS`
+projection runs before the queue, so a queued row can never carry more than a
+sent one.
+
+A silent row opts out of the three behaviours the outbox has for member
+**writes**, each of which would be wrong for telemetry:
+
+1. **It never becomes `failed`.** A row that exhausts its five attempts, or
+   hits a permanent error, is deleted. `analyticsTrack()`'s contract is that a
+   failed write is invisible and a dropped row is acceptable; a measurement
+   sitting in a member's "these did not send" list with a Retry button beside
+   it would be a bug in both directions. `pendingCount()`, `failedCount()` and
+   `state.outbox` all exclude silent rows.
+2. **It never stops the drain.** The FIFO stop-on-first-not-ready rule exists
+   so a comment cannot land before its post. Analytics has no such causal
+   chain, and a backed-off telemetry row holding up a real post would turn a
+   measurement into an outage.
+3. **It is capped**, at 200, oldest-first. `post_impression` fires once per
+   card per feed session, so browsing a cached feed offline can mint rows by
+   the hundred. A member's own queued write is never trimmed to make room —
+   the same trade `fitProps()` already makes for oversized props.
+
+The misattribution guard is unchanged: a silent row queued under one member's
+session is skipped, never sent, if a different member is signed in when the
+queue drains.
+
+If the queue is unavailable or throws, the behaviour degrades to what it was —
+the row is dropped — because a measurement must never be able to break the
+surface it measures.
 
 ## Weekly Community Active Members (WCAM)
 

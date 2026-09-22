@@ -43,6 +43,38 @@
   var BASE_DELAY_MS = 1000;
   var MAX_DELAY_MS = 60000;
 
+  // ---- SILENT ROWS -------------------------------------------------------
+  //
+  // A silent row is a measurement, not a member's action. Analytics is the
+  // only caller (cloud.js registers the `analytics_event` handler), and it
+  // arrives here because an offline event was being DROPPED outright - the
+  // insert rejected, analyticsTrack() swallowed it, and the row was gone. A
+  // member who trains in a basement with no signal was invisible in every
+  // number this app computes.
+  //
+  // It rides this queue's persistence, ordering and reconnect drain, and
+  // opts out of the three behaviours that exist for member WRITES and would
+  // be wrong for telemetry:
+  //
+  //   1. IT NEVER BECOMES `failed`, so it never reaches the member-visible
+  //      outbox surface. src/analytics.js's contract is that a failed
+  //      analytics write is invisible and a dropped row is acceptable; a
+  //      telemetry row sitting in a member's "these did not send" list with
+  //      a Retry button next to it would be a bug in both directions.
+  //      A silent row that exhausts its attempts, or hits a permanent
+  //      error, is deleted.
+  //   2. IT NEVER STOPS THE DRAIN. The FIFO stop-on-first-not-ready rule
+  //      exists so a comment cannot land before its post. Analytics has no
+  //      such causal chain, and a backed-off telemetry row that held up a
+  //      real post would turn a measurement into an outage.
+  //   3. IT IS CAPPED. post_impression fires once per card per feed
+  //      session, so browsing a cached feed offline can mint rows by the
+  //      hundred. Oldest-first trimming keeps the queue bounded, which is
+  //      the same trade fitProps() already makes for oversized props:
+  //      losing some telemetry beats an unbounded IndexedDB queue on
+  //      somebody's phone.
+  var SILENT_MAX = 200;
+
   // Errors that will never succeed on retry, so the row goes straight to
   // `failed` without burning five attempts and ~30 seconds first. Matched
   // against the server's own message text, which this repo's RPCs raise as
@@ -134,11 +166,25 @@
       lastError: "",
       optimisticId: options.optimisticId || null,
       userId: options.userId || null,
-      queuedAt: now()
+      queuedAt: now(),
+      silent: !!options.silent
     };
     await window.dbPutCommunityOutboxRow(row);
+    if (row.silent) await trimSilent();
     notify();
     return row;
+  }
+
+  // Oldest-first, and only ever over SILENT rows: a member's queued post is
+  // never trimmed to make room for an impression.
+  async function trimSilent() {
+    var rows = await list();
+    var silent = rows.filter(function (r) { return r.silent; });
+    if (silent.length <= SILENT_MAX) return;
+    var excess = silent.slice(0, silent.length - SILENT_MAX);
+    for (var i = 0; i < excess.length; i++) {
+      try { await window.dbDeleteCommunityOutbox(excess[i].id); } catch (e) { /* best effort */ }
+    }
   }
 
   async function list() {
@@ -149,14 +195,16 @@
     return (rows || []).slice().sort(function (a, b) { return (a.seq || 0) - (b.seq || 0); });
   }
 
+  // Both counts are what the member is shown, so both exclude silent rows.
+  // A telemetry row is not something anybody is waiting on.
   async function pendingCount() {
     var rows = await list();
-    return rows.filter(function (r) { return r.status === "pending"; }).length;
+    return rows.filter(function (r) { return r.status === "pending" && !r.silent; }).length;
   }
 
   async function failedCount() {
     var rows = await list();
-    return rows.filter(function (r) { return r.status === "failed"; }).length;
+    return rows.filter(function (r) { return r.status === "failed" && !r.silent; }).length;
   }
 
   // The drain. Processes strictly in FIFO order and STOPS at the first row
@@ -174,7 +222,7 @@
   async function flush(context) {
     if (flushing || !storeReady()) return { sent: 0, failed: 0, stopped: null };
     flushing = true;
-    var sent = 0, failed = 0, stopped = null, skipped = 0;
+    var sent = 0, failed = 0, stopped = null, skipped = 0, dropped = 0;
     var ctxUserId = context && context.userId;
     try {
       var rows = await list();
@@ -182,8 +230,17 @@
         var row = rows[i];
         if (row.status === "failed") continue;         // needs a manual decision
         if (row.userId && ctxUserId && row.userId !== ctxUserId) { skipped += 1; continue; }
-        if (row.nextAttemptAt > now()) { stopped = "backoff"; break; }
+        // Rule 2: a backed-off silent row is stepped over, never waited on.
+        if (row.nextAttemptAt > now()) {
+          if (row.silent) continue;
+          stopped = "backoff"; break;
+        }
         var handler = handlers[row.action];
+        if (!handler && row.silent) {
+          // Rule 1: an unsupported silent action is deleted, not surfaced.
+          await window.dbDeleteCommunityOutbox(row.id);
+          continue;
+        }
         if (!handler) {
           // An op whose handler is not registered (an older queued action
           // after an app update that removed it). Not retryable, and not
@@ -197,7 +254,10 @@
         var outcome = await runOne(handler, row, context);
         if (outcome === "sent") { sent += 1; continue; }
         if (outcome === "failed") { failed += 1; continue; }
-        // "retry" or "auth" - stop the drain to preserve ordering.
+        if (outcome === "dropped") { dropped += 1; continue; }
+        // "retry" or "auth" - stop the drain to preserve ordering, unless
+        // this is a silent row, which has no ordering to preserve (rule 2).
+        if (row.silent) continue;
         stopped = outcome;
         break;
       }
@@ -205,7 +265,7 @@
       flushing = false;
     }
     notify();
-    return { sent: sent, failed: failed, stopped: stopped, skipped: skipped };
+    return { sent: sent, failed: failed, stopped: stopped, skipped: skipped, dropped: dropped };
   }
 
   async function runOne(handler, row, context) {
@@ -217,6 +277,9 @@
       var msg = (err && err.message) ? String(err.message) : String(err || "unknown error");
       if (AUTH_ERROR_RE.test(msg)) {
         // Do not consume an attempt; the op is fine, the session is not.
+        // For a silent row this still returns "auth", and flush() steps over
+        // it rather than stopping - the row waits for a real session the
+        // same way a member's write does, it just does not hold up the queue.
         row.lastError = msg;
         await window.dbPutCommunityOutboxRow(row);
         return "auth";
@@ -224,6 +287,13 @@
       row.attempts = (row.attempts || 0) + 1;
       row.lastError = msg;
       if (PERMANENT_ERROR_RE.test(msg) || row.attempts >= MAX_ATTEMPTS) {
+        // Rule 1. A measurement that cannot be sent is a measurement that is
+        // lost, which src/analytics.js already treats as acceptable. Putting
+        // it in front of the member with a Retry button would not be.
+        if (row.silent) {
+          await window.dbDeleteCommunityOutbox(row.id);
+          return "dropped";
+        }
         row.status = "failed";
         row.nextAttemptAt = 0;
         await window.dbPutCommunityOutboxRow(row);

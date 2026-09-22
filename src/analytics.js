@@ -378,6 +378,24 @@
 
   let getClient = () => null;
   let getUserId = () => null;
+  // OFFLINE. Injected by configure(), the same way the client and the user
+  // id are, so this file still names no transport and no queue.
+  //
+  // Until this existed an event recorded with no connection was DROPPED: the
+  // insert's fetch rejected, the catch below swallowed it, and the row was
+  // gone. That is defensible for a lost packet and indefensible as the
+  // offline story of an offline-first app - a member who trains in a
+  // basement with no signal, logs the session there, and syncs on the way
+  // home was invisible in every number computed from this table, and
+  // attendance_recorded (the one event that decides WCAM for somebody who
+  // never opens the Community tab) was exactly the event most likely to be
+  // recorded with no connection.
+  //
+  // queueRow(row) returns true if it took ownership of the row. It is
+  // best-effort by contract: a queue that is unavailable or throws leaves
+  // the old behaviour, which is a dropped row, and never a thrown error at
+  // a call site that is only measuring something.
+  let queueRow = null;
   let busUnsubscribes = [];
   // The dev switch. When on, a tracked event is logged to the console and
   // nothing is written, so a developer can watch the stream on a real
@@ -458,12 +476,40 @@
         // redemption) recordable at all.
         user_id: userId,
       };
+
+      // Known-offline: queue without spending a round trip on a request
+      // that cannot succeed. Same shape communityRpc() already uses for a
+      // member's writes, and the same reason - navigator.onLine is a
+      // reliable NO and an unreliable yes, so it is only ever read as the
+      // negative.
+      if (typeof navigator !== "undefined" && navigator.onLine === false && enqueueRow(row)) {
+        return Promise.resolve(true);
+      }
       return Promise.resolve(client.from("analytics_events").insert(row))
-        .then((result) => !(result && result.error))
-        .catch(() => false);
+        .then((result) => {
+          if (!result || !result.error) return true;
+          // A rejected write is not automatically an offline one. The queue
+          // itself decides nothing about that: it retries with backoff and
+          // drops the row rather than ever showing a member a failed
+          // measurement (see src/outbox.js's silent-row rules).
+          return enqueueRow(row);
+        })
+        // The rejection branch is the offline one in practice: supabase-js
+        // rejects rather than resolving with an error when the fetch itself
+        // never left the device.
+        .catch(() => enqueueRow(row));
     } catch (err) {
       return Promise.resolve(false);
     }
+  }
+
+  // Hands one built row to the injected queue. Never throws: a queue that
+  // is missing, unavailable or broken degrades to the behaviour this helper
+  // had before it existed - the row is dropped - because a measurement must
+  // never be able to break the surface it measures.
+  function enqueueRow(row) {
+    if (typeof queueRow !== "function") return false;
+    try { return queueRow(row) === true; } catch (err) { return false; }
   }
 
   // Attach the product bus bridge. Idempotent: calling it twice does not
@@ -498,6 +544,7 @@
     if (typeof o.getUserId === "function") getUserId = o.getUserId;
     else if ("userId" in o) getUserId = () => o.userId;
     if (typeof o.debug === "boolean") debugMode = o.debug;
+    if (typeof o.queueRow === "function") queueRow = o.queueRow;
     if (o.attachToBus !== false) attachToBus();
     return true;
   }
@@ -506,6 +553,7 @@
     detachFromBus();
     getClient = () => null;
     getUserId = () => null;
+    queueRow = null;
     debugMode = false;
   }
 
