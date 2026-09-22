@@ -23,10 +23,11 @@ There are three surfaces, in order of how you will actually meet them.
 
 `public.job_health_check()` runs every hour as the pg_cron job
 `job-health-check`. It flags every job that is inactive, recorded a
-`failed` run in the last 24 hours, has never run, or has not run within
-its own cadence window — and on a problem it notifies **every admin**
-in-app, through the ordinary notifications path, as a
-`job_health_alert` (title "תקלה בעבודות המתוזמנות", body = the count).
+`failed` run in the last 24 hours, has not run within its own cadence
+window, or has never run **and was first seen more than one cadence
+window ago** — and on a problem it notifies **every admin** in-app,
+through the ordinary notifications path, as a `job_health_alert` (title
+"תקלה בעבודות המתוזמנות", body = the count).
 
 Re-alerting is rate-limited on purpose: the first problem, any change to
 the set of failing jobs, and otherwise at most once every six hours. A
@@ -38,6 +39,25 @@ A run that is **in progress** is not a failure — pg_cron writes a
 15 minutes, so treating in-progress as failure would page the admins about
 a job that is working. A genuinely stuck run is caught one cadence window
 later by the staleness clause.
+
+A job that has **never run yet** gets one cadence window of grace from the
+first time the check saw it (`202609220001`). Until `202609220001` a job was
+flagged from the instant it was scheduled, which reported `recap_monthly`
+(`'41 4 1 * *'`, created after 2026-09-01) as failing every hour until its
+first run on 2026-10-01 — a month of admin notifications and a month of red
+CI over a job doing exactly what it was told. The grace is per cadence, so a
+new hourly job is flagged after 3 hours and a new monthly one after 35 days;
+it covers the *absence* of a run only, and a job that ran and **failed** is
+flagged on its first run with no grace at all. The `purge_due_accounts()`
+state — scheduled but never running — is still caught, one window later than
+before.
+
+The first-seen stamps live in `public.job_health_state.first_seen`, a
+`{"<jobid>": "<timestamptz>"}` map rebuilt from `cron.job` on every run:
+pg_cron records no creation time anywhere, so the checker has to remember.
+Rebuilding is what prunes it — an unscheduled job loses its key in the same
+run, and a job that is unscheduled and scheduled again gets a new `jobid` and
+therefore a new window.
 
 ### 1b. The external backstop, with no service-role key
 
@@ -77,7 +97,7 @@ select jobname, last_status, last_run, seconds_since_last_run
  where not healthy;
 
 -- or, the same names as the hourly check saw them:
-select failing_jobs, failing_count, last_checked_at
+select failing_jobs, failing_count, last_checked_at, first_seen
   from public.job_health_state;
 ```
 
@@ -93,6 +113,15 @@ hourly or faster, i.e. roughly two of the job's own intervals. (A flat
 
 A job that has never run reports `last_status = 'never run'` — the exact
 state `purge_due_accounts()` sat in.
+
+**This view deliberately does not carry `202609220001`'s first-window
+grace**, so a just-scheduled job reads `healthy = false` here while the
+hourly check leaves it alone. That is not drift: this view pages nobody, it
+is read by a human who has already been told to look, and it prints the job
+name and `last_status = 'never run'` in the same row — so the reader can tell
+"scheduled yesterday" from "dead" without the function guessing for them.
+`job_health_check()` has no such reader; it sends a notification, which is
+why the false positive had to be fixed there.
 
 **Expected jobs** (11, as of `202609190001`):
 
