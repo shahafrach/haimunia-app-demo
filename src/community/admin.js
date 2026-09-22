@@ -4407,11 +4407,16 @@
     if (!o.months.length) return null;
     return o.months.find((r) => r.month_start === o.month) || o.months[0];
   }
+  // WRITTEN THROUGH THE FULL state.ownerReport.<leaf> PATH, not through a
+  // local alias. test/community-state-namespaces.test.mjs asserts that every
+  // declared leaf is referenced that way somewhere - a leaf only ever touched
+  // through an alias reads as dead state to the guard, and the guard is right
+  // to say so: that is also how a typo'd leaf survives forever.
   async function loadOwnerReport() {
     if (!state.user || !isClubLeader() || !isModuleEnabled("owner_report")) return;
-    const o = state.ownerReport;
-    if (o.loading) return;
-    o.loading = true; o.error = false;
+    if (state.ownerReport.loading) return;
+    state.ownerReport.loading = true;
+    state.ownerReport.error = false;
     rerender();
     // Twelve months, newest first. A club reads this one month at a time and
     // pages back at most a year; an unbounded read of a table that grows one
@@ -4421,15 +4426,17 @@
       .select("*")
       .order("month_start", { ascending: false })
       .limit(12);
-    o.loading = false; o.loaded = true;
+    state.ownerReport.loading = false;
+    state.ownerReport.loaded = true;
     // A FAILED READ IS NOT AN EMPTY REPORT. Seven zeros under a header that
     // says "last month" is a statement about the club, and it is exactly the
     // wrong one to make when the request failed.
-    o.error = !!error;
+    state.ownerReport.error = !!error;
     if (!error) {
-      o.months = data || [];
-      const still = o.month && o.months.some((r) => r.month_start === o.month);
-      if (!still) o.month = o.months.length ? o.months[0].month_start : null;
+      state.ownerReport.months = data || [];
+      const months = state.ownerReport.months;
+      const still = state.ownerReport.month && months.some((r) => r.month_start === state.ownerReport.month);
+      if (!still) state.ownerReport.month = months.length ? months[0].month_start : null;
     }
     rerender();
   }
@@ -4512,7 +4519,14 @@
     // The count of NAMES, which for the two task metrics is deliberately not
     // the figure above it - see OWNER_REPORT_METRICS.
     const count = l.loaded && !l.error
-      ? `<span style="color:var(--steel);font-size:12px;">${esc(rows.length === 1 ? "חבר/ה אחד/ת" : `${rows.length} חברים`)}</span>`
+      // "שם אחד" / "N שמות" rather than a count of members. שם is masculine
+      // and genderless in this construction, so there is no slash form to get
+      // wrong: the feminine of אחד is irregular, so no slash can join the two
+      // halves at all, and test/hebrew-copy-rules.test.mjs holds that rule -
+      // over the raw source, so the wrong form must not even appear in a
+      // comment explaining why it is wrong. Which is how this comment now
+      // reads the way it does.
+      ? `<span style="color:var(--steel);font-size:12px;">${esc(rows.length === 1 ? "שם אחד" : `${rows.length} שמות`)}</span>`
       : "";
     return `<div class="chart-card" style="margin-top:12px;" data-owner-report-list="${esc(l.metric)}">
       <div class="flex" style="justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:6px;">

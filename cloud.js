@@ -585,24 +585,6 @@
     },
 
     // ---- analytics: the admin dashboards (COMM-310..313) ----
-    // 202609220004. The monthly owner report, client half.
-    //
-    // `months` is the raw owner_reports rows, newest first - whatever the
-    // table returned, never reshaped here, the same "the server holds the one
-    // definition" posture the monthly recap figures already follow. `month`
-    // is which of them is on screen (the first, until a leader pages back).
-    // `list` is the drill-down: one metric's members at a time, because a
-    // report showing seven lists at once is not a report.
-    //
-    // listError is separate from error on purpose: a failed drill-down must
-    // not blank the seven figures that loaded fine, and a failed read is not
-    // an empty list - "nobody stopped attending" is exactly the wrong thing
-    // to tell a head coach whose request failed.
-    ownerReport: {
-      loading: false, loaded: false, error: false,
-      months: [], month: null,
-      list: { metric: null, loading: false, loaded: false, error: false, rows: [] },
-    },
     analytics: {
       // COMM-310 admin community analytics dashboard, client half. THE
       // FOUNDATIONAL SHELL later Phase 3 admin tickets extend - COMM-311
@@ -952,6 +934,25 @@
       // publish is in flight, the same single-flight shape
       // memberOfWeek.busy uses for its own publish action.
       monthlyRecap: { loading: false, loaded: false, error: false, row: null, busy: null, publishErr: "" },
+    },
+    // 202609220004. The monthly owner report, client half.
+    //
+    // `months` is the raw owner_reports rows, newest first - whatever the
+    // table returned, never reshaped here, the same "the server holds the one
+    // definition" posture the monthly recap figures already follow. `month`
+    // is which of them is on screen (the first, until a leader pages back).
+    // `list` is the drill-down: one metric's members at a time, because a
+    // report showing seven lists at once is not a report.
+    //
+    // The drill-down carries its OWN loading/loaded/error triple rather than
+    // sharing the namespace's, on purpose: a failed drill-down must not blank
+    // the seven figures that loaded fine, and a failed read is not an empty
+    // list - "nobody stopped attending" is exactly the wrong thing to tell a
+    // head coach whose request failed.
+    ownerReport: {
+      loading: false, loaded: false, error: false,
+      months: [], month: null,
+      list: { metric: null, loading: false, loaded: false, error: false, rows: [] },
     },
   };
   const photoUrlCache = {};

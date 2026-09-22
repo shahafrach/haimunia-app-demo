@@ -209,7 +209,7 @@ test("the task figures count TASKS and their lists count MEMBERS, and the screen
   await waitList(window, "tasks_opened");
   const list = window.document.querySelector('[data-owner-report-list="tasks_opened"]');
   assert.equal(list.querySelectorAll("[data-owner-report-member]").length, 2, "two members");
-  assert.match(list.textContent, /2 חברים/,
+  assert.match(list.textContent, /2 שמות/,
     "and the list says how many NAMES it holds, so a leader reading 3 above and 2 rows below is told why");
   assert.match(list.textContent, /2 משימות/, "with each member's own task count beside them");
 });
