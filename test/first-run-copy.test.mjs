@@ -35,9 +35,14 @@ test("the composer label has exactly one definition, and the welcome card uses i
   // The coupling that broke. Two screens name this control - the fake-input
   // row at the top of the feed, and the onboarding card that tells a member
   // to tap it - and nothing tied them together.
-  assert.match(cloudJs, /const POST_COMPOSER_PLACEHOLDER = "מה קורה היום\?";/,
+  // The STRING changed with the social feed pass ("מה עשית היום?" - a
+  // training club's feed asks what you just did, not what the news is) and
+  // this pin moved with it. What the test is actually for did not change at
+  // all, and is the reason the string only had to be edited in one place: one
+  // definition, quoted by every screen that names the control.
+  assert.match(cloudJs, /const POST_COMPOSER_PLACEHOLDER = "מה עשית היום\?";/,
     "one definition of the composer's label");
-  const defs = cloudJs.split("\n").filter((l) => l.includes("מה קורה היום?") && !/^\s*\/\//.test(l));
+  const defs = cloudJs.split("\n").filter((l) => l.includes("מה עשית היום?") && !/^\s*\/\//.test(l));
   assert.equal(defs.length, 1, `the label must be written out exactly once, found ${defs.length}:\n${defs.join("\n")}`);
 
   // The rendered trigger reads it rather than repeating it.
@@ -48,10 +53,28 @@ test("the composer label has exactly one definition, and the welcome card uses i
   // And the welcome card's fallback body quotes it, so the instruction names
   // whatever the button actually says.
   const w = cloudJs.indexOf('onboardingStepBodyRaw("welcome")');
-  const line = cloudJs.slice(w, cloudJs.indexOf("\n", w));
+  // From the START of that line: the call is wrapped, so a slice beginning at
+  // the call itself would not see what wraps it.
+  const line = cloudJs.slice(cloudJs.lastIndexOf("\n", w) + 1, cloudJs.indexOf("\n", w));
   assert.match(line, /\$\{POST_COMPOSER_PLACEHOLDER\}/,
     "the welcome card points at the real label, not a remembered one");
   assert.ok(!/כתיבת פוסט/.test(line), "and never at the retired one");
+
+  // ...AND SO DOES A STORED ONE. The fallback above only runs when the row is
+  // missing; the seeded row (202609150007) exists, so for nearly every club
+  // it is the STORED body that renders - and it still names whichever label
+  // was current when that migration was written. A rename that only moved the
+  // constant would have recreated the very defect this file exists for, on
+  // the first card a new member ever reads.
+  assert.match(line, /withCurrentComposerLabel\(/,
+    "a stored welcome body is corrected to the current label before it renders");
+  const retired = cloudJs.match(/const RETIRED_COMPOSER_LABELS = \[([^\]]*)\]/);
+  assert.ok(retired, "the retired labels are listed in one place");
+  for (const old of ["מה קורה היום?", "כתיבת פוסט"]) {
+    assert.ok(retired[1].includes(old), `"${old}" was a real composer label and must still be corrected away`);
+  }
+  assert.ok(!retired[1].includes("מה עשית היום?"),
+    "the CURRENT label must never be in the retired list - it would be replaced with itself forever");
 });
 
 test("no seeded first-run copy still names the retired button", () => {
