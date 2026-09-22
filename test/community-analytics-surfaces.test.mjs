@@ -18,7 +18,7 @@
 // test/platform-analytics.test.mjs.
 import { test } from "node:test";
 import assert from "node:assert";
-import { bootCommunity, waitFor, waitForCommunityGate } from "./helpers/boot.mjs";
+import { bootCommunity, chooseFeedScope, waitFor, waitForCommunityGate } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
 
 const VERIFIED = new Date().toISOString();
@@ -162,13 +162,13 @@ test("feed_viewed fires on the tab entry and again on a scope change, with the s
   await waitFor(() => events(mock, "feed_viewed").length === 1, 3000);
   assert.deepStrictEqual(plain(events(mock, "feed_viewed")[0].props), { scope: "for_you", source: "club_tab" });
 
-  window.document.querySelector('[data-community-action="feed-scope"][data-scope="following"]').click();
+  chooseFeedScope(window, "following");
   await waitFor(() => events(mock, "feed_viewed").length === 2, 3000);
   assert.deepStrictEqual(plain(events(mock, "feed_viewed")[1].props), { scope: "following", source: "scope_change" });
 
   // Re-picking the active scope is refused by setFeedScope, so it is not
   // a second view either.
-  window.document.querySelector('[data-community-action="feed-scope"][data-scope="following"]').click();
+  chooseFeedScope(window, "following");
   await new Promise((r) => setTimeout(r, 50));
   assert.equal(events(mock, "feed_viewed").length, 2);
 });

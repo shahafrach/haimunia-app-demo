@@ -1731,6 +1731,24 @@
      faces - the same reason .page-title and .celebration-title above are 400.
      Size goes up a little to carry the lighter weight. */
   .ach-section-title{ font-family:'Anton','Secular One','Rubik',sans-serif; font-weight:400; font-size:15.5px; letter-spacing:.2px; color:var(--chalk); }
+  /* THE FEED'S SCOPE FILTER, riding the "הפיד שלי" section head instead of
+     a rail of its own (cloud.js, filterHtml + sectionHead's `trailing`).
+     It was four .chip-btn role="tab"s in a .chip-row, measured at 96px tall
+     at 390x844 because the four Hebrew labels wrap onto two lines - the
+     third stacked navigation layer on a screen that already carries the
+     bottom bar and the community sub-tab bar.
+     margin-inline-start:auto, not margin-left: this is an RTL document and
+     the logical property is what puts the control at the row's END on both
+     directions rather than pinning it to a physical side.
+     width:auto overrides .text-input's own width:100%, which would take the
+     whole row and push the heading out.
+     NO COLOUR OF ITS OWN, deliberately - every paint it has comes from
+     .text-input's tokens (--surface2, --border, --chalk), so it themes
+     itself in light and dark and needs no duplicate in either dark block.
+     min-height:44px keeps it a real tap target; the smaller font is what
+     stops the longest scope label ("אחרי מי שאני עוקב/ת") from truncating
+     at 390px, measured, not assumed. */
+  .feed-scope-select{ margin-inline-start:auto; width:auto; max-width:62%; min-height:44px; padding:6px 10px; font-size:13.5px; font-weight:700; }
   /* Usability pass: the Manage tab's "ניהול" sub-tab (cloud.js
      renderManageApp) stacks five rare admin tools - moderation, audit log,
      club settings, analytics, onboarding content - one after another, which
@@ -2245,6 +2263,30 @@
 
   .scene-page__media::after{background-color:transparent;}
   .scene-page--achievements .scene-page__media::after{background-size:100% auto;}
+  /* COMMUNITY IS FRAMED BELOW THE WORDMARK ON THE WALL.
+     The club's logo wall is the right photo for this tab and the wrong crop
+     for it: the painted "האימוניה" sits 12-22% down the frame, which the
+     shared crop below put at y=54-100 on a 390x844 phone - directly under
+     the fixed header's own ./assets/logo-full.png at y=20-50. Two wordmarks,
+     60px apart, one of them the club's actual wall (measured in Chromium,
+     not inferred). So Community takes its own framing of the same
+     photograph: the same wall, its baseboard, the wooden floor and the
+     barbell on the mat, starting below the paint.
+     --community-scene-crop is the rendered height of the photo, and the
+     negative offset is that height times the fraction of the source frame
+     skipped - one number in two places, so zooming further cannot silently
+     stop clearing the text. 0.3 is the measured floor: the wordmark's
+     tagline ends at ~0.25 of the source height, and the rest is margin.
+     The photo has to be tall enough that what is left after the offset
+     still fills the visible band (--scene-photo-height, 42svh+16px), which
+     is what the max() floor is for on a short viewport.
+     No colour here, so no duplicate in either dark block - the scrim and
+     the sheet above it keep owning the theme. */
+  .scene-page--community{ --community-scene-crop:max(720px, 86svh); }
+  .scene-page--community .scene-page__media::after{
+    background-size:auto var(--community-scene-crop);
+    background-position:50% calc(var(--community-scene-crop) * -0.3);
+  }
   #achievementsOverlay{align-items:stretch; padding:0;}
   #achievementsOverlay .modal-sheet{height:100svh; max-height:100svh; border-radius:0;}
   #achievementsOverlay .modal-title{color:#fff;}

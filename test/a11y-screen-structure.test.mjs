@@ -272,16 +272,28 @@ for (const sub of COMMUNITY_TABS) {
   });
 }
 
-test("a11y structure — community, the feed scope chips are a real tab strip", async () => {
+// The scope chips were a role="tablist" of four, and this test pinned that
+// strip against the panel it controlled. They are one <select> now — the
+// screen was stacking three navigation layers (bottom bar, community
+// sub-tabs, scope chips) and a filter is the one of the three that is not
+// navigation. What has to stay true is the same pair it always checked: the
+// control has a name, and the region it filters says which scope is in
+// force. role="region", not "tabpanel": with no tablist left on the screen,
+// a tabpanel would promise tabs that do not exist.
+test("a11y structure — community, the feed scope filter names itself and the region it filters", async () => {
   const window = await openCommunity(communityMock());
   await waitFor(() => !!window.document.getElementById("communityFeedFilters"), 4000);
+  const select = window.document.getElementById("communityFeedFilters");
+  assert.equal(select.tagName, "SELECT");
+  assert.equal(select.getAttribute("aria-label"), "סינון הפיד", "the filter must carry its own name");
+  assert.equal(select.getAttribute("aria-controls"), "communityFeedPanel");
   const panel = window.document.getElementById("communityFeedPanel");
-  assert.ok(panel, "the feed scope chips declare themselves tabs — they need one stable panel to control");
-  assert.equal(panel.getAttribute("role"), "tabpanel");
-  const selected = window.document.querySelector('#communityFeedFilters [role="tab"][aria-selected="true"]');
-  assert.ok(selected, "no feed scope is selected");
-  assert.equal(panel.getAttribute("aria-labelledby"), selected.id,
-    "the feed panel must name the scope currently filtering it");
+  assert.ok(panel, "the filter needs one stable region to control");
+  assert.equal(panel.getAttribute("role"), "region");
+  const chosen = select.options[select.selectedIndex];
+  assert.ok(chosen, "no feed scope is selected");
+  assert.match(panel.getAttribute("aria-label") || "", new RegExp(chosen.textContent.trim()),
+    "the feed region must name the scope currently filtering it");
 });
 
 test("a11y structure — community, the staff Manage screen", async () => {

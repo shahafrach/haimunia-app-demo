@@ -2850,24 +2850,54 @@ function renderAppConfirmSheet() {
 // pure notification (the revoked-badge message), and restoring a deleted
 // record is a plain re-put of the object we already hold in memory, so
 // nothing has to be reconstructed from the UI.
+// `onExpire` is the third job, and the one the community half needs. Every
+// undo above REVERSES a write that already happened — the record is back in
+// IndexedDB before the toast is even drawn. A community delete cannot work
+// that way (see deferCommunityDelete(), cloud.js): the write is HELD for the
+// toast's window instead, so something has to say "the window closed and
+// nobody tapped בטלו — send it now". That is this callback, and it fires
+// exactly once per toast: on the timeout, or when a newer toast replaces
+// this one, and never when the action ran. One clock, owned here, rather
+// than a second timer in cloud.js that would eventually disagree with this
+// one about when five seconds are up.
 const TOAST_WINDOW_MS = 5000;
 let pendingToast = null;
 let toastTimeout = null;
-function showToast(label, action) {
-  clearTimeout(toastTimeout);
-  pendingToast = { label, action: action || null };
-  toastTimeout = setTimeout(() => { pendingToast = null; render(); }, TOAST_WINDOW_MS);
-}
-function offerUndo(label, restore) {
-  showToast(label, { label: "בטלו", run: restore });
-}
-function runToastAction() {
+// `ran` is what separates "the member tapped בטלו" from every other way a
+// toast ends. Only the latter releases a held write.
+function settleToast(ran) {
   const t = pendingToast;
   clearTimeout(toastTimeout);
+  toastTimeout = null;
   pendingToast = null;
+  if (t && !ran && typeof t.onExpire === "function") t.onExpire();
+  return t;
+}
+function showToast(label, action, onExpire) {
+  settleToast(false);
+  pendingToast = { label, action: action || null, onExpire: onExpire || null };
+  toastTimeout = setTimeout(() => { settleToast(false); render(); }, TOAST_WINDOW_MS);
+}
+function offerUndo(label, restore, onExpire) {
+  showToast(label, { label: "בטלו", run: restore }, onExpire);
+}
+function runToastAction() {
+  const t = settleToast(true);
   if (t && t.action) t.action.run();
   else render();
 }
+// A held write must not leave with the page. pagehide is the last event this
+// app is guaranteed on a real phone (iOS Safari does not fire beforeunload,
+// and a backgrounded tab's setTimeout is throttled to the point where the
+// five seconds may simply never elapse), so the window is closed by hand
+// there and whatever it was holding goes out immediately.
+// The repaint matters on the visibilitychange path and not on pagehide: a
+// tab that comes back would otherwise still be showing a toast whose window
+// has already closed, offering an undo that can no longer undo anything.
+window.addEventListener("pagehide", () => { settleToast(false); });
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden" && settleToast(false)) render();
+});
 function renderToastBar() {
   if (!pendingToast) return "";
   // Sits above #bottomNavWrap (z-index:30) and below every .modal-overlay

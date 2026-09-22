@@ -1,10 +1,16 @@
 // COMM-358: role="tablist" groups (bottom tab bar, WOD Rx/Scaled-style
-// subtabbar, community feed-scope filter) pair role="tab" with
+// subtabbar, the Community and Manage sub-tab bars) pair role="tab" with
 // aria-selected, which sets an assistive-tech user's expectation of
 // Arrow/Home/End navigation and a roving tabindex (only the selected tab is
-// a Tab stop). Covers the shared handler against the two in-app groups;
-// the community feed-scope filter reuses the exact same handler and is not
-// re-tested here.
+// a Tab stop). Covers the shared handler against the two in-app groups; the
+// community and manage sub-tab bars reuse the exact same handler and are
+// not re-tested here.
+//
+// THE COMMUNITY FEED-SCOPE FILTER IS NO LONGER ONE OF THESE GROUPS. It was
+// four role="tab" chips on a rail of its own - the third stacked navigation
+// layer on the Community tab - and is now a native <select>, which gets
+// Arrow/Home/End and a single Tab stop from the platform rather than from
+// this handler.
 import { test } from "node:test";
 import assert from "node:assert";
 import { bootApp } from "./helpers/boot.mjs";
