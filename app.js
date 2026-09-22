@@ -362,7 +362,7 @@ function renderNavRows(withIds, onlyOther, pick) {
     const idAttr = withIds ? ` id="${item.rowId}"` : "";
     const tabbtnClass = withIds ? " tabbtn" : "";
     return `
-      <button class="navrow${tabbtnClass}${isActive ? " active" : ""}"${idAttr} data-action="switch-tab" data-tab="${item.tab}" role="tab" aria-selected="${isActive}">
+      <button class="navrow${tabbtnClass}${isActive ? " active" : ""}"${idAttr} data-action="switch-tab" data-tab="${item.tab}" role="tab" aria-selected="${isActive}" aria-controls="content">
         <span class="icon-chip icon-chip-${item.tint}">${item.icon}</span>
         <span class="nav-label">${esc(item.label)}</span>
       </button>${sub}`;
@@ -3192,8 +3192,7 @@ function renderUserGreeting() {
   // sink keeps a bare identifier.
   const greetingHtml = userName ? `<span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">שלום ${bidiText(userName)}</span>${ICONS.chevronsLeft}` : "";
   el.innerHTML = greetingHtml;
-  if (userName) el.setAttribute("aria-label", `שלום ${userName} — פתיחת מדליות והישגים`);
-  else el.removeAttribute("aria-label");
+  el.setAttribute("aria-label", userName ? `שלום ${userName} — פתיחת מדליות והישגים` : "פתיחת מדליות והישגים");
 }
 let welcomeEditing = false;
 let welcomeOpenerEl = null;
@@ -4425,7 +4424,7 @@ function renderWodBuilderMovements(query) {
   }
   el.innerHTML = addRow + Object.entries(byCategory).map(([cat, items]) => `
     <div class="cat-group">
-      <div class="cat-head"><div class="dot" style="background:${esc(catColor(cat))}"></div><span class="cat-name">${esc(catLabel(cat))}</span></div>
+      <div class="cat-head"><div class="dot" style="background:${esc(catColor(cat))}"></div><h3 class="cat-name">${esc(catLabel(cat))}</h3></div>
       ${items.map((m) => {
         const entry = builderMovements[m.name];
         const checked = !!(entry && entry.checked);
@@ -5125,7 +5124,7 @@ function renderLogTab() {
 
     ${dayEntries.length === 0 ? `
     <div class="day-empty">${ICONS.emptyDay}<span>${isToday ? "עדיין לא נרשמו סטים היום. כאן מתעדים את האימון שהושלם." : `עדיין לא נרשמו סטים ב-${esc(dayLabel)}.`}</span></div>` : `
-    <div class="section-label">${isToday ? "סיכום האימון" : `סיכום ${esc(dayLabel)}`}</div>
+    <h2 class="section-label">${isToday ? "סיכום האימון" : `סיכום ${esc(dayLabel)}`}</h2>
     <div class="chart-card" style="margin-bottom:8px;">${renderDayEntriesListHtml(dayEntries, [])}</div>
     <button class="link-btn" data-action="view-log-date-calendar" style="display:flex; align-items:center; justify-content:space-between; width:100%; margin-bottom:0;">
       <span>הערות לאימון ופרטי היום · ${bidiText(entrySummary(dayEntries[0]))}</span>
@@ -5163,12 +5162,13 @@ function renderLogTab() {
     <div class="log-empty" data-empty-state="log-choose-exercise">
       <span class="log-empty-medal" aria-hidden="true">${ICONS.emptyBarbell}</span>
       <div class="log-empty-text">
-        <div class="log-empty-head">כאן מתעדים את האימון של היום</div>
+        <h2 class="log-empty-head">כאן מתעדים את האימון של היום</h2>
         <div class="log-empty-body">בוחרים תרגיל בכרטיס שלמעלה, ומשקל, חזרות וסטים נפתחים בדיוק כאן.</div>
       </div>
       <div class="log-empty-when">מיד אחרי הבחירה יופיעו כאן גם השיא שלכם, האימון האחרון וההיסטוריה בתרגיל.</div>
     </div>` : `
 
+    <h2 class="sr-only">רישום סט</h2>
     <div class="rx-toggle" role="radiogroup" aria-label="סוג רישום">
       <button class="rx-btn ${!isDuration ? "active-type" : ""}" data-action="set-log-entry-type" data-type="reps" role="radio" aria-checked="${!isDuration}">משקל וחזרות</button>
       <button class="rx-btn ${isDuration ? "active-type" : ""}" data-action="set-log-entry-type" data-type="duration" role="radio" aria-checked="${isDuration}"><span style="display:inline-flex; width:16px; height:16px; vertical-align:-3px; margin-left:4px;">${ICONS.stopwatchIcon}</span>החזקה בזמן</button>
@@ -5744,11 +5744,11 @@ function renderCalDetail() {
   const d = new Date(calSelectedDate + "T00:00:00");
   const label = d.toLocaleDateString("he-IL", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
   el.innerHTML = `
-    <div class="section-label" style="margin-top:4px;">${label.toUpperCase()}</div>
+    <h2 class="section-label" style="margin-top:4px;">${label.toUpperCase()}</h2>
     <div class="chart-card">
     ${renderDayEntriesListHtml(dayEntries, dayWods)}
 
-    <div class="section-label" style="margin-top:16px;">איך היה האימון היום</div>
+    <h3 class="section-label" style="margin-top:16px;">איך היה האימון היום</h3>
     <textarea id="sessionNoteInput" class="text-input" dir="auto" maxlength="${LIMITS.notesLen}" rows="3" placeholder="הרגשה, אנרגיה, מה עבד ומה פחות..." aria-label="איך היה האימון היום" style="resize:vertical; min-height:64px; font-family:inherit; margin-bottom:8px;">${esc(calNoteDate === calSelectedDate ? calNoteText : "")}</textarea>
     <button data-action="save-session-note" data-date="${esc(calSelectedDate)}" class="link-btn" style="display:block;">שמירת הערה</button>
     </div>
@@ -5803,7 +5803,7 @@ function renderVolumeReport() {
 
   return `
     <div class="chart-card">
-    <div class="section-label">נפח ותדירות לפי קטגוריה</div>
+    <h2 class="section-label">נפח ותדירות לפי קטגוריה</h2>
     <div style="color:var(--steel); font-size:11px; margin-bottom:10px;">סטים ב-7 / 30 הימים האחרונים, וזמן מאז האימון האחרון</div>
     ${rows}
     </div>
@@ -5843,7 +5843,7 @@ function renderCalendarTab() {
       </div>
     </div>
     ${listHtml}
-    <div id="calDetail" ${calView === "list" ? "hidden" : ""} style="margin-bottom:20px;"></div>
+    <div id="calDetail" role="region" aria-label="פירוט היום הנבחר" ${calView === "list" ? "hidden" : ""} style="margin-bottom:20px;"></div>
     <div class="cal-month-stats" id="calMonthStats"></div>
     ${renderVolumeReport()}
       </div>
@@ -5857,7 +5857,7 @@ function renderBodyweightArea() {
   const last = bodyweightEntries.slice().sort((a, b) => (b.ts || 0) - (a.ts || 0))[0];
   const chartData = sorted.map((e) => ({ dateLabel: fmtDate(e.date), est1RM: e.weight, isPR: false }));
   const header = `
-    <div class="section-label">משקל גוף</div>
+    <h2 class="section-label">משקל גוף</h2>
     <button class="exercise-row ${bodyweightExpanded ? "active" : ""}" data-action="toggle-bodyweight" style="${bodyweightExpanded ? "margin-bottom:0; border-bottom-left-radius:0; border-bottom-right-radius:0;" : ""}">
       <div class="flex items-center gap-8">
         <span style="display:inline-flex; transition:transform .2s; transform:rotate(${bodyweightExpanded ? "90deg" : "180deg"});">${ICONS.chevron}</span>
@@ -5943,7 +5943,7 @@ function renderMeasureArea() {
   }).join("");
 
   el.innerHTML = `
-    <div class="section-label" style="margin-top:4px;">מדדי גוף</div>
+    <h2 class="section-label" style="margin-top:4px;">מדדי גוף</h2>
     ${rows}
     ${addRow}
   `;
@@ -6128,7 +6128,7 @@ function renderBenchmarkCard(item) {
       ${item.tracked.length ? renderChart(chartData) : `<div style="color:var(--steel); font-size:13px; text-align:center; padding:18px 0;">אין עדיין תוצאה לבנצ'מרק הזה</div>`}
       ${item.kind === "wod" && item.effort !== null && item.tracked.length < item.all.length
         ? `<div class="footer-note" style="margin-top:10px; text-align:center;">הגרף והשיא מציגים את הניסיונות ב${esc(wodEffortLabel(item.effort))} בלבד — תוצאות בדרגות מאמץ שונות אינן ברות השוואה. כל הניסיונות מופיעים ברשימה למטה.</div>` : ""}
-      ${attempts.length ? `<div class="section-label" style="margin-top:14px;">כל הניסיונות</div>${attempts.map((a) => renderBenchmarkAttemptRow(item, a)).join("")}` : ""}
+      ${attempts.length ? `<h3 class="section-label" style="margin-top:14px;">כל הניסיונות</h3>${attempts.map((a) => renderBenchmarkAttemptRow(item, a)).join("")}` : ""}
       ${item.kind === "lift"
         ? `<div class="footer-note" style="margin-top:10px; text-align:center;">1RM משוער — חישוב מהסט הטוב ביותר בכל יום אימון, לא הרמה שבוצעה</div>`
         : `<button class="link-btn" data-action="log-benchmark" data-id="${esc(item.refId)}" style="display:block; margin:12px auto 0;">רישום ניסיון ב-${esc(item.name)}</button>`}
@@ -6173,12 +6173,14 @@ function renderBenchmarkArea() {
   // who has never signed into the community layer at all - and this section
   // does not exist rather than rendering an empty heading.
   el.innerHTML = benchmarksOn() ? benchmarkSectionHtml() : "";
+  if (el.firstElementChild) { el.setAttribute("role", "region"); el.setAttribute("aria-label", "בנצ'מרקים"); }
+  else { el.removeAttribute("role"); el.removeAttribute("aria-label"); }
 }
 function benchmarkSectionHtml() {
   const items = benchmarkItems();
   const due = items.filter((i) => i.retestDue);
   return `
-    <div class="section-label">בנצ'מרקים</div>
+    <h2 class="section-label">בנצ'מרקים</h2>
     ${due.length ? `<div class="footer-note" style="margin:0 0 10px;">${due.length === 1 ? `בנצ'מרק אחד לא נבדק` : `${due.length} בנצ'מרקים לא נבדקו`} מעל ${BENCHMARK_RETEST_DAYS} יום: ${esc(due.map((i) => i.name).join(", "))}</div>` : ""}
     ${items.map((item) => renderBenchmarkRow(item) + (benchmarkExpandedId === item.id ? renderBenchmarkCard(item) : "")).join("")}`;
 }
@@ -6213,17 +6215,17 @@ function renderHistoryTab() {
     <div id="benchmarkArea"></div>
 
     ${activeExercises().length > 0 ? `
-    <div class="section-label">שיאים כלל-זמנים</div>
+    <h2 class="section-label">שיאים כלל-זמנים</h2>
     <div class="search-box" style="margin:0 0 12px;">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--steel)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
       <input id="historySearch" dir="auto" placeholder="חיפוש בתרגילים שלך" aria-label="חיפוש בתרגילים שלך" value="${esc(historySearch)}" />
     </div>` : ""}
 
-    <div id="historyListArea"></div>
+    <div id="historyListArea" role="region" aria-label="שיאים כלל-זמנים"></div>
 
-    <div id="bodyweightArea"></div>
+    <div id="bodyweightArea" role="region" aria-label="משקל גוף"></div>
 
-    <div id="measureArea"></div>
+    <div id="measureArea" role="region" aria-label="מדדי גוף"></div>
       </div>
     </section>
   `;
@@ -6812,6 +6814,10 @@ function render() {
     try { typed = document.activeElement.value; } catch (e) { typed = null; }
   }
   document.getElementById("content").innerHTML = content + cloudOverlay + renderToastBar() + renderAppConfirmSheet();
+  const contentPanel = document.getElementById("content");
+  const activeNavItem = getNavItems().find((i) => i.tab === tab);
+  if (activeNavItem && document.getElementById(activeNavItem.rowId)) contentPanel.setAttribute("aria-labelledby", activeNavItem.rowId);
+  else contentPanel.removeAttribute("aria-labelledby");
   if (focusKey) {
     const again = findFieldByIdentity(focusKey);
     // Only when the swap is what took focus away. If the member has moved to
@@ -7111,7 +7117,7 @@ function renderWodLogSection() {
   if (!w) return `
     <div class="flex col items-center" style="padding:32px 20px; gap:10px; text-align:center;">
       <span style="display:inline-flex; width:28px; height:28px; color:var(--steel);">${ICONS.stopwatchIcon}</span>
-      <div style="font-size:15px; font-weight:700; color:var(--chalk);">בחרו אימון ונרשום אותו</div>
+      <h2 style="font-size:15px; font-weight:700; color:var(--chalk);">בחרו אימון ונרשום אותו</h2>
       <div style="font-size:13px; color:var(--steel);">אימונים מוכרים מהמועדון, או אימון משלכם.</div>
       <button class="exercise-select" data-action="open-wod-picker" style="width:100%; min-height:56px; margin-top:4px;">
         <span style="font-weight:800; font-size:16px;">בחירת אימון</span>
@@ -7159,6 +7165,7 @@ function renderWodLogSection() {
   }
 
   return `
+    <h2 class="sr-only">רישום תוצאת אימון</h2>
     ${editingWodEntryId ? `
     <div style="background:rgba(232,185,138,.12); border:1px solid var(--brass); border-radius:12px; padding:10px 14px; margin-bottom:12px; display:flex; align-items:center; justify-content:space-between;">
       <span style="color:var(--brass); font-weight:700; font-size:13px;">עריכת אימון קיים</span>
@@ -7366,12 +7373,12 @@ function renderWodHistoryListArea() {
 function renderWodHistorySection() {
   return `
     ${activeWods().length > 0 ? `
-    <div class="section-label">שיאים כלל-זמנים</div>
+    <h2 class="section-label">שיאים כלל-זמנים</h2>
     <div class="search-box" style="margin:0 0 12px;">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--steel)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
       <input id="wodHistorySearch" dir="auto" placeholder="חיפוש באימונים שלך" aria-label="חיפוש באימונים שלך" value="${esc(wodHistorySearch)}" />
-    </div>` : ""}
-    <div id="wodHistoryListArea"></div>
+    </div>` : `<h2 class="sr-only">שיאים כלל-זמנים</h2>`}
+    <div id="wodHistoryListArea" role="region" aria-label="שיאים כלל-זמנים"></div>
   `;
 }
 
@@ -7412,7 +7419,7 @@ function renderWodBenchmarksSection() {
   );
   return renderWodGlossaryLink() + groups.map(([cat, list]) => `
     <div class="cat-group">
-      <div class="cat-head"><span class="cat-name">${esc(WOD_LIBRARY_CATEGORY_LABELS[cat] || cat)}</span></div>
+      <div class="cat-head"><h2 class="cat-name">${esc(WOD_LIBRARY_CATEGORY_LABELS[cat] || cat)}</h2></div>
       ${list.map((w) => `<button class="movement-btn" data-action="select-benchmark" data-id="${esc(w.id)}">
         <div><span style="font-weight:700;">${bidiText(w.name)}</span>${w.desc ? `<div class="wod-desc">${bidiText(w.desc)}</div>` : ""}</div>
         <span aria-hidden="true">›</span>
@@ -7431,12 +7438,12 @@ function renderWodTab() {
       <div class="scene-sheet">
     <div class="stripe-ribbon" aria-hidden="true"></div>
     ${!storageOK ? `<div class="footer-note" style="color:var(--red-text); background:rgba(216,69,60,.1); border:1px solid var(--red); border-radius:12px; padding:10px 14px; margin-bottom:12px;" role="alert">${esc(storageErrMsg)}</div>` : ""}
-    <div class="subtabbar" role="tablist">
-      <button class="subtabbtn ${wodSubTab === "log" ? "active" : ""}" data-action="switch-wod-subtab" data-subtab="log" role="tab" aria-selected="${wodSubTab === "log"}" aria-controls="wodContent" tabindex="${wodSubTab === "log" ? "0" : "-1"}">רישום</button>
-      <button class="subtabbtn ${wodSubTab === "history" ? "active" : ""}" data-action="switch-wod-subtab" data-subtab="history" role="tab" aria-selected="${wodSubTab === "history"}" aria-controls="wodContent" tabindex="${wodSubTab === "history" ? "0" : "-1"}">היסטוריה</button>
-      <button class="subtabbtn ${wodSubTab === "benchmarks" ? "active" : ""}" data-action="switch-wod-subtab" data-subtab="benchmarks" role="tab" aria-selected="${wodSubTab === "benchmarks"}" aria-controls="wodContent" tabindex="${wodSubTab === "benchmarks" ? "0" : "-1"}">קטלוג</button>
+    <div class="subtabbar" role="tablist" aria-label="תצוגת ספריית האימונים">
+      <button class="subtabbtn ${wodSubTab === "log" ? "active" : ""}" id="wodSubtab-log" data-action="switch-wod-subtab" data-subtab="log" role="tab" aria-selected="${wodSubTab === "log"}" aria-controls="wodContent" tabindex="${wodSubTab === "log" ? "0" : "-1"}">רישום</button>
+      <button class="subtabbtn ${wodSubTab === "history" ? "active" : ""}" id="wodSubtab-history" data-action="switch-wod-subtab" data-subtab="history" role="tab" aria-selected="${wodSubTab === "history"}" aria-controls="wodContent" tabindex="${wodSubTab === "history" ? "0" : "-1"}">היסטוריה</button>
+      <button class="subtabbtn ${wodSubTab === "benchmarks" ? "active" : ""}" id="wodSubtab-benchmarks" data-action="switch-wod-subtab" data-subtab="benchmarks" role="tab" aria-selected="${wodSubTab === "benchmarks"}" aria-controls="wodContent" tabindex="${wodSubTab === "benchmarks" ? "0" : "-1"}">קטלוג</button>
     </div>
-    <div id="wodContent"></div>
+    <div id="wodContent" role="tabpanel" aria-labelledby="wodSubtab-${wodSubTab}"></div>
       </div>
     </section>
   `;
@@ -7844,7 +7851,7 @@ function renderPickerList(query) {
   }
   list.innerHTML = addRow + Object.entries(byCategory).map(([cat, items]) => `
     <div class="cat-group">
-      <div class="cat-head"><div class="dot" style="background:${esc(catColor(cat))}"></div><span class="cat-name">${esc(catLabel(cat))}</span></div>
+      <div class="cat-head"><div class="dot" style="background:${esc(catColor(cat))}"></div><h3 class="cat-name">${esc(catLabel(cat))}</h3></div>
       ${items.map((m) => `
         <button class="movement-btn ${selectedId === m.id ? "active" : ""}" data-action="pick-movement" data-id="${esc(m.id)}">
           <span style="font-weight:600; font-size:14px;">${bidiText(m.name)}</span>
@@ -7921,7 +7928,7 @@ function renderWodPickerList(query) {
   const cats = Object.keys(byCategory).sort((a, b) => order.indexOf(a) - order.indexOf(b));
   list.innerHTML = addRow + `<div style="height:12px;"></div>` + cats.map((cat) => `
     <div class="cat-group">
-      <div class="cat-head"><div class="dot" style="background:${esc(catColor(cat))}"></div><span class="cat-name">${esc(catLabel(cat))}</span></div>
+      <div class="cat-head"><div class="dot" style="background:${esc(catColor(cat))}"></div><h3 class="cat-name">${esc(catLabel(cat))}</h3></div>
       ${byCategory[cat].map((w) => `
         <div class="movement-btn ${selectedWodId === w.id ? "active" : ""}" style="padding:0; overflow:hidden;">
         <button style="flex:1; padding:12px 14px; text-align:right;" data-action="pick-wod" data-id="${esc(w.id)}">
@@ -8263,6 +8270,8 @@ document.addEventListener("click", (e) => {
       btn.setAttribute("aria-selected", String(active));
       btn.setAttribute("tabindex", active ? "0" : "-1");
     });
+    const wodPanel = document.getElementById("wodContent");
+    if (wodPanel) wodPanel.setAttribute("aria-labelledby", "wodSubtab-" + wodSubTab);
     renderWodContent();
     // Same reasoning as the pill highlight above: the fixed bottom bar's
     // visibility/action is normally set inside the full render(), which

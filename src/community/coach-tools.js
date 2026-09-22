@@ -1010,7 +1010,7 @@
     const prevName = prevProfile ? (prevProfile.display_name || "@" + prevProfile.handle) : "חבר/ה";
     const prevNote = prevId ? `<div class="footer-note" style="margin-top:4px;">לא ניתן לבחור שוב ב${esc(prevName)} — נבחר/ה כבר בשבוע שעבר.</div>` : "";
     return `<div class="chart-card" style="margin-top:8px;">
-      <div class="field-label" style="margin-bottom:6px;">בחירת מאמן/ת</div>
+      <h3 class="field-label" style="margin-bottom:6px;">בחירת מאמן/ת</h3>
       <label class="field"><span class="field-label">שם משתמש</span><input class="text-input" dir="ltr" placeholder="שם משתמש" data-mow-pick-handle value="${esc(s.pickHandle)}"${anyBusy ? " disabled" : ""}/></label>
       <label class="field"><span class="field-label">סיבה (חובה)</span><textarea class="text-input" rows="3" maxlength="500" data-mow-pick-reason placeholder="למה החבר/ה הזה/הזאת נבחר/ה השבוע"${anyBusy ? " disabled" : ""}>${esc(s.pickReason)}</textarea></label>
       <div data-mow-pick-counter style="text-align:left;font-size:11px;color:var(--steel);min-height:14px;">${s.pickReason.length}/500</div>
@@ -1198,7 +1198,7 @@
       // rather than wondering if the draft is broken.
       control = `<div class="footer-note" style="margin-top:8px;">רק בעל/ת הרשאת אנליטיקה או מנהל/ת יכול/ה לפרסם.</div>`;
     }
-    return `<div class="ach-section" style="margin-top:18px;">${head}<div class="chart-card"><div class="field-label" style="margin-bottom:6px;">${esc(r.month_start)}${r.published_at ? "" : " · טיוטה"}</div>${renderMonthlyRecapFigures(r)}${control}</div></div>`;
+    return `<div class="ach-section" style="margin-top:18px;">${head}<div class="chart-card"><h3 class="field-label" style="margin-bottom:6px;">${esc(r.month_start)}${r.published_at ? "" : " · טיוטה"}</h3>${renderMonthlyRecapFigures(r)}${control}</div></div>`;
   }
   // The member-facing surface: an inline Account-tab card, sibling to the
   // COMM-221 "View Week" entry (recapEntry in the tab builder below), not a
@@ -1218,7 +1218,7 @@
     // unlike the weekly recap's per-week dialog this never needs to
     // distinguish which month by id - landing on this one section IS
     // landing on the exact item the notification pointed at.
-    return `<div class="ach-section" data-monthly-recap-section style="margin-top:18px;">${sectionHead("var(--purple)", "סיכום החודש של הקהילה")}<div class="chart-card"><div class="field-label" style="margin-bottom:6px;">${esc(r.month_start)}</div>${renderMonthlyRecapFigures(r)}</div></div>`;
+    return `<div class="ach-section" data-monthly-recap-section style="margin-top:18px;">${sectionHead("var(--purple)", "סיכום החודש של הקהילה")}<div class="chart-card"><h3 class="field-label" style="margin-bottom:6px;">${esc(r.month_start)}</h3>${renderMonthlyRecapFigures(r)}</div></div>`;
   }
 
   // COMM-226 built this absent entirely (not merely styled hidden) unless

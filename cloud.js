@@ -3445,14 +3445,14 @@
       ? `<div class="chart-card" style="margin-bottom:10px;"><div class="field-label" style="margin-bottom:4px;">האירוע הקרוב</div><button class="link-btn" data-community-action="open-event" data-id="${esc(row.upcoming_event.id)}" data-source="recap" style="padding:0;text-align:right;display:block;">${esc(row.upcoming_event.title)}</button>${row.upcoming_event.start_at ? `<div style="color:var(--steel);font-size:12px;">${esc(formatChallengeDate(row.upcoming_event.start_at))}</div>` : ""}</div>`
       : `<div class="empty">אין אירוע קרוב לציין</div>`;
     const shareOptions = recapShareOptions(row);
-    const shareHtml = `<div class="field-label" style="margin:10px 0 4px;">שיתוף הסיכום</div><div class="chip-row" style="flex-wrap:wrap;">${shareOptions.map((o) => `<button class="chip-btn" data-community-action="share-recap" data-figure="${o.key}"${v.sharing === o.key ? " disabled" : ""}>${v.sharing === o.key ? "משתף…" : "שיתוף " + esc(o.label)}</button>`).join("")}</div>`;
+    const shareHtml = `<h3 class="field-label" style="margin:10px 0 4px;">שיתוף הסיכום</h3><div class="chip-row" style="flex-wrap:wrap;">${shareOptions.map((o) => `<button class="chip-btn" data-community-action="share-recap" data-figure="${o.key}"${v.sharing === o.key ? " disabled" : ""}>${v.sharing === o.key ? "משתף…" : "שיתוף " + esc(o.label)}</button>`).join("")}</div>`;
     return `${quietNote}
       <div class="chart-card" style="margin-bottom:10px;"><div class="field-label" style="margin-bottom:4px;">אימונים השבוע</div><div class="mono" style="color:var(--brass);font-size:18px;">${esc(row.sessions_completed)}</div></div>
       <div class="chart-card" style="margin-bottom:10px;"><div class="field-label" style="margin-bottom:4px;">רצף נוכחי</div><div class="mono" style="color:var(--brass);font-size:18px;">🔥 ${esc(row.streak)}</div></div>
-      <div class="field-label" style="margin:10px 0 4px;">שיאים</div>${prsHtml}
-      <div class="field-label" style="margin:10px 0 4px;">הישגים</div>${achHtml}
-      <div class="field-label" style="margin:10px 0 4px;">ההתקדמות שלי באתגר</div>${challengeHtml}
-      <div class="field-label" style="margin:10px 0 4px;">מי עוד התאמן איתכם השבוע</div>${classmatesHtml}
+      <h3 class="field-label" style="margin:10px 0 4px;">שיאים</h3>${prsHtml}
+      <h3 class="field-label" style="margin:10px 0 4px;">הישגים</h3>${achHtml}
+      <h3 class="field-label" style="margin:10px 0 4px;">ההתקדמות שלי באתגר</h3>${challengeHtml}
+      <h3 class="field-label" style="margin:10px 0 4px;">מי עוד התאמן איתכם השבוע</h3>${classmatesHtml}
       ${club}
       ${event}
       ${shareHtml}`;
@@ -4181,7 +4181,7 @@
     // (a role="tablist" whose children were not all tabs) is moot now that
     // there is nothing disabled left to render, but the note above stays as
     // the reason the live chips each carry role="tab".
-    const filterHtml = `<div class="chip-row" id="communityFeedFilters" role="tablist" aria-label="סינון הפיד" style="margin:0 0 10px;">${FEED_SCOPES.map((s) => `<button class="chip-btn${state.feed.scope === s.id ? " selected" : ""}" data-community-action="feed-scope" data-scope="${s.id}" role="tab" aria-selected="${state.feed.scope === s.id ? "true" : "false"}" tabindex="${state.feed.scope === s.id ? "0" : "-1"}">${esc(s.label)}</button>`).join("")}</div>`;
+    const filterHtml = `<div class="chip-row" id="communityFeedFilters" role="tablist" aria-label="סינון הפיד" style="margin:0 0 10px;">${FEED_SCOPES.map((s) => `<button class="chip-btn${state.feed.scope === s.id ? " selected" : ""}" id="feedScope-${s.id}" data-community-action="feed-scope" data-scope="${s.id}" role="tab" aria-controls="communityFeedPanel" aria-selected="${state.feed.scope === s.id ? "true" : "false"}" tabindex="${state.feed.scope === s.id ? "0" : "-1"}">${esc(s.label)}</button>`).join("")}</div>`;
 
     const feed = state.feed.loading && !state.feed.items.length
       ? `<div class="log-list" aria-busy="true">${renderPostCardSkeleton().repeat(3)}</div>`
@@ -4226,7 +4226,15 @@
     // render AFTER ${feed} - the one time-sensitive item on the screen sat
     // underneath an infinite list, so a member who kept scrolling passed it
     // and a member who did not never saw it at all.
-    const feedHtml = `<div class="ach-section">${sectionHead("var(--blue)", "הפיד שלי")}${composeBtn}${filterHtml}${feed}${feedMoreHtml}</div>`;
+    // Launch-readiness audit follow-up (COMM-329). The scope chips were
+    // already declared role="tab" inside a role="tablist", but there was no
+    // element for them to control: the list they swap is rendered under three
+    // different ids depending on state (loading / error / items), and the
+    // empty state has no container of its own at all. One stable wrapper is
+    // what completes the pattern - a plain block div inside a plain block
+    // .ach-section, so nothing about the layout moves.
+    const feedPanel = `<div id="communityFeedPanel" role="tabpanel" aria-labelledby="feedScope-${state.feed.scope}">${feed}${feedMoreHtml}</div>`;
+    const feedHtml = `<div class="ach-section">${sectionHead("var(--blue)", "הפיד שלי")}${composeBtn}${filterHtml}${feedPanel}</div>`;
 
     // COMM-155. The pinned strip sits above everything else on the Club home.
     // 202609080002. Directly under the club header and ABOVE the feed list:
