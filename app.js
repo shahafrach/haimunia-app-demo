@@ -362,7 +362,7 @@ function renderNavRows(withIds, onlyOther, pick) {
     const idAttr = withIds ? ` id="${item.rowId}"` : "";
     const tabbtnClass = withIds ? " tabbtn" : "";
     return `
-      <button class="navrow${tabbtnClass}${isActive ? " active" : ""}"${idAttr} data-action="switch-tab" data-tab="${item.tab}" role="tab" aria-selected="${isActive}">
+      <button class="navrow${tabbtnClass}${isActive ? " active" : ""}"${idAttr} data-action="switch-tab" data-tab="${item.tab}" role="tab" aria-selected="${isActive}" aria-controls="content">
         <span class="icon-chip icon-chip-${item.tint}">${item.icon}</span>
         <span class="nav-label">${esc(item.label)}</span>
       </button>${sub}`;
@@ -1018,19 +1018,31 @@ function longestWeekStreak() {
   return longest;
 }
 function totalSessions() { return new Set(loggedDates()).size; }
-function daysSinceBoxStart() {
-  if (!boxStartDate) return null;
-  // Live bug hunt (2026-09-11): raw ms-division drifts by the DST offset
-  // around a spring-forward/fall-back transition, which can flip a
-  // tenure/anniversary badge's day count off-by-one right at local midnight
-  // once the drift accumulates. computeCurrentStreak() already gets this
-  // right elsewhere in this file via setDate() local-calendar-day counting;
-  // matching that instead of the ms-division this function used before.
-  const start = new Date(boxStartDate + "T00:00:00");
+// WHOLE LOCAL CALENDAR DAYS between an ISO date and today.
+//
+// Live bug hunt (2026-09-11): raw ms-division drifts by the DST offset around
+// a spring-forward/fall-back transition, which can flip a day count
+// off-by-one right at local midnight once the drift accumulates.
+// computeCurrentStreak() already gets this right elsewhere in this file via
+// setDate() local-calendar-day counting; this matches that.
+//
+// Extracted from daysSinceBoxStart() when the benchmark retest reminder
+// needed the same arithmetic. A second copy of a DST-correct day count is the
+// exact shape of this codebase's characteristic defect - a right line with a
+// missed twin (CLAUDE.md, "Sibling drift") - and the twin here would have
+// been silent: a reminder one day early, twice a year, for one member.
+function daysSinceISODate(iso) {
+  if (!iso) return null;
+  const start = new Date(iso + "T00:00:00");
+  if (!isFinite(start.getTime())) return null;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   start.setHours(0, 0, 0, 0);
   return Math.round((today.getTime() - start.getTime()) / 86400000);
+}
+function daysSinceBoxStart() {
+  if (!boxStartDate) return null;
+  return daysSinceISODate(boxStartDate);
 }
 function earnedRxWodIds() { return new Set(wodEntries.filter((e) => e.rx).map((e) => e.wodId)); }
 function loggedCategories() {
@@ -2154,6 +2166,13 @@ let firstLogArrivalPending = false;
 let celebrationShowingArrival = false;
 
 function totalLoggedEntries() { return entries.length + wodEntries.length; }
+// Exported for the community layer's notification-permission gate
+// (pushAskGateReason, src/community/notifications.js), which will not ask a
+// member for permission to interrupt them until the app holds at least one
+// thing of theirs. Same window.haimunia* handle every other app.js -> cloud.js
+// fact already travels on; the training log itself stays entirely in this
+// file.
+window.haimuniaTotalLoggedEntries = totalLoggedEntries;
 
 // S2. The tour card retires itself two ways - the member took the tour, or
 // they have logged three entries and demonstrably do not need it. After that
@@ -3173,8 +3192,7 @@ function renderUserGreeting() {
   // sink keeps a bare identifier.
   const greetingHtml = userName ? `<span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">שלום ${bidiText(userName)}</span>${ICONS.chevronsLeft}` : "";
   el.innerHTML = greetingHtml;
-  if (userName) el.setAttribute("aria-label", `שלום ${userName} — פתיחת מדליות והישגים`);
-  else el.removeAttribute("aria-label");
+  el.setAttribute("aria-label", userName ? `שלום ${userName} — פתיחת מדליות והישגים` : "פתיחת מדליות והישגים");
 }
 let welcomeEditing = false;
 let welcomeOpenerEl = null;
@@ -3837,6 +3855,7 @@ async function clearAllData() {
   wodRxDefault = null;
   measureExpandedId = null;
   measureAddOpen = false;
+  benchmarkExpandedId = null;
   logDate = todayISO();
   logDateExplicitlyChosen = false;
   editingEntryId = null;
@@ -3966,6 +3985,16 @@ function clubFeatureOn(key) { return clubFeatureFlags[key] === true; }
 // The one call site's name for the one key, so a typo in the string is a
 // typo in one place. Read by renderLogTab and by nothing else.
 function strengthPercentagesOn() { return clubFeatureOn("strength_percentages"); }
+// Same shape, same key-lives-in-one-place reason, for the benchmark tracker on
+// the progress screen (club_features.benchmarks, seeded disabled by
+// 202609190002). Read by renderBenchmarkArea() and by nothing else.
+//
+// Through clubFeatureOn() rather than the community layer's isModuleEnabled()
+// deliberately, for both reasons the block above gives: the progress screen is
+// a member's own training data and has to render offline with no session, and
+// an unknown key here means OFF - which is what every member reads until an
+// admin switches this on.
+function benchmarksOn() { return clubFeatureOn("benchmarks"); }
 
 // ---------- The club's board for today (202609080002) ----------
 // THE DIVISION OF LABOUR, and the reason these three bridges exist at all:
@@ -4071,6 +4100,13 @@ function scoreValue(e) {
   if (e.scoreType === "emom") return 0; // no single comparable score — see bestWodScore
   return e.weight;
 }
+// WHICH END OF THE RANGE WINS, in one place. A time is a race (7:42 beats
+// 9:01); rounds, reps and kilos are all "more is better". bestWodScore()
+// carried this as an inline `scoreType === "time"` branch, and the benchmark
+// tracker needs exactly the same rule over exactly the same score types —
+// which is how this codebase ends up with a right line and a missed copy of
+// it (CLAUDE.md, "Sibling drift"). One function, both callers.
+function scoreLowerIsBetter(scoreType) { return scoreType === "time"; }
 // Live bug hunt (2026-09-11): rx (optional) restricts the comparison to
 // entries of that same Rx/Scaled status. Callers that don't pass it get the
 // old unfiltered behavior; saveWod()'s own PR check and formatWodBest()
@@ -4092,8 +4128,19 @@ function bestWodScore(id, excludeId, rx) {
   // one. Strict equality does that for all three with no extra branch.
   if (wodEffortAnswered(rx)) list = list.filter((e) => e.rx === rx);
   if (!list.length) return null;
-  if (w.scoreType === "time") return Math.min(...list.map(scoreValue));
-  return Math.max(...list.map(scoreValue));
+  const values = list.map(scoreValue);
+  return scoreLowerIsBetter(w.scoreType) ? Math.min(...values) : Math.max(...values);
+}
+// WHICH EFFORT BUCKET A MEMBER'S BEST ACTUALLY CAME FROM: Rx first, then Rx+,
+// then Scaled, stopping at the first bucket they have an attempt in. Split out
+// of formatWodBest() below when the benchmark tracker needed the same answer —
+// the headline number and the chart under it have to come from one bucket, and
+// two copies of this loop is the way they quietly stop doing so.
+function bestWodEffort(id) {
+  for (const effort of [true, WOD_EFFORT_PLUS, false]) {
+    if (bestWodScore(id, null, effort) !== null) return effort;
+  }
+  return null;
 }
 function formatWodEntry(e) {
   const base = e.scoreType === "time" ? formatClock(e.timeSeconds)
@@ -4117,15 +4164,18 @@ function formatWodBest(id) {
   // "—" next to results they had actually logged. Rx stays first (it is the
   // prescribed version, the one comparable to everybody else's), Rx+ second
   // because it is also at-or-above prescribed, Scaled last.
-  let best = null;
-  for (const effort of [true, WOD_EFFORT_PLUS, false]) {
-    best = bestWodScore(id, null, effort);
-    if (best !== null) break;
-  }
-  if (best === null) return "—";
-  if (w.scoreType === "time") return formatClock(best);
-  if (w.scoreType === "amrap") return `${Math.floor(best / 1000)}+${best % 1000}`;
-  return `${best} ק״ג`;
+  const effort = bestWodEffort(id);
+  if (effort === null) return "—";
+  return formatWodScore(w.scoreType, bestWodScore(id, null, effort));
+}
+// The score-to-text half of formatWodBest(), on its own so the benchmark
+// tracker prints a time, a rounds+reps and a load the same way the WOD tab
+// does rather than growing a second set of formats for the same four types.
+function formatWodScore(scoreType, value) {
+  if (value === null || !isFinite(value)) return "—";
+  if (scoreType === "time") return formatClock(value);
+  if (scoreType === "amrap") return `${Math.floor(value / 1000)}+${value % 1000}`;
+  return `${value} ק״ג`;
 }
 
 async function addCustomWod(name, scoreType, desc, extra) {
@@ -4170,7 +4220,8 @@ function wodShareCandidate(entry) {
     // Same coercion as communityWodLogFor(), same reason - the community
     // layer's rx is a boolean everywhere it lands. The comparison key above
     // already buckets Rx+ with Rx through its own `entry.rx ?`.
-    scoreDirection: entry.scoreType === "time" ? "lower" : entry.scoreType === "emom" ? null : "higher", occurredOn: entry.date, rx: entry.rx !== false };
+    scoreDirection: entry.scoreType === "emom" ? null : scoreLowerIsBetter(entry.scoreType) ? "lower" : "higher",
+    occurredOn: entry.date, rx: entry.rx !== false };
 }
 function communityShareCandidates() {
   const strength = entries.slice(0, 5).map(strengthShareCandidate).filter(Boolean);
@@ -4373,7 +4424,7 @@ function renderWodBuilderMovements(query) {
   }
   el.innerHTML = addRow + Object.entries(byCategory).map(([cat, items]) => `
     <div class="cat-group">
-      <div class="cat-head"><div class="dot" style="background:${esc(catColor(cat))}"></div><span class="cat-name">${esc(catLabel(cat))}</span></div>
+      <div class="cat-head"><div class="dot" style="background:${esc(catColor(cat))}"></div><h3 class="cat-name">${esc(catLabel(cat))}</h3></div>
       ${items.map((m) => {
         const entry = builderMovements[m.name];
         const checked = !!(entry && entry.checked);
@@ -4570,7 +4621,10 @@ async function saveWod(sanityConfirmed) {
   // threshold is not needed here - a WOD result is one attempt, not a set, so
   // "is there a previous best" IS the question - but the answer had the wrong
   // sign.
-  const isPR = w.scoreType === "emom" ? false : (prevBest !== null && (w.scoreType === "time" ? val < prevBest : val > prevBest));
+  // ONE LINE, deliberately: test/hunt-round8-wod-log.test.mjs pins this
+  // decision by slicing the source from `const isPR` to the next newline, so
+  // wrapping it hides the `prevBest !== null &&` that guard exists to protect.
+  const isPR = w.scoreType === "emom" ? false : (prevBest !== null && (scoreLowerIsBetter(w.scoreType) ? val < prevBest : val > prevBest));
   entry.isPR = isPR;
 
   // Live bug hunt (2026-09-11): same write-before-mutate fix as saveSet()
@@ -5070,7 +5124,7 @@ function renderLogTab() {
 
     ${dayEntries.length === 0 ? `
     <div class="day-empty">${ICONS.emptyDay}<span>${isToday ? "עדיין לא נרשמו סטים היום. כאן מתעדים את האימון שהושלם." : `עדיין לא נרשמו סטים ב-${esc(dayLabel)}.`}</span></div>` : `
-    <div class="section-label">${isToday ? "סיכום האימון" : `סיכום ${esc(dayLabel)}`}</div>
+    <h2 class="section-label">${isToday ? "סיכום האימון" : `סיכום ${esc(dayLabel)}`}</h2>
     <div class="chart-card" style="margin-bottom:8px;">${renderDayEntriesListHtml(dayEntries, [])}</div>
     <button class="link-btn" data-action="view-log-date-calendar" style="display:flex; align-items:center; justify-content:space-between; width:100%; margin-bottom:0;">
       <span>הערות לאימון ופרטי היום · ${bidiText(entrySummary(dayEntries[0]))}</span>
@@ -5108,12 +5162,13 @@ function renderLogTab() {
     <div class="log-empty" data-empty-state="log-choose-exercise">
       <span class="log-empty-medal" aria-hidden="true">${ICONS.emptyBarbell}</span>
       <div class="log-empty-text">
-        <div class="log-empty-head">כאן מתעדים את האימון של היום</div>
+        <h2 class="log-empty-head">כאן מתעדים את האימון של היום</h2>
         <div class="log-empty-body">בוחרים תרגיל בכרטיס שלמעלה, ומשקל, חזרות וסטים נפתחים בדיוק כאן.</div>
       </div>
       <div class="log-empty-when">מיד אחרי הבחירה יופיעו כאן גם השיא שלכם, האימון האחרון וההיסטוריה בתרגיל.</div>
     </div>` : `
 
+    <h2 class="sr-only">רישום סט</h2>
     <div class="rx-toggle" role="radiogroup" aria-label="סוג רישום">
       <button class="rx-btn ${!isDuration ? "active-type" : ""}" data-action="set-log-entry-type" data-type="reps" role="radio" aria-checked="${!isDuration}">משקל וחזרות</button>
       <button class="rx-btn ${isDuration ? "active-type" : ""}" data-action="set-log-entry-type" data-type="duration" role="radio" aria-checked="${isDuration}"><span style="display:inline-flex; width:16px; height:16px; vertical-align:-3px; margin-left:4px;">${ICONS.stopwatchIcon}</span>החזקה בזמן</button>
@@ -5689,11 +5744,11 @@ function renderCalDetail() {
   const d = new Date(calSelectedDate + "T00:00:00");
   const label = d.toLocaleDateString("he-IL", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
   el.innerHTML = `
-    <div class="section-label" style="margin-top:4px;">${label.toUpperCase()}</div>
+    <h2 class="section-label" style="margin-top:4px;">${label.toUpperCase()}</h2>
     <div class="chart-card">
     ${renderDayEntriesListHtml(dayEntries, dayWods)}
 
-    <div class="section-label" style="margin-top:16px;">איך היה האימון היום</div>
+    <h3 class="section-label" style="margin-top:16px;">איך היה האימון היום</h3>
     <textarea id="sessionNoteInput" class="text-input" dir="auto" maxlength="${LIMITS.notesLen}" rows="3" placeholder="הרגשה, אנרגיה, מה עבד ומה פחות..." aria-label="איך היה האימון היום" style="resize:vertical; min-height:64px; font-family:inherit; margin-bottom:8px;">${esc(calNoteDate === calSelectedDate ? calNoteText : "")}</textarea>
     <button data-action="save-session-note" data-date="${esc(calSelectedDate)}" class="link-btn" style="display:block;">שמירת הערה</button>
     </div>
@@ -5702,7 +5757,7 @@ function renderCalDetail() {
 
 function daysAgoLabel(iso) {
   if (!iso) return "מעולם לא";
-  const diff = Math.round((new Date(todayISO()) - new Date(iso)) / 86400000);
+  const diff = daysSinceISODate(iso);
   if (diff === 0) return "היום";
   if (diff === 1) return "לפני יום";
   return `לפני ${diff} ימים`;
@@ -5721,7 +5776,7 @@ function renderVolumeReport() {
     const setsWeek = catEntries.filter((e) => e.date >= cutoff7ISO).reduce((s, e) => s + e.sets, 0);
     const setsMonth = catEntries.filter((e) => e.date >= cutoff30ISO).reduce((s, e) => s + e.sets, 0);
     const lastDate = catEntries.length ? catEntries.map((e) => e.date).sort().slice(-1)[0] : null;
-    const diff = lastDate ? Math.round((new Date(todayISO()) - new Date(lastDate)) / 86400000) : null;
+    const diff = daysSinceISODate(lastDate);
     // .10, not .15: this badge now also renders on a white scene-sheet
     // (Calendar used to be a fixed-navy sheet - see .scene-sheet's own
     // comment) where the red state measured 4.456:1 against --red-text,
@@ -5748,7 +5803,7 @@ function renderVolumeReport() {
 
   return `
     <div class="chart-card">
-    <div class="section-label">נפח ותדירות לפי קטגוריה</div>
+    <h2 class="section-label">נפח ותדירות לפי קטגוריה</h2>
     <div style="color:var(--steel); font-size:11px; margin-bottom:10px;">סטים ב-7 / 30 הימים האחרונים, וזמן מאז האימון האחרון</div>
     ${rows}
     </div>
@@ -5788,7 +5843,7 @@ function renderCalendarTab() {
       </div>
     </div>
     ${listHtml}
-    <div id="calDetail" ${calView === "list" ? "hidden" : ""} style="margin-bottom:20px;"></div>
+    <div id="calDetail" role="region" aria-label="פירוט היום הנבחר" ${calView === "list" ? "hidden" : ""} style="margin-bottom:20px;"></div>
     <div class="cal-month-stats" id="calMonthStats"></div>
     ${renderVolumeReport()}
       </div>
@@ -5802,7 +5857,7 @@ function renderBodyweightArea() {
   const last = bodyweightEntries.slice().sort((a, b) => (b.ts || 0) - (a.ts || 0))[0];
   const chartData = sorted.map((e) => ({ dateLabel: fmtDate(e.date), est1RM: e.weight, isPR: false }));
   const header = `
-    <div class="section-label">משקל גוף</div>
+    <h2 class="section-label">משקל גוף</h2>
     <button class="exercise-row ${bodyweightExpanded ? "active" : ""}" data-action="toggle-bodyweight" style="${bodyweightExpanded ? "margin-bottom:0; border-bottom-left-radius:0; border-bottom-right-radius:0;" : ""}">
       <div class="flex items-center gap-8">
         <span style="display:inline-flex; transition:transform .2s; transform:rotate(${bodyweightExpanded ? "90deg" : "180deg"});">${ICONS.chevron}</span>
@@ -5888,7 +5943,7 @@ function renderMeasureArea() {
   }).join("");
 
   el.innerHTML = `
-    <div class="section-label" style="margin-top:4px;">מדדי גוף</div>
+    <h2 class="section-label" style="margin-top:4px;">מדדי גוף</h2>
     ${rows}
     ${addRow}
   `;
@@ -5901,6 +5956,233 @@ function renderMeasureArea() {
       });
     }
   }
+}
+
+// ---------- Benchmark tracking (club_features.benchmarks) ----------
+//
+// WHAT THIS IS. A fixed list of the classic named workouts, plus every lift
+// this member has actually logged a 1RM estimate for, each one showing every
+// attempt over time, the best result, and the same progress chart the rest of
+// this screen draws. Plus a reminder when a benchmark has not been retested
+// for BENCHMARK_RETEST_DAYS.
+//
+// WHAT IT DELIBERATELY IS NOT: a second store. A Fran attempt IS a wod_entry
+// and a 1RM attempt IS a strength_entry - the rows this app has always
+// written, already queued through queueSyncRecord() into private_records,
+// already covered by buildBackupPayload(), already re-applied by
+// applyRemotePrivateRecord(). So attempts sync exactly like every other
+// record because they ARE every other record, and nothing here writes
+// anything. A `benchmark_attempt` record type would also have needed a
+// migration to get past private_records' record_type check constraint
+// (202608260001), and supabase/migrations/ is the one directory two open
+// branches cannot both touch (CLAUDE.md, "Parallel work").
+//
+// This whole section reads and renders. Every number below is derived from
+// entries/wodEntries on each render, held nowhere, and invalidated by nothing.
+const BENCHMARK_WOD_IDS = ["fran", "grace", "helen", "diane", "cindy", "murph", "isabel", "karen"];
+// A quarter. Long enough that a member is not nagged about a workout they did
+// six weeks ago, short enough that a stale number stops being presented as
+// current. Retests are the point of a benchmark - a best from 2024 is a
+// souvenir, not a measurement.
+const BENCHMARK_RETEST_DAYS = 90;
+// Which row is open. Same one-at-a-time shape as historyId and
+// measureExpandedId, and for the same reason: a chart per row, all expanded,
+// is a screen nobody scrolls.
+let benchmarkExpandedId = null;
+
+// THE BEST RESULT, for a list of attempts that have already been reduced to
+// comparable numbers. The direction comes from scoreLowerIsBetter(), which is
+// the same rule bestWodScore() applies - one function, so a time can never
+// start being "best = highest" on one screen and "best = lowest" on another.
+//
+// Returns the winning ATTEMPT, not the bare number: the chart needs its date
+// and the list needs to mark the row. null for nothing to compare - an empty
+// list, or an EMOM, which has no single comparable score at all (see
+// scoreValue/bestWodScore; "10 of A, 8 of B" does not reduce to one number,
+// and inventing one here would put a fake PR on the screen).
+//
+// Ties go to the EARLIER attempt: a result you have merely matched is not a
+// new best, which is the same call saveSet/saveWod make when they decide
+// whether to celebrate.
+function benchmarkBest(attempts, scoreType) {
+  if (scoreType === "emom") return null;
+  const usable = (attempts || []).filter((a) => a && isFinite(a.value));
+  if (!usable.length) return null;
+  const lower = scoreLowerIsBetter(scoreType);
+  return usable.reduce((best, a) => (lower ? a.value < best.value : a.value > best.value) ? a : best);
+}
+
+// One attempt at a NAMED WORKOUT: the entry's own comparable score, through
+// scoreValue() - the same reduction the WOD tab's PR check uses.
+function benchmarkWodAttempt(e) {
+  return {
+    id: e.id, date: e.date, ts: e.ts || 0, value: scoreValue(e),
+    effort: e.rx, text: formatWodEntry(e),
+  };
+}
+// One attempt at a LIFT. "Attempt" here is a training DAY, not a set: a member
+// logs five sets of back squat in a session and that is one go at the
+// benchmark, so the day's best estimate stands for it - which is also exactly
+// what renderDetailCard() charts a few hundred lines up, so the two pictures
+// of the same movement agree.
+//
+// The value is the ESTIMATE (Epley, off the best set), not a tested single.
+// This app has one firm habit about that number - it says so wherever it
+// prints it - and this surface says so too, on the row and in the card.
+function benchmarkLiftAttempts(list) {
+  return bestPerDay((list || []).filter((e) => e.type !== "duration"), (e) => e.est1RM)
+    .map((e) => ({ id: e.id, date: e.date, ts: e.ts || 0, value: e.est1RM, effort: true, text: `${e.est1RM} ק״ג` }));
+}
+
+// THE FIXED EIGHT. Always all eight, in this order, whether or not the member
+// has ever done one: the list is the club's, not the member's, and a benchmark
+// never attempted is the most useful row on the screen for somebody new.
+//
+// Rx, Rx+ and Scaled are not comparable results (bestWodScore() has been
+// effort-scoped since the 2026-09-11 hunt found a scaled attempt overwriting
+// an Rx best), so the BEST and the CHART are scoped to one bucket -
+// bestWodEffort()'s, the same one formatWodBest() headlines. Every attempt
+// still appears in the list underneath, tagged, because "every attempt over
+// time" is what was asked for and hiding a member's own scaled attempts from
+// their own history would be a strange thing to do.
+function benchmarkWodItems() {
+  return BENCHMARK_WOD_IDS.map((wodId) => {
+    const w = wodById(wodId);
+    if (!w) return null; // a library id that no longer exists is not a crash
+    const effort = bestWodEffort(wodId);
+    const all = wodEntriesFor(wodId).map(benchmarkWodAttempt).sort((a, b) => a.date.localeCompare(b.date) || a.ts - b.ts);
+    const tracked = effort === null ? [] : all.filter((a) => a.effort === effort);
+    return benchmarkItem({
+      id: `wod:${wodId}`, kind: "wod", refId: wodId, name: w.name, subtitle: w.desc,
+      scoreType: w.scoreType, effort, all, tracked,
+    });
+  }).filter(Boolean);
+}
+// THE MEMBER'S OWN 1RM LIFTS - every movement they have a rep-based entry for,
+// which is the only definition of "your lifts" this app can give without
+// asking them to curate a list. A movement logged only as holds has no 1RM at
+// all (bestEst1RM returns null, not 0) and is simply not a lift benchmark.
+function benchmarkLiftItems() {
+  const index = entriesByExercise();
+  return activeExercises().map((m) => {
+    const attempts = benchmarkLiftAttempts(index.get(m.id) || []);
+    if (!attempts.length) return null;
+    return benchmarkItem({
+      id: `lift:${m.id}`, kind: "lift", refId: m.id, name: m.name, subtitle: null,
+      scoreType: "load", effort: true, all: attempts, tracked: attempts,
+    });
+  }).filter(Boolean).sort((a, b) => a.name.localeCompare(b.name));
+}
+// The derived half both kinds share, so "best", "how long ago" and "is it due"
+// are computed once rather than per caller.
+function benchmarkItem(base) {
+  const best = benchmarkBest(base.tracked, base.scoreType);
+  // ANY attempt, not the tracked bucket's: the question the reminder asks is
+  // "when did you last test this", and a scaled retest is still a retest.
+  const last = base.all.length ? base.all[base.all.length - 1] : null;
+  const daysSince = last ? daysSinceISODate(last.date) : null;
+  return Object.assign({}, base, {
+    best, lastDate: last ? last.date : null, daysSince,
+    // Never attempted is NOT due for a retest - there is nothing to re-test,
+    // and a reminder that fires on day one for eight workouts at once is how a
+    // member learns to ignore this section.
+    retestDue: daysSince !== null && daysSince > BENCHMARK_RETEST_DAYS,
+  });
+}
+function benchmarkItems() { return benchmarkWodItems().concat(benchmarkLiftItems()); }
+function formatBenchmarkValue(item, value) { return formatWodScore(item.scoreType, value); }
+
+function renderBenchmarkAttemptRow(item, attempt) {
+  const isBest = item.best && item.best.id === attempt.id;
+  // esc(), not bidiText(), for both spans. The score is a .mono run (a clock, a
+  // rounds+reps pair, a kilo figure) and the run-level isolation rule keeps
+  // those bare - see the bidi binding's own comment. The date and effort tag
+  // are this file's own strings with no member input in them at all.
+  return `<div data-benchmark-attempt="${esc(attempt.id)}" class="flex items-center justify-between" style="padding:7px 0; border-bottom:1px solid var(--border);">
+    <span style="color:var(--steel); font-size:12px;">${esc(fmtDate(attempt.date))}${item.kind === "wod" ? esc(wodEffortTag(attempt.effort)) : ""}</span>
+    <span class="flex items-center gap-6">
+      ${isBest ? `<span style="color:var(--brass); font-size:11px; font-weight:700;">שיא</span>` : ""}
+      <span class="mono" style="font-weight:700; font-size:13px; color:${isBest ? "var(--brass)" : "var(--chalk)"};">${esc(attempt.text)}</span>
+    </span>
+  </div>`;
+}
+
+function renderBenchmarkCard(item) {
+  // isPR marks the running best as the line climbs, exactly as
+  // renderDetailCard() does - so a PR dot means the same thing on both charts.
+  const lower = scoreLowerIsBetter(item.scoreType);
+  let running = null;
+  const chartData = item.tracked.map((a) => {
+    const isPR = running === null || (lower ? a.value <= running : a.value >= running);
+    if (running === null || (lower ? a.value < running : a.value > running)) running = a.value;
+    // est1RM is renderChart()'s parameter name for "the number on the y axis",
+    // not a claim about what the number is - it already plots bodyweight and
+    // body measurements through the same field.
+    return { dateLabel: fmtDate(a.date), est1RM: a.value, isPR };
+  });
+  const attempts = item.all.slice().reverse(); // newest first, like every other list here
+  return `
+    <div class="chart-card" style="margin-top:-4px; border-top-left-radius:0; border-top-right-radius:0; border-top:none;">
+      ${item.subtitle ? `<div class="wod-desc" style="margin-bottom:10px;">${bidiText(item.subtitle)}</div>` : ""}
+      ${item.retestDue ? `<div class="footer-note" style="margin:0 0 10px; text-align:center;">עברו ${item.daysSince} יום מאז הניסיון האחרון — זה הזמן לבדוק שוב.</div>` : ""}
+      ${item.tracked.length ? renderChart(chartData) : `<div style="color:var(--steel); font-size:13px; text-align:center; padding:18px 0;">אין עדיין תוצאה לבנצ'מרק הזה</div>`}
+      ${item.kind === "wod" && item.effort !== null && item.tracked.length < item.all.length
+        ? `<div class="footer-note" style="margin-top:10px; text-align:center;">הגרף והשיא מציגים את הניסיונות ב${esc(wodEffortLabel(item.effort))} בלבד — תוצאות בדרגות מאמץ שונות אינן ברות השוואה. כל הניסיונות מופיעים ברשימה למטה.</div>` : ""}
+      ${attempts.length ? `<h3 class="section-label" style="margin-top:14px;">כל הניסיונות</h3>${attempts.map((a) => renderBenchmarkAttemptRow(item, a)).join("")}` : ""}
+      ${item.kind === "lift"
+        ? `<div class="footer-note" style="margin-top:10px; text-align:center;">1RM משוער — חישוב מהסט הטוב ביותר בכל יום אימון, לא הרמה שבוצעה</div>`
+        : `<button class="link-btn" data-action="log-benchmark" data-id="${esc(item.refId)}" style="display:block; margin:12px auto 0;">רישום ניסיון ב-${esc(item.name)}</button>`}
+    </div>
+    <div style="height:8px;"></div>`;
+}
+
+function renderBenchmarkRow(item) {
+  const open = benchmarkExpandedId === item.id;
+  const best = item.best ? formatBenchmarkValue(item, item.best.value) : null;
+  return `
+    <button class="exercise-row ${open ? "active" : ""}" data-action="toggle-benchmark" data-id="${esc(item.id)}" aria-expanded="${open}" style="${open ? "margin-bottom:0; border-bottom-left-radius:0; border-bottom-right-radius:0;" : ""}">
+      <div class="flex items-center gap-8">
+        <span style="display:inline-flex; transition:transform .2s; transform:rotate(${open ? "90deg" : "180deg"});">${ICONS.chevron}</span>
+        <span style="font-weight:700; font-size:14px;">${bidiText(item.name)}</span>
+        ${item.retestDue ? `<span data-benchmark-retest="${esc(item.id)}" style="color:var(--brass); border:1px solid var(--brass); border-radius:999px; padding:1px 7px; font-size:10px; font-weight:700;">לבדיקה מחדש</span>` : ""}
+      </div>
+      <span style="text-align:left;">
+        ${best
+          ? `<span class="mono" style="display:block; color:var(--brass); font-weight:700; font-size:14px;">${esc(best)}</span>
+             ${item.kind === "lift" ? `<span style="display:block; color:var(--steel); font-weight:600; font-size:11px;">1RM משוער</span>` : ""}`
+          : `<span style="display:block; color:var(--steel); font-size:12px;">טרם נוסה</span>`}
+      </span>
+    </button>`;
+}
+
+// THE REMINDER, AND WHERE IT IS ALLOWED TO APPEAR. On this screen and nowhere
+// else: no notification row, no bell badge, and above all no push. Push
+// delivery is the community layer's (notif_push_pending, gated on
+// club_features.push_notifications), it costs a member an interruption on
+// their phone, and "you have not done Fran since April" is not worth one.
+// Nothing in this file touches that path, and this comment is here so a later
+// change that wants to has to argue with it first.
+function renderBenchmarkArea() {
+  const el = document.getElementById("benchmarkArea");
+  if (!el) return;
+  // The gate, and the whole section in ONE innerHTML sink rather than a write
+  // and an `= ""` beside it - test/app-innerhtml-sinks.test.mjs pins the count
+  // in app.js on purpose, and one surface is worth one line of that budget.
+  //
+  // Off - which is every club until an admin switches it on, and every member
+  // who has never signed into the community layer at all - and this section
+  // does not exist rather than rendering an empty heading.
+  el.innerHTML = benchmarksOn() ? benchmarkSectionHtml() : "";
+  if (el.firstElementChild) { el.setAttribute("role", "region"); el.setAttribute("aria-label", "בנצ'מרקים"); }
+  else { el.removeAttribute("role"); el.removeAttribute("aria-label"); }
+}
+function benchmarkSectionHtml() {
+  const items = benchmarkItems();
+  const due = items.filter((i) => i.retestDue);
+  return `
+    <h2 class="section-label">בנצ'מרקים</h2>
+    ${due.length ? `<div class="footer-note" style="margin:0 0 10px;">${due.length === 1 ? `בנצ'מרק אחד לא נבדק` : `${due.length} בנצ'מרקים לא נבדקו`} מעל ${BENCHMARK_RETEST_DAYS} יום: ${esc(due.map((i) => i.name).join(", "))}</div>` : ""}
+    ${items.map((item) => renderBenchmarkRow(item) + (benchmarkExpandedId === item.id ? renderBenchmarkCard(item) : "")).join("")}`;
 }
 
 function renderHistoryTab() {
@@ -5930,18 +6212,20 @@ function renderHistoryTab() {
       <div class="stat-card" style="text-align:center;"><div class="stat-value mono" style="font-size:20px;">${totalSetsLogged}</div><div class="stat-label">סטים שנרשמו</div></div>
     </div>
 
+    <div id="benchmarkArea"></div>
+
     ${activeExercises().length > 0 ? `
-    <div class="section-label">שיאים כלל-זמנים</div>
+    <h2 class="section-label">שיאים כלל-זמנים</h2>
     <div class="search-box" style="margin:0 0 12px;">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--steel)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
       <input id="historySearch" dir="auto" placeholder="חיפוש בתרגילים שלך" aria-label="חיפוש בתרגילים שלך" value="${esc(historySearch)}" />
     </div>` : ""}
 
-    <div id="historyListArea"></div>
+    <div id="historyListArea" role="region" aria-label="שיאים כלל-זמנים"></div>
 
-    <div id="bodyweightArea"></div>
+    <div id="bodyweightArea" role="region" aria-label="משקל גוף"></div>
 
-    <div id="measureArea"></div>
+    <div id="measureArea" role="region" aria-label="מדדי גוף"></div>
       </div>
     </section>
   `;
@@ -6530,6 +6814,10 @@ function render() {
     try { typed = document.activeElement.value; } catch (e) { typed = null; }
   }
   document.getElementById("content").innerHTML = content + cloudOverlay + renderToastBar() + renderAppConfirmSheet();
+  const contentPanel = document.getElementById("content");
+  const activeNavItem = getNavItems().find((i) => i.tab === tab);
+  if (activeNavItem && document.getElementById(activeNavItem.rowId)) contentPanel.setAttribute("aria-labelledby", activeNavItem.rowId);
+  else contentPanel.removeAttribute("aria-labelledby");
   if (focusKey) {
     const again = findFieldByIdentity(focusKey);
     // Only when the swap is what took focus away. If the member has moved to
@@ -6559,6 +6847,7 @@ function render() {
       });
     }
     if (tab === "history") {
+      renderBenchmarkArea();
       renderHistoryListArea();
       renderBodyweightArea();
       renderMeasureArea();
@@ -6828,7 +7117,7 @@ function renderWodLogSection() {
   if (!w) return `
     <div class="flex col items-center" style="padding:32px 20px; gap:10px; text-align:center;">
       <span style="display:inline-flex; width:28px; height:28px; color:var(--steel);">${ICONS.stopwatchIcon}</span>
-      <div style="font-size:15px; font-weight:700; color:var(--chalk);">בחרו אימון ונרשום אותו</div>
+      <h2 style="font-size:15px; font-weight:700; color:var(--chalk);">בחרו אימון ונרשום אותו</h2>
       <div style="font-size:13px; color:var(--steel);">אימונים מוכרים מהמועדון, או אימון משלכם.</div>
       <button class="exercise-select" data-action="open-wod-picker" style="width:100%; min-height:56px; margin-top:4px;">
         <span style="font-weight:800; font-size:16px;">בחירת אימון</span>
@@ -6876,6 +7165,7 @@ function renderWodLogSection() {
   }
 
   return `
+    <h2 class="sr-only">רישום תוצאת אימון</h2>
     ${editingWodEntryId ? `
     <div style="background:rgba(232,185,138,.12); border:1px solid var(--brass); border-radius:12px; padding:10px 14px; margin-bottom:12px; display:flex; align-items:center; justify-content:space-between;">
       <span style="color:var(--brass); font-weight:700; font-size:13px;">עריכת אימון קיים</span>
@@ -7010,14 +7300,15 @@ function renderWodDetailCard(w) {
     // Rx here while the stored isPR flag put it on its own - the chart dots
     // disagreeing with the attempt list underneath them, which is exactly what
     // fix 1 and 2 were for. One bucket per distinct answer, from the data.
-    const worstPossible = w.scoreType === "time" ? Infinity : -Infinity;
+    const lower = scoreLowerIsBetter(w.scoreType);
+    const worstPossible = lower ? Infinity : -Infinity;
     const bestSoFar = new Map();
     const chartData = sorted.map((e) => {
       const val = scoreValue(e);
       const bucket = String(e.rx);
       const prevBest = bestSoFar.has(bucket) ? bestSoFar.get(bucket) : worstPossible;
-      const isPR = w.scoreType === "time" ? val < prevBest : val > prevBest;
-      bestSoFar.set(bucket, w.scoreType === "time" ? Math.min(prevBest, val) : Math.max(prevBest, val));
+      const isPR = lower ? val < prevBest : val > prevBest;
+      bestSoFar.set(bucket, lower ? Math.min(prevBest, val) : Math.max(prevBest, val));
       return { dateLabel: fmtDate(e.date), est1RM: val, isPR };
     });
     chartHtml = renderChart(chartData);
@@ -7082,12 +7373,12 @@ function renderWodHistoryListArea() {
 function renderWodHistorySection() {
   return `
     ${activeWods().length > 0 ? `
-    <div class="section-label">שיאים כלל-זמנים</div>
+    <h2 class="section-label">שיאים כלל-זמנים</h2>
     <div class="search-box" style="margin:0 0 12px;">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--steel)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
       <input id="wodHistorySearch" dir="auto" placeholder="חיפוש באימונים שלך" aria-label="חיפוש באימונים שלך" value="${esc(wodHistorySearch)}" />
-    </div>` : ""}
-    <div id="wodHistoryListArea"></div>
+    </div>` : `<h2 class="sr-only">שיאים כלל-זמנים</h2>`}
+    <div id="wodHistoryListArea" role="region" aria-label="שיאים כלל-זמנים"></div>
   `;
 }
 
@@ -7128,7 +7419,7 @@ function renderWodBenchmarksSection() {
   );
   return renderWodGlossaryLink() + groups.map(([cat, list]) => `
     <div class="cat-group">
-      <div class="cat-head"><span class="cat-name">${esc(WOD_LIBRARY_CATEGORY_LABELS[cat] || cat)}</span></div>
+      <div class="cat-head"><h2 class="cat-name">${esc(WOD_LIBRARY_CATEGORY_LABELS[cat] || cat)}</h2></div>
       ${list.map((w) => `<button class="movement-btn" data-action="select-benchmark" data-id="${esc(w.id)}">
         <div><span style="font-weight:700;">${bidiText(w.name)}</span>${w.desc ? `<div class="wod-desc">${bidiText(w.desc)}</div>` : ""}</div>
         <span aria-hidden="true">›</span>
@@ -7147,12 +7438,12 @@ function renderWodTab() {
       <div class="scene-sheet">
     <div class="stripe-ribbon" aria-hidden="true"></div>
     ${!storageOK ? `<div class="footer-note" style="color:var(--red-text); background:rgba(216,69,60,.1); border:1px solid var(--red); border-radius:12px; padding:10px 14px; margin-bottom:12px;" role="alert">${esc(storageErrMsg)}</div>` : ""}
-    <div class="subtabbar" role="tablist">
-      <button class="subtabbtn ${wodSubTab === "log" ? "active" : ""}" data-action="switch-wod-subtab" data-subtab="log" role="tab" aria-selected="${wodSubTab === "log"}" aria-controls="wodContent" tabindex="${wodSubTab === "log" ? "0" : "-1"}">רישום</button>
-      <button class="subtabbtn ${wodSubTab === "history" ? "active" : ""}" data-action="switch-wod-subtab" data-subtab="history" role="tab" aria-selected="${wodSubTab === "history"}" aria-controls="wodContent" tabindex="${wodSubTab === "history" ? "0" : "-1"}">היסטוריה</button>
-      <button class="subtabbtn ${wodSubTab === "benchmarks" ? "active" : ""}" data-action="switch-wod-subtab" data-subtab="benchmarks" role="tab" aria-selected="${wodSubTab === "benchmarks"}" aria-controls="wodContent" tabindex="${wodSubTab === "benchmarks" ? "0" : "-1"}">קטלוג</button>
+    <div class="subtabbar" role="tablist" aria-label="תצוגת ספריית האימונים">
+      <button class="subtabbtn ${wodSubTab === "log" ? "active" : ""}" id="wodSubtab-log" data-action="switch-wod-subtab" data-subtab="log" role="tab" aria-selected="${wodSubTab === "log"}" aria-controls="wodContent" tabindex="${wodSubTab === "log" ? "0" : "-1"}">רישום</button>
+      <button class="subtabbtn ${wodSubTab === "history" ? "active" : ""}" id="wodSubtab-history" data-action="switch-wod-subtab" data-subtab="history" role="tab" aria-selected="${wodSubTab === "history"}" aria-controls="wodContent" tabindex="${wodSubTab === "history" ? "0" : "-1"}">היסטוריה</button>
+      <button class="subtabbtn ${wodSubTab === "benchmarks" ? "active" : ""}" id="wodSubtab-benchmarks" data-action="switch-wod-subtab" data-subtab="benchmarks" role="tab" aria-selected="${wodSubTab === "benchmarks"}" aria-controls="wodContent" tabindex="${wodSubTab === "benchmarks" ? "0" : "-1"}">קטלוג</button>
     </div>
-    <div id="wodContent"></div>
+    <div id="wodContent" role="tabpanel" aria-labelledby="wodSubtab-${wodSubTab}"></div>
       </div>
     </section>
   `;
@@ -7560,7 +7851,7 @@ function renderPickerList(query) {
   }
   list.innerHTML = addRow + Object.entries(byCategory).map(([cat, items]) => `
     <div class="cat-group">
-      <div class="cat-head"><div class="dot" style="background:${esc(catColor(cat))}"></div><span class="cat-name">${esc(catLabel(cat))}</span></div>
+      <div class="cat-head"><div class="dot" style="background:${esc(catColor(cat))}"></div><h3 class="cat-name">${esc(catLabel(cat))}</h3></div>
       ${items.map((m) => `
         <button class="movement-btn ${selectedId === m.id ? "active" : ""}" data-action="pick-movement" data-id="${esc(m.id)}">
           <span style="font-weight:600; font-size:14px;">${bidiText(m.name)}</span>
@@ -7637,7 +7928,7 @@ function renderWodPickerList(query) {
   const cats = Object.keys(byCategory).sort((a, b) => order.indexOf(a) - order.indexOf(b));
   list.innerHTML = addRow + `<div style="height:12px;"></div>` + cats.map((cat) => `
     <div class="cat-group">
-      <div class="cat-head"><div class="dot" style="background:${esc(catColor(cat))}"></div><span class="cat-name">${esc(catLabel(cat))}</span></div>
+      <div class="cat-head"><div class="dot" style="background:${esc(catColor(cat))}"></div><h3 class="cat-name">${esc(catLabel(cat))}</h3></div>
       ${byCategory[cat].map((w) => `
         <div class="movement-btn ${selectedWodId === w.id ? "active" : ""}" style="padding:0; overflow:hidden;">
         <button style="flex:1; padding:12px 14px; text-align:right;" data-action="pick-wod" data-id="${esc(w.id)}">
@@ -7979,6 +8270,8 @@ document.addEventListener("click", (e) => {
       btn.setAttribute("aria-selected", String(active));
       btn.setAttribute("tabindex", active ? "0" : "-1");
     });
+    const wodPanel = document.getElementById("wodContent");
+    if (wodPanel) wodPanel.setAttribute("aria-labelledby", "wodSubtab-" + wodSubTab);
     renderWodContent();
     // Same reasoning as the pill highlight above: the fixed bottom bar's
     // visibility/action is normally set inside the full render(), which
@@ -8097,6 +8390,20 @@ document.addEventListener("click", (e) => {
   else if (action === "toggle-measure-type") {
     measureExpandedId = measureExpandedId === el.dataset.id ? null : el.dataset.id;
     renderMeasureArea();
+  }
+  else if (action === "toggle-benchmark") {
+    benchmarkExpandedId = benchmarkExpandedId === el.dataset.id ? null : el.dataset.id;
+    renderBenchmarkArea();
+  }
+  else if (action === "log-benchmark") {
+    // The same three lines select-benchmark runs in the WOD tab's catalogue,
+    // plus the top-level tab switch this one starts from a different screen.
+    // A benchmark you have just been told to retest with no way to get to the
+    // form from there is a reminder that makes the member do the navigating.
+    choosePickedWod(el.dataset.id);
+    wodSubTab = "log";
+    tab = "wod";
+    render();
   }
   else if (action === "delete-measure-type") { askDeleteMeasureType(el.dataset.id); }
   else if (action === "save-measurement") { saveMeasurement(el.dataset.id); }
@@ -8539,6 +8846,12 @@ async function init() {
     navigator.serviceWorker.addEventListener("message", (e) => {
       if (e.data && e.data.type === "PUSH_NOTIFICATION_CLICK" && typeof window.communityHandlePushDeepLink === "function") {
         window.communityHandlePushDeepLink(e.data.deepLink);
+      }
+      // The push self-test's receipt, on exactly the same split and for the
+      // same reason: the worker observed the notification, the page owns the
+      // session and is the only side that can write the analytics row.
+      if (e.data && e.data.type === "PUSH_SELF_TEST_RECEIVED" && typeof window.communityHandlePushSelfTestReceipt === "function") {
+        window.communityHandlePushSelfTestReceipt(e.data.id);
       }
     });
   }

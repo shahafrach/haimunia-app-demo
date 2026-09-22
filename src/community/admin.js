@@ -675,7 +675,7 @@
       </div>
     </div>` : "";
     const form = `<form id="communityInviteCodeCreate" class="chart-card" style="margin-bottom:10px;">
-      <div class="field-label" style="margin-bottom:6px;">קוד הצטרפות משותף חדש</div>
+      <h3 class="field-label" style="margin-bottom:6px;">קוד הצטרפות משותף חדש</h3>
       ${field("communityInviteCodeCreate", "maxUses", "מקסימום שימושים", `<input class="text-input" name="maxUses" type="number" min="1" max="1000" placeholder="100"/>`)}
       ${dateField("communityInviteCodeCreate", "expiresAt", "תפוגה (רשות)", `<input class="text-input" name="expiresAt" type="date"/>`)}
       <button class="chip-btn primary" type="submit" style="margin-top:6px;">יצירת קוד</button>
@@ -722,7 +722,7 @@
       }).join("")}</div>`;
     }
     return `<div data-invite-codes-panel="1">
-      <div class="field-label" style="margin:4px 0 8px;">קודי הצטרפות משותפים</div>
+      <h3 class="field-label" style="margin:4px 0 8px;">קודי הצטרפות משותפים</h3>
       <div class="footer-note" style="margin-bottom:8px;">כיבוי קוד לא משפיע על מי שכבר הצטרף/ה דרכו - הוא רק מפסיק להתקבל בהצטרפויות חדשות.</div>
       ${createdHtml}${form}${list}
     </div>`;
@@ -741,7 +741,7 @@
       </div>
     </div>` : "";
     const form = `<form id="communityInviteCreate" class="chart-card" style="margin-bottom:10px;">
-      <div class="field-label" style="margin-bottom:6px;">הזמנה אישית חדשה</div>
+      <h3 class="field-label" style="margin-bottom:6px;">הזמנה אישית חדשה</h3>
       <div class="chip-row" style="margin-bottom:6px;">
         <label class="flex gap-6" style="align-items:center;"><input type="radio" name="role" value="member" checked/> חבר/ה</label>
         ${admin ? `<label class="flex gap-6" style="align-items:center;"><input type="radio" name="role" value="coach"/> מאמן/ת</label>` : `<span class="footer-note">הזמנת מאמן/ת זמינה רק למנהל/ת</span>`}
@@ -778,7 +778,7 @@
       list = `<div class="log-list">${iv.items.map(rowHtml).join("")}</div>${iv.end ? "" : `<div class="chip-row" style="justify-content:center;margin-top:8px;"><button class="chip-btn" data-community-action="invite-list-more"${iv.loadingMore ? " disabled" : ""}>${iv.loadingMore ? "טוען…" : "טעינת עוד"}</button></div>`}`;
     }
     return `<div data-person-invites-panel="1" style="margin-top:14px;">
-      <div class="field-label" style="margin:4px 0 8px;">הזמנות אישיות</div>
+      <h3 class="field-label" style="margin:4px 0 8px;">הזמנות אישיות</h3>
       ${createdHtml}${form}${filters}${list}
     </div>`;
   }
@@ -3405,7 +3405,7 @@
   }
   function renderAdminAnalyticsCoreGroup(data) {
     const core = data.core || {};
-    return `<div class="field-label" style="margin:4px 0 8px;">מדדי ליבה</div>`
+    return `<h3 class="field-label" style="margin:4px 0 8px;">מדדי ליבה</h3>`
       + renderAdminAnalyticsWcam(core)
       + renderAdminAnalyticsPosting(core)
       + renderAdminAnalyticsEngagement(core)
@@ -3531,7 +3531,7 @@
   }
   function renderAdminAnalyticsAdditionalGroup(data) {
     const add = data.additional || {};
-    return `<div class="field-label" style="margin:14px 0 8px;">מדדים נוספים</div>`
+    return `<h3 class="field-label" style="margin:14px 0 8px;">מדדים נוספים</h3>`
       + renderAdminAnalyticsOpenRate(add)
       + renderAdminAnalyticsFilterUse(add)
       + renderAdminAnalyticsSubTab(add)
@@ -3655,7 +3655,7 @@
       body = `<div class="footer-note" style="margin:0 0 8px;">סה״כ חברי מועדון: ${total}${ms.asOf ? ` · נכון לתאריך ${esc(ms.asOf)}` : ""}</div>`
         + MEMBER_SEGMENT_ORDER.map((key) => renderMemberSegmentCard(key, groups[key] || [], total, !!ms.expanded[key])).join("");
     }
-    return `<div style="margin-top:14px;" data-member-segments-section="1"><div class="field-label" style="margin:4px 0 8px;">פילוח מעורבות חברים</div>${body}</div>`;
+    return `<div style="margin-top:14px;" data-member-segments-section="1"><h3 class="field-label" style="margin:4px 0 8px;">פילוח מעורבות חברים</h3>${body}</div>`;
   }
   // ---- COMM-379. Registration funnel analytics ---------------------------
   // Same "appended inside the shell's own populated branch" shape as
@@ -3724,7 +3724,7 @@
         + adminAnalyticsCard("משפך הרשמה", funnelHtml)
         + sharedHtml + personHtml;
     }
-    return `<div style="margin-top:14px;" data-registration-funnel-section="1"><div class="field-label" style="margin:4px 0 8px;">משפך הרשמה</div>${body}</div>`;
+    return `<div style="margin-top:14px;" data-registration-funnel-section="1"><h3 class="field-label" style="margin:4px 0 8px;">משפך הרשמה</h3>${body}</div>`;
   }
   // ---- The shell itself ---------------------------------------------------
   // Frontend states (COMM-310's own "Frontend states" list): loading is a

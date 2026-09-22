@@ -70,13 +70,16 @@ still carrying; the QA sign-off happened (COMM-381 for Phase 4, then twenty
 hunt rounds across everything), so leaving them at `review` was a filing lag,
 not a real hold.
 
-**What is deliberately still not `done`, and why — these seven are the real
-remaining list.** None was flipped, and none should be without new work:
+**What is deliberately still not `done`, and why — these six are the real
+remaining list.** (COMM-329 was the seventh and is now `done`: the file-wide
+`.field-label` audit it was waiting on was carried out, 33 of the 48 one-off
+sub-headers became `<h3>` and the remaining 15 are captions over a single
+value or labels for a form control, which are not headings. See the ticket
+file for the split.) None was flipped, and none should be without new work:
 
 | ID | Status | Why it stays |
 |---|---|---|
 | COMM-337 | `todo` | The only genuinely open ticket. Real clickjacking headers need the site off GitHub Pages (which cannot set response headers) or behind an edge layer. Mitigated, not closed: `frame-guard.js` ships a client-side frame-buster and `_headers` is staged for whichever host reads it. A hosting decision, not code. |
-| COMM-329 | `partial` | Honestly partial: the shared paths are fixed (`renderTabHeader`, `adminAnalyticsCard()`'s `<h3>`), but ~40 one-off `.field-label` sub-headers across invites/challenges/events/recaps/profile are still plain `<div>`s. A file-wide audit, not a shared-function fix. |
 | COMM-143 | `partial` | Notification types that depend on attendance stay parked with the attendance decision. |
 | COMM-351, COMM-353, COMM-354 | `partial` | Cross-repo design-token reconciliation against `haimunia-app`, which is outside this workspace. **Unverifiable from here** — not claimed either way rather than guessed. |
 | COMM-368 | `partial` | Same reason: extracting shared safety helpers into a package both repos consume needs the other repo. |
@@ -3101,7 +3104,7 @@ Filed from `2026-09-02-design-sync-and-cross-repo-audit.md`, a 10-agent cross-re
 | COMM-326 | Fix hardcoded dark popover background in post menu and mention picker | cross-cutting (UI/design) | P0 | done |
 | COMM-327 | Decide and align on one navigation pattern across both apps | cross-cutting (UI/design) | P0 | done |
 | COMM-328 | Port overlay focus-trap/Escape contract to Community's core training-log dialogs | unassigned (app.js core, outside the 15-agent community roster) | P0 | done |
-| COMM-329 | Add heading elements and landmark regions to the app shell | cross-cutting (UI/design) | P0 | partial |
+| COMM-329 | Add heading elements and landmark regions to the app shell | cross-cutting (UI/design) | P0 | done |
 | COMM-330 | Reclassify cloud.js from REQUIRED to OPTIONAL in the service-worker precache list | platform | P0 | done |
 | COMM-331 | Defer the community data-load cascade until the Community tab is first opened | platform | P0 | done |
 | COMM-332 | Verify and fix migration-check / pgTAP CI status (COMM-020) | qa | P0 | done |

@@ -469,12 +469,20 @@
   // it; `hasPinned` is the one thing the caller has to tell it, because "no
   // announcements" and "the only one is pinned above you" are different empty
   // states and only the caller knows which it is looking at.
-  function renderAnnouncementsArchive(otherAnnouncements, hasPinned) {
+  // `source` is the third argument the analytics pass added, and it is the
+  // only thing the two callers disagree about: the member feed and the
+  // desktop staff home render the identical archive from the identical rows.
+  // Passed down onto the wrapper as a data attribute rather than held in a
+  // variable, because the thing that records the view (noteAnnouncementsView,
+  // cloud.js) learns the archive exists by finding it in the DOM - the same
+  // "only this hook can see it is actually on screen" shape
+  // noteClassmatesCardView already uses.
+  function renderAnnouncementsArchive(otherAnnouncements, hasPinned, source) {
     const announcementRow = (a) => `<div class="log-row" data-announcement-id="${esc(a.id)}" style="align-items:flex-start;flex-direction:column;gap:4px;${announcementAccentStyle(a)}"><div style="font-weight:700;display:flex;align-items:center;flex-wrap:wrap;gap:6px;">${bidiText(a.title)}${announcementPriorityBadge(a)}</div><div style="color:var(--steel);font-size:13px;">${bidiText(a.body)}</div><div style="color:var(--steel);font-size:11px;">${esc(a.profiles ? (a.profiles.display_name || "@" + a.profiles.handle) : "")}</div>${pinToggleHtml("announcement", a.id, a.title)}</div>`;
     const visibleAnnouncements = otherAnnouncements.slice(0, ANNOUNCEMENTS_ARCHIVE_VISIBLE);
     const restAnnouncements = otherAnnouncements.slice(ANNOUNCEMENTS_ARCHIVE_VISIBLE);
     return otherAnnouncements.length
-      ? `<div class="log-list">${visibleAnnouncements.map(announcementRow).join("")}</div>${restAnnouncements.length ? `<details style="margin-top:8px;"><summary class="link-btn" style="cursor:pointer;">עוד הודעות (${restAnnouncements.length})</summary><div class="log-list" style="margin-top:8px;">${restAnnouncements.map(announcementRow).join("")}</div></details>` : ""}`
+      ? `<div data-announcements-archive="ready" data-announcements-rows="${otherAnnouncements.length}" data-announcements-source="${esc(source || "feed")}"><div class="log-list">${visibleAnnouncements.map(announcementRow).join("")}</div>${restAnnouncements.length ? `<details style="margin-top:8px;"><summary class="link-btn" style="cursor:pointer;">עוד הודעות (${restAnnouncements.length})</summary><div class="log-list" style="margin-top:8px;">${restAnnouncements.map(announcementRow).join("")}</div></details>` : ""}</div>`
       : (hasPinned ? "" : `<div class="empty">אין הודעות חדשות</div>`);
   }
   function renderAnnouncementPostCard(post) {
@@ -651,6 +659,18 @@
       photo.width = (prepared.render && prepared.render.width) || null;
       photo.height = (prepared.render && prepared.render.height) || null;
       photo.status = "ready";
+      // The post_photos module's one event, and the reason it is HERE rather
+      // than at the publish: post_created already carries has_media, so the
+      // question this answers is the one that prop cannot - how often a member
+      // starts attaching a photo at all, including the drafts that are never
+      // published and the uploads that fail. Recorded on the ready branch
+      // only, so a failed upload is not counted as an attached photo.
+      //
+      // photo_count is the number of photos on the draft once this one landed,
+      // which is how "do members use the multi-photo composer or just the one"
+      // gets answered without a second name. Never the storage path, never the
+      // alt text a member typed.
+      track(A.POST_PHOTO_ATTACHED, { source: "composer", photo_count: state.posts.composer ? state.posts.composer.photos.length : 1 });
     } catch (err) {
       photo.status = "failed";
       photo.error = err && err.code === "not_an_image" ? "הקובץ אינו תמונה" : "העלאת התמונה נכשלה";
@@ -1047,7 +1067,7 @@
   // (already was, or just now succeeded) so coachWelcomeMember() can update
   // its own proactive welcomed map; false on a real failure.
   const welcomeBusy = {};
-  async function welcomeNewMember(postId) {
+  async function welcomeNewMember(postId, welcomeSource) {
     if (!state.user || welcomeBusy[postId]) return false;
     welcomeBusy[postId] = true;
     const already = await client.from("post_comments").select("id").eq("post_id", postId).eq("body", WELCOME_TEMPLATE_BODY).limit(1);
@@ -1057,7 +1077,21 @@
     }
     const { error } = await client.rpc("add_post_comment", { p_post_id: postId, p_body: WELCOME_TEMPLATE_BODY });
     delete welcomeBusy[postId];
-    setMessage(error ? "שליחת הברכה נכשלה" : "הברכה נשלחה");
+    // The welcome_flow module's one event. AFTER the write, like every other
+    // write-backed name, so a failed welcome is never counted as one - and
+    // only on the branch that actually wrote: the already-welcomed early
+    // return above leaves this unreached, which is what keeps the count at
+    // one welcome per new member rather than one per tap.
+    //
+    // It counts for WCAM. This path writes a real comment and bypasses the
+    // composer, so no COMMENT_CREATED bus event is emitted for it - without
+    // this line a coach whose only community act that week was welcoming
+    // three newcomers was not an active member of their own club.
+    //
+    // `source` is the only prop. Never the welcomed member's id: who was
+    // greeted is the newcomer's business, and the count of greetings is
+    // what the module switch is judged on.
+    if (!error) track(A.WELCOME_SENT, { source: welcomeSource || "feed_card" });
     if (!error && typeof loadCommentsFor === "function") loadCommentsFor(postId);
     return !error;
   }
@@ -1157,6 +1191,10 @@
       p.photo.width = (prepared.render && prepared.render.width) || null;
       p.photo.height = (prepared.render && prepared.render.height) || null;
       p.photo.status = "ready";
+      // The second of the two composers that can attach a photo (posts.js
+      // renders both; the module toggle hides both). Same name, different
+      // source - one photo is all this one holds, hence the literal 1.
+      track(A.POST_PHOTO_ATTACHED, { source: "pr_prompt", photo_count: 1 });
     } catch (err) {
       p.photo.status = "failed";
       p.photo.error = err && err.code === "not_an_image" ? "הקובץ אינו תמונה" : "העלאת התמונה נכשלה";

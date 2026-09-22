@@ -121,9 +121,28 @@ test("the sink count is pinned, so a new sink is a deliberate decision", () => {
   //     a .filter().length - provably an integer, the same class of value as
   //     computeCurrentStreak() in the PROVEN_SAFE list above. Every other
   //     interpolation in it goes through esc() or bidiText().
+  //
+  // 40 -> 41 on 2026-09-22: renderBenchmarkArea() writes the benchmark section
+  // into #benchmarkArea on the progress screen. ONE sink, not the two the
+  // obvious shape would have taken (a write plus an `= ""` early return for
+  // the club_features gate) - the whole section is composed by
+  // benchmarkSectionHtml() and the gate is a ternary on that one line, which
+  // is what this pin is for: it made the author look. Checked rather than
+  // waved through:
+  //   * THE SINK LINE ITSELF INTERPOLATES NOTHING - it assigns either a
+  //     function's return value or an empty string literal, so there is no
+  //     `${...}` on it for the escaping test above to check.
+  //   * What it composes is the member's OWN training log, but "local" is not
+  //     "trusted" (these records round-trip through private_records and can
+  //     arrive from an import file), so every value in it is escaped: movement
+  //     names and WOD descriptions through bidiText(), which escapes; scores,
+  //     dates, effort tags and the retest list through esc(); and the day
+  //     counts are integers out of daysSinceISODate().
+  //   * The eight benchmark names are WOD_LIBRARY literals in
+  //     src/constants.js, not member input, and are escaped anyway.
   const count = sinkLines(appJs).length;
-  assert.equal(count, 40,
-    `app.js has ${count} innerHTML/outerHTML sinks, expected 40. If you added one, verify its interpolations are escaped and update this number; if you removed one, just update it.`);
+  assert.equal(count, 41,
+    `app.js has ${count} innerHTML/outerHTML sinks, expected 41. If you added one, verify its interpolations are escaped and update this number; if you removed one, just update it.`);
 });
 
 test("esc() is a single shared definition, so there is one escaping rule and not several", () => {

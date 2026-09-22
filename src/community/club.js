@@ -522,7 +522,7 @@
         const saving = !!state.onboarding.editor.saving[step];
         const saved = !!state.onboarding.editor.saved[step];
         return `<div class="chart-card" style="margin-bottom:10px;" data-onboarding-editor-row="${step}">
-          <div class="field-label" style="margin-bottom:6px;">${esc(ONBOARDING_STEP_LABELS[step] || step)}</div>
+          <h3 class="field-label" style="margin-bottom:6px;">${esc(ONBOARDING_STEP_LABELS[step] || step)}</h3>
           ${field(formId, "title", "כותרת", `<input class="text-input" maxlength="120" data-onboarding-edit-title="${step}" value="${esc(draft.title)}"/>`)}
           ${field(formId, "body", "משפט פתיחה", `<textarea class="text-input" maxlength="2000" rows="3" data-onboarding-edit-body="${step}">${esc(draft.body)}</textarea>`)}
           <div class="chip-row" style="margin-top:6px;">
@@ -595,7 +595,7 @@
         const saving = !!state.intro.editor.saving[step];
         const saved = !!state.intro.editor.saved[step];
         return `<div class="chart-card" style="margin-bottom:10px;" data-intro-editor-row="${step}">
-          <div class="field-label" style="margin-bottom:6px;">${esc(INTRO_CAROUSEL_LABELS[step] || step)}</div>
+          <h3 class="field-label" style="margin-bottom:6px;">${esc(INTRO_CAROUSEL_LABELS[step] || step)}</h3>
           ${field(formId, "title", "כותרת", `<input class="text-input" maxlength="120" data-intro-edit-title="${step}" value="${esc(draft.title)}"/>`)}
           ${field(formId, "body", "תוכן", `<textarea class="text-input" maxlength="2000" rows="3" data-intro-edit-body="${step}">${esc(draft.body)}</textarea>`)}
           <div class="chip-row" style="margin-top:6px;">
@@ -1150,6 +1150,21 @@
       return false;
     }
     if (data) applyClubWodBoard(data);
+    // The club_wod module's one event. Attaching a logged result to the
+    // club's board is the module's whole point - a coach programs a day and
+    // members put their own results on it - and it is the only thing on that
+    // surface a member does rather than reads. After the RPC succeeds, like
+    // every other write-backed name.
+    //
+    // The session id is deliberately absent. It identifies one day's
+    // programming for the whole club, which makes any row carrying it a
+    // roster of who trained on a named day, in a table read under
+    // community.analytics.view. `source` says which of the two entry points
+    // the member used and nothing else.
+    //
+    // Not a WCAM event: the training this attaches was already counted, once,
+    // as attendance_recorded.
+    track(A.CLUB_WOD_RESULT_ATTACHED, { source: (v && v.sessionId === sessionId) ? "board" : "log_form" });
     setMessage("התוצאה צורפה ללוח של המועדון");
     rerender();
     return true;

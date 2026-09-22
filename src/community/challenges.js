@@ -1097,7 +1097,7 @@
           ? "הכפתור \"אתגר חדש\" שלמעלה פותח אתגר למועדון, ומרגע הפרסום הוא מופיע כאן לכל החברים."
           : "כשצוות המועדון יפתח אתגר חדש הוא יופיע כאן, ואפשר יהיה להצטרף אליו בלחיצה.",
       });
-    const pastHtml = past.length ? `<div style="margin-top:16px;"><div class="field-label" style="margin-bottom:6px;">אתגרים שהסתיימו</div>${past.map(renderChallengeCard).join("")}</div>` : "";
+    const pastHtml = past.length ? `<div style="margin-top:16px;"><h3 class="field-label" style="margin-bottom:6px;">אתגרים שהסתיימו</h3>${past.map(renderChallengeCard).join("")}</div>` : "";
     // The member's own onboarding card sits ABOVE the club's challenges and
     // above the create button: it is the one thing on this screen addressed
     // to them personally, and it is time-limited.
@@ -1159,7 +1159,7 @@
   function renderChallengeLogForm(v) {
     const lf = v.logForm;
     return `<div class="chart-card" style="margin-bottom:10px;">
-      <div class="field-label" style="margin-bottom:6px;">עדכון התקדמות</div>
+      <h3 class="field-label" style="margin-bottom:6px;">עדכון התקדמות</h3>
       <div class="flex gap-10" style="align-items:flex-end;">
         <label class="field" style="flex:1;margin-bottom:0;"><span class="field-label">כמות</span><input class="text-input" type="number" step="any" data-challenge-log-delta value="${esc(lf.delta)}"/></label>
         <button class="chip-btn primary" data-community-action="challenge-log-submit"${lf.busy ? " disabled" : ""}>${lf.busy ? "שומר…" : "עדכון"}</button>
@@ -1173,7 +1173,7 @@
     const completed = part.status === "completed";
     const pct = c.target_value ? (Number(part.progress_value || 0) / c.target_value) * 100 : null;
     return `<div class="chart-card" style="margin-bottom:10px;">
-      <div class="field-label" style="margin-bottom:4px;">ההתקדמות שלי</div>
+      <h3 class="field-label" style="margin-bottom:4px;">ההתקדמות שלי</h3>
       ${part.progress_value ? `<div class="mono" style="color:var(--brass);font-size:16px;">${esc(part.progress_value)}${c.target_value != null ? ` / ${esc(c.target_value)}` : ""}</div>` : `<div class="empty">עדיין לא נרשמה התקדמות.</div>`}
       ${pct != null ? challengeProgressBarHtml(pct) : ""}
       ${completed ? `<div style="color:var(--brass);font-weight:800;margin-top:6px;">האתגר הושלם 🎉</div>` : ""}
@@ -1193,11 +1193,11 @@
         }).join("")}</div>`
       : `<div class="empty">עדיין לא נאספה התקדמות משותפת.</div>`;
     return `<div class="chart-card" style="margin-bottom:10px;">
-      <div class="field-label" style="margin-bottom:4px;">התקדמות המועדון</div>
+      <h3 class="field-label" style="margin-bottom:4px;">התקדמות המועדון</h3>
       <div class="mono" style="color:var(--brass);font-size:18px;">${esc(p.club_total)}${c.target_value != null ? ` / ${esc(c.target_value)}` : ""}</div>
       ${challengeProgressBarHtml(pct)}
       <div style="color:var(--steel);font-size:12px;margin-top:4px;">${Math.round(Math.min(100, pct))}% מהיעד${days != null ? ` · ${daysRemainingLabel(days)}` : ""}</div>
-      <div class="field-label" style="margin:10px 0 4px;">תורמים אחרונים</div>
+      <h3 class="field-label" style="margin:10px 0 4px;">תורמים אחרונים</h3>
       ${contributorsHtml}
     </div>${v.myParticipant ? renderChallengeLogForm(v) : ""}`;
   }
@@ -1208,7 +1208,7 @@
   function challengeTeamMgmtSkeletonHtml() {
     const row = `<div class="log-row" aria-hidden="true"><span style="height:12px;width:60%;background:var(--border);border-radius:6px;display:inline-block;"></span><span style="height:12px;width:20%;background:var(--border);border-radius:6px;display:inline-block;"></span></div>`;
     return `<div class="chart-card" style="margin-bottom:10px;" data-team-mgmt="1">
-      <div class="field-label" style="margin-bottom:6px;">ניהול קבוצות</div>
+      <h3 class="field-label" style="margin-bottom:6px;">ניהול קבוצות</h3>
       <div class="log-list" aria-busy="true" data-team-mgmt-skeleton="1">${row.repeat(3)}</div>
     </div>`;
   }
@@ -1258,7 +1258,7 @@
     }).join("");
 
     const reassignHtml = rawTeams.length ? `<div style="margin-top:10px;">
-      <div class="field-label" style="margin-bottom:6px;">העברת משתתפים בין קבוצות</div>
+      <h3 class="field-label" style="margin-bottom:6px;">העברת משתתפים בין קבוצות</h3>
       <div class="log-list">${activeParticipants.map((p) => {
         const prof = p.profiles || {};
         const name = prof.display_name || (prof.handle ? "@" + prof.handle : "חבר/ה");
@@ -1272,7 +1272,7 @@
     </div>` : "";
 
     return `<div class="chart-card" style="margin-bottom:10px;" data-team-mgmt="1">
-      <div class="field-label" style="margin-bottom:6px;">ניהול קבוצות<span class="admin-tag">ניהול</span></div>
+      <h3 class="field-label" style="margin-bottom:6px;">ניהול קבוצות<span class="admin-tag">ניהול</span></h3>
       ${teamRows ? `<div class="log-list">${teamRows}</div>` : ""}
       <div class="flex gap-6" style="align-items:flex-end;margin-top:8px;">
         <label class="field" style="flex:1;margin-bottom:0;"><span class="field-label">קבוצה חדשה</span><input class="text-input" type="text" data-challenge-team-create-name value="${esc(tm.createName)}" maxlength="80"/></label>
@@ -1339,7 +1339,7 @@
     const canExpand = !b.loading && !b.error && leaderboardRows(b).length && b.limit < CHALLENGE_BOARD_FULL_LIMIT;
     const expand = canExpand ? `<div class="chip-row" style="margin-top:6px;"><button class="chip-btn" data-community-action="challenge-board-full">צפייה בטבלה המלאה</button></div>` : "";
     return `<div class="chart-card" style="margin-bottom:10px;" data-leaderboard="challenge">
-      <div class="field-label" style="margin-bottom:6px;">דירוג${b.limit >= CHALLENGE_BOARD_FULL_LIMIT ? " מלא" : ""}</div>
+      <h3 class="field-label" style="margin-bottom:6px;">דירוג${b.limit >= CHALLENGE_BOARD_FULL_LIMIT ? " מלא" : ""}</h3>
       ${leaderboardScopeSwitchHtml("challenge-board-scope", b.scope)}
       ${body}${expand}
       ${leaderboardHideToggleHtml()}
@@ -1361,7 +1361,7 @@
       </div>`;
     }).join("") : `<div class="empty">אף אחד עדיין לא הצטרף לאתגר.</div>`;
     return `<div class="chart-card" style="margin-bottom:10px;">
-      <div class="field-label" style="margin-bottom:6px;">עדכון התקדמות משתתפים</div>
+      <h3 class="field-label" style="margin-bottom:6px;">עדכון התקדמות משתתפים</h3>
       <div class="log-list">${rosterHtml}</div>
       ${v.coachEntry.error ? `<div class="field-error" role="alert" style="margin-top:6px;">${esc(v.coachEntry.error)}</div>` : ""}
     </div>`;
@@ -1380,7 +1380,7 @@
     if (!list.length) return "";
     const count = (v.progress && v.progress.participant_count != null) ? v.progress.participant_count : list.length;
     return `<div style="margin-top:12px;">
-      <div class="field-label" style="margin-bottom:6px;">משתתפים (${esc(count)})</div>
+      <h3 class="field-label" style="margin-bottom:6px;">משתתפים (${esc(count)})</h3>
       <div class="log-list">${list.map((p) => {
         const prof = p.profiles || {};
         const name = prof.display_name || (prof.handle ? "@" + prof.handle : "חבר/ה");
@@ -1394,7 +1394,7 @@
     const staff = hasPerm(PERM.CHALLENGE_CREATE);
     const meta = `<div style="color:var(--steel);font-size:12px;margin-bottom:10px;">${esc(def.label)} · ${formatChallengeDate(c.start_at)}–${formatChallengeDate(c.end_at)} · ${esc(challengeStatusLabel(c))}</div>`;
     const description = c.description ? `<div style="font-size:13.5px;line-height:1.6;margin-bottom:10px;white-space:pre-wrap;">${bidiText(c.description)}</div>` : "";
-    const rules = (c.config && c.config.rules_text) ? `<div class="chart-card" style="margin-bottom:10px;"><div class="field-label" style="margin-bottom:4px;">חוקי האתגר</div><div style="font-size:13px;white-space:pre-wrap;">${bidiText(c.config.rules_text)}</div></div>` : "";
+    const rules = (c.config && c.config.rules_text) ? `<div class="chart-card" style="margin-bottom:10px;"><h3 class="field-label" style="margin-bottom:4px;">חוקי האתגר</h3><div style="font-size:13px;white-space:pre-wrap;">${bidiText(c.config.rules_text)}</div></div>` : "";
     // Real bug found by a role-coverage audit: content.pin covers challenges
     // (pinTargetLabel() has always listed "challenge"), but until now no
     // challenge surface offered a pin control - see isPinnedTarget()'s

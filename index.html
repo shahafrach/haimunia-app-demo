@@ -1847,6 +1847,17 @@
      accidentally hit. Not display:none, never for a file input. */
   .file-input-hidden{ position:absolute; width:1px; height:1px; padding:0; margin:-1px;
     overflow:hidden; clip:rect(0 0 0 0); clip-path:inset(50%); white-space:nowrap; border:0; }
+  /* The screen-reader-only class. It was already IN USE (cloud.js's staff
+     rail spells the moderation badge's count out for a reader beside an
+     aria-hidden numeral) and had no rule anywhere, so that sentence was
+     simply painting on screen next to the badge it was meant to replace -
+     found while auditing this app's heading structure, not reported.
+     Same technique as .file-input-hidden above, and deliberately the same
+     one: clipped rather than display:none, so the text stays in the
+     accessibility tree. Sets no colour of its own, so it needs no entry in
+     either dark-theme block. */
+  .sr-only{ position:absolute; width:1px; height:1px; padding:0; margin:-1px;
+    overflow:hidden; clip:rect(0 0 0 0); clip-path:inset(50%); white-space:nowrap; border:0; }
   input[type="checkbox"]{ accent-color:var(--energy); }
   .chip-row{ display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
   /* color:var(--energy-text), not --energy - found via axe while touching
@@ -2485,7 +2496,7 @@
 <div id="appShell" class="app-shell">
 <nav id="desktopSidebar" class="desktop-sidebar" aria-label="ניווט ראשי"></nav>
 <div id="app" style="display:none;">
-  <header class="header">
+  <header class="header" aria-label="כותרת האפליקציה">
     <div class="flex items-center gap-8">
       <button id="navMenuBtn" data-action="open-nav-menu" aria-label="תפריט" aria-haspopup="dialog" aria-controls="navMenuOverlay" class="icon-chip icon-chip-steel" style="flex-shrink:0;">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
@@ -2531,7 +2542,7 @@
   </header>
   <div class="brand-stripe"></div>
 
-  <main><div id="content" role="tabpanel"></div></main>
+  <main aria-label="תוכן ראשי"><div id="content" role="tabpanel"></div></main>
 </div>
 <!-- The wide-desktop context column (design spec §6.2). Third and last
      child of #appShell, so in this RTL flex row it lands on the far
@@ -2596,7 +2607,7 @@
 <div class="modal-overlay" id="navMenuOverlay" data-action="close-nav-menu" role="dialog" aria-modal="true" aria-labelledby="navMenuTitle" style="align-items:stretch; padding:0;">
   <div class="modal-sheet" id="navMenuSheet" style="max-height:none; height:100%; border-radius:0; border:none;">
     <div class="modal-head">
-      <span class="modal-title" id="navMenuTitle">תפריט</span>
+      <h2 class="modal-title" id="navMenuTitle">תפריט</h2>
       <button data-action="close-nav-menu" class="icon-btn" aria-label="סגירה" style="color:var(--steel);">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
       </button>
@@ -2613,7 +2624,7 @@
 <div class="modal-overlay" id="settingsOverlay" data-action="close-settings" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" style="align-items:stretch; padding:0;">
   <div class="modal-sheet" id="settingsSheet" style="max-height:none; height:100%; border-radius:0; border:none;">
     <div class="modal-head">
-      <span class="modal-title" id="settingsTitle">הגדרות</span>
+      <h2 class="modal-title" id="settingsTitle">הגדרות</h2>
       <button data-action="close-settings" class="icon-btn" aria-label="סגירה" style="color:var(--steel);">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
       </button>
@@ -2674,6 +2685,26 @@
           <div style="font-weight:600; font-size:14px; color:var(--steel);">הוסיפו למסך הבית: שיתוף ← הוספה למסך הבית</div>
         </div>
       </div>
+      <!-- ONE LINE, and only here. This banner is the app's only install hint
+           on iOS, and maybeShowIOSInstallBanner() (app.js) already shows it
+           exclusively on an iOS device that is NOT running standalone - which
+           is exactly and only the population this sentence is true for, so it
+           needs no gate of its own and must not be copied onto the
+           Chrome/Android banner, where it would be false.
+
+           It is here because iOS withholds the Push API outside an installed
+           app entirely. Without this line the sequence a member meets is: no
+           notifications ever arrive, they go looking, and the settings panel
+           tells them (notifPushUnsupportedReason) what this banner could have
+           told them before they went looking. Data eviction is still the
+           banner's headline argument; notifications are the second one, and a
+           second one is all this is - no new control, no new dismissal, no
+           new state.
+
+           Both colour and spacing come from tokens already on the two lines
+           above, so it themes itself in light and dark with no new rule in
+           either of the two dark blocks. -->
+      <div style="font-weight:600; font-size:13px; color:var(--steel); margin-bottom:12px;">גם התראות עובדות רק מהאפליקציה המותקנת — בדפדפן iOS לא ניתן לקבל אותן.</div>
       <div class="brand-stripe" style="height:4px; margin-bottom:12px;"></div>
       <div class="flex items-center gap-10">
         <button data-action="dismiss-ios-install-hint" class="save-btn" style="flex:1; max-width:none; font-family:inherit; font-weight:800; font-size:15px; padding:12px 0; box-shadow:none;">הבנתי</button>
@@ -2686,13 +2717,13 @@
       <span id="saveBtnLabel">רישום סט</span>
     </button>
   </div>
-  <div class="tabbar" id="bottomTabBar" role="tablist"></div>
+  <div class="tabbar" id="bottomTabBar" role="tablist" aria-label="מסכים ראשיים"></div>
 </div>
 
 <div class="modal-overlay" id="pickerOverlay" data-action="close-picker" role="dialog" aria-modal="true" aria-labelledby="pickerTitle">
   <div class="modal-sheet">
     <div class="modal-head">
-      <span class="modal-title" id="pickerTitle">בחירת תרגיל</span>
+      <h2 class="modal-title" id="pickerTitle">בחירת תרגיל</h2>
       <button data-action="close-picker" class="icon-btn" aria-label="סגירה" style="color:var(--steel);">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
       </button>
@@ -2708,7 +2739,7 @@
 <div class="modal-overlay" id="wodPickerOverlay" data-action="close-wod-picker" role="dialog" aria-modal="true" aria-labelledby="wodPickerTitle">
   <div class="modal-sheet">
     <div class="modal-head">
-      <span class="modal-title" id="wodPickerTitle">בחירת אימון</span>
+      <h2 class="modal-title" id="wodPickerTitle">בחירת אימון</h2>
       <button data-action="close-wod-picker" class="icon-btn" aria-label="סגירה" style="color:var(--steel);">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
       </button>
@@ -2724,7 +2755,7 @@
 <div class="modal-overlay" id="wodBuilderOverlay" data-action="close-wod-builder" role="dialog" aria-modal="true" aria-labelledby="wodBuilderTitle">
   <div class="modal-sheet">
     <div class="modal-head">
-      <span class="modal-title" id="wodBuilderTitle">בניית אימון</span>
+      <h2 class="modal-title" id="wodBuilderTitle">בניית אימון</h2>
       <button data-action="close-wod-builder" class="icon-btn" aria-label="סגירה" style="color:var(--steel);">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
       </button>
@@ -2833,7 +2864,7 @@
 <div class="modal-overlay" id="achievementsOverlay" data-action="close-achievements" role="dialog" aria-modal="true" aria-labelledby="achievementsTitle">
   <div class="modal-sheet">
     <div class="modal-head">
-      <span class="modal-title" id="achievementsTitle">מדליות</span>
+      <h2 class="modal-title" id="achievementsTitle">מדליות</h2>
       <button data-action="close-achievements" class="icon-btn" aria-label="סגירה" style="color:var(--steel);">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
       </button>
@@ -2845,7 +2876,7 @@
 <div class="modal-overlay scene-page--community" id="notificationsOverlay" data-action="close-notifications" role="dialog" aria-modal="true" aria-labelledby="notificationsTitle">
   <div class="modal-sheet">
     <div class="modal-head">
-      <span class="modal-title" id="notificationsTitle">מה חדש</span>
+      <h2 class="modal-title" id="notificationsTitle">מה חדש</h2>
       <button data-action="close-notifications" class="icon-btn" aria-label="סגירה" style="color:var(--steel);">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
       </button>
@@ -2866,7 +2897,7 @@
 <div class="modal-overlay" id="supportOverlay" data-action="close-support" role="dialog" aria-modal="true" aria-labelledby="supportTitle">
   <div class="modal-sheet">
     <div class="modal-head">
-      <span class="modal-title" id="supportTitle">תמיכה ודיווח על תקלה</span>
+      <h2 class="modal-title" id="supportTitle">תמיכה ודיווח על תקלה</h2>
       <button data-action="close-support" class="icon-btn" aria-label="סגירה" style="color:var(--steel);">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
       </button>

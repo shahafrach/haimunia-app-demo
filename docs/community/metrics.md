@@ -2,7 +2,10 @@
 
 The one place that says what the community measures, what each tracked event
 means, and where it fires from. COMM-013 shipped the helper, COMM-170 wired
-the Phase 1 surfaces, COMM-233 wired the Phase 2 ones.
+the Phase 1 surfaces, COMM-233 wired the Phase 2 ones. The eleven-module pass
+added fourteen more names: one each for the eleven `club_features` keys that
+had a switch, a surface and no event at all, plus `app_opened`,
+`push_permission` and `push_self_test`. `EVENTS` holds 42 names.
 
 Owner: platform. A feature agent that adds a surface adds a row to the table
 below in the same change.
@@ -19,6 +22,8 @@ below in the same change.
   product event bus bridge, see "Events that come from the bus" below.
 - Nothing awaits an analytics call. A failed write is invisible to the
   member and no call site reads the return value.
+- An event recorded offline is queued rather than dropped; see "Offline"
+  below.
 
 ## Schema and versioning
 
@@ -50,6 +55,57 @@ Set `window.HAIMUNIA_ANALYTICS_DEBUG = true` from a console, or pass
 console and nothing is written. The global wins over the configure option,
 which is what makes it usable on a device that is already running. Unset it
 to go back to writing.
+
+## Offline
+
+An event recorded with no connection is **queued, not dropped**.
+
+It used to be dropped: `analyticsTrack()` did a direct
+`client.from("analytics_events").insert(row)` ending in `.catch(() => false)`,
+so offline the fetch rejected and the row was gone. That is defensible for a
+lost packet and indefensible as the offline story of an offline-first app — a
+member who trains in a basement with no signal, logs the session there and
+syncs on the way home was missing from every number this table feeds, and
+`attendance_recorded`, the one event that can make somebody WCAM-active
+without ever opening the Community tab, is the event most likely to be
+recorded with no signal.
+
+The row now rides the existing community outbox (`src/outbox.js`) as a
+**silent row**: persisted in IndexedDB, drained on the same reconnect a
+member's own queued writes use, and attributed to the member who was offline
+rather than to whoever happened to drain it.
+
+`navigator.onLine === false` skips the request entirely; otherwise the insert
+is attempted first and the row is queued on a rejection or an error, because
+`onLine` is a reliable **no** and an unreliable yes. The `HAND_PROP_KEYS`
+projection runs before the queue, so a queued row can never carry more than a
+sent one.
+
+A silent row opts out of the three behaviours the outbox has for member
+**writes**, each of which would be wrong for telemetry:
+
+1. **It never becomes `failed`.** A row that exhausts its five attempts, or
+   hits a permanent error, is deleted. `analyticsTrack()`'s contract is that a
+   failed write is invisible and a dropped row is acceptable; a measurement
+   sitting in a member's "these did not send" list with a Retry button beside
+   it would be a bug in both directions. `pendingCount()`, `failedCount()` and
+   `state.outbox` all exclude silent rows.
+2. **It never stops the drain.** The FIFO stop-on-first-not-ready rule exists
+   so a comment cannot land before its post. Analytics has no such causal
+   chain, and a backed-off telemetry row holding up a real post would turn a
+   measurement into an outage.
+3. **It is capped**, at 200, oldest-first. `post_impression` fires once per
+   card per feed session, so browsing a cached feed offline can mint rows by
+   the hundred. A member's own queued write is never trimmed to make room —
+   the same trade `fitProps()` already makes for oversized props.
+
+The misattribution guard is unchanged: a silent row queued under one member's
+session is skipped, never sent, if a different member is signed in when the
+queue drains.
+
+If the queue is unavailable or throws, the behaviour degrades to what it was —
+the row is dropped — because a measurement must never be able to break the
+surface it measures.
 
 ## Weekly Community Active Members (WCAM)
 
@@ -104,6 +160,51 @@ session make this member active. Acting *from* the card does count, through
 `member_followed` and `profile_opened`, which is where the participation
 actually is.
 
+The eleven-module pass reviewed each of its own fourteen new names the same
+way and added exactly **two** to the qualifying set:
+
+- `welcome_sent` counts. `welcomeNewMember()` writes a real comment through
+  `add_post_comment`, and "created a comment" is the first bullet of the
+  definition above. That path bypasses the composer, so no `COMMENT_CREATED`
+  bus event is emitted for it — this closes a gap in the existing count
+  rather than admitting a new kind of activity. A coach whose only community
+  act in a week was welcoming three newcomers was not, until now, an active
+  member of their own club.
+- `member_of_week_published` counts, **for the publishing coach**, on exactly
+  `coach_congratulate_sent`'s reasoning: the row's `user_id` is the actor.
+  The recognised member is never made active by somebody else choosing them.
+
+Everything else the pass added does **not** count, each for a stated reason:
+
+- `announcement_viewed`, `monthly_recap_viewed` and `new_member_post_viewed`
+  are views, and viewing is not the bar — the same call `leaderboard_viewed`
+  and `classmates_card_viewed` already made.
+- `club_wod_result_attached` does not: the member is already counted for the
+  day they trained, through `attendance_recorded`.
+- `post_photo_attached` and `mention_inserted` do not. Both happen inside a
+  composer, before anything is published; the publish is `post_created` /
+  `comment_created` and already counts. An abandoned draft must make nobody
+  active.
+- `outward_share_completed` does not. It is a share to somewhere that is not
+  this club — the same line the module map already draws between
+  `workout_shared` and `outward_share`.
+- `streak_nudge_opened` does not: `notification_opened` fires on the same tap
+  and already counts that member once.
+- `engagement_flag_actioned` does not. Triaging a queue is staff
+  administration; the coach becomes active through the outreach post it
+  publishes, which `post_created` already counts.
+- `app_opened`, `push_permission` and `push_self_test` do not. Opening the app
+  is not participation, and a permission or a device test is account
+  configuration — `push_opt_in`'s own reasoning, unchanged.
+
+**One clause in the definition above still has no producer.** "Opened an
+announcement" is listed as qualifying activity and nothing in this app opens
+an announcement: the archive renders every notice inline, and the feed card is
+a `POST_ANNOUNCEMENT` like any other post. `announcement_viewed` is not that
+clause and is deliberately not counted as it. Either the surface grows an open
+or the clause goes; recorded here so the next reader does not assume the event
+closed it.
+
 The qualifying event names are `ACTIVE_MEMBER_EVENTS` in `src/analytics.js`,
 and `isActiveMemberEvent(name)` answers for one name. They are kept as data
 so a rollup query and the client cannot drift apart. The WCAM column in the
@@ -118,7 +219,8 @@ where event_name in (
   'post_created','workout_shared','achievement_shared','comment_created',
   'reaction_added','challenge_joined','challenge_completed','event_rsvp',
   'post_opened','profile_opened','member_followed','notification_opened',
-  'weekly_recap_shared','coach_congratulate_sent','attendance_recorded')
+  'weekly_recap_shared','coach_congratulate_sent','attendance_recorded',
+  'welcome_sent','member_of_week_published')
   and created_at >= :week_start and created_at < :week_end
   and user_id is not null;
 ```
@@ -162,6 +264,20 @@ WCAM marks the events that make a member active for the week.
 | `directory_opened` | Entering the Directory sub-tab | `source` (`club_tab`, `leaderboard`) | no |
 | `attendance_recorded` | Bus, `ATTENDANCE_RECORDED`, emitted by `flushOutbox()` after a session-bearing `private_records` upsert succeeds (COMM-300) | `occurred_on` | yes |
 | `classmates_card_viewed` | `afterRenderCommunity()`, once per load of COMM-307's trained-with-you card, and only when it renders with at least one classmate on it | `rows`, `source` (`feed`) | no |
+| `app_opened` | `ensureAnalyticsConfigured()` in cloud.js, once per page load, on the same session-ready path `configure()` itself runs on | `display_mode` (`standalone`, `browser`), `platform` (`ios`, `android`, `other`) | no |
+| `push_permission` | `loadNotifPushStatus()` on the first Account-tab visit (source `account_tab`), and after every `Notification.requestPermission()` (source `prompt`, `self_test`) | `status` (`granted`, `denied`, `default`), `source`, `display_mode` | no |
+| `push_self_test` | `runPushSelfTest()`: `received` from the service worker's own receipt, `not_received` from the page's 8-second timeout | `result` (`received`, `not_received`) | no |
+| `announcement_viewed` | `afterRenderCommunity()`, once per entry into the Community tab, when the announcements archive is in the document with at least one row on it | `rows`, `source` (`feed`, `staff_home`) | no |
+| `member_of_week_published` | `publishMemberOfWeek()` after the RPC succeeds and the envelope has been re-read | `category` (server-resolved), `source` (`candidate`, `manual`) | yes, for the coach |
+| `welcome_sent` | `welcomeNewMember()` after `add_post_comment` succeeds | `source` (`feed_card`, `coach_section`) | yes |
+| `monthly_recap_viewed` | `afterRenderCommunity()`, once per entry, when the member-facing published monthly card is in the document. Never the staff draft preview | `source` (`account`) | no |
+| `club_wod_result_attached` | `attachClubWodResult()` after `club_wod_attach_result` succeeds | `source` (`board`, `log_form`) | no |
+| `new_member_post_viewed` | `noteFeedImpression()`, on the same once-per-post-per-feed-session guard, when the impressed card is a `POST_NEW_MEMBER` | `source` (`feed`) | no |
+| `post_photo_attached` | `composerAddPhoto()` / `prPromptAddPhoto()`, on the ready branch only — the attach, not the publish | `source` (`composer`, `pr_prompt`), `photo_count` | no |
+| `mention_inserted` | `mentionPick()`, when a member picks somebody out of the "@" picker | `source` (`comment`, `reply`) | no |
+| `outward_share_completed` | `outwardShareNow()` and `outwardCopyText()`, once the sheet settles | `kind` (`pr`, `achievement`, `workout`), `result` (`shared_image`, `shared_text`, `copied`, `cancelled`, `failed`) | no |
+| `streak_nudge_opened` | `openNotif()`, when the opened row's type is `streak_at_risk` | `was_unread` | no |
+| `engagement_flag_actioned` | `coachEngageReachOut()` after the outreach post writes, and `coachEngageResolveFlag()` after the status update | `action` (`reach_out`, `reviewed`, `dismissed`), `level` | no |
 
 ### Events that come from the bus
 
@@ -243,6 +359,110 @@ grain the `attendance_log` table stores.
   construction. `rows` is a count, never the members: the card's whole content
   is other people's identities and none of it reaches `analytics_events`.
 
+- `announcement_viewed` and `monthly_recap_viewed` ride the same
+  once-per-entry guard `club_tab_viewed` uses, and are reset by the same
+  capture-phase listener when the member leaves the Community tab. Both
+  surfaces render inline rather than opening, so "viewed" means "was in the
+  document with content on it", which is a fact only `afterRenderCommunity()`
+  can see. Neither fires on an empty surface: the announcements archive emits
+  its marker only on the non-empty branch, and the member-facing monthly card
+  renders nothing at all until a month is published.
+- `new_member_post_viewed` rides `noteFeedImpression()`'s own
+  `state.feed.seen` guard, so it is exactly once per welcome card per feed
+  session — the same guard, the same moment, one extra row. A second guard
+  for the same moment would be two counters that can disagree.
+- `post_photo_attached` fires on the ready branch of each composer only, so a
+  failed upload is not an attached photo, and it counts **attachments, not
+  posts**: three photos on one post are three rows, with `photo_count`
+  climbing 1, 2, 3. `post_created.has_media` is the published-side
+  cross-check.
+- `welcome_sent` cannot repeat. `welcomeNewMember()` returns early for a post
+  that already carries the welcome comment, and that early return is above
+  the track call.
+- `engagement_flag_actioned` is once per flag per action, guarded by the
+  in-flight `busy` map and — for a reach-out — by the `reachedOut` set the
+  loader reconstructs from `member_contact_log`.
+- `outward_share_completed` fires once per settled sheet, from either exit
+  (the share button or the copy-text button). `cancelled` is recorded rather
+  than dropped: "opened the sheet and backed out" and "never opened it" are
+  different findings, and only one of them is about the feature.
+- `streak_nudge_opened` is **the one deliberate double in the event set**.
+  The same tap also writes `notification_opened`, because the two rows answer
+  to different modules — `streak_risk_nudges` and `notifications` — and
+  without it a nudge module whose entire client footprint is one notification
+  type stays exactly as unmeasurable as it was. Per-module unique-member
+  counts stay correct; a sum of `event_count` across modules does not, and
+  `docs/audit/usage-queries.sql` never takes one.
+- `push_permission` records at most one row per distinct `status|source` pair
+  per page load, so the transition a prompt produces (`default` →
+  `granted`) is two rows and a re-render of the settings panel is none.
+- `app_opened` is once per page load, not per sign-in: `configure()` is
+  idempotent and so is the event beside it.
+
+## How the app asks for notification permission
+
+A browser gives a site **one** chance at the permission prompt. A denial is
+sticky and there is no API to ask again. So the prompt is not something to
+spend early and hope; three conditions must all hold before
+`Notification.requestPermission()` is reachable at all
+(`pushAskGateReason()`, `src/community/notifications.js`):
+
+1. **A user action.** Every caller passes `userAction: true` and the gate
+   refuses without it. "Never on first load" is not a timer — it is the
+   absence of any code path that asks without somebody having pressed
+   something. The two callers are `enableNotifPush()` (the push channel
+   button on a preference row) and `runPushSelfTest()` (the self-test
+   button), both click handlers.
+2. **Inside the installed app.** `isStandalonePwa()` must be true. On iOS
+   this is a hard platform rule — Safari withholds the Push API from a plain
+   browser tab — and everywhere else it is a product one.
+3. **Earned.** At least one logged workout
+   (`window.haimuniaTotalLoggedEntries()`, exported by app.js) or a community
+   profile. Before either, "may we interrupt you later" is a question about a
+   relationship that does not exist yet.
+
+The iOS install banner carries one line saying notifications need the
+installed app, so a member on iOS Safari learns it from the banner rather
+than from a control that does nothing. It is in `#iosInstallBanner` only —
+`maybeShowIOSInstallBanner()` already shows that banner exclusively on iOS
+outside standalone, which is exactly and only the population the sentence is
+true for.
+
+## The push self-test
+
+Account settings, under the preference rows: one button per device, because
+a `PushSubscription` is per device.
+
+It asks **this device's own service worker** to show a real notification and
+waits for the worker to report back that it did. That exercises the four
+things that break on a real phone: the permission is granted, a service
+worker is registered and controlling the page, the worker can call
+`showNotification()`, and the page and the worker can still talk to each
+other. It does **not** exercise the push server — `notif_push_pending` and
+the Edge Function behind it (202609170002) are a scheduled job measured in
+minutes, and a test a member waits five minutes for is not a test. The screen
+says so in one line rather than implying more.
+
+The worker draws the notification rather than the page, because every real
+push this app delivers is drawn by `sw.js`'s push handler from the worker's
+own registration — which is the surface a member who says "I never get
+notifications" has a problem with.
+
+**The worker records the receipt; the page writes the row.** A service worker
+has no Supabase client and deliberately cannot read `cloud-config.js`, so
+`sw.js` posts `PUSH_SELF_TEST_RECEIVED` back to its clients, app.js's existing
+`serviceWorker` message listener routes it to
+`communityHandlePushSelfTestReceipt()`, and the row goes through
+`analyticsTrack()` — the one existing writer of `public.analytics_events`.
+The same page-decides split `PUSH_NOTIFICATION_CLICK` has used since
+COMM-229. A token travels out and back so a late receipt from an abandoned
+run cannot resolve a newer one.
+
+**"Not received" is an answer, and it is the one members arrive for.** After
+eight seconds with no receipt the page settles on `not_received`, writes that
+row, and tells the member what to check. A test that hangs on a spinner tells
+them nothing.
+
 ## Core metrics
 
 Spec section 78.
@@ -295,6 +515,25 @@ plus the community tables, with no new event name.
   every pair have to have flipped it. `member_followed` and `profile_opened`
   in the same session are the conversion off it, and neither carries a prop
   saying the card was the source - the card's own event is the denominator.
+
+- Install share, `app_opened` grouped by `display_mode` and `platform`, with
+  `count(distinct user_id)` as the member number — never the session count,
+  which is visit frequency wearing an install's clothes. A member can appear
+  in both display modes legitimately (the installed app on a phone, a browser
+  tab on a laptop).
+- Push funnel, `push_permission` by `status` → `push_opt_in` →
+  `push_self_test` by `result`. The row that is an action item rather than a
+  statistic is `self_test_missing` against `permission_granted`: a granted
+  permission with no delivery is a broken install, not a preference.
+- Module reach for the eleven that used to be silent — one event each, read
+  through `docs/audit/usage-queries.sql` queries 2 and 5. Their point is
+  negative evidence: a module with a switch, a surface and zero events for
+  thirty days can now be discussed, where before the only honest answer was
+  "nothing measures it".
+- Composer drop-off, `post_photo_attached` and `mention_inserted` against
+  `post_created.has_media` and `comment_created.mention_count`. A high attach
+  count with a low published rate is a composer problem, not a disused
+  feature, and neither number says that alone.
 
 The section 79 list in the product spec was not in this repo when this doc
 was written, so the set above is what the shipped event schema supports.

@@ -294,6 +294,104 @@
   function isStandalonePwa() {
     return !!(navigator.standalone || (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches));
   }
+  // "standalone" or "browser", the two values app_opened's display_mode prop
+  // takes. Built on isStandalonePwa() above rather than on a second
+  // matchMedia call: there are already two detectors for this fact in the
+  // repository (this one and app.js's own isStandalone(), which app.js's
+  // install banners need and which cannot read this scope), and a third would
+  // be exactly the sibling drift CLAUDE.md names. Both existing ones test the
+  // same two signals in the opposite order and agree on every input.
+  function communityDisplayMode() { return isStandalonePwa() ? "standalone" : "browser"; }
+  // A coarse bucket, never the user agent string. "ios" is the only value
+  // with a behaviour attached to it (Safari withholds the Push API outside an
+  // installed app), "android" is the other half of the phone club, and
+  // everything else - desktop, a tablet that lies, a browser nobody has heard
+  // of - is "other". Built on communityIsIOSDevice() for the same
+  // no-third-detector reason as above. A full UA string in analytics_events
+  // would be a fingerprint in a table whose read grant is a permission, not a
+  // role; it is carried, deliberately and only, on a support report the
+  // member chose to send.
+  function communityPlatformBucket() {
+    if (communityIsIOSDevice()) return "ios";
+    return /Android/i.test(String(navigator.userAgent || "")) ? "android" : "other";
+  }
+
+  // ---- WHEN THE APP MAY ASK FOR NOTIFICATION PERMISSION ------------------
+  //
+  // A browser gives a site ONE chance at this prompt. Deny it and the answer
+  // is sticky - there is no API to ask again, and on most engines the member
+  // has to find the permission in browser settings to undo it. So the prompt
+  // is not a thing to show early and hope; it is a thing to spend once, on
+  // somebody who already has a reason to say yes.
+  //
+  // Three conditions, and all three must hold:
+  //
+  //   1. A USER ACTION, always. Every caller passes userAction and this
+  //      refuses without it, so no boot path, no render, no realtime event
+  //      and no retry can reach requestPermission(). NEVER ON FIRST LOAD is
+  //      not a timer - it is the absence of any code path that asks without
+  //      somebody having pressed something.
+  //   2. INSIDE THE INSTALLED APP. On iOS this is a hard platform rule (no
+  //      Push API in a plain Safari tab at all), and everywhere else it is a
+  //      product one: a notification is a promise to interrupt someone later,
+  //      and a browser tab is not where this app keeps that promise. The iOS
+  //      install banner says so in its own line now, rather than leaving a
+  //      member to discover it from a control that does nothing.
+  //   3. EARNED. The member has logged at least one workout, or has joined
+  //      the club's community. Before either, "may we send you notifications"
+  //      is a question about a relationship that does not exist yet.
+  function pushAskEarned() {
+    // Joined the community: a profile row is the thing redemption creates.
+    if (state.user && state.profile) return true;
+    // Or logged a workout. app.js owns the training log and exports the
+    // count; a build where cloud.js loaded and app.js somehow did not is not
+    // a reason to ask, so a missing function reads as "not earned".
+    try {
+      if (typeof window.haimuniaTotalLoggedEntries === "function") return window.haimuniaTotalLoggedEntries() > 0;
+    } catch (e) { /* fall through */ }
+    return false;
+  }
+  // null when the app may ask right now; a Hebrew sentence saying why not
+  // otherwise, so a member who taps and gets nothing is told the reason
+  // instead of meeting a dead control.
+  function pushAskGateReason(opts) {
+    if (!opts || opts.userAction !== true) return "אפשר להפעיל התראות רק מתוך פעולה באפליקציה.";
+    if (!isStandalonePwa()) return "כדי לקבל התראות יש להוסיף את האפליקציה למסך הבית ולפתוח אותה משם.";
+    if (!pushAskEarned()) return "נבקש הרשאת התראות אחרי האימון הראשון שתרשמו, או אחרי ההצטרפות לקהילת המועדון.";
+    return null;
+  }
+  // push_permission. The browser's own answer, recorded as it stands.
+  //
+  // It is NOT the same measurement as push_opt_in, which fires only after a
+  // push_subscriptions row is written: a member who was asked and said no
+  // writes no subscription, so until this name existed a denial produced no
+  // row anywhere and "how many people did we ask, and what did they say" was
+  // unanswerable. status is the browser's own three-value enum, unmapped.
+  //
+  // display_mode rides along because the answer is not comparable across the
+  // two: a denial in a browser tab and a denial in the installed app are
+  // different events with the same word on them.
+  let pushPermissionLogged = "";
+  function currentPushPermission() {
+    try {
+      if (typeof Notification === "undefined") return null;
+      const p = Notification.permission;
+      return (p === "granted" || p === "denied" || p === "default") ? p : null;
+    } catch (e) { return null; }
+  }
+  // Records at most one row per distinct status per page load. The status is
+  // the key rather than a plain boolean, so the transition a prompt produces
+  // (default -> granted) is two rows and a re-render of the same screen is
+  // still none.
+  function notePushPermission(source) {
+    const status = currentPushPermission();
+    if (!status) return;
+    const key = status + "|" + String(source || "");
+    if (pushPermissionLogged === key) return;
+    pushPermissionLogged = key;
+    track(A.PUSH_PERMISSION, { status: status, source: source || "unknown", display_mode: communityDisplayMode() });
+  }
+
   // null when push can be offered in this browser context right now; a
   // Hebrew explanation otherwise, rendered as visible text under the Push
   // option (not just a title attribute) so a member on an unsupported
@@ -324,6 +422,12 @@
   // Phase 2 reads use (coachEngage).
   async function loadNotifPushStatus() {
     state.notif.pushChecked = true;
+    // Reading the permission is not asking for it. This runs once, lazily,
+    // when a member lands on the Account tab, and it is what makes the
+    // "default" bucket - members who have never been asked - countable at
+    // all; a prompt-only measurement can only ever see the people who were
+    // already asked.
+    notePushPermission("account_tab");
     if (!state.user || !client || !notifPushEnabled() || notifPushUnsupportedReason()) { state.notif.pushSub = null; return; }
     try {
       const hasSw = "serviceWorker" in navigator;
@@ -366,11 +470,20 @@
   async function enableNotifPush(source, prefType) {
     const reason = notifPushUnsupportedReason();
     if (reason) { setMessage(reason); return false; }
+    // The one prompt, the one gate. Every caller of this function is a click
+    // handler, and each states so here rather than leaving it implied - which
+    // is what makes "never on first load" a property of the code instead of a
+    // claim about it.
+    const gate = pushAskGateReason({ userAction: true });
+    if (gate) { setMessage(gate); return false; }
     try {
       const reg = await navigator.serviceWorker.ready;
       let sub = await reg.pushManager.getSubscription();
       if (!sub) {
         const perm = await Notification.requestPermission();
+        // Recorded on BOTH branches, before the early return below: a denial
+        // is the answer this event exists for.
+        notePushPermission("prompt");
         if (perm !== "granted") { setMessage("לא אושרה הרשאת התראות"); return false; }
         const pubKey = (window.HAIMUNIA_CONFIG && window.HAIMUNIA_CONFIG.notifPushVapidPublicKey) || "";
         sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: vapidKeyToUint8Array(pubKey) });
@@ -395,6 +508,102 @@
       return false;
     }
   }
+  // ---- The push self-test (account settings) -----------------------------
+  //
+  // WHAT IT PROVES, AND WHAT IT DOES NOT. It asks this device's own service
+  // worker to show a real notification and waits for the worker to report
+  // back that it did. That exercises the four things that actually break on
+  // a phone: the permission is granted, a service worker is registered AND
+  // controlling this page, the worker can call showNotification(), and the
+  // page and the worker can still talk to each other. It does NOT exercise
+  // the push SERVER - notif_push_pending and the Edge Function behind it
+  // (202609170002) - because that path is a scheduled job measured in
+  // minutes, and a "test" a member waits five minutes for is not a test.
+  // The screen says as much in one line rather than implying more.
+  //
+  // WHY THE WORKER SHOWS IT rather than the page. A notification raised from
+  // the page proves only that the page can raise notifications; every real
+  // push this app will ever deliver is drawn by sw.js's push handler, from
+  // the worker's own registration, which is exactly the surface a member who
+  // says "I never get notifications" has a problem with.
+  const PUSH_SELF_TEST_TIMEOUT_MS = 8000;
+  let pushSelfTestTimer = null;
+  function pushSelfTestSet(status, reason) {
+    state.notif.selfTest.status = status;
+    state.notif.selfTest.reason = reason || "";
+    rerender();
+  }
+  function clearPushSelfTestTimer() {
+    if (pushSelfTestTimer) { clearTimeout(pushSelfTestTimer); pushSelfTestTimer = null; }
+  }
+  async function runPushSelfTest() {
+    if (!state.user) return;
+    const st = state.notif.selfTest;
+    if (st.status === "sending" || st.status === "waiting") return;
+    clearPushSelfTestTimer();
+    const unsupported = notifPushUnsupportedReason();
+    if (unsupported) return pushSelfTestSet("failed", unsupported);
+    // The self-test is a user action inside the app, so it is a legitimate
+    // place to ask - the same gate enableNotifPush uses, stated the same way.
+    // A member who has never granted permission gets the prompt here and a
+    // notification immediately after, which is the clearest possible version
+    // of what they just agreed to.
+    if (currentPushPermission() !== "granted") {
+      const gate = pushAskGateReason({ userAction: true });
+      if (gate) return pushSelfTestSet("failed", gate);
+      let perm = null;
+      try { perm = await Notification.requestPermission(); } catch (e) { perm = null; }
+      notePushPermission("self_test");
+      if (perm !== "granted") return pushSelfTestSet("failed", "לא אושרה הרשאת התראות");
+    }
+    const id = "st" + Date.now() + Math.random().toString(36).slice(2, 6);
+    st.id = id;
+    pushSelfTestSet("sending", "");
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const worker = reg.active || navigator.serviceWorker.controller;
+      if (!worker) return pushSelfTestSet("failed", "אין עובד שירות פעיל במכשיר הזה. נסו לסגור ולפתוח את האפליקציה.");
+      worker.postMessage({ type: "PUSH_SELF_TEST", id: id });
+    } catch (err) {
+      return pushSelfTestSet("failed", "לא ניתן היה לשלוח התראת בדיקה. נסו שוב.");
+    }
+    pushSelfTestSet("waiting", "");
+    // NOT RECEIVED IS AN ANSWER, and it is the answer the member came for.
+    // A test that hangs on a spinner tells them nothing; a test that says
+    // "nothing arrived" after eight seconds tells them exactly what they
+    // suspected, and writes the row that makes it countable across the club.
+    pushSelfTestTimer = setTimeout(() => {
+      pushSelfTestTimer = null;
+      // A session that ended while the test was in flight writes nothing. The
+      // row would carry a null user_id (the insert policy allows one), and
+      // "somebody, once, did not get a notification" is not a measurement.
+      if (!state.user) return;
+      if (state.notif.selfTest.id !== id || state.notif.selfTest.status !== "waiting") return;
+      track(A.PUSH_SELF_TEST, { result: "not_received" });
+      pushSelfTestSet("not_received", "");
+    }, PUSH_SELF_TEST_TIMEOUT_MS);
+  }
+  // sw.js posts this back the moment showNotification() resolves, reaching
+  // here through app.js's serviceWorker "message" listener - the same
+  // page-decides split PUSH_NOTIFICATION_CLICK already uses, and the reason
+  // the worker does not write the row itself: a service worker has no
+  // Supabase client and deliberately cannot read cloud-config.js (see sw.js's
+  // own note on why importScripts there is not worth it). The RECEIPT is the
+  // worker's; the INSERT is analyticsTrack's, the one existing writer of
+  // public.analytics_events, on the page where the session already lives.
+  //
+  // The id check is what makes a late receipt from an abandoned run unable to
+  // resolve a newer one, or to write a second row after the timeout already
+  // wrote "not_received".
+  function communityHandlePushSelfTestReceipt(id) {
+    const st = state.notif.selfTest;
+    if (!state.user) return;
+    if (!id || st.id !== id || st.status !== "waiting") return;
+    clearPushSelfTestTimer();
+    track(A.PUSH_SELF_TEST, { result: "received" });
+    pushSelfTestSet("received", "");
+  }
+
   // Explicit "turn off on this device" control (renderNotifPrefsPanel).
   // Revoking sets revoked_at rather than deleting the row, matching the
   // existing partial index `where revoked_at is null`.
@@ -739,6 +948,22 @@
     // the centre already marks every row it showed as seen, so read_at is
     // false for everything by the time a member taps one.
     track(A.NOTIFICATION_OPENED, { notification_id: id, type: row.type || null, target: target.tab || null, was_unread: !!row._wasUnread });
+    // The streak_risk_nudges module's one event, and the one place in this
+    // change where a second row is written for a single tap on purpose.
+    //
+    // streak_risk_nudges is a scheduled server job (notif_streak_at_risk,
+    // 202609100002) whose entire client footprint is a notification of one
+    // type. notification_opened above already records that tap, but it
+    // belongs to the `notifications` module in the event-to-module map, so
+    // without this line the nudge module stays exactly as unmeasurable as it
+    // was - the tap would be counted, just never against the thing that
+    // caused it. Two modules, two rows, and per-module unique_users stays
+    // correct for both; the totals in query 2 are per module, not a sum.
+    //
+    // It does NOT count for WCAM. notification_opened fires on the same tap
+    // and already counts that member once; counting again would change
+    // nothing except the number of ways one action can appear.
+    if (row.type === "streak_at_risk") track(A.STREAK_NUDGE_OPENED, { was_unread: !!row._wasUnread });
     await markNotifRead(id);
     closeNotifCenter();
     navigateToNotifTarget(target);
@@ -992,9 +1217,54 @@
       <div style="color:var(--steel);font-size:12px;line-height:1.6;margin-bottom:8px;">${introHtml}</div>
       ${deviceStatusHtml}
       <div class="log-list">${rows}</div>
+      ${renderPushSelfTestPanel()}
     </div>`;
   }
 
+  // Rendered under the preference rows rather than beside the push button on
+  // each of them: a PushSubscription is per device, so "does this phone get
+  // notifications" is one question asked once, exactly like the
+  // turn-off-on-this-device control above it.
+  //
+  // Only while the push module is on. With push switched off club-wide there
+  // is nothing to test and offering a test would contradict the panel, which
+  // omits the push option entirely in that state.
+  function renderPushSelfTestPanel() {
+    if (!notifPushEnabled()) return "";
+    const st = state.notif.selfTest;
+    const busy = st.status === "sending" || st.status === "waiting";
+    // The result line. Three settled answers and one in-flight, each saying
+    // what it means rather than only what happened - "not received" is the
+    // one a member actually arrives here with, so it is the one that carries
+    // the next step.
+    let resultHtml = "";
+    if (st.status === "received") {
+      resultHtml = `<div role="status" style="color:var(--green);font-size:12px;margin-top:6px;">התראה התקבלה במכשיר הזה.</div>`;
+    } else if (st.status === "not_received") {
+      resultHtml = `<div role="status" style="color:var(--steel);font-size:12px;margin-top:6px;">לא התקבלה התראה. בדקו שהתראות מהאפליקציה מאושרות בהגדרות המכשיר, ושהאפליקציה פתוחה מהמסך הבית ולא מהדפדפן.</div>`;
+    } else if (st.status === "failed") {
+      resultHtml = `<div role="alert" style="color:var(--steel);font-size:12px;margin-top:6px;">${esc(st.reason || "לא ניתן היה לשלוח התראת בדיקה.")}</div>`;
+    } else if (busy) {
+      resultHtml = `<div role="status" style="color:var(--steel);font-size:12px;margin-top:6px;">ממתינים להתראה…</div>`;
+    }
+    return `<div class="chart-card" style="margin-top:10px;" data-push-self-test="${esc(st.status)}">
+      <div style="font-weight:800;font-size:13px;">בדיקת התראות במכשיר הזה</div>
+      <div style="color:var(--steel);font-size:12px;line-height:1.6;margin-top:4px;">שליחת התראת בדיקה למכשיר הזה בלבד. הבדיקה מוודאת שההרשאה ניתנה ושהאפליקציה יכולה להציג התראה — היא לא בודקת התראות שנשלחות מהשרת.</div>
+      <div class="chip-row" style="margin-top:8px;">
+        <button type="button" class="chip-btn primary" data-community-action="notif-push-self-test"${busy ? " disabled" : ""}>${busy ? "שולח…" : "שליחת התראת בדיקה"}</button>
+      </div>
+      ${resultHtml}
+    </div>`;
+  }
+
+  window.communityHandlePushSelfTestReceipt = communityHandlePushSelfTestReceipt;
+  // Published beside notifRoute/classifyNotification/notifResolveTarget for
+  // the same reason those are: they are pure answers about the current
+  // environment with no side effect, and the permission gate in particular is
+  // a rule that has to be assertable from outside the scope it lives in.
+  window.communityDisplayMode = communityDisplayMode;
+  window.communityPlatformBucket = communityPlatformBucket;
+  window.pushAskGateReason = pushAskGateReason;
   window.notifRoute = notifRoute;
   window.classifyNotification = classifyNotification;
   window.notifResolveTarget = resolveNotifTarget;
