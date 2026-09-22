@@ -46,6 +46,15 @@ select * from no_plan();
 -- =====================================================================
 select tests.clear_auth();
 
+-- THIS FILE IS ABOUT THE RANKED ORDER, so it asks for it (202609220003).
+-- feed_page() has had two orders since then and the club default is
+-- chronological: a dated page would answer every feed_score assertion below
+-- with a tier. The order is a club setting in club_features.config, written
+-- here as the bootstrap superuser rather than through
+-- admin_set_club_feature() so the fixture leaves no admin_actions row behind.
+update public.club_features set config = config || '{"order": "ranked"}'::jsonb
+ where module_key = 'feed';
+
 -- rls_helpers' invite_redemptions rows fire the POST_NEW_MEMBER trigger
 -- (202608290014). Those posts are authorless, published at now() and carry
 -- gen_random_uuid() ids, so leaving them in would make a pinned feed order
