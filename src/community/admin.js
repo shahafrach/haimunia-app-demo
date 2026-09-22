@@ -1988,6 +1988,44 @@
     setMessage("הגדרת המודול נשמרה");
     rerender();
   }
+  // 202609220002. The thresholds behind a switch, through the SAME RPC the
+  // switch itself uses - admin_set_club_feature(key, enabled, config) has
+  // taken a config argument since 202609010012 and nothing had ever sent one.
+  //
+  // `enabled` is re-sent unchanged from what the client holds, because that
+  // RPC upserts the whole row: omitting it would silently reset the module to
+  // its default. NOT optimistic, unlike the toggle above - a threshold is a
+  // number an admin will read back off the screen to check, so it is shown
+  // only once the server has taken it.
+  //
+  // AN EMPTY FIELD REMOVES THE KEY rather than writing 0. That is what makes
+  // "clear it to go back to the default" true: club_feature_number() falls
+  // back to its own default for an absent key, and a written 0 would be a
+  // real, clamped, very different number.
+  async function saveClubFeatureConfig(key) {
+    const def = CLUB_MODULE_TOGGLES.concat(COACH_MODULE_TOGGLES).find((m) => m.key === key);
+    if (!state.user || !def || !def.settings || state.club.moduleBusy || state.club.configBusy) return;
+    const config = {};
+    for (const sett of def.settings) {
+      const el = document.querySelector(`[data-club-feature-setting="${key}"][data-setting-key="${sett.id}"]`);
+      const raw = el ? String(el.value).trim() : "";
+      if (raw === "") continue;
+      const n = Number(raw);
+      if (!Number.isFinite(n)) continue;
+      config[sett.id] = Math.round(n);
+    }
+    const prev = state.club.features[key] || { enabled: true, config: {} };
+    state.club.configBusy = key;
+    rerender();
+    const { error } = await mgmtDb().rpc("admin_set_club_feature", {
+      p_module_key: key, p_enabled: !!prev.enabled, p_config: config,
+    });
+    state.club.configBusy = null;
+    if (error) { setMessage("לא ניתן היה לשמור את הערכים"); return rerender(); }
+    state.club.features[key] = { enabled: !!prev.enabled, config };
+    setMessage("הערכים נשמרו");
+    rerender();
+  }
 
   // COMM-152/153. The moderation queue. Visible to a community.comment.moderate
   // holder or a real admin; mod_queue() enforces both and is the only path
@@ -3168,6 +3206,54 @@
     const chip = (text, color) => `<span style="font-size:10px;line-height:1.6;color:${color};border:1px solid ${color};border-radius:999px;padding:0 6px;white-space:nowrap;">${esc(text)}</span>`;
     return `${m.planned ? chip("בפיתוח", "var(--brass)") : ""}${chip(m.clientOnly ? "בתצוגה בלבד" : "נאכף בשרת", "var(--steel)")}`;
   }
+  // 202609220002. THE FIRST TWO MODULES WITH NUMBERS BEHIND THE SWITCH.
+  //
+  // club_features.config has existed since 202609010012 and its own comment
+  // said "none does today" about modules needing sub-structure. coach_tasks
+  // and onboarding_challenge do: their rules are thresholds a club retunes
+  // (welcome by day 7? day 5? a goal of 8 sessions or 12?), and a migration
+  // per retune is not a thing a gym can do.
+  //
+  // RENDERED OUTSIDE THE <label>, not inside it. The row is a label wrapping
+  // its own checkbox; a second form control inside the same label is invalid
+  // HTML and one browser quirk away from a number field that toggles the
+  // module when you click it.
+  //
+  // COLLAPSED, because seven number fields under one switch turn a list of
+  // twenty modules into a form nobody reads. Same reasoning the panel's own
+  // .manage-area disclosures use.
+  //
+  // THE SERVER IS THE AUTHORITY ON THE RANGE. min/max here match the clamps
+  // club_feature_number() applies in Postgres, and the server clamps whatever
+  // arrives regardless - these attributes are a keyboard convenience, not the
+  // validation.
+  function clubModuleSettingsHtml(m, anyBusy) {
+    if (!m.settings || !m.settings.length) return "";
+    const row = state.club.features[m.key] || { enabled: true, config: {} };
+    const cfg = row.config || {};
+    const busy = state.club.configBusy === m.key;
+    const fields = m.settings.map((sett) => {
+      // The DEFAULT is shown as the placeholder rather than pre-filled into
+      // the value, so an admin can tell "nobody has set this, the shipped
+      // number applies" from "somebody chose exactly the shipped number".
+      // Clearing a field is how you go back to the default.
+      const v = Object.prototype.hasOwnProperty.call(cfg, sett.id) && cfg[sett.id] !== null ? String(cfg[sett.id]) : "";
+      return `<label class="field" style="margin:0;">
+        <span class="field-label" style="font-size:11.5px;">${esc(sett.label)}</span>
+        <input class="text-input" type="number" inputmode="numeric" dir="ltr"
+               min="${esc(String(sett.min))}" max="${esc(String(sett.max))}"
+               placeholder="${esc(String(sett.def))}" value="${esc(v)}"
+               data-club-feature-setting="${esc(m.key)}" data-setting-key="${esc(sett.id)}"${anyBusy ? " disabled" : ""}/>
+      </label>`;
+    }).join("");
+    const detailsId = `clubModuleSettings-${m.key}`;
+    return `<details class="club-module-settings" id="${detailsId}" data-club-feature-settings="${esc(m.key)}"${state.admin.openAreas[detailsId] ? " open" : ""} style="margin:-4px 0 8px;padding:0 4px;">
+      <summary style="cursor:pointer;color:var(--steel);font-size:12px;padding:4px 0;">כיוונון הערכים</summary>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin:6px 0;">${fields}</div>
+      <div style="color:var(--steel);font-size:11.5px;line-height:1.6;margin-bottom:6px;">${bidiText("שדה ריק = ערך ברירת המחדל שמופיע בו. ערך מחוץ לטווח מוחזר לגבול הקרוב בשרת.")}</div>
+      <button class="chip-btn" data-community-action="save-club-feature-config" data-key="${esc(m.key)}"${anyBusy ? " disabled" : ""}>${busy ? "שומר…" : "שמירת הערכים"}</button>
+    </details>`;
+  }
   function clubModuleRow(m, anyBusy) {
     const row = state.club.features[m.key] || { enabled: true, config: {} };
     const busy = state.club.moduleBusy === m.key;
@@ -3183,11 +3269,11 @@
         ${m.desc ? `<span id="${descId}" style="color:var(--steel);font-size:11.5px;line-height:1.5;">${bidiText(m.desc)}</span>` : ""}
       </span>
       <input type="checkbox" data-club-feature="${m.key}"${row.enabled ? " checked" : ""}${anyBusy ? " disabled" : ""} aria-label="${esc(m.label)}"${descId ? ` aria-describedby="${descId}"` : ""}/>
-    </label>`;
+    </label>${clubModuleSettingsHtml(m, anyBusy)}`;
   }
   function renderClubModulesPanel() {
     if (!(hasPerm(PERM.CLUB_MANAGE_MODULES) || isAdmin())) return "";
-    const anyBusy = !!state.club.moduleBusy;
+    const anyBusy = !!(state.club.moduleBusy || state.club.configBusy);
     // Which rows are server-enforced and which only hide a control is now
     // stated on each row by clubModuleMarkersHtml() - see its comment for
     // why that stopped being a sentence in the group blurb below.

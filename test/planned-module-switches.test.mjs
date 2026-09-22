@@ -43,10 +43,8 @@ const seedSql = fs.readFileSync(new URL("202609190002_seven_switches_before_thei
 // derived, because "it is in one of the two arrays" would pass if a
 // later edit moved a coach tool into the members' content list.
 const PLANNED = [
-  { key: "onboarding_challenge", group: "CLUB_MODULE_TOGGLES" },
   { key: "benchmarks", group: "CLUB_MODULE_TOGGLES" },
   { key: "gym_display", group: "CLUB_MODULE_TOGGLES" },
-  { key: "coach_tasks", group: "COACH_MODULE_TOGGLES" },
   { key: "owner_report", group: "COACH_MODULE_TOGGLES" },
   { key: "arbox_attendance", group: "COACH_MODULE_TOGGLES" },
 ];
@@ -60,8 +58,27 @@ const PLANNED_KEYS = PLANNED.map((p) => p.key);
 // hypothetical and starts being something members see. So the promise is kept
 // in both directions: PLANNED asserts no gate and a בפיתוח marker, BUILT
 // asserts a real gate and no marker.
+//
+// `clientOnly` IS PART OF THE HANDOVER, not a constant. 202609190002 set it
+// on all seven and said why: there was no RLS clause behind any of them yet,
+// so the panel must not claim server enforcement, and "whichever of the two a
+// feature turns out to need, its own branch sets it then". Two branches have
+// now answered that question in opposite directions, so BUILT carries the
+// answer per row rather than asserting one of them for everybody:
+//
+//   strength_percentages  a display hide in app.js, no policy anywhere -> true
+//   coach_tasks           coach_tasks' own SELECT and UPDATE policies carry
+//                         club_feature_enabled('coach_tasks') -> false
+//   onboarding_challenge  onboarding_challenge_offers' SELECT policy carries
+//                         it, and both RPCs refuse while it is off -> false
+//
+// A blanket assertion here would have forced the two 202609220002 keys to
+// keep claiming "בתצוגה בלבד" about a key Postgres really does enforce, which
+// is the same class of lie as leaving בפיתוח on a shipped feature.
 const BUILT = [
-  { key: "strength_percentages", group: "CLUB_MODULE_TOGGLES" },
+  { key: "strength_percentages", group: "CLUB_MODULE_TOGGLES", clientOnly: true },
+  { key: "onboarding_challenge", group: "CLUB_MODULE_TOGGLES", clientOnly: false, migration: "202609220002" },
+  { key: "coach_tasks", group: "COACH_MODULE_TOGGLES", clientOnly: false, migration: "202609220002" },
 ];
 const BUILT_KEYS = BUILT.map((b) => b.key);
 // Everything 202609190002 seeded, which is what the migration half checks:
@@ -101,6 +118,14 @@ function gateSites(key) {
 // uses and for the same reason: notifications.js's NOTIF_PREF_TYPES shares
 // this row shape and one of these words, and a bare indexOf over the whole
 // layer is exactly the mistake that gets wrong.
+// A MODULE ROW, and nothing that merely looks like one. This was a bare
+// `/\{ key: "([a-z0-9_]+)"/g` over the registry text until 202609220002 gave
+// two modules a `settings:` array whose entries have the same shape one
+// nesting level in - at which point every threshold name was reported as an
+// undeclared module key. The entries were renamed to `id`, and this regex was
+// anchored to the four-space indentation a module row actually has, so the
+// next nested list cannot make the same mistake twice.
+const MODULE_ROW_KEY = /^ {4}\{ key: "([a-z0-9_]+)"/gm;
 function registry(name) {
   const at = cloudJs.indexOf(`const ${name} = [`);
   assert.ok(at > -1, `${name} is still a named registry`);
@@ -150,17 +175,37 @@ test("each planned key is marked both planned and client-only, because it enforc
   }
 });
 
-test("a key whose feature has shipped carries no planned marker, and still claims no server enforcement", () => {
-  for (const key of BUILT_KEYS) {
-    const row = rowFor(key);
+test("a key whose feature has shipped carries no planned marker, and claims exactly the enforcement it has", () => {
+  for (const b of BUILT) {
+    const row = rowFor(b.key);
     assert.ok(!/planned/.test(row),
-      `${key} has a gate now - planned must be off the row, or the panel says בפיתוח about a surface members can see`);
-    // Shipping a feature is not the same as enforcing it server-side. The
-    // percentage chips are a display hide in app.js with no RLS clause behind
-    // the key, so this row stays clientOnly; the day a definer function reads
-    // it, that is a deliberate change to this line and to this assertion.
-    assert.match(row, /clientOnly: true/,
-      `${key} is gated in the client only - it must not start claiming נאכף בשרת`);
+      `${b.key} has a gate now - planned must be off the row, or the panel says בפיתוח about a surface members can see`);
+    if (b.clientOnly) {
+      assert.match(row, /clientOnly: true/,
+        `${b.key} is gated in the client only - it must not start claiming נאכף בשרת`);
+    } else {
+      assert.ok(!/clientOnly/.test(row),
+        `${b.key} IS enforced by a policy in ${b.migration} - leaving clientOnly on the row tells an admin the opposite`);
+    }
+  }
+});
+
+test("a server-enforced key really does have a policy behind it, in the migration that claims one", () => {
+  // The other half of dropping clientOnly. Without this, taking the marker
+  // off would be enough to satisfy this file, and a row could claim "נאכף
+  // בשרת" over nothing - which is the same failure shape as a planned marker
+  // outliving its feature, one column over.
+  //
+  // Read out of the migration text rather than out of a live database,
+  // because `supabase test db` needs Docker and this suite is jsdom. What a
+  // source read CAN establish is that the policy naming the key exists and
+  // names it; supabase/tests/0118 and 0119 are what prove it bites.
+  for (const b of BUILT.filter((x) => !x.clientOnly)) {
+    const sql = fs.readFileSync(new URL(`${b.migration}_coach_tasks_and_the_onboarding_challenge.sql`, MIGRATIONS_DIR), "utf8");
+    const policies = sql.split("create policy").slice(1)
+      .filter((chunk) => chunk.slice(0, chunk.indexOf(";")).includes(`club_feature_enabled('${b.key}')`));
+    assert.ok(policies.length > 0,
+      `${b.key} has no clientOnly marker, so some RLS policy in ${b.migration} must gate on club_feature_enabled('${b.key}')`);
   }
 });
 
@@ -259,7 +304,7 @@ test("the gate readers are only ever called with a literal key, so the scan cann
 
 test("no planned key collides with an existing module", () => {
   const existing = (registry("CLUB_MODULE_TOGGLES") + registry("COACH_MODULE_TOGGLES"))
-    .match(/\{ key: "([a-z0-9_]+)"/g).map((m) => m.slice(8, -1));
+    .match(MODULE_ROW_KEY).map((m) => /"([a-z0-9_]+)"/.exec(m)[1]);
   assert.equal(new Set(existing).size, existing.length, "no module key is declared twice");
   for (const key of SEEDED_KEYS) assert.ok(existing.includes(key), `${key} is still declared`);
   // coach_tasks next to the long-standing coach_tools is one typo away from
@@ -304,7 +349,7 @@ test("every module key the panel offers has a club_features row seeded by some m
     .join("\n");
   assert.ok(inserts.length > 0, "at least one migration seeds club_features");
   const declared = (registry("CLUB_MODULE_TOGGLES") + registry("COACH_MODULE_TOGGLES"))
-    .match(/\{ key: "([a-z0-9_]+)"/g).map((m) => m.slice(8, -1));
+    .match(MODULE_ROW_KEY).map((m) => /"([a-z0-9_]+)"/.exec(m)[1]);
   const missing = declared.filter((k) => !inserts.includes(`'${k}'`));
   assert.deepEqual(missing, [],
     `these keys have a switch in the panel and no row for it to write: ${missing.join(", ")}`);
@@ -362,19 +407,24 @@ test("each planned row says in Hebrew that it is not built yet, and that it is n
   }
 });
 
-test("a shipped key's row drops בפיתוח and says only that it is a display hide", async () => {
+test("a shipped key's row drops בפיתוח and states the enforcement it actually has", async () => {
   const window = await bootCommunity(seeded(), { syncEnabled: false });
   await openModuleSettings(window);
-  for (const { key } of BUILT) {
-    const row = window.document.querySelector(`[data-club-feature="${key}"]`).closest("label");
+  for (const b of BUILT) {
+    const row = window.document.querySelector(`[data-club-feature="${b.key}"]`).closest("label");
     assert.ok(!/בפיתוח/.test(row.textContent),
-      `${key} exists now - an admin reading בפיתוח here would not switch on a feature their members can use`);
-    assert.match(row.textContent, /בתצוגה בלבד/, `${key} is a client-side hide and its row still says so`);
-    assert.ok(!/נאכף בשרת/.test(row.textContent), `${key} has no server gate behind it`);
+      `${b.key} exists now - an admin reading בפיתוח here would not switch on a feature their members can use`);
+    if (b.clientOnly) {
+      assert.match(row.textContent, /בתצוגה בלבד/, `${b.key} is a client-side hide and its row still says so`);
+      assert.ok(!/נאכף בשרת/.test(row.textContent), `${b.key} has no server gate behind it`);
+    } else {
+      assert.match(row.textContent, /נאכף בשרת/, `${b.key} is gated by a real RLS predicate and the row must say so`);
+      assert.ok(!/בתצוגה בלבד/.test(row.textContent), `${b.key} is more than a screen hide and must stop claiming otherwise`);
+    }
     // Still off out of 202609190002, and still the admin's decision to make.
-    const box = window.document.querySelector(`[data-club-feature="${key}"]`);
-    assert.equal(box.checked, false, `${key} ships off and waits for the club`);
-    assert.equal(box.disabled, false, `${key} is switchable`);
+    const box = window.document.querySelector(`[data-club-feature="${b.key}"]`);
+    assert.equal(box.checked, false, `${b.key} ships off and waits for the club`);
+    assert.equal(box.disabled, false, `${b.key} is switchable`);
   }
 });
 

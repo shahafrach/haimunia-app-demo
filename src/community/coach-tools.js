@@ -1242,7 +1242,136 @@
     return `<div class="ach-section" style="margin-top:18px;">${sectionHead("var(--red)", "מעקב מעורבות")}${body}</div>`;
   }
   function renderCoachTab() {
-    return renderCoachCelebrateSection() + renderCoachMemberOfWeekSection() + renderCoachWelcomeSection() + renderChallengesListSection() + renderCoachEngageSection() + renderCoachMonthlyRecapSection();
+    // Tasks first, deliberately. Everything else on this tab is something a
+    // coach may want to look at; this is the only part that is a list of
+    // things somebody has to do today, and burying a work queue under three
+    // browsable sections is how it stops being one.
+    return renderCoachTasksSection() + renderCoachCelebrateSection() + renderCoachMemberOfWeekSection() + renderCoachWelcomeSection() + renderChallengesListSection() + renderCoachEngageSection() + renderCoachMonthlyRecapSection();
+  }
+
+  // ---- Coach tasks (202609220002) ------------------------------------------
+  // The five rules become one list. Everything here reads
+  // coach_tasks_refresh(), which syncs and returns in one call, and every
+  // action is either the member_contact_log insert this codebase already had
+  // or the one UPDATE coach_tasks' own policy allows.
+  //
+  // THE MODULE GATE IS REAL HERE, unlike most sections on this tab. The RPC
+  // returns nothing and the table's RLS returns nothing while coach_tasks is
+  // off, so this `return ""` hides an empty shell rather than being the only
+  // thing standing between a coach and the data.
+  const COACH_TASK_RULES = {
+    welcome:              { label: "קבלת פנים", accent: "var(--green)" },
+    first_class_followup: { label: "אחרי האימון הראשון", accent: "var(--teal)" },
+    low_attendance:       { label: "כמעט לא הגיע/ה", accent: "var(--brass)" },
+    day_60_checkin:       { label: "שיחת יום 60", accent: "var(--teal)" },
+    no_contact_30:        { label: "בלי קשר חודש", accent: "var(--red)" },
+  };
+  function coachTaskRule(key) { return COACH_TASK_RULES[key] || { label: key || "", accent: "var(--steel)" }; }
+  async function loadCoachTasks() {
+    if (!state.user || !isStaff() || !isModuleEnabled("coach_tasks")) return;
+    state.coach.tasks.loading = true;
+    rerender();
+    const { data, error } = await client.rpc("coach_tasks_refresh", { p_include_closed: false, p_limit: 100 });
+    state.coach.tasks.loading = false;
+    state.coach.tasks.loaded = true;
+    // A FAILED READ IS NOT AN EMPTY LIST - the same rule
+    // renderStaffWeekStrip() states for the week. On failure the previous
+    // answer is left alone and the section says so, because "no tasks today"
+    // is exactly the wrong thing to tell a coach whose list did not load.
+    state.coach.tasks.error = !!error;
+    if (!error) state.coach.tasks.items = data || [];
+    rerender();
+  }
+  // Closing a task by making contact, which is the ordinary path: one
+  // member_contact_log row, written through the SAME insert
+  // coachMarkContacted() already used, and the trigger closes every open task
+  // for that member. Nothing here writes coach_tasks.
+  async function coachTaskContact(taskId) {
+    const task = (state.coach.tasks.items || []).find((t) => t.id === taskId);
+    if (!task || state.coach.tasks.busy) return;
+    state.coach.tasks.busy = taskId;
+    rerender();
+    const note = String((state.coach.tasks.contactDrafts || {})[task.user_id] || "").trim().slice(0, 500);
+    const { error } = await client.from("member_contact_log").insert({ user_id: task.user_id, note });
+    state.coach.tasks.busy = null;
+    if (error) { setMessage(failText("לא ניתן היה לבצע את הפעולה. נסו שוב.", error)); return rerender(); }
+    delete state.coach.tasks.contactDrafts[task.user_id];
+    setMessage("סומן כנוצר קשר");
+    // Re-read rather than splice: one contact closes every open task for that
+    // member, and guessing which ones from here would be a second copy of the
+    // close rule that lives in the database.
+    loadCoachTasks();
+  }
+  // Closing a task WITHOUT a contact - "this one does not apply". The
+  // direct UPDATE coach_tasks_staff_close permits; the guard trigger stamps
+  // closed_by and refuses anything that is not open -> closed.
+  async function coachTaskDismiss(taskId) {
+    if (!taskId || state.coach.tasks.busy) return;
+    state.coach.tasks.busy = taskId;
+    rerender();
+    const { error } = await client.from("coach_tasks").update({ closed_at: new Date().toISOString() }).eq("id", taskId);
+    state.coach.tasks.busy = null;
+    if (error) { setMessage(failText("לא ניתן היה לבצע את הפעולה. נסו שוב.", error)); return rerender(); }
+    state.coach.tasks.items = state.coach.tasks.items.filter((t) => t.id !== taskId);
+    setMessage("המשימה נסגרה");
+    rerender();
+  }
+  function renderCoachTaskRow(t) {
+    const rule = coachTaskRule(t.rule_key);
+    const busy = state.coach.tasks.busy === t.id;
+    const anyBusy = !!state.coach.tasks.busy;
+    const days = Number(t.days_since_join);
+    // Singular branches on both, because "לפני 1 ימים" is the defect this
+    // file has now been through three times (renderCoachWelcomeRow,
+    // renderCoachNewMembersSection, memberOfWeekCandidateDetailText).
+    const joined = !Number.isFinite(days) ? "" : days === 0 ? "הצטרף/ה היום" : days === 1 ? "הצטרף/ה אתמול" : `במועדון ${days} ימים`;
+    const sessions = Number(t.sessions_logged) || 0;
+    // Says what the number IS. A count of workouts logged in the app is not a
+    // count of classes attended, and a coach must not read it as one - the
+    // same sentence renderCoachNewMembersSection() carries for the same
+    // number.
+    const trained = sessions === 1 ? "אימון אחד באפליקציה" : sessions ? `${sessions} אימונים באפליקציה` : "לא רשמו אימון באפליקציה";
+    const owner = t.assigned_coach_name ? `אחריות: ${t.assigned_coach_name}` : "בלי מאמן/ת אחראי/ת";
+    const draft = String((state.coach.tasks.contactDrafts || {})[t.user_id] || "");
+    return `<div class="log-row" data-coach-task="${esc(t.id)}" style="align-items:flex-start;flex-direction:column;gap:6px;">
+      <div class="flex gap-6" style="align-items:center;flex-wrap:wrap;">
+        <span class="tag" style="border-color:${rule.accent};color:${rule.accent};">${esc(rule.label)}</span>
+        ${t.overdue ? `<span class="tag tag-brass">באיחור</span>` : ""}
+        <button class="link-btn" data-community-action="view-profile" data-id="${esc(t.user_id)}" style="padding:0;font-weight:800;color:inherit;">${nameHtml(t.display_name, t.handle)}</button>
+      </div>
+      <span style="color:var(--steel);font-size:12px;">${bidiText([joined, trained, owner].filter(Boolean).join(" · "))}</span>
+      <span style="color:var(--steel);font-size:12px;">${bidiText(`יעד: ${t.due_on || ""}`)}</span>
+      <input class="text-input" placeholder="הערה קצרה לגבי הקשר (אופציונלי)" data-coach-task-note="${esc(t.user_id)}" value="${esc(draft)}"/>
+      <div class="chip-row">
+        <button class="chip-btn primary" data-community-action="coach-task-contact" data-id="${esc(t.id)}"${anyBusy ? " disabled" : ""}>${busy ? "שומר…" : "סימון כנוצר קשר"}</button>
+        <button class="chip-btn" data-community-action="coach-task-dismiss" data-id="${esc(t.id)}"${anyBusy ? " disabled" : ""}>לא רלוונטי</button>
+      </div>
+    </div>`;
+  }
+  function renderCoachTasksSection() {
+    if (!isModuleEnabled("coach_tasks")) return "";
+    const s = state.coach.tasks;
+    const rows = (s.items || []).filter((t) => !t || !isBlockedUser(t.user_id));
+    const body = (s.loading && !s.loaded)
+      ? `<div aria-busy="true">${`<div class="chart-card" style="height:56px;background:var(--border);opacity:.35;margin-bottom:10px;"></div>`.repeat(2)}</div>`
+      : s.error
+      ? `<div class="empty" role="alert">לא ניתן היה לטעון את המשימות.<div class="chip-row" style="justify-content:center;margin-top:6px;"><button class="chip-btn" data-community-action="coach-tasks-retry">ניסיון חוזר</button></div></div>`
+      : rows.length
+      ? `<div class="log-list">${rows.map(renderCoachTaskRow).join("")}</div>`
+      : emptyStateHtml({
+        key: "coach-tasks", icon: "check",
+        headline: "אין משימות פתוחות",
+        body: "הרשימה נבנית לבד מתוך מי שהצטרף, מי שהתאמן ומי שכבר דיברו איתו.",
+        when: "כשמישהו חדש יצטרף, יגיע לאימון ראשון או ייעלם לחודש - המשימה תופיע כאן.",
+      });
+    const overdue = rows.filter((t) => t.overdue).length;
+    const count = rows.length
+      ? `<span style="color:var(--steel);font-size:12px;">${esc(overdue ? `${rows.length} משימות, ${overdue} באיחור` : `${rows.length} משימות`)}</span>`
+      : "";
+    return `<div class="ach-section" style="margin-top:18px;" data-coach-tasks-section="1">${sectionHead(overdue ? "var(--red)" : "var(--teal)", "משימות להיום", true)}
+      <div class="flex" style="justify-content:space-between;align-items:baseline;margin:-2px 0 8px;">
+        <span style="color:var(--steel);font-size:12px;line-height:1.6;">${bidiText("נסגרת לבד ברגע שנרשם קשר עם החבר/ה.")}</span>${count}
+      </div>${body}</div>`;
   }
 
   // The permanent sub-note under the section head. Not conditional on

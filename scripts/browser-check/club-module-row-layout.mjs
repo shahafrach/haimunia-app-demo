@@ -41,7 +41,20 @@ function check(label, ok, detail = "") {
 // and 'directory', a client-side hide) are read further down as the
 // within-list control for the markers, but they need no fixture row: a key
 // with no club_features row defaults to enabled, which is what they are.
-const PLANNED = ["onboarding_challenge", "benchmarks", "strength_percentages", "gym_display", "coach_tasks", "owner_report", "arbox_attendance"];
+//
+// THE GEOMETRY IS MEASURED FOR ALL SEVEN, still, and that is deliberate:
+// three of them have shipped since (strength_percentages, and since
+// 202609220002 coach_tasks and onboarding_challenge) and a shipped row is
+// exactly as capable of pushing its checkbox off the left edge as a planned
+// one. What changes with shipping is only the MARKER text, which is asserted
+// per row further down rather than over the whole list.
+const SEEDED = ["onboarding_challenge", "benchmarks", "strength_percentages", "gym_display", "coach_tasks", "owner_report", "arbox_attendance"];
+// Still carrying בפיתוח. The other three ship a feature and must not.
+const STILL_PLANNED = ["benchmarks", "gym_display", "owner_report", "arbox_attendance"];
+// 202609220002. Two rows that now also render a collapsed threshold
+// disclosure BELOW the label - a second block in the same row whose fields
+// must not overflow either.
+const WITH_SETTINGS = ["coach_tasks", "onboarding_challenge"];
 
 const target = await resolveLocalOnlyTarget();
 console.log(`Target: ${target.url} (local static server, mocked backend)`);
@@ -56,7 +69,7 @@ await installMockCloud(page, {
   invite_redemptions: [{ user_id: "admin-1", invite_id: "i1", role: "admin", redeemed_at: VERIFIED }],
   clubs: [{ id: "club-1", name: "חיימוניה" }],
   // Exactly as 202609190002 leaves them: a row each, all off.
-  club_features: PLANNED.map((module_key) => ({ club_id: "club-1", module_key, enabled: false, config: {} })),
+  club_features: SEEDED.map((module_key) => ({ club_id: "club-1", module_key, enabled: false, config: {} })),
   workout_posts: [], feed_page_rows: [], post_comments: [], reports: [], admin_actions: [],
   pins: [], posting_restrictions: [], follows: [], hidden_posts: [], notifications: [],
   notification_preferences: [],
@@ -112,13 +125,13 @@ async function measure() {
       };
     });
     return { vw, docScrollW: document.documentElement.scrollWidth, rows };
-  }, PLANNED);
+  }, SEEDED);
 }
 
 const m = await measure();
 console.log(`viewport ${m.vw}px, document scrollWidth ${m.docScrollW}px`);
 
-check("every planned module has a switch on screen", m.rows.every((r) => !r.missing),
+check("every seeded module has a switch on screen", m.rows.every((r) => !r.missing),
   m.rows.filter((r) => r.missing).map((r) => r.key).join(", ") || "all seven present");
 
 for (const r of m.rows) {
@@ -151,6 +164,57 @@ const markerText = await page.evaluate(() => {
 });
 check("a planned row states in visible text that it is not built yet", /בפיתוח/.test(markerText), markerText.slice(0, 80));
 check("and that it is not server-enforced", /בתצוגה בלבד/.test(markerText), markerText.slice(0, 80));
+
+// 202609220002. The two rows that stopped being planned must stop saying so,
+// on the real screen and not only in a source test - this is the same
+// handover the migration's own comment describes, checked where an admin
+// would actually read it.
+const shippedMarkers = await page.evaluate((keys) => Object.fromEntries(keys.map((k) => [
+  k, document.querySelector(`[data-club-feature="${k}"]`).closest("label").textContent.replace(/\s+/g, " ").trim(),
+])), WITH_SETTINGS);
+for (const key of WITH_SETTINGS) {
+  check(`${key}: the row no longer says בפיתוח`, !/בפיתוח/.test(shippedMarkers[key]), shippedMarkers[key].slice(0, 80));
+  check(`${key}: and claims the server enforcement it now has`, /נאכף בשרת/.test(shippedMarkers[key]), shippedMarkers[key].slice(0, 80));
+}
+for (const key of STILL_PLANNED) {
+  const text = await page.evaluate((k) => document.querySelector(`[data-club-feature="${k}"]`).closest("label").textContent.replace(/\s+/g, " ").trim(), key);
+  check(`${key}: still says בפיתוח, because nothing has been built behind it`, /בפיתוח/.test(text), text.slice(0, 80));
+}
+
+// The threshold fields: opened, measured, and still inside the row. A number
+// input is wider than a chip and this is the width where that matters.
+await page.evaluate((keys) => { for (const k of keys) document.getElementById(`clubModuleSettings-${k}`).open = true; }, WITH_SETTINGS);
+const settings = await page.evaluate((keys) => {
+  const vw = document.documentElement.clientWidth;
+  return {
+    vw, docScrollW: document.documentElement.scrollWidth,
+    rows: keys.map((k) => {
+      const d = document.getElementById(`clubModuleSettings-${k}`);
+      const inputs = [...d.querySelectorAll("input[type=number]")].map((i) => {
+        const r = i.getBoundingClientRect();
+        return { left: Math.round(r.left), right: Math.round(r.right), w: Math.round(r.width), h: Math.round(r.height) };
+      });
+      const box = document.querySelector(`[data-club-feature="${k}"]`).getBoundingClientRect();
+      return { key: k, inputs, boxLeft: Math.round(box.left), boxRight: Math.round(box.right) };
+    }),
+  };
+}, WITH_SETTINGS);
+for (const r of settings.rows) {
+  check(`${r.key}: the threshold fields are on screen`, r.inputs.length > 0, `${r.inputs.length} fields`);
+  check(`${r.key}: every threshold field is fully inside the viewport`,
+    r.inputs.every((i) => i.left >= 0 && i.right <= settings.vw),
+    r.inputs.map((i) => `${i.left}..${i.right}`).join(" "));
+  check(`${r.key}: and each is big enough to tap`,
+    r.inputs.every((i) => i.w >= 44 && i.h >= 28),
+    r.inputs.map((i) => `${i.w}×${i.h}`).join(" "));
+  // The switch itself must not have been pushed anywhere by the block that
+  // opened underneath it - the disclosure is a SIBLING of the label, not a
+  // child, precisely so it cannot.
+  check(`${r.key}: the switch is still inside the viewport with the fields open`,
+    r.boxLeft >= 0 && r.boxRight <= settings.vw, `x=${r.boxLeft}..${r.boxRight}`);
+}
+check("no horizontal overflow with every threshold field open",
+  settings.docScrollW <= settings.vw + 1, `scrollWidth=${settings.docScrollW}, clientWidth=${settings.vw}`);
 
 const liveMarkerText = await page.evaluate(() => {
   const label = document.querySelector('[data-club-feature="events"]').closest("label");

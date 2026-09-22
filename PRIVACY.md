@@ -188,6 +188,16 @@ the Hebrew governs for members.
 **ברשימת החברים החדשים** מוצג למאמנים גם מספר ימי האימון שרשמתם מאז
 שהצטרפתם — מספר בלבד, בלי תאריכים ובלי תוצאות.
 
+**ברשימת המשימות של המאמנים** (מודול "משימות למאמן/ת", כבוי כברירת מחדל
+ונדלק על ידי המועדון) מופיעה, לגבי מי שהצטרף לאחרונה, גם משימה אחת מסוג
+"מעקב אחרי האימון הראשון". כדי שהמשימה תהיה שימושית היא נושאת **תאריך
+יעד**, וממנו אפשר להסיק מתי היה האימון הראשון שרשמתם — זה **החריג היחיד**
+לכלל "בלי תאריכים" שלמעלה, והוא חל על יום אחד בלבד: הראשון. שאר המשימות
+נשענות על תאריך ההצטרפות, על מספר ימי אימון מצטבר ועל התאריך שבו מישהו
+מהצוות יצר איתכם קשר לאחרונה — לא על רשימת האימונים שלכם. **המשימות
+האלה גלויות לצוות בלבד** ואינן מוצגות לחבר/ה שהן עוסקות בו/בה, מאותה
+סיבה שסימון ירידה בקצב מוסתר; גם כאן אתם רשאים לבקש לדעת מה רשום לגביכם.
+
 **ימים שבהם פתחתם את האפליקציה — מדד נפרד לגמרי.** בנפרד מכל האמור
 לעיל, ולחברי קהילה בלבד, נרשם יום לכל יום שבו האפליקציה נפתחה. מכאן
 מגיעים שלושה דברים: רשימת "חברים שלא היו פעילים לאחרונה" ורשימת "חברים
@@ -579,6 +589,18 @@ you; ask your coach.
 **In the new-members list**, coaches also see the number of training days
 you have logged since joining — a count only, with no dates and no
 results.
+
+**In the coach task list** (the "coach tasks" module, off by default and
+switched on by the club) a recently joined member also gets one
+"follow up after the first class" task. For that task to be useful it
+carries a **due date**, from which the date of the first training day you
+logged can be inferred — this is the **only exception** to the "no dates"
+rule above, and it covers exactly one day: the first. Every other task is
+built from your join date, from an aggregate count of training days, and
+from when somebody on the staff last contacted you — never from a list of
+your sessions. **These tasks are visible to staff only** and are not shown
+to the member they are about, for the same reason a drop-in-pace flag is
+hidden; here too you are entitled to ask what is recorded about you.
 
 **Days you opened the app — an entirely separate measure.** Separately
 from all of the above, and for community members only, a day is recorded
