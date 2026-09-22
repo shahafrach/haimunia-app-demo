@@ -861,6 +861,39 @@
      wrapper now, for exactly the same reason - see .install-dock below. */
   #bottomNavWrap{ position:fixed; left:0; right:0; bottom:0; z-index:30; }
   .bottom-bar{ display:flex; justify-content:center; background:linear-gradient(to top, var(--bg) 70%, transparent); padding:10px 16px 8px; }
+  /* ---- The toast dock (#appToastDock) ----
+     UX review, finding 1 - THE SAVE CONFIRMATION SAT ON THE SAVE BUTTON.
+     renderToastBar() (app.js) used to emit its own
+     `position:fixed; bottom:calc(env(safe-area-inset-bottom,0px) + 84px)`
+     element. Measured at 390x844: the toast occupied y=704-760 while
+     #bottomBarBtn - the save button that had just been tapped - sits at
+     y=716-768, so document.elementFromPoint() at that button's own centre
+     returned the toast's card, not the button, for the whole five-second
+     window. Every ordinary save covered its own control and ate the next
+     tap aimed at it.
+
+     Same defect and the same structural fix as the install dock below: the
+     toast is a child of #bottomNavWrap now, so "above the bottom bar" is
+     the wrapper's own geometry instead of a hand-tuned 84px offset that
+     has to be re-tuned whenever the save bar's height, the tab bar's
+     height or the safe-area inset changes - the three things that produced
+     the 84px in the first place and the reason it was 12px short.
+
+     position:absolute, NOT an in-flow sibling the way the install dock is.
+     The dock is a one-off banner, so growing the nav by its height is
+     fine; a save toast fires on every single save, and in flow it would
+     shove the save button 56px up the screen and back down again five
+     seconds later, mid-session. bottom:100% puts the dock's bottom edge
+     exactly on the wrapper's top edge, so the clearance is exact with the
+     save bar showing, with it hidden (display:none on every tab but Add
+     and WOD), and with an install dock stacked in between.
+
+     pointer-events:none here as well as on the rail inside it: the dock's
+     box spans the full width while the card inside is centred and capped
+     at 420px, so without it the empty gutters either side of the card
+     would swallow taps aimed at the content scrolling underneath. The card
+     itself turns them back on - see renderToastBar(). */
+  #appToastDock{ position:absolute; left:0; right:0; bottom:100%; pointer-events:none; }
   /* ---- The install dock (#installBanner / #iosInstallBanner) ----
      UX AUDIT, DEFECT 1 - THE LAUNCH BLOCKER. Both banners used to be their
      own `position:fixed; bottom:0; z-index:59` elements, 163px tall on an
@@ -991,6 +1024,23 @@
      segmented treatment just below. */
   .link-btn{ color:var(--steel); font-size:13px; text-decoration:underline;
     display:inline-flex; align-items:center; min-height:36px; padding:4px 6px; }
+  /* UX review, finding 4. The 36px floor above is right for the INLINE
+     idiom it was written for - two or three links on one line, one of them
+     inside a .header cell - and wrong for a .link-btn that is alone on its
+     own line and is the only way to perform its action. Four of those in
+     the training log measured 36px tall: the day-summary row and the
+     ladder/superset entry point on Add, the superset partner picker inside
+     the ladder panel, and "שמירת הערה", which is a SAVE.
+
+     44px is this app's own tap-target floor (.tabbtn, .stepper-btn,
+     .cal-nav-btn, .icon-btn all declare it) and four other .link-btn call
+     sites already carry `style="min-height:44px"` inline to reach it. This
+     is that same value with one definition instead of a fifth copy, and it
+     is opt-in per call site precisely so it does not reach the inline rows
+     the comment above is protecting. Only min-height - font-size, the
+     underline and the padding are untouched, so the link looks exactly as
+     it did and only its transparent hit area grows. */
+  .link-btn--tap{ min-height:44px; }
   /* UX audit, defect 3 - THE SETTINGS ROWS ARE CONTROLS, NOT LINKS.
      app.js's renderThemeRow()/renderTextScaleRow() emit each option as an
      11px underlined .link-btn and mark only the SELECTED one with an
@@ -2320,11 +2370,29 @@
      last rule forever. */
 
   /* Taller photo, lighter through the middle - kept Add-specific: the
-     56svh height is what that screen's own mockup pass tuned, and
+     height is tuned by that screen's own mockup pass, and
      Calendar/Progress/Library/Community's shorter --scene-photo-height
      values (40svh/38svh/etc.) came from an earlier, separately-approved
-     VISUAL_QA_PROTOCOL.md pass this change isn't meant to relitigate. */
-  .scene-page--add{ --scene-photo-height: clamp(360px, 56svh, 500px); }
+     VISUAL_QA_PROTOCOL.md pass this change isn't meant to relitigate.
+
+     UX review, finding 3: this was clamp(360px, 56svh, 500px), which at
+     390x844 resolves to 472.6px - the tallest photo zone in the app by
+     about 100px, since every other scene sits at 38-42svh + 16px. Measured
+     on that viewport, with one set already logged for the day (the
+     ordinary state a member returns to, where the day-summary card and its
+     row sit above the picker), .exercise-select - the movement picker,
+     which is the entire point of the screen - landed at y=663-712 while
+     #bottomNavWrap starts at y=706: the control was partly behind the
+     fixed save bar on arrival, and had to be scrolled to before it could
+     be used.
+
+     46svh keeps Add the tallest scene on purpose - 388px at 844 against
+     370.5px for the base scene, so the Navy Stripe hero composition is
+     still Add's own and the other scenes are untouched - while putting the
+     picker fully clear of the bar without scrolling. The clamp floor and
+     ceiling move with it, keeping the same ratio to the svh term as
+     before. */
+  .scene-page--add{ --scene-photo-height: clamp(320px, 46svh, 440px); }
 
   /* The lighter scrim itself DOES extend to every scene, not just Add -
      the original darkened to .62 opacity by the halfway point on every
@@ -2800,6 +2868,12 @@
       </div>
     </div>
   </div>
+  <!-- The save/undo toast is painted in here by render() (app.js), not into
+       #content, so that it is positioned against this wrapper rather than
+       against the viewport. See #appToastDock in the stylesheet for the
+       measured reason. Empty - and therefore zero-height - whenever there
+       is no pending toast. -->
+  <div id="appToastDock"></div>
   <div class="bottom-bar" id="bottomBar" style="display:none;">
     <button class="save-btn" id="bottomBarBtn" data-action="save-set">
       <img src="./assets/icon-barbell.png" alt="" width="22" height="7" style="filter:brightness(0); opacity:.75;" />

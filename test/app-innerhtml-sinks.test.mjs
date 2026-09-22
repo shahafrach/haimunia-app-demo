@@ -140,9 +140,29 @@ test("the sink count is pinned, so a new sink is a deliberate decision", () => {
   //     counts are integers out of daysSinceISODate().
   //   * The eight benchmark names are WOD_LIBRARY literals in
   //     src/constants.js, not member input, and are escaped anyway.
+  //
+  // 41 -> 42 on 2026-09-22: render() now writes renderToastBar() into
+  // #appToastDock instead of concatenating it into #content, so the save/undo
+  // toast can be positioned against #bottomNavWrap rather than on top of the
+  // save button (training-log UX review, finding 1). ONE new sink and no
+  // markup that was not already reaching the DOM - the old #content write
+  // carried the same string. Checked rather than waved through:
+  //   * THE SINK LINE ITSELF INTERPOLATES NOTHING - `toastDock.innerHTML =
+  //     renderToastBar()` assigns a function's return value, so there is no
+  //     `${...}` on it for the escaping test above to check. Same shape as the
+  //     #contextCol and #benchmarkArea entries above.
+  //   * renderToastBar() composes exactly two outside values, and both are
+  //     escaped where they are interpolated: the toast label through
+  //     bidiText(), which escapes (src/shared/safe-helpers.js), and the undo
+  //     action's own label through esc(). Every label passed to showToast() is
+  //     built in app.js from literals plus movement/WOD names that have
+  //     already been through bidiText()/esc() at their call sites.
+  //   * The #content sink it came out of is unchanged in count: that line
+  //     still writes content + cloudOverlay + renderAppConfirmSheet(), so this
+  //     is +1, not a move that also removed one.
   const count = sinkLines(appJs).length;
-  assert.equal(count, 41,
-    `app.js has ${count} innerHTML/outerHTML sinks, expected 41. If you added one, verify its interpolations are escaped and update this number; if you removed one, just update it.`);
+  assert.equal(count, 42,
+    `app.js has ${count} innerHTML/outerHTML sinks, expected 42. If you added one, verify its interpolations are escaped and update this number; if you removed one, just update it.`);
 });
 
 test("esc() is a single shared definition, so there is one escaping rule and not several", () => {
