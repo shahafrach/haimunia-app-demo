@@ -2027,6 +2027,15 @@
       const el = document.querySelector(`[data-club-feature-setting="${key}"][data-setting-key="${sett.id}"]`);
       const raw = el ? String(el.value).trim() : "";
       if (raw === "") continue;
+      // 202609220003. A choice is written as the word it is, and only if it
+      // is one this build offers. The server re-checks membership and falls
+      // back to its own default for anything else (club_feature_choice), so
+      // this is the same "most rubbish never gets typed" convenience the
+      // number input's min/max is - not the validation.
+      if (sett.choices) {
+        if (sett.choices.some((c) => c.value === raw)) config[sett.id] = raw;
+        continue;
+      }
       const n = Number(raw);
       if (!Number.isFinite(n)) continue;
       config[sett.id] = Math.round(n);
@@ -3250,6 +3259,30 @@
     const cfg = row.config || {};
     const busy = state.club.configBusy === m.key;
     const fields = m.settings.map((sett) => {
+      // 202609220003. A CHOICE, not a number: one of a fixed set of words,
+      // rendered as the same <select class="text-input"> every other choice
+      // in this app uses, so it needs no CSS of its own and themes itself.
+      //
+      // NO EMPTY OPTION, and that is the one place this control departs from
+      // the number fields beside it. "Clear it to go back to the default"
+      // needs a state a text box has and a select does not; offering an
+      // extra "default (chronological)" option next to "chronological" would
+      // be two options that do the same thing, which is worse than writing
+      // the value out. So a save always states the order explicitly, and the
+      // shipped default is what the control shows a club that has never
+      // chosen - including one whose config holds a word this build does not
+      // know, which is exactly what the server falls back to as well
+      // (club_feature_choice).
+      if (sett.choices) {
+        const stored = cfg[sett.id];
+        const current = sett.choices.some((c) => c.value === stored) ? stored : sett.def;
+        const options = sett.choices.map((c) =>
+          `<option value="${esc(c.value)}"${c.value === current ? " selected" : ""}>${esc(c.label)}</option>`).join("");
+        return `<label class="field" style="margin:0;">
+          <span class="field-label" style="font-size:11.5px;">${esc(sett.label)}</span>
+          <select class="text-input" data-club-feature-setting="${esc(m.key)}" data-setting-key="${esc(sett.id)}"${anyBusy ? " disabled" : ""}>${options}</select>
+        </label>`;
+      }
       // The DEFAULT is shown as the placeholder rather than pre-filled into
       // the value, so an admin can tell "nobody has set this, the shipped
       // number applies" from "somebody chose exactly the shipped number".
@@ -3267,7 +3300,7 @@
     return `<details class="club-module-settings" id="${detailsId}" data-club-feature-settings="${esc(m.key)}"${state.admin.openAreas[detailsId] ? " open" : ""} style="margin:-4px 0 8px;padding:0 4px;">
       <summary style="cursor:pointer;color:var(--steel);font-size:12px;padding:4px 0;">כיוונון הערכים</summary>
       <div style="display:flex;flex-wrap:wrap;gap:8px;margin:6px 0;">${fields}</div>
-      <div style="color:var(--steel);font-size:11.5px;line-height:1.6;margin-bottom:6px;">${bidiText("שדה ריק = ערך ברירת המחדל שמופיע בו. ערך מחוץ לטווח מוחזר לגבול הקרוב בשרת.")}</div>
+      ${m.settings.some((sett) => !sett.choices) ? `<div style="color:var(--steel);font-size:11.5px;line-height:1.6;margin-bottom:6px;">${bidiText("שדה ריק = ערך ברירת המחדל שמופיע בו. ערך מחוץ לטווח מוחזר לגבול הקרוב בשרת.")}</div>` : ""}
       <button class="chip-btn" data-community-action="save-club-feature-config" data-key="${esc(m.key)}"${anyBusy ? " disabled" : ""}>${busy ? "שומר…" : "שמירת הערכים"}</button>
     </details>`;
   }

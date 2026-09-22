@@ -1111,7 +1111,24 @@
     { key: "events", label: "אירועים" },
     { key: "challenges", label: "אתגרים" },
     { key: "achievements", label: "הישגים ומדליות" },
-    { key: "feed", label: "פיד (כולל תגובות חיזוק)" },
+    // 202609220003. The feed row is the first switch with a CHOICE behind it
+    // rather than a threshold: not "how many", but "which of two". The two
+    // orders are two different promises - a dated stream a member can trust,
+    // or a ranked one that tries to put the best thing first - and which one
+    // a gym wants is the gym's to decide, so it is a setting rather than a
+    // deploy. Chronological is the default, and the default lives in the
+    // SERVER's reader (club_feature_choice, 202609220003): this `def` is only
+    // what the control shows a club that has never chosen, and the two must
+    // agree. Pinned posts, coach posts and announcements and today's club WOD
+    // stay above the stream in the chronological order - that is not a
+    // separate setting and is not switchable.
+    { key: "feed", label: "פיד (כולל תגובות חיזוק)",
+      settings: [
+        { id: "order", label: "סדר הפיד", def: "chronological", choices: [
+          { value: "chronological", label: "כרונולוגי - החדש למעלה" },
+          { value: "ranked", label: "מותאם אישית - לפי דירוג" },
+        ] },
+      ] },
     { key: "leaderboards", label: "טבלאות מובילים" },
     { key: "directory", label: "ספריית חברים", clientOnly: true },
     // Added 2026-09-15, on the owner's instruction that every function in the

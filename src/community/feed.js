@@ -15,6 +15,14 @@
 // back in the order it comes back. A sort in this file would be a second
 // ranking rule competing with the first.
 //
+// NEITHER IS THE ORDER, since 202609220003. The club's feed is chronological
+// by default - newest first, with pinned posts, coach posts and
+// announcements and today's club WOD held above the stream - and an admin
+// can switch it back to the ranked order from the modules panel. The setting
+// is club_features.config -> feed -> order, it is read inside feed_page(),
+// and nothing on this side knows or needs to know which order it is looking
+// at: both arrive as one page of rows in the order they belong in.
+//
 // WHAT STAYED BEHIND, deliberately: ensureFeedRealtime, realtimePostId,
 // onFeedCommentRealtime and onFeedReactionRealtime — part of the one Realtime
 // block that also serves notifications and challenges.
