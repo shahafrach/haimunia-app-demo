@@ -237,6 +237,10 @@
       // three types whose content is the member's OWN result - see
       // outwardSubjectFromPost() for why the other nine are out.
       if (OUTWARD_SHAREABLE_POST_TYPES.indexOf(post.post_type) >= 0) items += mi("outward-post", "שיתוף מחוץ לאפליקציה", post.id);
+      // 202609220005. Own workout posts only, and only while the club has
+      // the module on - postCanTagPartners() is the same three conditions
+      // post_tag_training_partners() enforces.
+      if (postCanTagPartners(post)) items += mi("post-tag-partners", "מי התאמן/ה איתי", post.id);
       items += mi("post-edit-caption", "עריכת כיתוב", post.id);
       items += mi("post-change-visibility", "שינוי נראוּת", post.id);
       items += mi("post-delete", "מחיקה", post.id, true);
@@ -323,15 +327,281 @@
     </div>`;
   }
 
+  // ---- "התאמנו יחד": training partners on a workout post (202609220005) ---
+  //
+  // The author names who was in the room; the named members are notified and
+  // any of them can take their own name off. The server is the authority on
+  // every one of those three sentences - post_tag_training_partners() is
+  // author-only and re-checks each target's allow_mentions,
+  // post_training_partners_read decides who is ever shown a tag, and
+  // post_training_partner_remove() is what the untag button calls. Nothing
+  // below is a permission check; it is all about what to draw.
+
+  // The server's own cap, restated so the sheet can stop the member at ten
+  // rather than letting the RPC raise after they have ticked eleven.
+  const TRAINING_PARTNERS_MAX = 10;
+  // Suggestions come from the classmates signal, whose own clamp is 1..20.
+  // Twelve is "everyone who was plausibly in that class" without turning the
+  // sheet into a club directory - a CrossFit class is rarely larger.
+  const TRAINING_PARTNER_SUGGEST_LIMIT = 12;
+
+  // The tags a card should print. An ABSENT entry and an EMPTY one are
+  // different answers and the difference is load-bearing: absent means this
+  // post has not been asked about yet (a page still in flight, a post just
+  // inserted optimistically) and the card prints nothing; empty means the
+  // server was asked and returned no tags the viewer may see. Collapsing the
+  // two would make every unloaded post claim it has no partners.
+  function postTrainingPartners(post) {
+    const pid = post && post.id;
+    if (!pid) return null;
+    const rows = state.posts.partners[pid];
+    return Array.isArray(rows) ? rows : null;
+  }
+  // WHICH DAY THE SUGGESTIONS ARE FOR. occurred_on is the workout's own date
+  // and is what the share path writes; metadata.workout_date is what the
+  // card already prefers when it prints the date, so the same order is used
+  // here rather than a second opinion about the same post. created_at is the
+  // last resort - a post with no date at all is still taggable, it just
+  // suggests from the day it was written.
+  function postTrainingDay(post) {
+    const m = (post && post.metadata) || {};
+    const raw = m.workout_date || (post && post.occurred_on) || (post && post.created_at) || "";
+    const day = String(raw).slice(0, 10);
+    return /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : new Date().toISOString().slice(0, 10);
+  }
+  // Only the author, only a workout post, only while the club has the module
+  // on - the same three conditions post_tag_training_partners() enforces, so
+  // the control is never offered where the call would be refused.
+  //
+  // AND ONLY WHERE THE SHEET CAN ACTUALLY OPEN, which is the fourth
+  // condition and the one that is about this codebase rather than about the
+  // feature. renderPostCard() is called from two places: the feed, and the
+  // Posts tab of a profile (directory.js). findFeedPost() only ever looks in
+  // state.feed.items, so a card drawn on the profile tab cannot be resolved
+  // back to its row. The three older own-post controls share that lookup and
+  // degrade quietly there - postStartCaptionEdit opens with an empty body,
+  // postStartVisibilityEdit with the default scope - which is a pre-existing
+  // gap this branch is reporting rather than inheriting: a tagging sheet has
+  // no sensible degraded form (it needs the post's DAY to suggest anybody at
+  // all), so it is not offered there instead of opening onto nothing. The
+  // READ half is unaffected - the partners line and the tagged member's own
+  // remove button both work on the profile tab, and directory.js loads the
+  // tags for it.
+  function postCanTagPartners(post) {
+    if (!isModuleEnabled("trained_together")) return false;
+    if (!post || post.post_type !== "POST_WORKOUT") return false;
+    if (!postIsOwn(post)) return false;
+    return !!findFeedPost(post.id);
+  }
+
+  // One call per feed page, not one per card. post_training_partners_for()
+  // is SECURITY INVOKER, so what comes back is already filtered by the read
+  // policy and by profiles' own - nothing is re-filtered at LOAD time. The
+  // one filter the render applies (trainingPartnersHtml's isBlockedUser
+  // call) is about a block made since this answer arrived, not about
+  // doubting it.
+  async function loadTrainingPartners(postIds) {
+    if (!state.user || !client) return;
+    if (!isModuleEnabled("trained_together")) return;
+    const ids = (postIds || []).filter((id) => !!id);
+    if (!ids.length) return;
+    const { data, error } = await client.rpc("post_training_partners_for", { p_post_ids: ids });
+    // A failure leaves the map untouched rather than writing [] for every id:
+    // an empty answer and an unanswered question must not look the same (see
+    // postTrainingPartners above), and the next page load asks again.
+    if (error) return;
+    const rows = Array.isArray(data) ? data : (data ? [data] : []);
+    // Seed every id that was asked about with an empty list FIRST, so a post
+    // that genuinely carries no tags is recorded as answered.
+    for (const id of ids) state.posts.partners[id] = [];
+    for (const r of rows) {
+      if (!r || !r.post_id) continue;
+      if (!state.posts.partners[r.post_id]) state.posts.partners[r.post_id] = [];
+      state.posts.partners[r.post_id].push({
+        user_id: r.user_id, display_name: r.display_name, handle: r.handle, avatar_url: r.avatar_url,
+      });
+    }
+  }
+
+  function trainingPartnerName(row) {
+    const name = String((row && row.display_name) || "").trim();
+    if (name) return name;
+    return row && row.handle ? "@" + row.handle : "חבר/ה";
+  }
+
+  // The line under the card. Rendered in the order the server returned -
+  // post_training_partners_for() orders by created_at then name then id, a
+  // total order, so two names never swap between renders.
+  function trainingPartnersHtml(post) {
+    if (!isModuleEnabled("trained_together")) return "";
+    const loaded = postTrainingPartners(post);
+    // The same second net the classmates card carries (blockFilteredList in
+    // directory.js), applied for the same reason and not because the server
+    // is doubted: post_training_partners_read already refuses a row across a
+    // block edge, but a block made in THIS session is in state.members.blocks
+    // before the next page load re-asks, and the member who just blocked
+    // somebody must not keep seeing their name until then.
+    const rows = (loaded || []).filter((r) => !(typeof isBlockedUser === "function" && isBlockedUser(r.user_id)));
+    if (!loaded || !rows.length) return "";
+    const pid = esc(post.id);
+    const names = rows.map((r) => `<button class="link-btn" data-community-action="view-profile" data-id="${esc(r.user_id)}" style="padding:0;font:inherit;color:var(--chalk);font-weight:700;">${esc(trainingPartnerName(r))}</button>`)
+      .join(`<span aria-hidden="true">, </span>`);
+    // The member's own escape hatch, on the card rather than behind the
+    // author's sheet: being able to remove the tag is the whole reason being
+    // tagged is acceptable, and it must not require finding a menu.
+    const taggedMe = !!(state.user && rows.some((r) => r.user_id === state.user.id));
+    const untag = taggedMe
+      ? `<button class="link-btn" data-community-action="partner-untag-self" data-id="${pid}" style="font-size:12px;">הסרת התיוג שלי</button>`
+      : "";
+    return `<div class="post-partners" data-post-partners="ready" data-post-id="${pid}" style="margin-top:8px;display:flex;flex-wrap:wrap;align-items:center;gap:6px;color:var(--steel);font-size:12.5px;line-height:1.6;">
+      <span aria-hidden="true">🤝</span><span style="font-weight:800;color:var(--chalk);">התאמנו יחד</span>${names}${untag}
+    </div>`;
+  }
+
+  // The author's sheet. Inline under the card, the shape captionEditPanel and
+  // visibilityEditPanel already use, rather than a modal - it is a short list
+  // of checkboxes and the post it is about is the context.
+  function trainingPartnersPanel(post) {
+    const p = state.posts.partnersPanel;
+    const picked = p.picked || [];
+    // Everyone the sheet can offer: the classmates signal for the post's day,
+    // plus anyone already tagged. The second half is not decoration - a
+    // member tagged yesterday who has since turned show_attendance off drops
+    // out of the signal, and without this they would be untickable.
+    const options = p.options || [];
+    const atCap = picked.length >= TRAINING_PARTNERS_MAX;
+    const rows = options.map((o) => {
+      const on = picked.indexOf(o.user_id) >= 0;
+      return `<label class="field flex gap-6" style="align-items:center;">
+        <input type="checkbox" data-partner-pick="${esc(o.user_id)}"${on ? " checked" : ""}${!on && atCap ? " disabled" : ""}/>
+        <span style="font-size:13px;">${esc(trainingPartnerName(o))}</span>
+      </label>`;
+    }).join("");
+    const body = p.loading
+      ? `<div class="empty">טוען…</div>`
+      : options.length
+        ? rows
+        // "On no signal, show nothing" does not apply inside a sheet the
+        // member deliberately opened: here an empty list has to say why, or
+        // it reads as broken. The two real causes are named, because one of
+        // them is the member's own setting and they can change it.
+        : `<div class="empty">לא נמצאו חברים שהתאמנו באותו יום. התיוג מסתמך על דיווח נוכחות, ועל כך שגם אתם וגם הם בחרו להציג נוכחות בפרופיל.</div>`;
+    return `<div class="post-inline-edit" data-partners-panel="${esc(post.id)}" style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px;">
+      <div class="field-label" style="margin-bottom:6px;">מי התאמן/ה איתכם?</div>
+      <div style="color:var(--steel);font-size:12px;margin-bottom:8px;">מוצעים חברים שדיווחו על אימון ב-${esc(shortHebDate(p.day))}. מי שתסמנו יקבל/ת התראה ויוכל/תוכל להסיר את התיוג.</div>
+      ${body}
+      ${atCap ? `<div style="color:var(--steel);font-size:12px;margin-top:6px;">אפשר לתייג עד ${TRAINING_PARTNERS_MAX} חברים.</div>` : ""}
+      ${p.error ? `<div class="field-error" role="alert" style="margin-top:8px;">${esc(p.error)}</div>` : ""}
+      <div class="chip-row" style="margin-top:8px;">
+        <button class="chip-btn" data-community-action="partners-cancel">ביטול</button>
+        <button class="chip-btn primary" data-community-action="partners-save"${p.saving || p.loading ? " disabled" : ""}>${p.saving ? "שומר…" : "שמירה"}</button>
+      </div>
+    </div>`;
+  }
+
+  async function openTrainingPartners(postId) {
+    const post = findFeedPost(postId);
+    if (!post || !postCanTagPartners(post)) return;
+    state.posts.openMenu = null;
+    const day = postTrainingDay(post);
+    const tagged = postTrainingPartners(post) || [];
+    state.posts.partnersPanel = {
+      postId, day,
+      options: tagged.slice(),
+      picked: tagged.map((r) => r.user_id),
+      loading: true, saving: false, error: "",
+    };
+    rerender();
+    const { data, error } = await client.rpc("attendance_classmates_on", {
+      p_day: day, p_limit: TRAINING_PARTNER_SUGGEST_LIMIT,
+    });
+    const p = state.posts.partnersPanel;
+    // Moved on while this was in flight - closed the sheet, opened another
+    // post's. Same guard every other loader in this layer carries.
+    if (!p || p.postId !== postId) return;
+    p.loading = false;
+    if (error) {
+      p.error = failText("לא ניתן לטעון הצעות כרגע", error);
+      return rerender();
+    }
+    const rows = Array.isArray(data) ? data : (data ? [data] : []);
+    // Already-tagged first, in the order the card prints them, then the
+    // suggestions that are not already on the post. One entry per member.
+    const seen = {};
+    const options = [];
+    for (const r of p.options.concat(rows)) {
+      if (!r || !r.user_id || seen[r.user_id]) continue;
+      seen[r.user_id] = true;
+      options.push(r);
+    }
+    p.options = options;
+    rerender();
+  }
+  function closeTrainingPartners() {
+    state.posts.partnersPanel = null;
+    rerender();
+  }
+  function toggleTrainingPartnerPick(userId) {
+    const p = state.posts.partnersPanel;
+    if (!p || !userId) return;
+    const at = p.picked.indexOf(userId);
+    if (at >= 0) p.picked.splice(at, 1);
+    else if (p.picked.length < TRAINING_PARTNERS_MAX) p.picked.push(userId);
+    p.error = "";
+    rerender();
+  }
+  async function saveTrainingPartners() {
+    const p = state.posts.partnersPanel;
+    if (!p || p.saving || p.loading) return;
+    p.saving = true;
+    p.error = "";
+    rerender();
+    const postId = p.postId;
+    const { error } = await client.rpc("post_tag_training_partners", {
+      p_post_id: postId, p_members: p.picked.slice(),
+    });
+    if (error) {
+      // Still the open sheet? A save that lands after the member closed it
+      // must not resurrect the panel just to show an error on it.
+      if (state.posts.partnersPanel === p) {
+        p.saving = false;
+        p.error = failText("שמירת התיוגים נכשלה", error);
+        rerender();
+      }
+      return;
+    }
+    // The server decides what actually landed - a target who turned tagging
+    // off is skipped silently, so re-reading is the only honest way to know
+    // what the card should print.
+    await loadTrainingPartners([postId]);
+    if (state.posts.partnersPanel === p) state.posts.partnersPanel = null;
+    setMessage("התיוגים נשמרו");
+    rerender();
+  }
+  // The tagged member's own removal, from the card. One argument: the server
+  // defaults p_user_id to the caller, so this call cannot name anybody else
+  // even if it were forged.
+  async function removeOwnTrainingPartnerTag(postId) {
+    if (!state.user || !postId) return;
+    const { error } = await client.rpc("post_training_partner_remove", { p_post_id: postId });
+    if (error) return setMessage(failText("הסרת התיוג נכשלה", error));
+    await loadTrainingPartners([postId]);
+    setMessage("התיוג הוסר");
+    rerender();
+  }
+
   function postCardShell(post, inner, opts) {
     opts = opts || {};
     const pid = post && post.id;
+    const partnersPanelOpen = state.posts.partnersPanel && pid && state.posts.partnersPanel.postId === pid;
     return `<article class="chart-card post-card" data-post-type="${esc((post && post.post_type) || "UNKNOWN")}"${opts.unknown ? ' data-post-unknown="1"' : ""}${pid ? ` data-post-id="${esc(pid)}"` : ""}>
       ${postHeadHtml(post, opts)}
       ${inner || ""}
+      ${trainingPartnersHtml(post)}
       ${opts.engagementDisabled ? "" : postActionsHtml(post, opts)}
       ${state.posts.captionEdit && pid && state.posts.captionEdit.postId === pid ? captionEditPanel() : ""}
       ${state.posts.visibilityEdit && pid && state.posts.visibilityEdit.postId === pid ? visibilityEditPanel() : ""}
+      ${partnersPanelOpen ? trainingPartnersPanel(post) : ""}
       ${!opts.engagementDisabled && pid && typeof renderComments === "function" ? renderComments(post) : ""}
     </article>`;
   }

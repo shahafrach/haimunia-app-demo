@@ -171,6 +171,14 @@
     // role set the comments do. One lookup per page; a re-render follows
     // when it resolves so the badge is not gated on the feed round-trip.
     if (rows.length) loadMemberRoles(rows.map((r) => r && r.author_id)).then(() => rerender());
+    // 202609220005 "התאמנו יחד". One post_training_partners_for() call per
+    // page, alongside the role lookup and for the same reason: the tags are
+    // not a column on feed_page's fixed `returns table (...)`, and adding one
+    // would mean dropping and rebuilding the ranking function to carry a list
+    // a single extra round trip fetches. Not awaited - a card renders without
+    // its partners line and gains it when this resolves, the same way the
+    // coach badge does.
+    if (rows.length) loadTrainingPartners(rows.map((r) => r && r.id)).then(() => rerender());
     return true;
   }
 

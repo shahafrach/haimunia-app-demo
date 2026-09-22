@@ -313,6 +313,18 @@
       // record. Holds a Blob and an object URL, so closeOutwardShare() is the
       // only way it is cleared - it revokes the URL on the way out.
       outwardShare: null,
+      // 202609220005 "התאמנו יחד". Two separate things, deliberately not one:
+      //   partners: post_id -> the tag rows the server returned for it, as
+      //     post_training_partners_for() ordered them. Read by every card,
+      //     written only by loadTrainingPartners(). A post with no entry has
+      //     not been asked about yet; a post with [] has been asked about and
+      //     carries no tags - the card must not confuse the two, or an
+      //     unloaded page renders "no partners" for every post on it.
+      //   partnersPanel: the author's open tagging sheet for ONE post -
+      //     { postId, day, suggestions, picked, loading, saving, error }.
+      //     Null when closed, the shape captionEdit and visibilityEdit
+      //     already use for a per-post inline editor.
+      partners: {}, partnersPanel: null,
     },
 
     // ---- engagement: comments, replies, reactions, mentions (COMM-120..125) ----
@@ -1132,6 +1144,20 @@
     { key: "post_photos", label: "תמונות בפוסטים", clientOnly: true },
     { key: "mentions", label: "תיוג חברים (@)", clientOnly: true },
     { key: "outward_share", label: "שיתוף מחוץ לאפליקציה", clientOnly: true },
+    // 202609220005. The author of a workout post names who was in the room
+    // with them; the people named are notified and any of them can take
+    // their own name off.
+    //
+    // NOT clientOnly, and the distinction matters on this row more than on
+    // most: post_training_partners' read policy carries
+    // club_feature_enabled('trained_together') and post_tag_training_partners()
+    // refuses outright while it is off, so switching it off really does make
+    // the tags unqueryable rather than unrendered - including the author's
+    // own. The panel may say נאכף בשרת.
+    //
+    // No `planned` marker: unlike 202609190002's seven, the feature ships in
+    // the same change as its key.
+    { key: "trained_together", label: "תיוג מי שהתאמן/ה יחד", desc: "מי שמפרסם/ת אימון יכול/ה לציין עם מי התאמן/ה, והמתויגים מקבלים התראה ויכולים להסיר את התיוג." },
     // The owner's kill switch for push, 2026-09-17. Deliberately NOT
     // clientOnly: the check is inside notif_push_pending (202609170003), so
     // switching it off stops delivery even for a device already subscribed,
@@ -6320,6 +6346,11 @@
     else if (action === "post-change-visibility") postStartVisibilityEdit(el.dataset.id);
     else if (action === "visibility-pick") postApplyVisibility(el.dataset.value);
     else if (action === "visibility-cancel") { state.posts.visibilityEdit = null; rerender(); }
+    // 202609220005 "התאמנו יחד".
+    else if (action === "post-tag-partners") openTrainingPartners(el.dataset.id);
+    else if (action === "partners-cancel") closeTrainingPartners();
+    else if (action === "partners-save") saveTrainingPartners();
+    else if (action === "partner-untag-self") removeOwnTrainingPartnerTag(el.dataset.id);
     else if (action === "post-delete") askConfirm({ title: "מחיקת פוסט", message: "הפוסט יוסר מהפיד. הפעולה אינה ניתנת לביטול מיידי.", confirmLabel: "מחיקה", destructive: true, action: "post-delete-rpc", payload: { postId: el.dataset.id } });
     else if (action === "welcome-member") welcomeNewMember(el.dataset.id, "feed_card");
     else if (action === "view-profile") viewCommunityProfile(el.dataset.id);
@@ -6764,6 +6795,12 @@
         state.posts.openShare = {}; state.posts.comparisonForPostId = null; state.posts.comparison = [];
         state.posts.composer = null; state.posts.composerTrigger = null; state.posts.openMenu = null; state.posts.savedIds = {};
         state.posts.captionEdit = null; state.posts.visibilityEdit = null; state.posts.prPrompt = null;
+        // 202609220005. Same reason every other per-member cache on this list
+        // is cleared: the tags one member was allowed to see are not the tags
+        // the next member on this device is allowed to see, and a stale
+        // partners map would print names past a block edge the new session
+        // has.
+        state.posts.partners = {}; state.posts.partnersPanel = null;
         // Five-persona UX audit, outward sharing. Through the closer rather
         // than a bare null: the sheet owns an object URL over a Blob, and a
         // sign-out that only dropped the reference would leak it for the life
@@ -6957,6 +6994,9 @@
     else if ("avatarFile" in t.dataset) { const f = t.files && t.files[0]; if (f) avatarPhotoSelected(f); try { t.value = ""; } catch (err) {} }
     else if ("composerDecorative" in t.dataset) composerToggleDecorative(t.dataset.composerDecorative, t.checked);
     else if ("composerVisibility" in t.dataset) composerSetVisibility(t.value);
+    // 202609220005. The tagging sheet's checkboxes. `change`, not `click`, so
+    // a keyboard toggle on the label counts the same as a tap.
+    else if ("partnerPick" in t.dataset) toggleTrainingPartnerPick(t.dataset.partnerPick);
     // The weekly-challenge picker, kept in state so a rejected submit (missing
     // title or dates) re-renders the form with the coach's choice still made.
     else if ("challengeKey" in t.dataset) state.club.challengeKeyDraft = t.value;

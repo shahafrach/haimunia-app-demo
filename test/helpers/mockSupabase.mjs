@@ -1500,6 +1500,137 @@ export function createMockSupabase(seedTables = {}) {
             error: null,
           });
         }
+        // 202609220005. attendance_classmates_on(p_day, p_limit) - the
+        // classmates signal for one named day. The real function IS the body
+        // attendance_classmates_today() now delegates to, so the stand-in is
+        // written the same way round: this arm holds the algorithm and the
+        // `attendance_classmates_today` arm above stays as it was, calling
+        // through with today's date. Same four documented keys, same order,
+        // same caller-own-show_attendance gate, same empty-not-raise answer -
+        // see that arm's header for why each of those is what the client
+        // depends on. Postgres and supabase/tests/0122 are what prove the
+        // privacy gate itself.
+        if (name === "attendance_classmates_on") {
+          const uid = currentUser && currentUser.id;
+          if (!uid) return Promise.resolve({ data: null, error: { message: "not authorized" } });
+          const limit = Math.max(1, Math.min(Number((args && args.p_limit) != null ? args.p_limit : 6), 20));
+          const day = (args && args.p_day) ? String(args.p_day).slice(0, 10) : new Date().toISOString().slice(0, 10);
+          const me = rows("profiles").find((p) => p.id === uid && !p.deleted_at);
+          if (!me || me.show_attendance !== true) return Promise.resolve({ data: [], error: null });
+          const mine = rows("attendance_log").find((r) => r.user_id === uid && r.occurred_on === day);
+          if (!mine) return Promise.resolve({ data: [], error: null });
+          const isAdminCaller = !!me.is_admin;
+          const out = [];
+          for (const row of rows("attendance_log")) {
+            if (row.occurred_on !== day || row.user_id === uid) continue;
+            const p = rows("profiles").find((x) => x.id === row.user_id);
+            if (!p || p.deleted_at) continue;
+            if (!isAdminCaller) {
+              const blocked = rows("blocks").some((b) => (b.blocker_id === uid && b.blocked_id === p.id) || (b.blocker_id === p.id && b.blocked_id === uid));
+              if (blocked) continue;
+              if (p.visible_to_club === false) continue;
+              if (p.show_attendance !== true) continue;
+            }
+            out.push({ user_id: p.id, display_name: p.display_name || null, handle: p.handle || null, avatar_url: p.avatar_url || null, _at: row.recorded_at || "" });
+          }
+          const nameOf = (r) => String(r.display_name || "").trim() || String(r.handle || "");
+          out.sort((a, b) => String(b._at).localeCompare(String(a._at))
+            || nameOf(a).localeCompare(nameOf(b))
+            || String(a.user_id).localeCompare(String(b.user_id)));
+          return Promise.resolve({
+            data: out.slice(0, limit).map((r) => ({ user_id: r.user_id, display_name: r.display_name, handle: r.handle, avatar_url: r.avatar_url })),
+            error: null,
+          });
+        }
+        // 202609220005 "התאמנו יחד". Three arms, standing in for what the
+        // client half actually depends on and no more:
+        //   * post_tag_training_partners is a SET write, author-only,
+        //     POST_WORKOUT-only, capped at 10, that SKIPS a target whose
+        //     allow_mentions is off or who sits behind a block edge rather
+        //     than raising - the skip is the behaviour the sheet's
+        //     re-read-after-save exists for, so it has to be here.
+        //   * post_training_partner_remove defaults p_user_id to the caller
+        //     and is idempotent.
+        //   * post_training_partners_for returns the card's row shape in the
+        //     server's order, filtered by the same visibility facts.
+        // The RLS policy, the module gate, the notification trigger and the
+        // real block/visible_to_club resolution are Postgres, pinned by
+        // supabase/tests/0122 - this file does not re-implement them as a
+        // claim, only far enough that the client renders what it would.
+        if (name === "post_tag_training_partners") {
+          const uid = currentUser && currentUser.id;
+          if (!uid) return Promise.resolve({ data: null, error: { message: "not authorized" } });
+          const postId = args && args.p_post_id;
+          const post = rows("workout_posts").find((p) => p.id === postId);
+          if (!post || post.deleted_at) return Promise.resolve({ data: null, error: { message: "post not found" } });
+          if (post.author_id !== uid) return Promise.resolve({ data: null, error: { message: "not authorized" } });
+          if (post.post_type !== "POST_WORKOUT") return Promise.resolve({ data: null, error: { message: "training partners are for workout posts" } });
+          const asked = Array.from(new Set((args && args.p_members) || [])).filter((id) => id && id !== uid);
+          if (asked.length > 10) return Promise.resolve({ data: null, error: { message: "at most 10 training partners per post" } });
+          const table = rows("post_training_partners");
+          for (let i = table.length - 1; i >= 0; i--) {
+            if (table[i].post_id === postId && asked.indexOf(table[i].tagged_user_id) < 0) table.splice(i, 1);
+          }
+          for (const target of asked) {
+            if (table.some((r) => r.post_id === postId && r.tagged_user_id === target)) continue;
+            const p = rows("profiles").find((x) => x.id === target && !x.deleted_at);
+            if (!p) continue;
+            const blocked = rows("blocks").some((b) => (b.blocker_id === uid && b.blocked_id === target) || (b.blocker_id === target && b.blocked_id === uid));
+            if (blocked) continue;
+            if (p.visible_to_club === false) continue;
+            if (p.allow_mentions === false) continue;
+            table.push({ post_id: postId, tagged_user_id: target, tagged_by: uid, created_at: new Date().toISOString() });
+            // The AFTER INSERT trigger's one visible effect.
+            rows("notifications").push({
+              id: `notif-tt-${table.length}`, user_id: target, type: "trained_together", category: "community",
+              title: "You were tagged as a training partner", body: post.title || "",
+              source_type: "post", source_id: postId, deep_link: `/community/feed?post=${postId}`,
+              created_at: new Date().toISOString(), read_at: null,
+            });
+          }
+          return Promise.resolve({ data: table.filter((r) => r.post_id === postId).length, error: null });
+        }
+        if (name === "post_training_partner_remove") {
+          const uid = currentUser && currentUser.id;
+          if (!uid) return Promise.resolve({ data: null, error: { message: "not authorized" } });
+          const postId = args && args.p_post_id;
+          const target = (args && args.p_user_id) || uid;
+          const post = rows("workout_posts").find((p) => p.id === postId);
+          if (target !== uid && (!post || post.author_id !== uid)) {
+            return Promise.resolve({ data: null, error: { message: "not authorized" } });
+          }
+          const table = rows("post_training_partners");
+          for (let i = table.length - 1; i >= 0; i--) {
+            if (table[i].post_id === postId && table[i].tagged_user_id === target) table.splice(i, 1);
+          }
+          return Promise.resolve({ data: null, error: null });
+        }
+        if (name === "post_training_partners_for") {
+          const uid = currentUser && currentUser.id;
+          if (!uid) return Promise.resolve({ data: null, error: { message: "not authorized" } });
+          const ids = (args && args.p_post_ids) || [];
+          const out = [];
+          for (const r of rows("post_training_partners")) {
+            if (ids.indexOf(r.post_id) < 0) continue;
+            const p = rows("profiles").find((x) => x.id === r.tagged_user_id && !x.deleted_at);
+            if (!p) continue;
+            if (r.tagged_user_id !== uid) {
+              const blocked = rows("blocks").some((b) => (b.blocker_id === uid && b.blocked_id === p.id) || (b.blocker_id === p.id && b.blocked_id === uid));
+              if (blocked) continue;
+              if (p.visible_to_club === false) continue;
+            }
+            out.push({ post_id: r.post_id, user_id: p.id, display_name: p.display_name || null, handle: p.handle || null, avatar_url: p.avatar_url || null, _at: r.created_at || "" });
+          }
+          const nameOf = (r) => String(r.display_name || "").trim() || String(r.handle || "");
+          out.sort((a, b) => String(a.post_id).localeCompare(String(b.post_id))
+            || String(a._at).localeCompare(String(b._at))
+            || nameOf(a).localeCompare(nameOf(b))
+            || String(a.user_id).localeCompare(String(b.user_id)));
+          return Promise.resolve({
+            data: out.slice(0, 200).map((r) => ({ post_id: r.post_id, user_id: r.user_id, display_name: r.display_name, handle: r.handle, avatar_url: r.avatar_url })),
+            error: null,
+          });
+        }
         if (name === "mark_recovery_verified") {
           const prof = rows("profiles").find((r) => currentUser && r.id === currentUser.id);
           const hasCreds = currentUser && (currentUser.email || rows("__credentials").some((c) => c.userId === currentUser.id));

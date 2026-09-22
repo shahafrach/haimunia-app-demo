@@ -132,6 +132,24 @@
     mention:               { category: "community",  mode: "immediate", pref: "mentions",            icon: "@",  title: "תייגו אותך בתגובה" },
     coach_mention:         { category: "community",  mode: "immediate", pref: "mentions",            icon: "@",  title: "מאמן/ת תייג/ה אותך" },
     reaction:              { category: "community",  mode: "batched",   pref: "reactions",           icon: "🔥", title: "עידודים חדשים על הפוסט שלך" },
+    // 202609220005. The author of a workout post named this member as
+    // somebody who trained with them. IMMEDIATE rather than batched, and
+    // deliberately: it is one person naming one person, at most ten times on
+    // one post, and it is the notification that tells a member a tag exists
+    // at all - which is what makes "you can remove it" a real option rather
+    // than a setting nobody finds. notif_create()'s own one-hour de-dupe on
+    // (user, type, source_id) already collapses a re-save of the same list.
+    //
+    // `pref` is the literal type name, the same no-server-pref-arm shape as
+    // new_report/streak_at_risk above: notif_pref_key() has no arm for
+    // trained_together, so its identity fallback (`else p_type`) makes the
+    // real server-side key the string "trained_together". Anything coarser
+    // here would be a toggle that silently suppresses nothing.
+    //
+    // NOT serverTitle: notif_create writes the fixed English 'You were
+    // tagged as a training partner' and the body carries the workout's own
+    // title, so the client label below is the one that should win.
+    trained_together:      { category: "community",  mode: "immediate", pref: "trained_together",    icon: "🤝", title: "תויגתם כמי שהתאמנו יחד" },
     // Live bug hunt (2026-09-11): pref was "comments" - the OLD pre-rename
     // key COMM-218/219 renamed everywhere else to comment_on_post, just
     // missed here. notif_pref_key()'s real SQL (202608290009) has no
@@ -212,6 +230,12 @@
     { key: "comment_on_post",     label: "תגובות על הפוסטים שלי" },
     { key: "comment_reply",       label: "תגובות לתגובות שלי" },
     { key: "mentions",            label: "תיוגים" },
+    // 202609220005. Its own row rather than folding into `mentions` above:
+    // the two are different server keys (notif_pref_key has an arm for
+    // mention/coach_mention and none for trained_together), so one toggle
+    // could not honestly write both - the same reason challenge_ending_soon
+    // and challenge_update are a documented gap rather than a merged row.
+    { key: "trained_together",    label: "תיוג באימון משותף" },
     { key: "reactions",           label: "עידודים" },
     // Live bug hunt (2026-09-11): feed_activity had no row here at all - see
     // NOTIF_TYPES.feed_activity's own comment.
