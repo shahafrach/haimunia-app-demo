@@ -1608,12 +1608,39 @@
      matches .save-btn's own established narrow-single-column cap
      elsewhere, rather than inventing a new number. */
   [data-invite-management-section]{ max-width:448px; }
-  input[type="date"]{ color-scheme:var(--color-scheme); }
-  input[type="date"]::-webkit-calendar-picker-indicator{ cursor:pointer; }
+  /* SIBLING DRIFT, fixed: every rule in this block used to name
+     input[type="date"] alone, so the four <input type="datetime-local">
+     controls in the community layer (the announcement expiry and the event
+     form's start/end/registration-deadline) got neither the color-scheme
+     token nor the dark-theme indicator invert their date-only siblings have
+     had all along. The selector list is the fix; nothing about the date
+     behaviour changes. */
+  input[type="date"], input[type="datetime-local"], input[type="time"]{ color-scheme:var(--color-scheme); }
+  /* THE WIDTH BOUND, which is what stops the expiry field escaping its card.
+     A native date/time control sizes to its own segment text, and WebKit
+     (every iPhone in the club) treats that as an intrinsic MINIMUM it will
+     not shrink past - so `.text-input{width:100%}` is simply ignored once
+     the rendered format is wider than the card, and in an RTL column the
+     overflow lands past the card's left edge. Chromium honours the 100%
+     already, so this is a no-op there rather than a second layout to keep in
+     sync. appearance:none is what drops the intrinsic sizing; .text-input
+     already supplies the background, border, padding and colour underneath
+     it, so the control keeps looking like every other field on the card
+     instead of like a native widget that wandered in. min-width:0 answers
+     the flex-child case (the event form's two-up rows), max-width:100% the
+     block case (the announcement expiry). */
+  input[type="date"], input[type="datetime-local"], input[type="time"]{ -webkit-appearance:none; appearance:none; min-width:0; max-width:100%; }
+  input[type="date"]::-webkit-calendar-picker-indicator,
+  input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+  input[type="time"]::-webkit-calendar-picker-indicator{ cursor:pointer; }
   @media (prefers-color-scheme: dark){
-    :root:not([data-theme="light"]) input[type="date"]::-webkit-calendar-picker-indicator{ filter:invert(1) brightness(1.4); }
+    :root:not([data-theme="light"]) input[type="date"]::-webkit-calendar-picker-indicator,
+    :root:not([data-theme="light"]) input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+    :root:not([data-theme="light"]) input[type="time"]::-webkit-calendar-picker-indicator{ filter:invert(1) brightness(1.4); }
   }
-  :root[data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator{ filter:invert(1) brightness(1.4); }
+  :root[data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator,
+  :root[data-theme="dark"] input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+  :root[data-theme="dark"] input[type="time"]::-webkit-calendar-picker-indicator{ filter:invert(1) brightness(1.4); }
   .format-chip{ min-height:44px; padding:10px 6px; border-radius:12px; border:1px solid var(--border); background:var(--surface); font-weight:700; font-size:13px; color:var(--steel); text-align:center; flex:1; }
   /* color:var(--energy-text), not --energy: found by a light-theme axe
      pass this session - --energy (#E85D3D since it was unified across
@@ -1842,6 +1869,22 @@
      both read as a wall of orange. Selected state gets its own, quieter
      treatment; .primary stays reserved for actions. */
   .chip-btn.selected{ border-color:var(--brass); border-width:2px; color:var(--brass); }
+  /* THE SECOND ACTION ON A SCREEN THAT ALREADY HAS A FIRST ONE.
+     .primary was being spent on every create/publish control regardless of
+     what else was on the same screen - found in real phone screenshots at
+     390px, the Boards tab showed a solid-orange "אתגר חדש" and a solid-orange
+     "אירוע חדש" stacked above the join buttons that are the member's actual
+     action, and the member-of-the-week section put a full-width orange
+     "פרסום בחירת המאמן/ת" directly under the orange "פרסום" on each
+     candidate row. Three fills of the same colour on one screen is no
+     emphasis at all.
+     .secondary is the SAME action family at lower weight: the primary's
+     outline without its fill, so the pair reads as first/second rather than
+     as action/other-thing (which is what a plain .chip-btn already says).
+     Built from --energy and --energy-text, both of which are declared in all
+     three theme blocks, so this rule themes itself and needs no duplicate;
+     and it never pairs with .primary - a button is one or the other. */
+  .chip-btn.secondary{ background:transparent; border-color:color-mix(in srgb, var(--energy) 55%, var(--border)); color:var(--energy-text); box-shadow:none; }
   /* One shared "this is destructive" treatment instead of 3 ad hoc inline
      styles (a bare red border+text on a plain chip, or a full red fill
      duplicated verbatim at two confirm-dialog call sites). Combined with

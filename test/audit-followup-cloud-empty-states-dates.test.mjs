@@ -74,17 +74,22 @@ const emptyState = (window, key) => window.document.querySelector(`[data-empty-s
 // The structural invariant, asserted once over every call site rather than
 // re-asserted per state: the whole point of the finding is that nine states
 // had drifted apart, so what has to be pinned is that they can no longer.
-test("every empty state renders all four slots: an icon, a headline, an explanation, and exactly one of an action or a when-line", async () => {
+//
+// SCOPED to the four-slot variant, which is now not the only one. The coach
+// board's seven sections stacked six of these cards on a quiet week - two
+// screens of illustrated apologies for a coach whose answer was "nothing" -
+// and they are one line each there now, with a single summary at the top of
+// the tab. See emptyLineHtml() in cloud.js. The card is still the right shape
+// wherever an empty state IS the screen, which is what this drives: the
+// Boards challenge list, where nothing about the state changed.
+test("every four-slot empty state renders all four slots: an icon, a headline, an explanation, and exactly one of an action or a when-line", async () => {
   const mock = staffMock({}, true);
-  mock.onRpc("coach_celebrate_feed", () => ({ data: [], error: null }));
-  mock.onRpc("coach_new_members", () => ({ data: [], error: null }));
-  mock.onRpc("member_of_week_candidates", () => ({ data: [{ category: "most_prs", category_label: "הכי הרבה שיאים", week_start: "2026-09-07", candidates: [], free_selection: false, published: null }], error: null }));
   const window = await bootCommunity(mock, { syncEnabled: false });
-  await openCoachTab(window);
-  await waitFor(() => !!emptyState(window, "coach-celebrate"), 4000);
+  await openBoards(window);
+  await waitFor(() => !!emptyState(window, "challenges-active"), 4000);
 
-  const states = [...window.document.querySelectorAll("[data-empty-state]")];
-  assert.ok(states.length >= 3, "the coach dashboard renders several empty states at once on a quiet week");
+  const states = [...window.document.querySelectorAll('[data-empty-state]:not([data-empty-variant="line"])')];
+  assert.ok(states.length >= 1, "the four-slot card is still rendered somewhere, or this contract guards nothing");
   for (const el of states) {
     const key = el.getAttribute("data-empty-state");
     // Slot 1. Decorative, so aria-hidden - it carries no information the
@@ -101,6 +106,69 @@ test("every empty state renders all four slots: an icon, a headline, an explanat
     const hasWhen = text.length > 80;
     assert.ok(action || hasWhen, `${key}: slot 4, either a real action or a when-line`);
   }
+});
+
+// The other half of the same finding, re-decided. Measured on a real phone at
+// 390px: six four-slot cards back to back, each 32px of padding + a 28px icon
+// + a headline + two paragraphs, is what a coach scrolled through to learn
+// that nothing needed them.
+test("on the coach board every empty section is ONE line - no icon, no second paragraph, no button", async () => {
+  const mock = staffMock({}, true);
+  mock.onRpc("coach_celebrate_feed", () => ({ data: [], error: null }));
+  mock.onRpc("coach_new_members", () => ({ data: [], error: null }));
+  mock.onRpc("member_of_week_candidates", () => ({ data: [{ category: "most_prs", category_label: "הכי הרבה שיאים", week_start: "2026-09-07", candidates: [], free_selection: false, published: null }], error: null }));
+  const window = await bootCommunity(mock, { syncEnabled: false });
+  await openCoachTab(window);
+  await waitFor(() => !!emptyState(window, "coach-celebrate"), 4000);
+
+  const states = [...window.document.querySelectorAll("[data-empty-state]")];
+  assert.ok(states.length >= 3, "the coach dashboard still renders several empty sections at once on a quiet week");
+  for (const el of states) {
+    const key = el.getAttribute("data-empty-state");
+    assert.equal(el.getAttribute("data-empty-variant"), "line", `${key}: the coach board uses the one-line variant`);
+    assert.equal(el.querySelector("svg"), null, `${key}: no icon - six of them is decoration, not information`);
+    assert.equal(el.querySelector("button"), null, `${key}: and still no invented button`);
+    const text = el.textContent.replace(/\s+/g, " ").trim();
+    assert.ok(text.length > 20, `${key}: still a real sentence, not a bare "אין"`);
+    assert.ok(text.length <= 90, `${key}: one short line (${text.length} chars): ${text}`);
+  }
+  // Tone rule 1 holds in the shorter form too: a line names what WILL be
+  // here, it does not open by announcing what is missing.
+  for (const m of [...src.matchAll(/emptyLineHtml\(\{[\s\S]{0,400}?text: "([^"]+)"/g)]) {
+    assert.ok(!/^(אין|עדיין לא|מעולם לא)\b/.test(m[1]), `a one-line empty state opens with a banned word: ${m[1]}`);
+  }
+  // Tone rule 2: absence is not an error.
+  const helper = src.slice(src.indexOf("function emptyLineHtml"), src.indexOf("function emptyLineHtml") + 800);
+  assert.equal(/--red/.test(helper), false, "no empty state renders in red - absence is not an error");
+});
+
+test("when nothing on the coach board needs attention, ONE summary says so at the top", async () => {
+  const mock = staffMock({}, true);
+  mock.onRpc("coach_celebrate_feed", () => ({ data: [], error: null }));
+  mock.onRpc("coach_new_members", () => ({ data: [], error: null }));
+  mock.onRpc("member_of_week_candidates", () => ({ data: [{ category: "most_prs", category_label: "הכי הרבה שיאים", week_start: "2026-09-07", candidates: [], free_selection: false, published: null }], error: null }));
+  const window = await bootCommunity(mock, { syncEnabled: false });
+  await openCoachTab(window);
+  await waitFor(() => !!window.document.querySelector("[data-coach-board-summary]"), 5000);
+  const summaries = window.document.querySelectorAll("[data-coach-board-summary]");
+  assert.equal(summaries.length, 1, "one summary, not one per quiet section");
+  // It is the first thing on the tab, above the work queue it is reporting on.
+  const tasks = window.document.querySelector("[data-coach-tasks-section]");
+  if (tasks) {
+    assert.equal(summaries[0].compareDocumentPosition(tasks) & 4, 4, "the summary renders before the sections it summarises");
+  }
+});
+
+test("the summary is withheld the moment any section has something in it - it is an all-clear, not a header", async () => {
+  const mock = staffMock({}, true);
+  // One real row in Celebrate is enough: the club is not quiet.
+  mock.onRpc("coach_celebrate_feed", () => ({ data: [{ kind: "pr", user_id: "u2", handle: "noam", display_name: "נועם", avatar_url: null, occurred_at: new Date().toISOString(), detail: { lift: "דדליפט" } }], error: null }));
+  mock.onRpc("coach_new_members", () => ({ data: [], error: null }));
+  mock.onRpc("member_of_week_candidates", () => ({ data: [{ category: "most_prs", category_label: "הכי הרבה שיאים", week_start: "2026-09-07", candidates: [], free_selection: false, published: null }], error: null }));
+  const window = await bootCommunity(mock, { syncEnabled: false });
+  await openCoachTab(window);
+  await waitFor(() => !!window.document.querySelector('[data-community-action="coach-congratulate"]'), 5000);
+  assert.equal(window.document.querySelector("[data-coach-board-summary]"), null, "a board with a row in it is not an all-clear");
 });
 
 test("no empty-state headline opens with a word the spec's tone rules ban, and none of them renders red", () => {
@@ -170,7 +238,7 @@ test("Celebrate's empty state says what a PR feed is built from and offers no bu
   await openCoachTab(window);
   await waitFor(() => !!emptyState(window, "coach-celebrate"), 4000);
   const el = emptyState(window, "coach-celebrate");
-  assert.match(el.textContent, /שיאים/, "says what the list is built from");
+  assert.match(el.textContent, /שיא אישי/, "says what the list is built from");
   assert.equal(el.querySelector("button"), null, "no invented button - a coach cannot make someone hit a PR");
 });
 
@@ -205,7 +273,7 @@ test("the Member of the Week empty state points at the pick form already on scre
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openCoachTab(window);
   await waitFor(() => !!emptyState(window, "coach-member-of-week"), 4000);
-  assert.ok(window.document.querySelector("[data-mow-pick-handle]"), "the real action, the free-selection form, is rendered directly below");
+  assert.ok(window.document.querySelector("[data-mow-pick-search]"), "the real action, the free-selection form, is rendered directly below");
   assert.equal(emptyState(window, "coach-member-of-week").querySelector("button"), null, "and is not duplicated as a button inside the empty state");
 });
 

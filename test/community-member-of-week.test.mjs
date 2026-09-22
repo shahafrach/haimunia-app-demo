@@ -110,7 +110,7 @@ test("Populated: computed candidates render with their category-shaped detail an
   // The free-selection ("coach's pick") form is offered beside the
   // suggestions, not only as an empty-state fallback - COMM-315's own
   // "Populated" frontend state names both together.
-  assert.ok(window.document.querySelector('[data-mow-pick-handle]'), "the coach's-pick form is present alongside a non-empty suggestion list");
+  assert.ok(window.document.querySelector('[data-mow-pick-search]'), "the coach's-pick form is present alongside a non-empty suggestion list");
   assert.ok(window.document.querySelector('[data-mow-pick-reason]'), "the reason field is present too");
 });
 
@@ -120,7 +120,7 @@ test("Empty: a computed category with zero candidates shows the exact Hebrew emp
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openCoachTab(window);
   await waitFor(() => !!window.document.querySelector('[data-empty-state="coach-member-of-week"]'), 3000);
-  assert.ok(window.document.querySelector('[data-mow-pick-handle]'), "staff can still fall back to a coach's pick from the empty state");
+  assert.ok(window.document.querySelector('[data-mow-pick-search]'), "staff can still fall back to a coach's pick from the empty state");
 });
 
 test("the coachs_pick week shows only the free-selection form - no candidate list and no empty message, since it is the category's own definition", async () => {
@@ -131,7 +131,7 @@ test("the coachs_pick week shows only the free-selection form - no candidate lis
   }));
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openCoachTab(window);
-  await waitFor(() => !!window.document.querySelector('[data-mow-pick-handle]'), 3000);
+  await waitFor(() => !!window.document.querySelector('[data-mow-pick-search]'), 3000);
   assert.equal(!!window.document.querySelector('[data-empty-state="coach-member-of-week"]'), false, "the coachs_pick week is never rendered as the empty state");
   assert.equal(window.document.querySelector('[data-community-action="coach-mow-publish-candidate"]'), null, "there is no computed candidate to publish on a coachs_pick week");
 });
@@ -152,7 +152,7 @@ test("published: shows who/what was published instead of any suggestion UI - the
   await waitFor(() => window.document.body.textContent.includes("חבר/ת השבוע"), 3000);
   await waitFor(() => window.document.body.textContent.includes("נועה"), 3000);
   assert.equal(window.document.querySelector('[data-community-action="coach-mow-publish-candidate"]'), null, "no publish control once the week is already published");
-  assert.equal(window.document.querySelector('[data-mow-pick-handle]'), null, "no free-selection form either - the action is spent for the week");
+  assert.equal(window.document.querySelector('[data-mow-pick-search]'), null, "no free-selection form either - the action is spent for the week");
 });
 
 // --- the previous week's member is named, not merely hidden -----------------
@@ -233,7 +233,28 @@ test("publishing the same candidate twice in a row is a no-op the second time - 
 
 // --- the coach's-pick free-selection form ------------------------------------
 
-test("the coach's-pick form requires both a handle and a non-empty reason before it ever calls the server", async () => {
+// --- the picker that replaced the typed handle -------------------------------
+//
+// The member half of the coach's-pick form used to be a free-text @handle a
+// coach had to already know and spell exactly, in Latin script, inside an RTL
+// Hebrew form. It is a search over the roster the Directory tab already loads
+// (loadDirectory), with the same community_search RPC behind it once the
+// query is long enough to ask - no new RPC and no migration. These four tests
+// pin what that costs and what it buys.
+
+// The roster the picker's suggestions come from arrives through
+// loadDirectory(), which afterRenderCommunity() fires the first time the
+// Coach sub-tab renders. Waiting for a real suggestion row is waiting for
+// that whole path, not for a stub.
+async function waitForPickSuggestions(window) {
+  await waitFor(() => !!window.document.querySelector('[data-mow-pick-search]'), 3000);
+  await waitFor(() => !!window.document.querySelector('[data-community-action="coach-mow-pick-select"]'), 4000);
+}
+function pickOption(window, userId) {
+  return window.document.querySelector(`[data-community-action="coach-mow-pick-select"][data-id="${userId}"]`);
+}
+
+test("the picker offers the club roster as suggestions, so a coach never has to know a member's @handle", async () => {
   const mock = seeded({});
   mock.onRpc("member_of_week_candidates", () => ({
     data: [computedEnvelope({ category: "coachs_pick", free_selection: true, candidates: [] })],
@@ -241,20 +262,52 @@ test("the coach's-pick form requires both a handle and a non-empty reason before
   }));
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openCoachTab(window);
-  await waitFor(() => !!window.document.querySelector('[data-mow-pick-handle]'), 3000);
-  window.document.querySelector('[data-community-action="coach-mow-publish-pick"]').click();
-  await waitFor(() => window.document.body.textContent.includes("יש להזין שם משתמש."), 3000);
-  assert.equal(mock.callsTo("member_of_week_publish").length, 0);
-
-  const handleInput = window.document.querySelector('[data-mow-pick-handle]');
-  handleInput.value = "noa";
-  handleInput.dispatchEvent(new window.Event("input", { bubbles: true }));
-  window.document.querySelector('[data-community-action="coach-mow-publish-pick"]').click();
-  await waitFor(() => window.document.body.textContent.includes("יש להזין סיבה לבחירת המאמן/ת."), 3000);
-  assert.equal(mock.callsTo("member_of_week_publish").length, 0, "a handle with no reason still never reaches the server");
+  await waitForPickSuggestions(window);
+  const row = pickOption(window, "u9");
+  assert.ok(row, "the roster's members are offered by name, not demanded as typed handles");
+  assert.match(row.textContent, /נועה/, "the suggestion names the member the way the club knows them");
+  assert.match(row.textContent, /@noa/, "and still shows the handle, so two members with one first name are distinguishable");
 });
 
-test("the coach's-pick form resolves a typed handle to an id and publishes with the typed reason", async () => {
+test("the picker disables last week's member rather than only warning about them", async () => {
+  const mock = seeded({});
+  mock.onRpc("member_of_week_candidates", () => ({
+    data: [computedEnvelope({ category: "coachs_pick", free_selection: true, candidates: [], previous_week_user_id: "u-prev" })],
+    error: null,
+  }));
+  const window = await bootCommunity(mock, { syncEnabled: false });
+  await openCoachTab(window);
+  await waitForPickSuggestions(window);
+  const prev = pickOption(window, "u-prev");
+  assert.ok(prev, "last week's member is still LISTED - hiding them would leave the rule undiscoverable");
+  assert.equal(prev.disabled, true, "but is not selectable");
+  assert.match(prev.textContent, /בשבוע שעבר/, "and the row says why");
+  // The note naming them stays too: a disabled row explains that it cannot be
+  // pressed, not why.
+  assert.match(window.document.body.textContent, /נבחר\/ה כבר בשבוע שעבר/);
+});
+
+test("the coach's-pick form requires both a chosen member and a non-empty reason before it ever calls the server", async () => {
+  const mock = seeded({});
+  mock.onRpc("member_of_week_candidates", () => ({
+    data: [computedEnvelope({ category: "coachs_pick", free_selection: true, candidates: [] })],
+    error: null,
+  }));
+  const window = await bootCommunity(mock, { syncEnabled: false });
+  await openCoachTab(window);
+  await waitForPickSuggestions(window);
+  window.document.querySelector('[data-community-action="coach-mow-publish-pick"]').click();
+  await waitFor(() => window.document.body.textContent.includes("יש לבחור חבר/ה מהרשימה."), 3000);
+  assert.equal(mock.callsTo("member_of_week_publish").length, 0);
+
+  pickOption(window, "u9").click();
+  await waitFor(() => !!window.document.querySelector('[data-mow-pick-chosen="u9"]'), 3000);
+  window.document.querySelector('[data-community-action="coach-mow-publish-pick"]').click();
+  await waitFor(() => window.document.body.textContent.includes("יש להזין סיבה לבחירת המאמן/ת."), 3000);
+  assert.equal(mock.callsTo("member_of_week_publish").length, 0, "a chosen member with no reason still never reaches the server");
+});
+
+test("choosing a member from the suggestions publishes that member's id with the typed reason, with no handle lookup on the way", async () => {
   const mock = seeded({});
   mock.onRpc("member_of_week_candidates", () => ({
     data: [computedEnvelope({ category: "coachs_pick", free_selection: true, candidates: [] })],
@@ -264,16 +317,37 @@ test("the coach's-pick form resolves a typed handle to an id and publishes with 
   mock.onRpc("member_of_week_publish", (args) => { calls.push(args); return { data: "mow-2", error: null }; });
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openCoachTab(window);
-  await waitFor(() => !!window.document.querySelector('[data-mow-pick-handle]'), 3000);
-  const handleInput = window.document.querySelector('[data-mow-pick-handle]');
-  handleInput.value = "noa";
-  handleInput.dispatchEvent(new window.Event("input", { bubbles: true }));
+  await waitForPickSuggestions(window);
+  pickOption(window, "u9").click();
+  await waitFor(() => !!window.document.querySelector('[data-mow-pick-chosen="u9"]'), 3000);
+  // The chosen row replaces the search box and names who was chosen, so the
+  // coach can check the choice before writing the reason.
+  assert.match(window.document.querySelector('[data-mow-pick-chosen="u9"]').textContent, /נועה/);
+  assert.equal(window.document.querySelector('[data-mow-pick-search]'), null, "the box is replaced by the choice, not left beside it");
+
   const reasonInput = window.document.querySelector('[data-mow-pick-reason]');
   reasonInput.value = "עבדה קשה כל החודש";
   reasonInput.dispatchEvent(new window.Event("input", { bubbles: true }));
   window.document.querySelector('[data-community-action="coach-mow-publish-pick"]').click();
   await waitFor(() => calls.length === 1, 3000);
   assert.deepEqual(calls[0], { p_week_start: null, p_user_id: "u9", p_reason: "עבדה קשה כל החודש" });
+});
+
+test("\"שינוי\" puts the coach back in the search box with the choice dropped", async () => {
+  const mock = seeded({});
+  mock.onRpc("member_of_week_candidates", () => ({
+    data: [computedEnvelope({ category: "coachs_pick", free_selection: true, candidates: [] })],
+    error: null,
+  }));
+  const window = await bootCommunity(mock, { syncEnabled: false });
+  await openCoachTab(window);
+  await waitForPickSuggestions(window);
+  pickOption(window, "u9").click();
+  await waitFor(() => !!window.document.querySelector('[data-mow-pick-chosen="u9"]'), 3000);
+  window.document.querySelector('[data-community-action="coach-mow-pick-clear"]').click();
+  await waitFor(() => !!window.document.querySelector('[data-mow-pick-search]'), 3000);
+  assert.equal(window.document.querySelector('[data-mow-pick-chosen="u9"]'), null, "the choice is gone");
+  assert.equal(window.document.querySelector('[data-mow-pick-search]').value, "", "and so is the query, so the next search starts clean");
 });
 
 test("the coach's-pick form's reason field carries a live 500-char counter", async () => {

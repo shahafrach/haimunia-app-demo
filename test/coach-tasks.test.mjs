@@ -178,12 +178,26 @@ test("a failed read says so and offers a retry - it never renders as 'no tasks t
   assert.ok(section(window).querySelector('[data-community-action="coach-tasks-retry"]'), "with a retry");
 });
 
-test("an empty list is an empty list, and says what would put something in it", async () => {
+test("an empty list is an empty list, and says what would put something in it - in one line", async () => {
   const window = await bootCommunity(seeded([]), { syncEnabled: false });
   await openCoachTab(window);
-  const text = (await settled(window)).textContent;
-  assert.match(text, /אין משימות פתוחות/, "the empty state is stated plainly");
-  assert.match(text, /תופיע כאן/, "and says what would fill it, rather than leaving a coach to guess");
+  const el = await settled(window);
+  const text = el.textContent;
+  // One line, not the four-slot card: this section is one of seven on the
+  // coach board, and six such cards is what a quiet week used to look like.
+  // See emptyLineHtml() in cloud.js.
+  const empty = el.querySelector('[data-empty-state="coach-tasks"]');
+  assert.ok(empty, "the empty state is still a real, findable state");
+  assert.equal(empty.getAttribute("data-empty-variant"), "line", "rendered as one line");
+  assert.match(text, /משימה תיפתח כאן/, "the empty state is stated plainly");
+  assert.match(text, /יגיע לאימון ראשון/, "and says what would fill it, rather than leaving a coach to guess");
+  // The plain "אין משימות פתוחות" statement did not disappear - it moved to
+  // the board's single summary, which is the point of the change: said once
+  // for the whole tab instead of once per empty section. That summary is
+  // withheld unless EVERY section has loaded and is empty, which this
+  // fixture (tasks only) deliberately does not arrange, so it is driven in
+  // test/audit-followup-cloud-empty-states-dates.test.mjs instead of here.
+  assert.ok(!/אין משימות פתוחות/.test(text), "the section itself no longer repeats what the summary says");
 });
 
 test("switching the module off removes the section entirely, and asks the server for nothing", async () => {
