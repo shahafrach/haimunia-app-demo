@@ -80,6 +80,58 @@
     return `<div class="ach-section" style="margin-top:18px;" data-blocked-members-section="1">${sectionHead("var(--blue)", "חברים חסומים")}<div class="log-list">${rows}</div></div>`;
   }
   function isBlockedUser(userId) { return !!userId && state.members.blockedIds.indexOf(userId) >= 0; }
+  // ==========================================================================
+  // 202609220006 - a management account is not a clubmate
+  // ==========================================================================
+  // Real phone screenshot at 390px: "ניהול @admin" - the account the gym's
+  // owner signs into the admin panel with - sitting in the member directory
+  // between two real members, offering a "מעקב" button. It was in community
+  // search too, and eligible for "אנשים שאולי תכירו". Nothing distinguished
+  // the office from a clubmate.
+  //
+  // THE SERVER DECIDES WHO, AND FOR WHOM. management_user_ids() answers with
+  // the ids THIS caller must not be shown - already empty for a staff caller,
+  // because hide_management_from_member() applies the staff exemption on the
+  // server. So there is no "am I staff" branch anywhere on this side: the
+  // client's whole job is to not draw the ids it was handed, and it cannot
+  // disagree with the server about which those are. Coaches and head coaches
+  // are not in the list by design - see the migration's header.
+  //
+  // FILTER WHEN RENDERING, for exactly the reason blockFilteredList() above
+  // gives at length: the three member-row caches (directory page, directory
+  // search results, suggestions) would otherwise each need purging, and the
+  // fourth surface added next year would inherit nothing. withoutManagement()
+  // is called where rows are turned into HTML, so a stale cache is harmless.
+  //
+  // A FAILED LOAD HIDES NOBODY, and that is the honest default: the list is a
+  // privacy-of-staff nicety, not an access control - the server already
+  // refuses a member anything a management account could do, and both
+  // community_search() and people_suggestions() drop these rows on their own.
+  // Only the directory's own plain profiles read depends on this list, and a
+  // directory that fails closed on a transient RPC error would be a blank
+  // roster, which is far worse than one extra row.
+  async function loadManagementIds() {
+    if (!client || !state.user) { state.members.managementIds = []; state.members.managementLoaded = true; return; }
+    const { data, error } = await client.rpc("management_user_ids");
+    state.members.managementLoaded = true;
+    if (error) { state.members.managementIds = []; return; }
+    // setof uuid comes back as either bare strings or {management_user_ids}
+    // wrappers depending on how PostgREST names a single out-column; both
+    // shapes are read rather than assuming one.
+    state.members.managementIds = (Array.isArray(data) ? data : [])
+      .map((r) => (r && typeof r === "object") ? (r.management_user_ids || r.id || "") : r)
+      .filter(Boolean);
+  }
+  function isManagementAccount(userId) { return !!userId && state.members.managementIds.indexOf(userId) >= 0; }
+  // The array twin of blockFilteredList(): same "return the input untouched
+  // when nothing was dropped" so an unchanged list is not needlessly copied,
+  // and same never-mutate-the-cache rule so the rows come straight back if
+  // the set ever empties.
+  function withoutManagement(rows) {
+    if (!Array.isArray(rows)) return rows;
+    const kept = rows.filter((m) => !m || !isManagementAccount(m.id || m.user_id));
+    return kept.length === rows.length ? rows : kept;
+  }
   // FILTER WHEN RENDERING, not when blocking.
   //
   // Live bug hunt, fresh round 8 (2026-09-15), and the bug it fixes was
@@ -428,7 +480,11 @@
     </div>`;
   }
   function renderPeopleSuggestions() {
-    const s = blockFilteredList(state.members.suggestions);
+    const blocked = blockFilteredList(state.members.suggestions);
+    // Both filters, in one place. withoutManagement() returns the same array
+    // when it drops nothing, so this allocates only when it actually has to.
+    const kept = withoutManagement(blocked.items);
+    const s = kept === blocked.items ? blocked : Object.assign({}, blocked, { items: kept });
     // COMM-232: on error the strip is not rendered at all - no heading, no
     // empty state, no retry. Nothing tells the member a thing failed.
     if (s.error) return "";
@@ -539,13 +595,17 @@
     rerender();
     loadMemberRoles(members.map((m) => m.id)).then(() => rerender());
   }
+  // Every return path goes through withoutManagement(), including the
+  // client-side substring fallback - the roster, the server search and the
+  // under-two-characters filter are three ways of answering one question and
+  // a management row must not come back through any of them.
   function directoryRows() {
     const d = state.members.directory;
     const q = String(d.query || "").trim();
-    if (!q) return d.items;
-    if (Array.isArray(d.searchResults)) return d.searchResults;
+    if (!q) return withoutManagement(d.items);
+    if (Array.isArray(d.searchResults)) return withoutManagement(d.searchResults);
     const needle = q.toLowerCase();
-    return d.items.filter((m) => (m.display_name || "").toLowerCase().indexOf(needle) >= 0 || (m.handle || "").toLowerCase().indexOf(needle) >= 0);
+    return withoutManagement(d.items.filter((m) => (m.display_name || "").toLowerCase().indexOf(needle) >= 0 || (m.handle || "").toLowerCase().indexOf(needle) >= 0));
   }
   function directorySkeletonHtml(n) {
     const row = `<div class="log-row" aria-hidden="true"><span style="height:12px;width:52%;background:var(--border);border-radius:6px;display:inline-block;"></span></div>`;
@@ -620,8 +680,50 @@
   function searchGroupTitle(key) {
     return { members: "חברים", events: "אירועים", challenges: "אתגרים" }[key] || key;
   }
+  // ONE CARD SHAPE FOR EVERY MEMBER, AND BLOCK IS NOT A PEER OF FOLLOW.
+  //
+  // Real phone screenshots at 390px: this row - the one shape the directory
+  // AND community search both render - put "חסימה" on the same .chip-btn, at
+  // the same size, in the same row as "מעקב". Three equal-weight chips, one
+  // of which is the most destructive thing a member can do to another, read
+  // as three equally ordinary choices; on a 390px screen the three also had
+  // to share one line with the name and avatar.
+  //
+  // Block now lives behind the "⋯" overflow menu, which is the affordance
+  // this app already uses for exactly this - see postMenuHtml() in
+  // src/community/posts.js, where block is likewise a menu item and likewise
+  // .danger. Same .post-menu-wrap / .post-menu / .post-menu-item classes,
+  // same state.posts.openMenu single-open-menu slot (so opening one closes
+  // any other, and the existing Escape handler in cloud.js closes this one
+  // too, for free), same `block` action and therefore the same askConfirm
+  // dialog and the same block() write. Nothing about blocking changed except
+  // how many taps and how much visual weight it takes.
+  //
+  // The key is prefixed "member:" because that one slot holds a post id
+  // everywhere else and a raw user id could in principle collide with one.
+  //
+  // THE MENU BUTTON IS UNCONDITIONAL, and that is the point of the second
+  // half of this fix: "מעקב" is already withheld from a member who has
+  // allow_follows off, so with block as a third chip those members' cards
+  // were visibly a different shape from everyone else's - a privacy setting
+  // leaking as a layout difference. Every card now ends in פרופיל + ⋯, with
+  // the follow chip the only thing that varies, in the middle.
+  function memberMenuKey(userId) { return "member:" + userId; }
+  function memberMenuHtml(userId) {
+    const id = esc(userId);
+    const open = state.posts.openMenu === memberMenuKey(userId);
+    return `<div class="post-menu-wrap" data-member-menu="${id}">
+      <button class="chip-btn" data-community-action="toggle-member-menu" data-id="${id}" aria-haspopup="true" aria-expanded="${open ? "true" : "false"}" aria-label="עוד פעולות">⋯</button>
+      ${open ? `<div class="post-menu" role="menu"><button class="post-menu-item danger" role="menuitem" data-community-action="block" data-id="${id}">חסימה</button></div>` : ""}
+    </div>`;
+  }
+  function toggleMemberMenu(userId) {
+    const key = memberMenuKey(userId);
+    state.posts.openMenu = state.posts.openMenu === key ? null : key;
+    rerender();
+  }
   function searchMemberRowHtml(person) {
-    return `<div class="log-row"><div class="flex gap-10" style="align-items:center;">${avatarHtml(person.display_name || person.handle, 32, person.avatar_url)}<div style="min-width:0;"><div class="member-name" style="font-weight:700;">${nameHtml(person.display_name, person.handle)}${isCoachRole(memberRole(person.id)) ? " " + coachBadgeHtml(memberRole(person.id)) : ""}</div><div style="color:var(--steel);font-size:12px;"><bdi>@${esc(person.handle)}</bdi> ${bidiText(person.bio || "")}</div></div></div><div class="chip-row" style="margin-top:0;"><button class="chip-btn" data-community-action="view-profile" data-id="${esc(person.id)}">פרופיל</button>${person.allow_follows === false ? "" : followButtonHtml(person.id)}<button class="chip-btn" data-community-action="block" data-id="${esc(person.id)}">חסימה</button></div></div>`;
+    return `<div class="log-row"><div class="flex gap-10" style="align-items:center;">${avatarHtml(person.display_name || person.handle, 32, person.avatar_url)}<div style="min-width:0;"><div class="member-name" style="font-weight:700;">${nameHtml(person.display_name, person.handle)}${isCoachRole(memberRole(person.id)) ? " " + coachBadgeHtml(memberRole(person.id)) : ""}</div><div style="color:var(--steel);font-size:12px;"><bdi>@${esc(person.handle)}</bdi> ${bidiText(person.bio || "")}</div></div></div><div class="chip-row" style="margin-top:0;"><button class="chip-btn" data-community-action="view-profile" data-id="${esc(person.id)}">פרופיל</button>${person.allow_follows === false ? "" : followButtonHtml(person.id)}${memberMenuHtml(person.id)}</div></div>`;
   }
   function searchEventRowHtml(ev) {
     // No event detail surface exists yet (COMM-213 builds it), so the row
@@ -645,7 +747,7 @@
     } else if (state.search.loading) {
       body = `<div class="empty" role="status" style="padding:8px 0;">מחפש...</div>`;
     } else {
-      body = searchGroupHtml("members", state.members.people.map(searchMemberRowHtml).join(""))
+      body = searchGroupHtml("members", withoutManagement(state.members.people).map(searchMemberRowHtml).join(""))
         + searchGroupHtml("events", state.search.events.map(searchEventRowHtml).join(""))
         + searchGroupHtml("challenges", state.search.challenges.map(searchChallengeRowHtml).join(""));
     }

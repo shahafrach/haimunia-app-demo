@@ -36,7 +36,7 @@
 // way the RLS boundary tests do.
 import { test } from "node:test";
 import assert from "node:assert";
-import { bootCommunity, waitFor } from "./helpers/boot.mjs";
+import { bootCommunity, waitFor, notifPrefControl, notifPrefOption, notifPrefValue, pickNotifPref } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
 
 const VERIFIED = new Date().toISOString();
@@ -95,7 +95,7 @@ async function openCenter(window) {
 async function openAccount(window) {
   await openCommunity(window);
   window.document.querySelector('[data-community-action="set-tab"][data-tab="account"]').click();
-  await waitFor(() => !!window.document.querySelector('[data-community-action="notif-pref"]'), 4000);
+  await waitFor(() => !!notifPrefControl(window, "mentions"), 4000);
 }
 const centerText = (window) => window.document.querySelector("[data-notif-center]").textContent;
 
@@ -457,7 +457,7 @@ test("the Account panel lists every type with Push (disabled), In-app and Off", 
   // row rather than a fold into `mentions`, because notif_pref_key() has an
   // arm for mention/coach_mention and none for trained_together - one
   // toggle could not honestly write both server keys.
-  const types = new Set([...window.document.querySelectorAll('[data-community-action="notif-pref"]')].map((b) => b.dataset.type));
+  const types = new Set([...window.document.querySelectorAll("[data-notif-pref-select]")].map((b) => b.dataset.type));
   assert.deepEqual([...types].sort(), [
     "achievement_unlocked", "announcements", "challenges", "comment_on_post", "comment_reply",
     "events", "feed_activity", "friend_achievements", "mentions", "monthly_club_recap", "reactions",
@@ -471,11 +471,11 @@ test("the Account panel lists every type with Push (disabled), In-app and Off", 
   // the option is omitted entirely now while the flag is off, not merely
   // disabled. See test/community-web-push.test.mjs for the dedicated
   // coverage of this and the flag-on case.
-  const push = window.document.querySelector('[data-community-action="notif-pref"][data-type="comment_on_post"][data-channel="push"]');
+  const push = notifPrefOption(window, "comment_on_post", "push");
   assert.equal(push, null, "push is not offered at all in V1, not just disabled");
-  const inApp = window.document.querySelector('[data-community-action="notif-pref"][data-type="comment_on_post"][data-channel="in_app"]');
+  const inApp = notifPrefOption(window, "comment_on_post", "in_app");
   assert.ok(!inApp.disabled, "In-app works");
-  assert.ok(inApp.className.includes("selected"), "the default selection is In-app");
+  assert.equal(notifPrefValue(window, "comment_on_post"), "in_app", "the default selection is In-app");
 });
 
 test("a moderator sees the new_report and engagement_decline_flagged preference rows; a plain member never does", async () => {
@@ -489,14 +489,14 @@ test("a moderator sees the new_report and engagement_decline_flagged preference 
   modMock.setUser({ id: "u1", is_anonymous: false, email: "dana@members.haimuniya.invalid" });
   const modWindow = await bootCommunity(modMock, { syncEnabled: false });
   await openAccount(modWindow);
-  assert.ok(modWindow.document.querySelector('[data-community-action="notif-pref"][data-type="new_report"]'), "a coach (community.comment.moderate) sees the row");
-  assert.ok(modWindow.document.querySelector('[data-community-action="notif-pref"][data-type="engagement_decline_flagged"]'), "and the engagement-decline alert row too - same staffOnly gate as new_report (202609100002)");
+  assert.ok(notifPrefControl(modWindow, "new_report"), "a coach (community.comment.moderate) sees the row");
+  assert.ok(notifPrefControl(modWindow, "engagement_decline_flagged"), "and the engagement-decline alert row too - same staffOnly gate as new_report (202609100002)");
 
   const memberMock = seeded([]);
   const memberWindow = await bootCommunity(memberMock, { syncEnabled: false });
   await openAccount(memberWindow);
-  assert.ok(!memberWindow.document.querySelector('[data-community-action="notif-pref"][data-type="new_report"]'), "a plain member does not");
-  assert.ok(!memberWindow.document.querySelector('[data-community-action="notif-pref"][data-type="engagement_decline_flagged"]'), "nor the engagement-decline alert row");
+  assert.ok(!notifPrefControl(memberWindow, "new_report"), "a plain member does not");
+  assert.ok(!notifPrefControl(memberWindow, "engagement_decline_flagged"), "nor the engagement-decline alert row");
 });
 
 test("changing a preference is a direct own-row upsert into notification_preferences", async () => {
@@ -504,7 +504,7 @@ test("changing a preference is a direct own-row upsert into notification_prefere
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openAccount(window);
 
-  window.document.querySelector('[data-community-action="notif-pref"][data-type="mentions"][data-channel="off"]').click();
+  pickNotifPref(window, "mentions", "off");
   await waitFor(() => mock.db.notification_preferences.some((r) => r.type === "mentions" && r.channel === "off"), 4000);
 
   const row = mock.db.notification_preferences.find((r) => r.type === "mentions");
@@ -514,8 +514,8 @@ test("changing a preference is a direct own-row upsert into notification_prefere
   // reflected on re-render
   window.document.querySelector('[data-community-action="set-tab"][data-tab="feed"]').click();
   window.document.querySelector('[data-community-action="set-tab"][data-tab="account"]').click();
-  await waitFor(() => !!window.document.querySelector('[data-community-action="notif-pref"]'), 4000);
-  assert.ok(window.document.querySelector('[data-community-action="notif-pref"][data-type="mentions"][data-channel="off"]').className.includes("selected"));
+  await waitFor(() => !!notifPrefControl(window, "mentions"), 4000);
+  assert.equal(notifPrefValue(window, "mentions"), "off");
 });
 
 test("stored preferences load and drive the panel selection", async () => {
@@ -525,8 +525,8 @@ test("stored preferences load and drive the panel selection", async () => {
   ] });
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openAccount(window);
-  assert.ok(window.document.querySelector('[data-community-action="notif-pref"][data-type="reactions"][data-channel="off"]').className.includes("selected"));
-  assert.ok(window.document.querySelector('[data-community-action="notif-pref"][data-type="comment_reply"][data-channel="in_app"]').className.includes("selected"));
+  assert.equal(notifPrefValue(window, "reactions"), "off");
+  assert.equal(notifPrefValue(window, "comment_reply"), "in_app");
 });
 
 test("a failed preference save reverts the control and shows the Hebrew error", async () => {
@@ -540,9 +540,9 @@ test("a failed preference save reverts the control and shows the Hebrew error", 
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openAccount(window);
 
-  window.document.querySelector('[data-community-action="notif-pref"][data-type="events"][data-channel="off"]').click();
+  pickNotifPref(window, "events", "off");
   await waitFor(() => /לא ניתן לשמור העדפה זו/.test(window.document.getElementById("content").textContent), 4000);
-  assert.ok(window.document.querySelector('[data-community-action="notif-pref"][data-type="events"][data-channel="in_app"]').className.includes("selected"), "the control reverted to In-app");
+  assert.equal(notifPrefValue(window, "events"), "in_app", "the control reverted to In-app");
 });
 
 test("the panel notes that operational announcements always show in-app", async () => {
@@ -559,7 +559,7 @@ test("the announcements row states plainly that important/urgent still reach a m
   const mock = seeded([]);
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openAccount(window);
-  const toggle = window.document.querySelector('[data-community-action="notif-pref"][data-type="announcements"]');
+  const toggle = notifPrefControl(window, "announcements");
   const row = toggle.closest(".log-row");
   assert.match(row.textContent, /חשוב/, "mentions the important tier");
   assert.match(row.textContent, /דחוף/, "mentions the urgent tier");
@@ -579,7 +579,7 @@ test("no push subscription is created and push offers no control at all with the
   // there is no button to click at all while the flag is off (see
   // community-web-push.test.mjs for the dedicated coverage of both states).
   assert.equal(
-    window.document.querySelector('[data-community-action="notif-pref"][data-type="comment_on_post"][data-channel="push"]'), null,
+    notifPrefOption(window, "comment_on_post", "push"), null,
     "no push control exists in the DOM in V1");
   await new Promise((r) => setTimeout(r, 40));
   assert.ok(!seenTables.includes("push_subscriptions"), "nothing writes push_subscriptions in V1");
@@ -680,7 +680,7 @@ test("the comment_reply toggle writes the server's real preference key, not the 
   const mock = seeded([]);
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openAccount(window);
-  window.document.querySelector('[data-community-action="notif-pref"][data-type="comment_reply"][data-channel="off"]').click();
+  pickNotifPref(window, "comment_reply", "off");
   await waitFor(() => mock.db.notification_preferences.some((r) => r.type === "comment_reply" && r.channel === "off"), 4000);
   assert.ok(!mock.db.notification_preferences.some((r) => r.type === "replies"), "the server-unrecognised key 'replies' is never written");
 });

@@ -1685,8 +1685,11 @@
   .wodbuild-foot{ flex-shrink:0; padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 16px); border-top:1px solid var(--border); background:var(--bg); }
   .movecheck-row{ width:100%; min-height:44px; display:flex; align-items:center; justify-content:space-between; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:11px 14px; margin-bottom:6px; text-align:right; }
   .movecheck-row.checked{ background:var(--surface2); border-color:var(--brass); }
-  .movecheck-box{ width:18px; height:18px; border-radius:5px; border:1.5px solid var(--border); flex-shrink:0; display:flex; align-items:center; justify-content:center; }
-  .movecheck-row.checked .movecheck-box{ background:var(--brass); border-color:var(--brass); }
+  /* .movecheck-box carries no box styling of its own any more: it is drawn
+     by the one checkbox rule further down (search "ONE CHECKBOX"), which
+     this selector is listed in, so the WOD builder's movement rows and every
+     real <input type="checkbox"> in the app are the same 18px brass box. */
+  .movecheck-box{ display:flex; align-items:center; justify-content:center; }
 
   /* ---- Achievements / medals ----
      Tier metal tones are deliberately the same in both themes — gold is
@@ -1969,7 +1972,42 @@
      either dark-theme block. */
   .sr-only{ position:absolute; width:1px; height:1px; padding:0; margin:-1px;
     overflow:hidden; clip:rect(0 0 0 0); clip-path:inset(50%); white-space:nowrap; border:0; }
-  input[type="checkbox"]{ accent-color:var(--energy); }
+  /* ONE CHECKBOX, EVERYWHERE.
+     The app shipped two: every real <input type="checkbox"> (the privacy
+     toggles, the club-module switches, the composer's "decorative image",
+     publishNow/teamAuto/pinToday, the leaderboard hide-self row, the term-
+     marks switch, the outward-share name row, the partner picker) was a
+     NATIVE box tinted with accent-color:var(--energy), while the WOD
+     builder's movement rows drew their own 18px brass .movecheck-box with
+     an SVG tick. Two shapes, two sizes, two colours, for the same "this is
+     on" - and the native one's rendering was the platform's, so it also
+     differed between iOS and Android on the same screen.
+     This rule is the single definition, and .movecheck-box is listed in it
+     rather than kept as a second copy. appearance:none is what makes the
+     native control stop drawing itself and take the same box.
+     BUILT FROM TOKENS ONLY - --border, --surface2, --brass and the ink
+     token .tag-brass already pairs with --brass (--avatar-ink) - so it
+     themes itself and needs no entry in either dark block. That ink is also
+     a real fix: .movecheck-box's tick was a hardcoded #1a1a1a, which on the
+     LIGHT theme's dark --brass (#8a5d25) was near-black on brown.
+     The tick is drawn with PHYSICAL border sides (right/bottom) on purpose:
+     a logical border-inline-* would flip with this app's RTL direction and
+     rotate into a mirror-image check. */
+  input[type="checkbox"], .movecheck-box{
+    appearance:none; -webkit-appearance:none; -moz-appearance:none;
+    width:18px; height:18px; flex-shrink:0; margin:0; padding:0;
+    border:1.5px solid var(--border); border-radius:5px; background:var(--surface2);
+    cursor:pointer; position:relative; }
+  input[type="checkbox"]:checked, .movecheck-row.checked .movecheck-box{
+    background:var(--brass); border-color:var(--brass); }
+  input[type="checkbox"]::after{
+    content:""; position:absolute; inset:0; margin:auto;
+    width:5px; height:9px; opacity:0;
+    border:0 solid var(--avatar-ink); border-right-width:2px; border-bottom-width:2px;
+    transform:rotate(45deg) translate(-1px, -1px); }
+  input[type="checkbox"]:checked::after{ opacity:1; }
+  input[type="checkbox"]:focus-visible, .movecheck-row:focus-visible{
+    outline:2px solid var(--brass); outline-offset:2px; }
   .chip-row{ display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
   /* color:var(--energy-text), not --energy - found via axe while touching
      an unrelated invite-tab restructure, but pre-existing and shared: this
@@ -2134,6 +2172,17 @@
   /* .coach-badge and .pr-badge were two independently-inlined copies of the
      exact same small filled pill - one shared rule, matching how
      .admin-tag/.tag already centralize their own pill look. */
+  /* CONFLICT RESOLVED (#41 + #43, both fixed this independently).
+     #41's implementation is kept whole: it makes the same inset-inline-end
+     correction #43 made, and additionally caps the panel against the
+     viewport, raises each item to this app's 44px tap floor, and gives it a
+     focus-visible state. #43's own finding is preserved here because it is
+     the reason the rule must stay shared: this ONE rule backs both the
+     feed's post menu (cloud.js) and the member card's menu
+     (src/community/directory.js) - same wrap, same width, same edge - and
+     scripts/browser-check/member-surface-polish-390.mjs measures both. The
+     max-width below satisfies that check's "fully inside 390px" assertion
+     more strictly than #43's uncapped 150px did. */
   /* nowrap and no underline here rather than only on the feed's copy: this
      pill is a LABEL ("מאמן/ת ראשי/ת"), and a label that breaks across two
      lines or picks up the underline of whatever link it happens to sit
