@@ -46,23 +46,9 @@ const CATEGORY_COLORS = {
   Kettlebell: "var(--yellow)", "Odd Object": "var(--red)", Monostructural: "var(--steel)",
 };
 
-// Girls/Heroes are HEBREW here and English everywhere else in this table, and
-// that is the point rather than an inconsistency. Reported from a real phone:
-// "the same benchmark category is called בנות in the library and GIRLS in the
-// workout picker" - app.js carried a second, Hebrew, two-entry table
-// (WOD_LIBRARY_CATEGORY_LABELS) for the catalogue screen while the picker
-// read this one, so the two screens named the same group differently. Two
-// tables for one label is exactly the sibling drift CLAUDE.md is about; the
-// second table is gone and its two Hebrew names moved here, so there is one
-// name per category and both screens read it.
-//
-// The rest stay English because they are the movements' own names as the box
-// says them out loud - "Back Squat", "Olympic" - and translating those is a
-// different decision about the app's vocabulary, not this bug. Club/Custom
-// are the pair most obviously left behind; they are named in the PR.
 const CATEGORY_LABELS = {
   Squat: "Squat", Deadlift: "Deadlift", Press: "Press", Olympic: "Olympic",
-  Pull: "Pull", Other: "Other", Custom: "Custom", Club: "Club", Girls: "בנות", Heroes: "גיבורים",
+  Pull: "Pull", Other: "Other", Custom: "Custom", Club: "Club", Girls: "Girls", Heroes: "Heroes",
   Gymnastics: "Gymnastics", Weightlifting: "Weightlifting", Dumbbell: "Dumbbell",
   Kettlebell: "Kettlebell", "Odd Object": "Odd Object", Monostructural: "Monostructural",
 };

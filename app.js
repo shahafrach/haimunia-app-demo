@@ -7661,19 +7661,37 @@ function renderWodHistorySection() {
 // calendar's cal-next arrow follows.
 // Grouped by Girls/Heroes (the only two categories WOD_LIBRARY actually
 // uses) with the same .cat-group/.cat-head pattern the exercise/strength
-// pickers already use, instead of one flat undifferentiated list.
+// pickers already use, instead of one flat undifferentiated list. Hebrew
+// labels are local to the WOD library, not catLabel()'s CATEGORY_LABELS
+// table - that table is scoped to strength MOVEMENT categories
+// (Squat/Deadlift/…) and mixing WOD-library categories into it would blur two
+// different classification systems that happen to share the word "category".
 //
-// THE LABELS NO LONGER LIVE HERE. This file used to own a local
-// WOD_LIBRARY_CATEGORY_LABELS = { Girls: "בנות", Heroes: "גיבורים" } on the
-// argument that WOD-library categories and strength MOVEMENT categories are
-// two classification systems that should not be mixed in one table. The
-// argument does not survive contact with the screen: CATEGORY_LABELS already
-// HAD Girls and Heroes keys (it feeds the WOD picker, which groups by the
-// same field), so the systems were already mixed and the only thing the
-// second table added was a disagreement - the catalogue said "בנות" and the
-// picker, three taps away, said "GIRLS" for the identical group. Reported
-// from a real phone. One name per category now, in src/constants.js, read by
-// both screens through catLabel().
+// ONE TABLE, BOTH SCREENS, which is the part that was missing. Reported from
+// a real phone: "the same benchmark category is called בנות in the library
+// and GIRLS in the workout picker". Both are right about their own screen and
+// the app was wrong overall - the catalogue read this table and the picker
+// read catLabel(), where Girls/Heroes are identity entries, so one group had
+// two names three taps apart.
+//
+// The fix is to give the picker this table too (wodCatLabel below), NOT to
+// put Hebrew into CATEGORY_LABELS. test/community-term-disclosure.test.mjs
+// pins that map as an identity map on an explicit product decision - "Back
+// Squat" and "Fran" are what the coach says on the floor, and translating
+// the movement vocabulary would put the picker, the progress panel, the
+// calendar and the achievement headers into a different language from the
+// whiteboard. A benchmark GROUP heading is not movement vocabulary; the six
+// movement categories are, and they are untouched.
+const WOD_LIBRARY_CATEGORY_LABELS = { Girls: "בנות", Heroes: "גיבורים" };
+// The WOD picker also lists Club and Custom, which are not benchmark groups
+// and have no Hebrew name of their own - they fall through to catLabel(), so
+// this is the library's table where it has an answer and the shared one
+// everywhere else.
+function wodCatLabel(cat) {
+  return Object.prototype.hasOwnProperty.call(WOD_LIBRARY_CATEGORY_LABELS, cat)
+    ? WOD_LIBRARY_CATEGORY_LABELS[cat]
+    : catLabel(cat);
+}
 // Fresh-eyes audit: a trainee-persona review named this exact screen -
 // "Isabel — 30 Snatches", "Diane — 21-15-9 Deadlifts & HSPU" - as pure
 // CrossFit jargon with nothing on it to explain a Thruster, an HSPU or a
@@ -7697,7 +7715,7 @@ function renderWodBenchmarksSection() {
   );
   return renderWodGlossaryLink() + groups.map(([cat, list]) => `
     <div class="cat-group">
-      <div class="cat-head"><h2 class="cat-name">${esc(catLabel(cat))}</h2></div>
+      <div class="cat-head"><h2 class="cat-name">${esc(wodCatLabel(cat))}</h2></div>
       ${list.map((w) => `<button class="movement-btn" data-action="select-benchmark" data-id="${esc(w.id)}">
         <div><span style="font-weight:700;">${bidiText(w.name)}</span>${w.desc ? `<div class="wod-desc">${bidiText(w.desc)}</div>` : ""}</div>
         <span aria-hidden="true">›</span>
@@ -8206,7 +8224,7 @@ function renderWodPickerList(query) {
   const cats = Object.keys(byCategory).sort((a, b) => order.indexOf(a) - order.indexOf(b));
   list.innerHTML = addRow + `<div style="height:12px;"></div>` + cats.map((cat) => `
     <div class="cat-group">
-      <div class="cat-head"><div class="dot" style="background:${esc(catColor(cat))}"></div><h3 class="cat-name">${esc(catLabel(cat))}</h3></div>
+      <div class="cat-head"><div class="dot" style="background:${esc(catColor(cat))}"></div><h3 class="cat-name">${esc(wodCatLabel(cat))}</h3></div>
       ${byCategory[cat].map((w) => `
         <div class="movement-btn ${selectedWodId === w.id ? "active" : ""}" style="padding:0; overflow:hidden;">
         <button style="flex:1; padding:12px 14px; text-align:right;" data-action="pick-wod" data-id="${esc(w.id)}">
