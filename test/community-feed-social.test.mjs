@@ -489,8 +489,17 @@ test("an empty feed welcomes a new member and names the club's most active", asy
   await waitFor(() => !!window.document.querySelector('[data-feed-active-members="ready"]'), 4000);
   const active = window.document.querySelector('[data-feed-active-members="ready"]');
   assert.match(active.textContent, /נועם/);
-  assert.match(active.textContent, /12 ימים ברצף/);
-  assert.match(active.textContent, /יום רצוף/, "one day is singular, not '1 ימים'");
+  // The FIGURE is the point of the row, so it is printed at every value -
+  // including one, which used to render the bare words with no number at all
+  // - and the noun and adjective agree with it (יום/ימים, רצוף/רצופים).
+  assert.match(active.textContent, /12 ימים רצופים/);
+  assert.match(active.textContent, /1 יום רצוף/, "one day is singular AND still carries its number");
+  // Only the digits are .mono (direction:ltr): the whole phrase used to be,
+  // which laid a mixed number-and-Hebrew string out as an LTR paragraph
+  // inside an RTL row. See streakDaysHtml() in cloud.js.
+  const streak = active.querySelector(".streak-count");
+  assert.ok(streak, "the streak is its own element, not an inline-styled span");
+  assert.equal(streak.querySelector(".mono").textContent.trim(), "12", "the mono run is the number alone");
 });
 
 test("with no streaks at all the welcome stands alone rather than heading an empty list", async () => {

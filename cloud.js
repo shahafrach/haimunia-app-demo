@@ -3539,6 +3539,47 @@
     check: '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8.2 12.3l2.6 2.6 5-5.2"/></svg>',
     chart: '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 17V11M12 17V5M20 17v-4"/><path d="M3 20.5h18"/></svg>',
   };
+  // ---- THE FEED'S OWN GLYPHS ------------------------------------------
+  //
+  // The feed shipped with three emoji in it - a 💬 on the comment count, a
+  // 🔔 on the club strip and a 📷 on the composer - and on a real phone they
+  // are the only three marks in the whole module that are not this app's
+  // drawing: a colour font renders them in the vendor's palette, at the
+  // vendor's weight, and they land differently on iOS, Android and a
+  // desktop browser. Beside the reaction pill's own dumbbell they read as
+  // clip-art dropped onto a line-drawn set.
+  //
+  // So they are re-cut in the dumbbell's language, and it is a deliberately
+  // narrow one: a 24-box, `currentColor`, round caps and joins, no fill, and
+  // a stroke chosen so the optical weight matches at the size each is drawn
+  // (2.2 at pill size, 1.9 on the two 40px chips - a thinner line reads the
+  // same at the larger size). currentColor is what makes them theme
+  // themselves: each takes the colour of the control it sits in, in both
+  // themes, with no second declaration anywhere.
+  //
+  // Every one is aria-hidden and focusable="false". None of them is the
+  // accessible name of anything - each control it sits in already carries
+  // its own aria-label (and the comment count carries the NUMBER in that
+  // label, which an emoji never did).
+  //
+  // NOT replaced, and deliberately: the notification CENTRE's per-type icons
+  // (💬, 🏆, 🚩 … in NOTIF_TYPES, src/community/notifications.js). Those are
+  // a 20-odd-glyph taxonomy where each emoji distinguishes one row type from
+  // another inside one list, they are not in the feed, and redrawing them is
+  // its own pass with its own contrast check - not a line to sneak into this
+  // one. renderShareControl()'s 📷/📤 (the log screens' inline share row) is
+  // the same call: same emoji, different surface, and it is not the feed.
+  const FEED_ICONS = {
+    comment: '<svg class="action-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 11.5a7.5 7.5 0 0 1-10.9 6.7L4 19.5l1.4-4.6A7.5 7.5 0 1 1 20 11.5Z"/></svg>',
+    bell: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M18 9a6 6 0 1 0-12 0c0 5-2 6.5-2 6.5h16S18 14 18 9Z"/><path d="M10.4 19a2 2 0 0 0 3.2 0"/></svg>',
+    camera: '<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3.5 8.5h3l1.6-2.3h7.8l1.6 2.3h3v10h-17Z"/><circle cx="12" cy="13" r="3.2"/></svg>',
+    // Drawn pointing LEFT, not mirrored at runtime. This is a directional
+    // glyph in a document that is RTL end to end: "send" travels the way the
+    // text does, and the app has exactly one direction, so the arrow is cut
+    // the right way round once rather than flipped by a transform that would
+    // then be wrong in the one place something renders LTR.
+    send: '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 12 20 4.5l-2.6 7.5L20 19.5Z M17.4 12H4"/></svg>',
+  };
   // `opts.attr` is a raw attribute string and is therefore only ever passed a
   // LITERAL from this file - it exists solely so renderCommunityHealthScore()
   // can keep the data-community-health-empty hook COMM-312's own tests pin.
@@ -4396,6 +4437,31 @@
     // streaks - a brand-new club has none, and "החברים הפעילים ביותר"
     // followed by nothing is worse than the welcome card alone.
     const ACTIVE_MEMBERS_SHOWN = 5;
+    // THE NUMBER IS THE FACT, so it is always printed - and it was not.
+    //
+    // Two defects in one line, both visible in a 390px screenshot of
+    // "החברים הפעילים במועדון". The streak of exactly one rendered the bare
+    // words "יום רצוף" with no figure at all, so the one row on the list
+    // that names a starting streak was the one row that did not say what it
+    // was. And the whole phrase was wrapped in .mono, which is
+    // `direction:ltr; unicode-bidi:isolate` (index.html): a mixed
+    // number-and-Hebrew string laid out as an LTR paragraph inside an RTL
+    // row, which puts the digit on the far side of the words it belongs to
+    // with the gap stranded between them.
+    //
+    // Now: the digit alone is monospaced and bdi-isolated - which is what
+    // .mono is for and the only part of the string that wants LTR - and the
+    // words stay in the document's direction, so "3 ימים רצופים" reads in
+    // one piece. The noun and the adjective agree with the number
+    // (יום/ימים, רצוף/רצופים), which is the whole of Hebrew's plural rule
+    // here; the dual "יומיים" is deliberately not used, because it would
+    // drop the digit again at exactly the value below the one that already
+    // lost it.
+    function streakDaysHtml(value) {
+      const days = Math.max(0, Math.floor(Number(value) || 0));
+      const word = days === 1 ? "יום רצוף" : "ימים רצופים";
+      return `<span class="streak-count"><bdi class="mono streak-days">${days}</bdi> ${word}</span>`;
+    }
     function renderFeedEmptyState() {
       const scopeEmpty = feedScopeDef(state.feed.scope).empty || "פעילות המועדון תופיע כאן.";
       // Only the default scope gets the welcome. "אין עדיין פוסטים ממי
@@ -4409,11 +4475,11 @@
       const activeHtml = active.length ? `<div class="chart-card" data-feed-active-members="ready" style="margin-top:10px;">
         <h3 class="field-label" style="margin:0 0 8px;">החברים הפעילים במועדון</h3>
         <div class="log-list">${active.map((m) => `<div class="log-row">
-          <button class="link-btn" data-community-action="view-profile" data-id="${esc(m.user_id || "")}" style="padding:0;display:flex;gap:10px;align-items:center;color:inherit;text-align:right;">
+          <button class="link-btn member-row-link" data-community-action="view-profile" data-id="${esc(m.user_id || "")}">
             ${/* community_streaks returns user_id, handle, display_name, current_streak and last_activity_on - and no avatar_url, so this is initials by data shape, not by choice. */ avatarHtml(m.display_name || m.handle, 32)}
-            <span style="font-weight:700;">${nameHtml(m.display_name, m.handle)}</span>
+            <span class="member-row-name">${nameHtml(m.display_name, m.handle)}</span>
           </button>
-          <span class="mono" style="color:var(--brass);">${esc(Number(m.current_streak) === 1 ? "יום רצוף" : Number(m.current_streak) + " ימים ברצף")}</span>
+          ${streakDaysHtml(m.current_streak)}
         </div>`).join("")}</div>
       </div>` : "";
       return `<div class="chart-card" data-feed-welcome="ready">
@@ -4619,7 +4685,7 @@
         ${avatarHtml(selfDisplayName(), 40, state.profile && state.profile.avatar_url)}
         <span class="post-composer-trigger-text">${esc(POST_COMPOSER_PLACEHOLDER)}</span>
       </button>
-      ${isModuleEnabled("post_photos") ? `<button class="composer-photo-btn" data-community-action="open-composer-photo" aria-label="פוסט עם תמונה"><span aria-hidden="true">📷</span></button>` : ""}
+      ${isModuleEnabled("post_photos") ? `<button class="composer-photo-btn" data-community-action="open-composer-photo" aria-label="פוסט עם תמונה">${FEED_ICONS.camera}</button>` : ""}
     </div>`;
     // upcomingEventHtml is no longer concatenated here - it is a rail card.
     // It used to render AFTER ${feed}: the one time-sensitive item on the
@@ -7490,6 +7556,20 @@
         if (e.key === "Escape") { e.preventDefault(); const k = state.engagement.mentionPicker.key; state.engagement.mentionPicker = null; rerender(); restoreCommentFocus(k, t.selectionStart); return; }
       }
     }
+    // Feed polish. The ⋯ post menu is a role="menu", so it answers the keys a
+    // menu is supposed to answer: ArrowUp/ArrowDown/Home/End move between the
+    // items and Escape closes it and hands focus back to the button that
+    // opened it. Ahead of the dialog handling below because a post menu is
+    // never open at the same time as a dialog (opening one closes the other),
+    // and ahead of the `e.key !== "Escape"` gate because the arrows have to
+    // reach it at all. Tab is deliberately NOT intercepted: the items sit
+    // immediately after the button in DOM order, so tabbing walks them and
+    // then leaves, which is the behaviour without a trap and the right one
+    // for a menu that is not modal.
+    // `!currentCloudDialog()` because a dialog opened FROM the menu (the
+    // report sheet, the block confirm) may leave state.posts.openMenu set
+    // behind it, and Escape must always close the topmost thing first.
+    if (state.posts.openMenu && !currentCloudDialog() && postMenuKeydown(e)) return;
     // COMM-190. Every Phase 1 overlay dialog traps Tab within itself.
     if (e.key === "Tab") {
       const dk = currentCloudDialog();
@@ -7530,6 +7610,9 @@
     for (const d of CLOUD_DIALOGS) {
       if (d.isOpen()) { e.preventDefault(); d.close(); return; }
     }
+    // Reached only when the menu's own handler above did not take the key -
+    // the card it belongs to is no longer rendered, so there is nothing to
+    // return focus to and the state is simply cleared.
     if (state.posts.openMenu) { state.posts.openMenu = null; rerender(); }
   });
   // COMM-190. A click on the dim backdrop - the overlay element itself, not

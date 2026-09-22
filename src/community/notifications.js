@@ -33,7 +33,7 @@
     const unread = state.notif.unreadLoaded
       ? Number(state.notif.unread) || 0
       : Number((club && club.unread_notifications) || 0);
-    return `<button class="chip-btn" data-community-action="feed-notifications" aria-label="התראות${unread ? (unread === 1 ? ", התראה אחת חדשה" : `, ${unread} חדשות`) : ""}" aria-haspopup="dialog" style="position:relative;">🔔${unread ? `<span class="tab-badge" aria-hidden="true">${unread}</span>` : ""}</button>`;
+    return `<button class="chip-btn" data-community-action="feed-notifications" aria-label="התראות${unread ? (unread === 1 ? ", התראה אחת חדשה" : `, ${unread} חדשות`) : ""}" aria-haspopup="dialog" style="position:relative;">${FEED_ICONS.bell}${unread ? `<span class="tab-badge" aria-hidden="true">${unread}</span>` : ""}</button>`;
   }
 
   // ==== COMM-140..144 notifications ====================================
