@@ -1844,6 +1844,19 @@
   // turned into buttons.
   var bidiText = window.BoxLogSafe.bidiText;
   const bidiHtml = window.BoxLogSafe.bidiHtml;
+  // bidiUnit is the third: a MEASUREMENT (a number plus a Hebrew unit or a
+  // Hebrew count word) whose base direction is stated RTL rather than
+  // inferred. Every `.mono` readout in this file and in src/community/*.js
+  // that puts a Hebrew word next to a number needs it - `.mono` declares
+  // `direction:ltr`, which is right for a bare number and wrong for
+  // "12 ימים ברצף". See the "CONTAINER level" section in safe-helpers.js.
+  // `var`, like bidiText directly above and for the identical reason: app.js
+  // binds the same helper at ITS top level, and these two classic scripts
+  // share one global lexical environment. `var` + `var` binding the identical
+  // frozen function is legal; a `const` on either side is a redeclaration
+  // SyntaxError that takes the whole app down at parse time.
+  var bidiUnit = window.BoxLogSafe.bidiUnit;
+  var bidiUnitHtml = window.BoxLogSafe.bidiUnitHtml;
 
   // ==========================================================================
   // JARGON DISCLOSURE (design spec section 3)
@@ -2880,10 +2893,19 @@
   // These toggles only hide the offer (they are clientOnly by design), so a
   // surface that keeps offering is the whole of the failure: the club said no
   // and one of three places did not listen.
+  // Reported from a real phone: "replace the share emoji on the progress card
+  // with a stroke share icon". 📤 (OUTBOX TRAY) is a colour emoji - it is
+  // painted by the device's own emoji font, at that font's own size and in
+  // its own palette, next to a row of 1.8px-stroke currentColor glyphs, and
+  // it is a filing tray rather than a share affordance on most platforms.
+  // Drawn to EMPTY_STATE_ICONS' conventions below (24-box, 1.8 stroke, round
+  // caps and joins, currentColor) so it inherits the button's own --steel and
+  // themes itself, with no colour of its own in either theme.
+  const SHARE_ICON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3"/><path d="M8 7l4-4 4 4"/><path d="M4 13v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6"/></svg>';
   window.renderShareControl = function (type, id) {
     if (!window.isCommunitySignedIn || !window.isCommunitySignedIn()) return "";
     const key = shareKey(type, id);
-    if (!state.posts.openShare[key]) return `<button data-community-action="toggle-share" data-type="${esc(type)}" data-id="${esc(id)}" aria-label="שיתוף לקהילה" style="color:var(--steel);padding:4px;">📤</button>`;
+    if (!state.posts.openShare[key]) return `<button data-community-action="toggle-share" data-type="${esc(type)}" data-id="${esc(id)}" aria-label="שיתוף לקהילה" style="color:var(--steel);padding:4px;">${SHARE_ICON}</button>`;
     return `<div class="flex items-center gap-6" style="flex-wrap:wrap;">
       ${isModuleEnabled("post_photos") ? `<input type="file" id="photo-${esc(id)}" accept="image/jpeg,image/png,image/webp" class="file-input-hidden"/>
       <label class="chip-btn" for="photo-${esc(id)}" style="cursor:pointer;padding:5px 9px;font-size:11px;">📷</label>` : ""}
@@ -3748,7 +3770,7 @@
         <div style="padding:18px 18px calc(env(safe-area-inset-bottom,0px) + 16px);">
           <div class="flex" style="justify-content:space-between;align-items:center;margin-bottom:12px;">
             <h2 id="recapViewTitle" style="margin-top:0;font-weight:800;font-size:17px;margin-bottom:0;">${weekLabel ? "סיכום השבוע · " + esc(weekLabel) : "סיכום שבועי"}</h2>
-            <button class="chip-btn" data-community-action="close-recap-view" aria-label="סגירה">✕</button>
+            ${sheetCloseBtnHtml("close-recap-view")}
           </div>
           ${nav}
           ${bodyHtml}
@@ -3992,6 +4014,30 @@
       + renderOutwardShareSheet()
       + renderConfirmSheet();
   }
+  // THE CLOSE BUTTON EVERY SHEET IN THIS APP USES, defined once.
+  //
+  // Real-phone report: "the terms sheet has a large boxed close button unlike
+  // every other sheet". Both halves are right. .chip-btn is a pill - a 44px
+  // min-height, a real border, a filled background, sized for "RSVP" or
+  // "לעוקבים" - and a bare "✕" glyph inside it reads as a button that does
+  // something, not as the dismiss affordance. Every app.js dialog
+  // (#notificationsOverlay, #achievementsOverlay, #supportOverlay, the
+  // exercise picker) closes with .icon-btn and the 20x20 stroked X below,
+  // and that is what a member arriving at the glossary from the workouts
+  // library has just been looking at.
+  //
+  // WHICH WAY THE DRIFT GOES, because it is a real question here. This file
+  // and src/community/*.js had SIX copies of the chip-btn form and zero of
+  // the standard one, so the term sheet was not the odd one out within
+  // cloud.js - it was consistent with five siblings and all six were
+  // inconsistent with the app around them. Fixing only the reported one
+  // would have left five, so all six call this, and this is the only
+  // definition. Listed in the PR.
+  function sheetCloseBtnHtml(action) {
+    return `<button class="icon-btn" data-community-action="${esc(action)}" aria-label="סגירה" style="color:var(--steel);">`
+      + `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>`
+      + `</button>`;
+  }
   // ==========================================================================
   // Design spec section 3, TIER 3 — the term sheet.
   //
@@ -4045,7 +4091,7 @@
       <div class="modal-sheet" data-term-sheet style="max-height:none;">
         <div class="modal-head">
           <span class="modal-title" style="font-size:13px;color:var(--steel);">${state.ui.termGlossaryOpen ? "מונחים" : "מה זה?"}</span>
-          <button class="chip-btn" data-community-action="term-close" aria-label="סגירה">✕</button>
+          ${sheetCloseBtnHtml("term-close")}
         </div>
         <div style="padding:4px 18px calc(env(safe-area-inset-bottom,0px) + 22px);">${page}</div>
       </div>
@@ -4399,7 +4445,7 @@
             ${/* community_streaks returns user_id, handle, display_name, current_streak and last_activity_on - and no avatar_url, so this is initials by data shape, not by choice. */ avatarHtml(m.display_name || m.handle, 32)}
             <span style="font-weight:700;">${nameHtml(m.display_name, m.handle)}</span>
           </button>
-          <span class="mono" style="color:var(--brass);">${esc(Number(m.current_streak) === 1 ? "יום רצוף" : Number(m.current_streak) + " ימים ברצף")}</span>
+          <span class="mono" style="color:var(--brass);">${bidiUnit(Number(m.current_streak) === 1 ? "יום רצוף" : Number(m.current_streak) + " ימים ברצף")}</span>
         </div>`).join("")}</div>
       </div>` : "";
       return `<div class="chart-card" data-feed-welcome="ready">
@@ -4658,7 +4704,7 @@
     // separate one, who is on it yet.
     const runningChallenge = activeWeeklyChallenge();
     const weeklyLeaderboardList = state.club.weeklyChallenge
-      ? renderRankedList(state.club.weeklyLeaderboard, (it) => it.author_id, (it) => esc(it.result_text))
+      ? renderRankedList(state.club.weeklyLeaderboard, (it) => it.author_id, (it) => bidiUnit(it.result_text))
       : runningChallenge
         ? `<div class="empty">האתגר פתוח ועדיין אין תוצאות. תוצאה שתשתפו מהאימון תיכנס לטבלה מעצמה.</div>`
         : `<div class="empty">אין אתגר פעיל כרגע</div>`;

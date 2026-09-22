@@ -30,7 +30,7 @@ const appSrc = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
 const cloudSrc = fs.readFileSync(new URL("../cloud.js", import.meta.url), "utf8");
 const g = {};
 new Function("window", helpersSrc)(g);
-const { bidiText, bidiHtml, esc } = g.BoxLogSafe;
+const { bidiText, bidiHtml, bidiUnit, bidiUnitHtml, esc } = g.BoxLogSafe;
 
 // Undo esc() and drop the isolation markup, to compare against what was typed.
 const unesc = (s) =>
@@ -93,6 +93,200 @@ test("the booted app really has the shared module under it, behaving as asserted
   // scripts/browser-check/bidi-rtl-geometry.mjs drives the WOD-history search
   // in real Chromium and asserts the rendered node contains the shared
   // helper's own isolate. That check fails if app.js goes back to a local copy.
+});
+
+// ---------------------------------------------------------------------------
+// bidiUnit / bidiUnitHtml: the CONTAINER-level half.
+//
+// What these can and cannot prove is the same split as the file header
+// describes for bidiText: the painted order lives in Chromium
+// (scripts/browser-check/bidi-measurement-order.mjs measures it, with a
+// control that has to fail). What is unit-testable, and is what this section
+// locks down, is the STRUCTURE - that the base direction is STATED and not
+// inferred, that the run rule inside it is the same one bidiText uses, and
+// that nothing about escaping changed.
+// ---------------------------------------------------------------------------
+
+test("bidiUnit states an RTL base instead of inferring one - this is the whole difference", () => {
+  // The line that made the difference necessary. Its first strong character
+  // is the Latin R of "1RM", so first-strong detection (what <bdi> and
+  // bidiText do) resolves it LTR and paints "משוער 90 ק״ג 1RM" - the exact
+  // string reported from a phone.
+  assert.equal(bidiText("1RM משוער 90 ק״ג"), '<bdi>1RM משוער 90 ק״ג</bdi>', "bidiText leaves an LTR-first line to dir=auto, unchanged");
+  assert.equal(bidiUnit("1RM משוער 90 ק״ג"), '<bdi dir="rtl">1RM משוער 90 ק״ג</bdi>');
+  // And the ordinary case: an RTL-first measurement gets the same stated base
+  // rather than a happens-to-agree inferred one.
+  assert.equal(bidiUnit("90 ק״ג × 1"), '<bdi dir="rtl">90 ק״ג × 1</bdi>');
+});
+
+test("bidiUnit applies the SAME run rule bidiText does, with no first-strong gate", () => {
+  // Interior neutrals still split a Latin/numeric run against an RTL base,
+  // so the run isolation is still required - a stated base does not make it
+  // unnecessary, it only makes the gate unnecessary.
+  assert.equal(bidiUnit("הרמתי 3×5 @ 60"), '<bdi dir="rtl">הרמתי <bdi dir="ltr" lang="en">3×5 @ 60</bdi></bdi>');
+  // The gate bidiText needs is gone: an LTR-FIRST line gets its runs
+  // isolated here, which is safe precisely because the base was stated.
+  assert.equal(bidiUnit("43/30 ק״ג"), '<bdi dir="rtl"><bdi dir="ltr" lang="en">43/30</bdi> ק״ג</bdi>');
+  // A run with no interior neutral is still left alone - and this one is
+  // load-bearing rather than an optimisation. Measured in Chromium: forcing
+  // "+12" LTR inside the RTL base paints "12+ ק״ג", while leaving it alone
+  // paints "+12 ק״ג".
+  assert.equal(bidiUnit("+12 ק״ג"), '<bdi dir="rtl">+12 ק״ג</bdi>');
+  assert.equal(bidiUnit("90 ק״ג"), '<bdi dir="rtl">90 ק״ג</bdi>');
+});
+
+test("bidiUnit escapes every character of untrusted input, exactly like its siblings", () => {
+  const hostile = [
+    '<img src=x onerror="alert(1)">',
+    "בדיקה <script>alert(1)</script> סוף",
+    `אמר 'שלום' & "להתראות" <b>3×5 @ 60</b>`,
+    "&lt;already escaped&gt;",
+  ];
+  for (const raw of hostile) {
+    const out = bidiUnit(raw);
+    assert.doesNotMatch(
+      out.replace(/<\/?bdi(?: [^>]*)?>/g, ""),
+      /[<>]/,
+      `bidiUnit must not leave a raw angle bracket in the output for ${JSON.stringify(raw)}`,
+    );
+    assert.equal(stripped(out), raw, "the isolation must not add, drop or reorder a character");
+  }
+  // And boundaries are still found BEFORE escaping, so `ק"ג` never has the
+  // Latin word inside its own entity isolated.
+  const q = bidiUnit('הרמתי 100 ק"ג');
+  assert.match(q, /ק&quot;ג/);
+  assert.doesNotMatch(q, /<bdi dir="ltr" lang="en">[^<]*quot/);
+});
+
+test("bidiUnit is total: null/undefined/empty are an empty stated-RTL isolate", () => {
+  assert.equal(bidiUnit(null), '<bdi dir="rtl"></bdi>');
+  assert.equal(bidiUnit(undefined), '<bdi dir="rtl"></bdi>');
+  assert.equal(bidiUnit(""), '<bdi dir="rtl"></bdi>');
+  assert.equal(bidiUnit(42), '<bdi dir="rtl">42</bdi>');
+});
+
+test("bidiUnitHtml wraps already-escaped HTML without straddling a tag", () => {
+  const input = '22.09: <span style="color:var(--chalk);">90 ק&quot;ג</span>';
+  const out = bidiUnitHtml(input);
+  assert.match(out, /^<bdi dir="rtl">/);
+  assert.match(out, /<\/bdi>$/);
+  // Lossless over the markup it was handed: only isolates are added.
+  assert.equal(out.replace(/<bdi(?: [^>]*)?>/g, "").replace(/<\/bdi>/g, ""), input);
+  for (const run of out.match(/<bdi dir="ltr" lang="en">[\s\S]*?<\/bdi>/g) || []) {
+    assert.doesNotMatch(run.slice('<bdi dir="ltr" lang="en">'.length, -"</bdi>".length), /[<>]/, "no isolate may contain markup");
+  }
+});
+
+test("app.js and cloud.js bind bidiUnit, they do not re-declare it", () => {
+  // The same drift guard the pair above already has, for the pair below it.
+  // A fourth copy of the run finder is the failure mode; a local
+  // re-implementation of the wrapper is how one gets in.
+  for (const [name, src] of [["app.js", appSrc], ["cloud.js", cloudSrc], ...COMMUNITY_MODULES.map((f) => [f, communityFile(f)])]) {
+    assert.doesNotMatch(src, /^\s*function bidiUnit\s*\(/m, `${name} must not re-declare bidiUnit`);
+    assert.doesNotMatch(src, /^\s*function bidiUnitHtml\s*\(/m, `${name} must not re-declare bidiUnitHtml`);
+  }
+  // `var` on BOTH sides, not `const`. app.js and cloud.js are classic scripts
+  // sharing one global lexical environment: `var` + `var` binding the same
+  // frozen function is legal, and a `const` on either side is a redeclaration
+  // SyntaxError that takes the whole app down at parse time.
+  // One statement each, not a comma list: test/community-module-split.test.mjs
+  // reads top-level declarations a line at a time and would only see the
+  // first name of `var a = …, b = …`, silently exempting the second from the
+  // cross-file redeclaration check these two most need.
+  assert.match(appSrc, /^var bidiUnit = SAFE\.bidiUnit;$/m);
+  assert.match(appSrc, /^var bidiUnitHtml = SAFE\.bidiUnitHtml;$/m);
+  assert.match(cloudSrc, /var bidiUnit = window\.BoxLogSafe\.bidiUnit;/);
+  assert.match(cloudSrc, /var bidiUnitHtml = window\.BoxLogSafe\.bidiUnitHtml;/);
+});
+
+// THE RULE, ENFORCED OVER REAL RENDERED SCREENS RATHER THAN OVER SOURCE TEXT.
+//
+// index.html's `.mono` declares `direction:ltr`. That is correct for a bare
+// number and wrong for a number standing next to a Hebrew word, and the
+// difference is invisible in every artefact a unit test normally looks at -
+// the markup is right either way, and jsdom has no bidi algorithm to run.
+//
+// So the assertion is structural and it is checked where the strings actually
+// land: boot the app, put real data through it, render the screens, and walk
+// every `.mono` element on them. Any that contains a Hebrew letter must carry
+// a STATED base direction (bidiUnit's `<bdi dir="rtl">`), because the `.mono`
+// box it sits in has already stated the wrong one.
+//
+// A source-level scan was the obvious alternative and is strictly weaker: it
+// can only see the call sites someone thought to write, while this sees what
+// a screen actually produced, including through helpers three calls deep
+// (formatWodEntry, formatLiftedSet, volumeCountsLabel, entrySummary).
+const HEBREW = /[\u0590-\u05FF]/;
+function unisolatedMonoNodes(window) {
+  const bad = [];
+  for (const el of window.document.querySelectorAll(".mono")) {
+    const text = (el.textContent || "").trim();
+    if (!text || !HEBREW.test(text)) continue;
+    // The isolate may be the element's own child or wrap a part of it; what
+    // matters is that a stated-RTL base exists between the `.mono` box and
+    // the Hebrew, for every Hebrew-bearing text node under it.
+    const stated = el.querySelector('bdi[dir="rtl"]');
+    if (!stated || !HEBREW.test(stated.textContent || "")) bad.push(text.slice(0, 48));
+  }
+  return bad;
+}
+
+test("no rendered .mono readout puts a Hebrew unit in an LTR box without stating its base", async () => {
+  const window = await bootApp();
+  const doc = window.document;
+
+  await window.addMovement("Bidi Squat", "Squat");
+  window.applyFieldValue("step", "weight", 90);
+  window.applyFieldValue("step", "reps", 1);
+  window.applyFieldValue("step", "sets", 1);
+  await window.saveSet();
+
+  const offenders = {};
+  // The progress tab, with a record row expanded: the headline, the estimate
+  // line under it, the trend chip and the recent-sets strip.
+  doc.getElementById("tabHistoryBtn").click();
+  const row = doc.querySelector("#historyListArea [data-action='select-history']");
+  if (row) row.click();
+  offenders.progress = unisolatedMonoNodes(window);
+
+  // The calendar tab: the day detail and the category volume card.
+  doc.getElementById("tabCalendarBtn").click();
+  offenders.calendar = unisolatedMonoNodes(window);
+
+  // The workouts library, all three sub-tabs.
+  doc.getElementById("tabWodBtn").click();
+  offenders.wodLog = unisolatedMonoNodes(window);
+  const benchTab = doc.querySelector("button.subtabbtn[data-subtab='benchmarks']");
+  if (benchTab) { benchTab.click(); offenders.wodBenchmarks = unisolatedMonoNodes(window); }
+  const histTab = doc.querySelector("button.subtabbtn[data-subtab='history']");
+  if (histTab) { histTab.click(); offenders.wodHistory = unisolatedMonoNodes(window); }
+
+  // The medals overlay.
+  window.openAchievements();
+  offenders.medals = unisolatedMonoNodes(window);
+
+  const all = Object.entries(offenders).filter(([, v]) => v.length);
+  assert.deepEqual(
+    all,
+    [],
+    "a .mono readout carries Hebrew with no stated base direction — it will paint in the wrong order:\n  "
+      + all.map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join("\n  "),
+  );
+});
+
+test("the audit above is not vacuously green: it really does catch an un-isolated readout", async () => {
+  // The same shape the app used to emit, injected into a real rendered page.
+  // Without this, "no .mono element is missing its isolate" would pass just
+  // as happily on a page that has no .mono elements at all.
+  const window = await bootApp();
+  const probe = window.document.createElement("span");
+  probe.className = "mono";
+  probe.textContent = "90 ק״ג × 1";
+  window.document.getElementById("content").appendChild(probe);
+  assert.deepEqual(unisolatedMonoNodes(window), ["90 ק״ג × 1"]);
+  // And the fixed form passes.
+  probe.innerHTML = window.BoxLogSafe.bidiUnit("90 ק״ג × 1");
+  assert.deepEqual(unisolatedMonoNodes(window), []);
 });
 
 test("VERSION was bumped for the added helpers, as the module's contract requires", () => {

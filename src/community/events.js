@@ -658,7 +658,7 @@
         <div style="padding:18px 18px calc(env(safe-area-inset-bottom,0px) + 16px);">
           <div class="flex" style="justify-content:space-between;align-items:center;margin-bottom:12px;">
             <h2 id="eventViewTitle" style="margin-top:0;font-weight:800;font-size:17px;margin-bottom:0;">${v.event ? bidiText(v.event.title) : "אירוע"}</h2>
-            <button class="chip-btn" data-community-action="close-event-view" aria-label="סגירה">✕</button>
+            ${sheetCloseBtnHtml("close-event-view")}
           </div>
           ${bodyHtml}
         </div>
