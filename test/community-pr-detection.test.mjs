@@ -108,6 +108,20 @@ test("end to end: a logged lift drives the PR share prompt and posts nothing on 
   for (const kg of [100, 105, 110]) {
     await logReps(window, kg);
     window.closeCelebration();
+    // The share-prompt coordinator (src/community/share-prompt.js) shows ONE
+    // prompt per moment and parks the rest, so the "האימון הראשון" medal the
+    // first save unlocks is now answered BEFORE anything else is offered
+    // rather than painted on top of the PR prompt - which is the "stacked
+    // right behind the achievement-unlock celebration" complaint
+    // onPrCreated's own comment records, and answering them in turn is that
+    // complaint's fix rather than a new hoop. ach_claim is a round trip, so
+    // the medal arrives a tick or two after the save resolves.
+    const until = Date.now() + 500;
+    while (Date.now() < until) {
+      const medal = window.document.querySelector('[data-community-action="ach-not-now"]');
+      if (medal) { medal.click(); break; }
+      await new Promise((r) => setTimeout(r, 25));
+    }
   }
   await logReps(window, 140);
 

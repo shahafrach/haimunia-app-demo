@@ -58,6 +58,7 @@ const OPTIONAL_ASSETS = [
   "./src/community/boards.js",
   "./src/community/directory.js",
   "./src/community/posts.js",
+  "./src/community/share-prompt.js",
   "./src/community/auth.js",
   "./src/community/admin.js",
   "./cloud.js",

@@ -122,16 +122,89 @@
       }
       if (!photoPath) return setMessage("העלאת התמונה נכשלה, אפשר לנסות שוב בלי תמונה");
     }
+    const { queued, error } = await shareWorkoutRecord(item, visibility, photoPath);
+    if (error) return setMessage(failText("שיתוף התוצאה נכשל", error));
+    delete state.posts.openShare[shareKey(type, id)];
+    if (queued) return setMessage("התוצאה תישלח למועדון כשהחיבור יחזור");
+    await loadFeed(); setMessage("התוצאה שותפה בלי הערות, מדדים או פרטים אישיים");
+  }
+  // ---- The one workout-share write in the app --------------------------
+  //
+  // Two callers now: publishWorkout() above (the share control in Calendar
+  // and Progress, where the member goes looking) and shareWorkoutSharePrompt()
+  // in src/community/share-prompt.js (the prompt that comes looking for them).
+  // They are one write, one payload, one on-conflict target and one
+  // measurement, declared here once, because two copies of this that drifted
+  // by one column is the defect CLAUDE.md's "sibling drift" rule is about -
+  // and because the on-conflict target IS rule 4 of the share prompt ("one
+  // record, one post"): a second definition that omitted it would publish a
+  // duplicate card for every re-share.
+  function workoutSharePayload(item, visibility, photoPath) {
     const payload = { author_id: state.user.id, source_type: item.type, source_record_id: item.id, visibility: visibility === "public" ? "public" : "followers", title: item.title, result_text: item.resultText, comparison_key: item.comparisonKey, score_value: item.scoreValue, score_direction: item.scoreDirection, rx: item.rx, occurred_on: item.occurredOn };
     if (photoPath) payload.photo_path = photoPath;
-    const { error } = await client.from("workout_posts").upsert(payload, { onConflict: "author_id,source_type,source_record_id" });
-    if (error) return setMessage(failText("שיתוף התוצאה נכשל", error));
-    // COMM-170. After the write, so a failed share is not counted as one.
-    // This path predates the composer and does not emit POST_CREATED, so
-    // workout_shared is the only record of it.
-    track(A.WORKOUT_SHARED, { source_type: item.type, visibility: payload.visibility, has_photo: !!photoPath });
-    delete state.posts.openShare[shareKey(type, id)];
-    await loadFeed(); setMessage("התוצאה שותפה בלי הערות, מדדים או פרטים אישיים");
+    return payload;
+  }
+  // THE on-conflict target. workout_posts(author_id, source_type,
+  // source_record_id) is unique, so a repeat share of one logged record
+  // converges on the post that already exists instead of raising 23505 or
+  // minting a second card - the same uniqueness pr_share() leans on when it
+  // UPGRADES this row in place to a POST_PR (202609060025) rather than
+  // writing a second post beside it.
+  function upsertWorkoutSharePost(payload) {
+    return client.from("workout_posts").upsert(payload, { onConflict: "author_id,source_type,source_record_id" });
+  }
+  // The queued action name. NOT in OUTBOX_ACTIONS, and for exactly the reason
+  // ANALYTICS_OUTBOX_ACTION is not: that list is what communityRpc() consults,
+  // every entry in it is an RPC name, and this one is a table upsert. It gets
+  // its own handler in registerOutboxHandlers() (cloud.js) instead.
+  //
+  // The queue mints an idempotency key per row and this handler ignores it,
+  // which is safe here and only here: the write is an upsert on a unique
+  // triple, so replaying it converges rather than duplicating. An RPC in the
+  // same position would need the key.
+  const WORKOUT_SHARE_OUTBOX_ACTION = "workout_share";
+  async function writeWorkoutSharePost(payload) {
+    // The same storeReady() question src/outbox.js asks itself, asked before
+    // enqueue() can throw it back at a member who is simply offline.
+    const canQueue = !!(window.HaimuniaOutbox && typeof window.dbPutCommunityOutboxRow === "function");
+    const enqueueOpts = { userId: state.user && state.user.id };
+    if (canQueue && typeof navigator !== "undefined" && navigator.onLine === false) {
+      await window.HaimuniaOutbox.enqueue(WORKOUT_SHARE_OUTBOX_ACTION, { row: payload }, enqueueOpts);
+      return { queued: true, error: null };
+    }
+    const { error } = await upsertWorkoutSharePost(payload);
+    if (error && canQueue && isOfflineError(error)) {
+      await window.HaimuniaOutbox.enqueue(WORKOUT_SHARE_OUTBOX_ACTION, { row: payload }, enqueueOpts);
+      return { queued: true, error: null };
+    }
+    if (error) trackWriteFailure(WORKOUT_SHARE_OUTBOX_ACTION, error);
+    return { queued: false, error: error };
+  }
+  // The handler the queue drains this action with. Registered from cloud.js's
+  // registerOutboxHandlers() beside the analytics one; defined here so the
+  // upsert has one home.
+  async function workoutShareOutboxHandler(args, row) {
+    if (!client || !state.user) throw new Error("session expired");
+    if (row && row.userId && row.userId !== state.user.id) throw new Error("session mismatch, queued for a different member");
+    const payload = Object.assign({}, args && args.row);
+    // Re-stamped rather than trusted: the row was built while this member was
+    // offline, flush() and the check above already refuse a row belonging to
+    // anybody else, and author_id is the column the unique triple - and every
+    // RLS policy on this table - is keyed on.
+    payload.author_id = state.user.id;
+    const { error } = await upsertWorkoutSharePost(payload);
+    if (error) throw new Error(error.message || "workout share failed");
+  }
+  // Returns { queued, error }. COMM-170's measurement lives here, after the
+  // write and on both callers' behalf, so a failed share is never counted as
+  // one - and a QUEUED share is, because it is a member action that will
+  // land. This path predates the composer and emits no POST_CREATED, so
+  // workout_shared is the only record of it.
+  async function shareWorkoutRecord(item, visibility, photoPath) {
+    const payload = workoutSharePayload(item, visibility, photoPath);
+    const result = await writeWorkoutSharePost(payload);
+    if (!result.error) track(A.WORKOUT_SHARED, { source_type: item.type, visibility: payload.visibility, has_photo: !!photoPath });
+    return result;
   }
   // Collapsed to one small icon by default wherever a result actually
   // lives (Calendar day view, a movement/WOD's Progress card) instead of
@@ -1252,6 +1325,12 @@
   // must stay correct regardless of how many prior sets happen to be on
   // file. The per-movement cooldown below is the same idea applied a
   // second time, for members past the trivial window (see its own comment).
+  //
+  // The signed-in check it used to make by hand is now one clause of
+  // sharePromptAllowed() (src/community/share-prompt.js), which also asks the
+  // member's own "stop offering" switch and the club's feed module.
+  // offerSharePrompt() is what keeps this from opening on top of, or under,
+  // the workout prompt or an achievement celebration for the same save.
   function onPrCreated(payload) {
     const record = payload && (payload.record || payload);
     if (!record) return;
@@ -1260,15 +1339,23 @@
     if (!recordId) return;
     if (prPromptDismissedSet().has(String(recordId))) return;
     if (prPromptOnCooldownFor(record.movement)) return;
-    if (!window.isCommunitySignedIn || !window.isCommunitySignedIn()) return;
-    state.posts.prPrompt = { record: Object.assign({}, record, { record_id: recordId }), note: "", showNote: false, photo: null, publishing: false, error: "" };
-    rememberPrPromptShownForMovement(record.movement);
-    rerender();
+    offerSharePrompt("pr", function () {
+      // Re-checked at open time, not only at offer time: a parked offer can
+      // be released a dialog later, and the cooldown this very prompt writes
+      // is what stops the second of two PRs in one session from asking again.
+      if (prPromptDismissedSet().has(String(recordId))) return false;
+      if (prPromptOnCooldownFor(record.movement)) return false;
+      state.posts.prPrompt = { record: Object.assign({}, record, { record_id: recordId }), note: "", showNote: false, photo: null, publishing: false, error: "" };
+      rememberPrPromptShownForMovement(record.movement);
+      rerender();
+      return true;
+    });
   }
   function dismissPrPrompt() {
     if (state.posts.prPrompt) rememberPrDismissed(state.posts.prPrompt.record.record_id);
     state.posts.prPrompt = null;
     rerender();
+    sharePromptClosed();
   }
   async function prPromptAddPhoto(file) {
     const p = state.posts.prPrompt;
@@ -1303,15 +1390,26 @@
     const media = p.photo && p.photo.status === "ready" && p.photo.storagePath
       ? [{ storage_path: p.photo.storagePath, alt_text: p.photo.decorative ? "" : String(p.photo.altText || "").slice(0, ALT_TEXT_MAX), decorative: !!p.photo.decorative, position: 0, width: p.photo.width || null, height: p.photo.height || null }]
       : [];
-    const { data, error } = await client.rpc("pr_share", { record_id: p.record.record_id, note: cleanPostBody(p.note), media });
-    if (error || !data) { p.publishing = false; p.error = "השיתוף נכשל, אפשר לנסות שוב"; return rerender(); }
+    // communityRpc(), not client.rpc(): pr_share is in OUTBOX_ACTIONS now, so
+    // a share tapped with no connection is persisted in IndexedDB with its own
+    // idempotency key and sent on reconnect instead of failing in front of a
+    // member who has just finished training in a basement. The key is what
+    // makes the retry safe; the server (202609060014) answers a repeated key
+    // with the original post id rather than writing twice.
+    const { queued, data, error } = await communityRpc("pr_share", { record_id: p.record.record_id, note: cleanPostBody(p.note), media });
+    if (error || (!queued && !data)) { p.publishing = false; p.error = "השיתוף נכשל, אפשר לנסות שוב"; return rerender(); }
     rememberPrDismissed(p.record.record_id);
     state.posts.prPrompt = null;
-    setMessage("השיא שותף לקהילה");
-    if (window.HaimuniaEvents && window.PRODUCT_EVENTS && window.PRODUCT_EVENTS.POST_CREATED) {
+    setMessage(queued ? "השיא יישלח לקהילה כשהחיבור יחזור" : "השיא שותף לקהילה");
+    // No post id yet on the queued branch, and POST_CREATED's whole payload is
+    // one - so it is not emitted rather than emitted with a null. The queue
+    // owns the write from here; nothing downstream of this event is load-
+    // bearing for the member's own share.
+    if (!queued && window.HaimuniaEvents && window.PRODUCT_EVENTS && window.PRODUCT_EVENTS.POST_CREATED) {
       try { window.HaimuniaEvents.emit(window.PRODUCT_EVENTS.POST_CREATED, { post_id: data, post_type: "POST_PR" }); } catch (e) {}
     }
     rerender();
+    sharePromptClosed();
   }
   function renderPrSharePrompt() {
     const p = state.posts.prPrompt;
@@ -1330,6 +1428,13 @@
           ${p.photo ? `<div style="font-size:12px;color:var(--steel);margin-top:6px;">${p.photo.status === "ready" ? "תמונה צורפה" : p.photo.status === "processing" ? "מעבד תמונה…" : esc(p.photo.error || "העלאת התמונה נכשלה")}</div>` : ""}
           ${p.photo && p.photo.status === "ready" && !p.photo.decorative ? `<label class="field" style="margin-top:6px;"><span class="field-label">תיאור התמונה לקורא מסך</span><input class="text-input" data-pr-alt maxlength="${ALT_TEXT_MAX}" value="${esc(p.photo.altText || "")}"/></label>` : ""}
           ${p.showNote ? `<label class="field" style="margin-top:8px;"><span class="field-label">הערה</span><textarea class="text-input" data-pr-note maxlength="${POST_BODY_MAX}" rows="3">${esc(p.note || "")}</textarea></label>` : ""}
+          ${/* Sibling: feed_page redacts a POST_PR's figures under exactly the
+                same show_workout_results rule it redacts a POST_WORKOUT's
+                (202608310006), so the sentence the workout prompt says before
+                a member taps belongs on this prompt too - it was the twin
+                this prompt was missing. One definition, in
+                src/community/share-prompt.js. */ ""}
+          ${sharePromptPrivacyNoteHtml()}
           ${p.error ? `<div class="field-error" role="alert" style="margin-top:8px;">${esc(p.error)}</div>` : ""}
           <div class="chip-row" style="margin-top:14px;">
             <button class="chip-btn primary" data-community-action="pr-share"${p.publishing || (p.photo && p.photo.status === "processing") ? " disabled" : ""}>${p.publishing ? "משתף…" : "שיתוף למועדון"}</button>
