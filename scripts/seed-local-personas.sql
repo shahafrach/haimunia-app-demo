@@ -20,8 +20,16 @@
 -- (24 seeded + 6 POST_NEW_MEMBER the app generates on join), 40 reactions,
 -- 8 comments.
 -- Routed through the real RPCs (create_member_invite / redeem_invite_code /
--- post_create / toggle_reaction / add_post_comment) so the rows land the way
--- the app would make them, RLS and triggers included.
+-- post_create / pr_share / toggle_reaction / add_post_comment) so the rows
+-- land the way the app would make them, RLS and triggers included.
+--
+-- 2026-09-22: section 6 (the PRs) was rewritten. It used to set
+-- post_type = 'POST_PR' in a direct update, which 202609110004 now refuses
+-- ('post type requires server-verified evidence'), aborting the whole file
+-- on any stack at or past that migration; it now goes through pr_share()
+-- over a real private_records row instead. See that section's own header.
+-- That rewrite has NOT been re-run against a local stack - the environment
+-- it was written in has no Docker, so `supabase start` was unavailable.
 --
 -- NEVER run this against a remote project.
 
@@ -352,46 +360,179 @@ end $$;
 
 -- 6. A few PRs, so Celebrate has its non-attendance sources populated.
 --
+-- THROUGH pr_share(), NOT a direct post_type update. This block used to call
+-- post_create() and then set post_type = 'POST_PR' in a second own-row
+-- update, on the reasoning that POST_PR was not in the privileged set.
+-- 202609110004 closed exactly that hole: a POST_PR/POST_ACHIEVEMENT write by
+-- an authenticated caller now raises 'post type requires server-verified
+-- evidence' unless the transaction-local app.allow_pr_achievement_write pin
+-- is on, and only pr_share()/ach_share() set it - after reading the caller's
+-- OWN private_records row. So the old block aborted the whole seed here on
+-- any stack at or past that migration.
+--
+-- Setting that pin from the seed would be forging by hand the one thing the
+-- guard exists to demand. The fixture supplies the evidence instead: a real
+-- private_records entry per PR (the same rows cloud.js's outbox syncs), then
+-- pr_share() on it as that member - exactly what the app's share prompt
+-- (COMM-133, cloud.js) does when a PR is detected.
+--
+-- WHAT THAT CHANGES about the rows this produces: movement, new_result,
+-- previous_result, improvement and achieved_on are now DERIVED by pr_share()
+-- from the record instead of being handed to it, so the result strings are
+-- pr_share's own format ('90 ק"ג × 1') rather than the free text this block
+-- used to invent. Nothing here can publish a figure the member did not log,
+-- which is the point of the guard.
+--
+-- MOVEMENT NAMES RESOLVE ONLY FOR CUSTOM MOVEMENTS. pr_share looks the title
+-- up in the caller's own record_type='movement' rows, and only custom
+-- movements are ever synced (202609060019's header says so; MOVEMENTS in
+-- src/constants.js is built into the client and has no server row). Two of
+-- the three PRs below are on seeded custom movements and carry a name; the
+-- third is deliberately on the built-in back-squat and carries none, so the
+-- fixture also shows the coach card's real fallback - coach_celebrate_feed
+-- coalesces metadata->>'movement' to title to '' - instead of only the happy
+-- path. That blank is the product as shipped, not a broken fixture.
+--
 -- show_prs is OFF by default (202608280003) and coach_celebrate_feed() runs
 -- every PR through can_view_profile_field(author,'show_prs'), so a PR post
 -- by a member who has not opted in is correctly invisible to the coach.
--- Opting these two in is what makes the fixture exercise the visible path;
+-- Opting these three in is what makes the fixture exercise the visible path;
 -- the other members' PRs staying hidden is the privacy rule working.
+--
+-- WHO GETS A PR, AND WHY NOT itai_r OR omer_l. Going through pr_share means
+-- seeding a real strength_entry, and private_records_attendance_log turns
+-- every one of those into a training day - which is an INPUT to
+-- coach_detect_engagement_decline() in section 7. itai_r is the fixture's
+-- 'significant' decline (4/wk baseline, 1/wk recent, ratio 0.25 against a
+-- 0.35 bucket edge) and omer_l is its only genuinely lapsed member; one
+-- extra day inside the 14-day recent window moves itai_r to 'mild' and
+-- un-lapses omer_l, and whether it lands at all would depend on which
+-- weekday the seed happened to be run. The three chosen here - noa_s
+-- (healthy), dana_k (steady, and the coach) and maya_t (four days old, so
+-- below the 0.5 sessions/week baseline floor that makes a member
+-- flaggable at all) - cannot be flagged either way, so a PR cannot change
+-- what section 7 finds.
 --
 -- Movement names are English on purpose - that is the vernacular in an
 -- Israeli box, and the app does not translate them.
+--
+-- WHAT THE THREE CARDS COME OUT AS. Derived by running pr_share's own
+-- title/result/previous-best expressions over exactly these rows:
+--
+--   noa_s   Sandbag Clean   90 ק"ג × 1   previous 80 ק"ג × 1, +10 ק"ג
+--   dana_k  Yoke Carry      150 ק"ג · 20 שנ׳
+--   maya_t  (no name)       80 ק"ג × 3   - the built-in back-squat case
+--
 do $$
 declare
   v_author uuid;
   v_post uuid;
+  v_rec text;
+  v_prev_rec text;
+  v_ts bigint;
+  v_name text;
+  v_ex text;
+  v_type text;
+  v_weight numeric;
+  v_reps int;
+  v_dur int;
+  v_prev numeric;
+  -- handle, custom movement name (null = a built-in id with no server row),
+  -- exerciseId, entry type, weight, reps, durationSeconds, the weight of the
+  -- set this one beats (null = no prior best, so no improvement line), note.
   v_prs text[][] := array[
-    ['noa_s','Back Squat','120 kg','שיא חדש בסקוואט, 120'],
-    ['dana_k','Deadlift','150 kg','דדליפט 150, אחרי חודשיים של עבודה'],
-    ['itai_r','Fran','3:48','Fran ב-3:48, ראשון מתחת ל-4']
+    ['noa_s','Sandbag Clean','seed-mv-sandbag-clean','reps','90','1','0','80','סנדבאג 90, שיא חדש'],
+    ['dana_k','Yoke Carry','seed-mv-yoke-carry','duration','150','0','20',null,'יוק 150 ק"ג, 20 שניות'],
+    ['maya_t',null,'back-squat','reps','80','3','0',null,'סקוואט 80, השיא הראשון שלי פה']
   ];
   i int;
 begin
   update public.profiles set show_prs = true
-   where handle in ('noa_s','dana_k','itai_r');
+   where handle in ('noa_s','dana_k','maya_t');
 
   for i in 1..array_length(v_prs,1) loop
     select id into v_author from public.profiles where handle = v_prs[i][1];
     continue when v_author is null;
+
+    v_name   := v_prs[i][2];
+    v_ex     := v_prs[i][3];
+    v_type   := v_prs[i][4];
+    v_weight := v_prs[i][5]::numeric;
+    v_reps   := v_prs[i][6]::int;
+    v_dur    := v_prs[i][7]::int;
+    v_prev   := v_prs[i][8]::numeric;
+    v_rec    := 'seed-pr-' || v_prs[i][1];
+    v_ts     := (extract(epoch from now()) * 1000)::bigint;
+
+    -- The movement definition, when this PR is on a custom movement. Payload
+    -- shape is customMovements' own ({id, name, category}, app.js addMovement).
+    if v_name is not null then
+      insert into public.private_records (user_id, record_type, record_id, payload)
+      values (v_author, 'movement', v_ex,
+              jsonb_build_object('id', v_ex, 'name', v_name, 'category', 'Other'))
+      on conflict (user_id, record_type, record_id) do nothing;
+    end if;
+
+    -- The set this PR beats, when there is one. pr_share's previous-best
+    -- probe asks for the same exerciseId, the same rep count and an older
+    -- ts, and nothing else - so those three are what this row has to carry
+    -- for 'previous_result'/'improvement' to appear on the card.
+    if v_prev is not null then
+      v_prev_rec := 'seed-pr-prev-' || v_prs[i][1];
+      insert into public.private_records (user_id, record_type, record_id, payload, created_at, updated_at)
+      values (v_author, 'strength_entry', v_prev_rec,
+              jsonb_build_object(
+                'id', v_prev_rec,
+                -- 30 days in ms. The cast is load-bearing: 30 * 86400000
+                -- overflows int4 and would abort the seed at runtime.
+                'ts', v_ts - 30 * 86400000::bigint,
+                'updatedAt', v_ts - 30 * 86400000::bigint,
+                'exerciseId', v_ex, 'type', 'reps',
+                'weight', v_prev, 'reps', v_reps, 'sets', 1,
+                'durationSeconds', 0,
+                'date', (current_date - 30)::text, 'isPR', true,
+                -- estimate1RM (src/format.js): the weight itself at one rep.
+                'est1RM', case when v_reps <= 1 then v_prev
+                               else round(v_prev * (1 + v_reps / 30.0), 1) end,
+                'groupId', null, 'blockLabel', null),
+              (current_date - 30)::timestamptz, (current_date - 30)::timestamptz)
+      on conflict (user_id, record_type, record_id) do nothing;
+    end if;
+
+    -- The PR itself. saveSet()'s own entry shape (app.js), which is what
+    -- queueSyncRecord('strength_entry', ...) puts in private_records.payload.
+    insert into public.private_records (user_id, record_type, record_id, payload, created_at, updated_at)
+    values (v_author, 'strength_entry', v_rec,
+            jsonb_build_object(
+              'id', v_rec, 'ts', v_ts, 'updatedAt', v_ts,
+              'exerciseId', v_ex, 'type', v_type,
+              'weight', v_weight, 'reps', v_reps, 'sets', 1,
+              'durationSeconds', v_dur,
+              'date', (current_date - i)::text, 'isPR', true,
+              'est1RM', case when v_type = 'duration' then 0
+                             when v_reps <= 1 then v_weight
+                             else round(v_weight * (1 + v_reps / 30.0), 1) end,
+              'groupId', null, 'blockLabel', null),
+            (current_date - i)::timestamptz, (current_date - i)::timestamptz)
+    on conflict (user_id, record_type, record_id) do nothing;
+
+    -- As the member, over the same RPC the share prompt calls. Every gate
+    -- pr_share carries (is_community_member, has_perm, posting restriction,
+    -- rate limit) runs for real here, which is the point.
     perform set_config('request.jwt.claims',
       json_build_object('sub', v_author::text, 'role', 'authenticated')::text, true);
-    v_post := public.post_create(
-      v_prs[i][4], 'club'::public.post_visibility, '[]'::jsonb, '{}'::jsonb);
-    -- post_create always lands POST_TEXT (202608280023); the type is set in
-    -- a second own-row update, the same workaround cloud.js already uses for
-    -- POST_COACH. POST_PR is not in the privileged set, so no staff rank is
-    -- involved and a plain member's PR lands the same way.
+    v_post := public.pr_share(v_rec, v_prs[i][9]);
+    perform set_config('request.jwt.claims', '', true);
+
+    -- Spread the three cards across coach_celebrate_feed's 7-day window.
+    -- created_at is not one of workout_posts_guard_moderated_fields' seven
+    -- pinned columns, and post_type does not move, so this is an ordinary
+    -- update - and the claims are already cleared, so it runs as the seed's
+    -- own superuser rather than as the member.
     update public.workout_posts
-       set post_type = 'POST_PR',
-           metadata = jsonb_build_object('movement', v_prs[i][2], 'new_result', v_prs[i][3]),
-           created_at = now() - make_interval(days => i)
+       set created_at = now() - make_interval(days => i)
      where id = v_post;
   end loop;
-  perform set_config('request.jwt.claims', '', true);
 end $$;
 
 -- 6b. One finished challenge with two members who completed it, so

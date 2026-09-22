@@ -198,6 +198,16 @@ the Hebrew governs for members.
 האלה גלויות לצוות בלבד** ואינן מוצגות לחבר/ה שהן עוסקות בו/בה, מאותה
 סיבה שסימון ירידה בקצב מוסתר; גם כאן אתם רשאים לבקש לדעת מה רשום לגביכם.
 
+**בדוח החודשי של המועדון** (מודול "דוח לבעלי המועדון", כבוי כברירת מחדל
+ונדלק על ידי המועדון) רואים **מאמן/ת ראשי/ת ומנהל/ת בלבד** — לא מאמן/ת
+רגיל/ה — תמונה של החודש שנסגר: כמה חברים התאמנו, מי הצטרף, מי התאמן
+בחודש הקודם ולא הגיע בחודש הזה, ומי מסומן/ת בסיכון כרגע. מאחורי כל מספר
+אפשר לפתוח את רשימת השמות, ולצד כל שם מופיע **מספר ימי אימון בלבד** —
+לא התאריכים ולא התוצאות. הרזולוציה היא חודש שלם: מהרשימה אפשר להסיק
+באיזה חודש התאמנתם לאחרונה, לא באילו ימים. הדוח נוצר פעם בחודש, נשמר
+כמספרים בלבד (בלי שמות), ואינו יוצא מהמועדון — אין ממנו ייצוא לקובץ ואין
+שליחה לשום שירות חיצוני.
+
 **ימים שבהם פתחתם את האפליקציה — מדד נפרד לגמרי.** בנפרד מכל האמור
 לעיל, ולחברי קהילה בלבד, נרשם יום לכל יום שבו האפליקציה נפתחה. מכאן
 מגיעים שלושה דברים: רשימת "חברים שלא היו פעילים לאחרונה" ורשימת "חברים
@@ -601,6 +611,18 @@ from when somebody on the staff last contacted you — never from a list of
 your sessions. **These tasks are visible to staff only** and are not shown
 to the member they are about, for the same reason a drop-in-pace flag is
 hidden; here too you are entitled to ask what is recorded about you.
+
+**In the club's monthly report** (the "owner report" module, off by default
+and switched on by the club) the **head coach and the admin only** — not an
+ordinary coach — see a picture of the month that just closed: how many
+members trained, who joined, who trained last month and did not come this
+month, and who is currently flagged as at risk. Each number opens the list of
+names behind it, and beside each name is **a count of training days only** —
+never the dates and never the results. The resolution is a whole month: the
+list tells them which month you last trained in, not which days. The report is
+produced once a month, is stored as counts alone with no names in it, and does
+not leave the club — there is no export from it and nothing is sent to any
+outside service.
 
 **Days you opened the app — an entirely separate measure.** Separately
 from all of the above, and for community members only, a day is recorded

@@ -3162,6 +3162,11 @@
 <script defer src="./src/community/boards.js"></script>
 <script defer src="./src/community/directory.js"></script>
 <script defer src="./src/community/posts.js"></script>
+<!-- The share prompt after real training, and the one coordinator the
+     workout, PR and achievement prompts all pass through. After posts.js
+     and achievements.js by convention only - it calls into both, but only
+     from inside function bodies, which run long after every script has. -->
+<script defer src="./src/community/share-prompt.js"></script>
 <script defer src="./src/community/auth.js"></script>
 <script defer src="./src/community/admin.js"></script>
 <script defer src="./cloud.js"></script>

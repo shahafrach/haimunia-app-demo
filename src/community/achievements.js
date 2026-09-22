@@ -137,9 +137,22 @@
   }
   window.claimCommunityAchievements = claimCommunityAchievements;
 
+  // Two entry points, one sheet. ACHIEVEMENT_UNLOCKED arrives on its own -
+  // the member did not ask for it - so it goes through the share-prompt
+  // coordinator (src/community/share-prompt.js): the member's "stop offering"
+  // switch, the club's achievements module, and the one-prompt-at-a-time rule
+  // that stops this from painting on top of the PR prompt for the same save.
+  // (The decoration's OWN visibility is checked where it belongs, on the
+  // sheet's share control below - "only_me" offers no share at all.) shareEarnedAchievement() below is a TAP on a decoration the member
+  // went and found in "ההישגים שלי", so it opens the sheet directly: a switch
+  // that says "do not offer" must not disable a control the member pressed.
   function onAchievementUnlocked(payload) {
+    if (!payload || !payload.code) return;
+    offerSharePrompt("achievement", function () { return openAchievementUnlockSheet(payload); });
+  }
+  function openAchievementUnlockSheet(payload) {
     const code = payload && payload.code;
-    if (!code) return;
+    if (!code) return false;
     // ach_claim_row carries only {code, member_achievement_id, visibility} -
     // no name and no icon - so achMeta's definition fallback needs a row from
     // somewhere. state.achievements.mine is already loaded and already
@@ -164,8 +177,9 @@
       note: "",
     };
     rerender();
+    return true;
   }
-  function dismissAchievementUnlock() { state.achievements.unlock = null; rerender(); }
+  function dismissAchievementUnlock() { state.achievements.unlock = null; rerender(); sharePromptClosed(); }
   async function shareAchievementUnlock() {
     const a = state.achievements.unlock;
     if (!a || a.sharing) return;
@@ -173,8 +187,12 @@
     a.sharing = true;
     a.error = "";
     rerender();
-    const { data, error } = await client.rpc("ach_share", { member_achievement_id: a.memberAchievementId, caption: cleanPostBody(a.note), media: [] });
-    if (error || !data) { a.sharing = false; a.error = "לא ניתן לשתף. נסו שוב."; return rerender(); }
+    // communityRpc(), not client.rpc(): ach_share is in OUTBOX_ACTIONS now, so
+    // a share tapped offline is persisted with its own idempotency key and
+    // sent on reconnect rather than refused. Same change, same reasoning, as
+    // the PR prompt's own share - see sharePrPrompt() in posts.js.
+    const { queued, data, error } = await communityRpc("ach_share", { member_achievement_id: a.memberAchievementId, caption: cleanPostBody(a.note), media: [] });
+    if (error || (!queued && !data)) { a.sharing = false; a.error = "לא ניתן לשתף. נסו שוב."; return rerender(); }
     if (Array.isArray(state.achievements.mine)) {
       const row = state.achievements.mine.find((r) => r.id === a.memberAchievementId);
       if (row) row.shared_at = new Date().toISOString();
@@ -185,15 +203,20 @@
     // this records that a member chose to share a decoration.
     track(A.ACHIEVEMENT_SHARED, { member_achievement_id: a.memberAchievementId, code: a.code || null, source: "unlock_sheet" });
     state.achievements.unlock = null;
-    setMessage("המדליה שותפה למועדון");
-    if (window.HaimuniaEvents && window.PRODUCT_EVENTS && window.PRODUCT_EVENTS.POST_CREATED) {
+    setMessage(queued ? "המדליה תישלח למועדון כשהחיבור יחזור" : "המדליה שותפה למועדון");
+    // Not emitted on the queued branch: POST_CREATED's payload is a post id
+    // and there is not one yet. Same reasoning as sharePrPrompt()'s.
+    if (!queued && window.HaimuniaEvents && window.PRODUCT_EVENTS && window.PRODUCT_EVENTS.POST_CREATED) {
       try { window.HaimuniaEvents.emit(window.PRODUCT_EVENTS.POST_CREATED, { post_id: data, post_type: "POST_ACHIEVEMENT" }); } catch (e) {}
     }
     rerender();
+    sharePromptClosed();
   }
   function shareEarnedAchievement(memberAchievementId, code) {
     const row = (state.achievements.mine || []).find((r) => r.id === memberAchievementId);
-    onAchievementUnlocked({ code: code || achCodeOf(row), member_achievement_id: memberAchievementId, visibility: row ? row.visibility : "club" });
+    // Straight to the sheet, past the coordinator: see onAchievementUnlocked's
+    // own comment for why a tap is not an offer.
+    openAchievementUnlockSheet({ code: code || achCodeOf(row), member_achievement_id: memberAchievementId, visibility: row ? row.visibility : "club" });
   }
 
   function renderAchievementUnlockCelebration() {

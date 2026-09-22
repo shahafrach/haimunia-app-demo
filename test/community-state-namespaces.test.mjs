@@ -78,6 +78,13 @@ test("the state root is the session core plus per-domain namespaces, nothing els
     // read together by the outbox banner.
     "outbox",
     "coach",
+    // 202609220004. The monthly owner report: the twelve months of
+    // owner_reports rows, which of them is on screen, and the one open
+    // drill-down. A namespace rather than root scalars because the
+    // drill-down carries its own loading/loaded/error triple - a failed list
+    // read must not blank the seven figures that loaded fine - and those
+    // three names are exactly the ones the flat root used to collide on.
+    "ownerReport",
   ], "the namespace set changed - update this list and docs/community/backlog.md's COMM-365 row");
 });
 
@@ -199,7 +206,36 @@ test("the dialog registry keeps DOM keys and state paths separate", () => {
   // dialog genuinely starts closed. It lives inside the existing `engagement`
   // namespace beside reactions/reactionError rather than in a new one: it is
   // a second view of the reaction set that namespace already owns.
-  assert.equal(entries.length, 17, "every dialog entry needs a key and an isOpen getter");
+  //
+  // 18 since the share prompt added "workoutPrompt" - the short
+  // "לשתף עם המועדון?" sheet a member sees after an ordinary logged workout.
+  // Treated as the review trigger this pin is meant to be:
+  //
+  //   WHY A DIALOG AND NOT A REUSE. The two candidates were the PR prompt and
+  //   askConfirm. The PR prompt is the right shape but the wrong subject: it
+  //   is built entirely out of a PR_CREATED record (movement, new_result,
+  //   previous_result, improvement), it carries a note field, a photo
+  //   uploader and an outward-share exit, and it writes through pr_share().
+  //   None of that exists for a plain logged set. askConfirm is a title, a
+  //   message and two buttons - close, but it is the app's DESTRUCTIVE
+  //   confirmation surface, and routing an invitation to publish through the
+  //   dialog that also asks "delete this permanently?" is how the two stop
+  //   reading differently. The prompt is deliberately the smallest sheet in
+  //   this registry: a heading, the entry it is about, and two buttons.
+  //
+  //   WHY IT SITS BESIDE prPrompt. The two can never be open at once -
+  //   offerSharePrompt() in src/community/share-prompt.js opens one prompt
+  //   per moment and parks the rest - so their relative order settles
+  //   nothing. What the position does say is that both stay below
+  //   confirmSheet, outwardShare and termSheet, each of which can be stacked
+  //   on top of a prompt, and above nothing that can cover them.
+  //
+  // The half that is THIS file's own assertion: state.posts.workoutPrompt
+  // must default to null like every other dialog flag, and it lives in the
+  // existing `posts` namespace - "composing, own-post controls, sharing" -
+  // rather than spending the namespace pin above on a surface that is
+  // already exactly that.
+  assert.equal(entries.length, 18, "every dialog entry needs a key and an isOpen getter");
   const state = readStateLiteral();
   for (const [, key, path] of entries) {
     const value = path.split(".").slice(1).reduce((o, k) => (o == null ? o : o[k]), state);
