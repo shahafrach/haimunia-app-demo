@@ -610,7 +610,7 @@
   // (relevance across types) the RPC deliberately does not compute.
   function searchGroupHtml(label, rowsHtml) {
     return `<div class="search-group" data-search-group="${label}" style="margin-top:10px;">
-      <div class="field-label" style="margin-bottom:6px;">${searchGroupTitle(label)}</div>
+      <h3 class="field-label" style="margin-bottom:6px;">${searchGroupTitle(label)}</h3>
       ${rowsHtml ? `<div class="log-list">${rowsHtml}</div>` : `<div class="empty" style="padding:6px 0;">אין תוצאות</div>`}
     </div>`;
   }

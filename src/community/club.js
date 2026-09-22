@@ -522,7 +522,7 @@
         const saving = !!state.onboarding.editor.saving[step];
         const saved = !!state.onboarding.editor.saved[step];
         return `<div class="chart-card" style="margin-bottom:10px;" data-onboarding-editor-row="${step}">
-          <div class="field-label" style="margin-bottom:6px;">${esc(ONBOARDING_STEP_LABELS[step] || step)}</div>
+          <h3 class="field-label" style="margin-bottom:6px;">${esc(ONBOARDING_STEP_LABELS[step] || step)}</h3>
           ${field(formId, "title", "כותרת", `<input class="text-input" maxlength="120" data-onboarding-edit-title="${step}" value="${esc(draft.title)}"/>`)}
           ${field(formId, "body", "משפט פתיחה", `<textarea class="text-input" maxlength="2000" rows="3" data-onboarding-edit-body="${step}">${esc(draft.body)}</textarea>`)}
           <div class="chip-row" style="margin-top:6px;">
@@ -595,7 +595,7 @@
         const saving = !!state.intro.editor.saving[step];
         const saved = !!state.intro.editor.saved[step];
         return `<div class="chart-card" style="margin-bottom:10px;" data-intro-editor-row="${step}">
-          <div class="field-label" style="margin-bottom:6px;">${esc(INTRO_CAROUSEL_LABELS[step] || step)}</div>
+          <h3 class="field-label" style="margin-bottom:6px;">${esc(INTRO_CAROUSEL_LABELS[step] || step)}</h3>
           ${field(formId, "title", "כותרת", `<input class="text-input" maxlength="120" data-intro-edit-title="${step}" value="${esc(draft.title)}"/>`)}
           ${field(formId, "body", "תוכן", `<textarea class="text-input" maxlength="2000" rows="3" data-intro-edit-body="${step}">${esc(draft.body)}</textarea>`)}
           <div class="chip-row" style="margin-top:6px;">

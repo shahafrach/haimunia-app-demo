@@ -186,7 +186,7 @@
       : state.events.error
       ? `<div class="empty">לא ניתן היה לטעון את האירוע. נסו שוב.<div class="chip-row" style="justify-content:center;"><button class="chip-btn" data-community-action="events-retry">ניסיון חוזר</button></div></div>`
       : upcoming.length ? upcoming.map(renderEventCard).join("") : `<div class="empty">אין אירועים קרובים כרגע.</div>`;
-    const pastHtml = past.length ? `<div style="margin-top:16px;"><div class="field-label" style="margin-bottom:6px;">אירועים שהסתיימו</div>${past.map(renderEventCard).join("")}</div>` : "";
+    const pastHtml = past.length ? `<div style="margin-top:16px;"><h3 class="field-label" style="margin-bottom:6px;">אירועים שהסתיימו</h3>${past.map(renderEventCard).join("")}</div>` : "";
     return `<div class="ach-section">${sectionHead("var(--blue)", "אירועי המועדון")}${createBtn}${state.events.form ? renderEventForm() : ""}${list}${pastHtml}</div>`;
   }
 
@@ -488,7 +488,7 @@
     // community.event.manage, and everyone else's only when
     // show_in_attendee_lists (and its club-wide override) allows it - no
     // extra client-side filtering needed to honour that rule.
-    return `<div class="field-label" style="margin:10px 0 4px;">משתתפים (${going})</div><div class="log-list">${rows.map(rowHtml).join("")}</div>`;
+    return `<h3 class="field-label" style="margin:10px 0 4px;">משתתפים (${going})</h3><div class="log-list">${rows.map(rowHtml).join("")}</div>`;
   }
 
   // ---- Add to calendar (COMM-215) --------------------------------------------

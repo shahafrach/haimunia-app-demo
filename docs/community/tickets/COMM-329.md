@@ -2,7 +2,7 @@
 
 Phase: Design sync & audit remediation (2026-09-02)
 Agent: cross-cutting (UI/design)
-Status: partial
+Status: done
 Priority: P0
 Attendance-blocked: no
 
@@ -16,12 +16,12 @@ both apps, including all of Community's community layer.
 
 ## Acceptance criteria
 
-- [ ] Real `<h1>`/`<h2>` elements introduced for page and section titles (replacing
+- [x] Real `<h1>`/`<h2>` elements introduced for page and section titles (replacing
   plain `<div class="page-title">` / section-title divs) with no visual change
   for sighted users.
-- [ ] `<header>`/`<nav>`/`<main>` landmarks added to the app shell; exactly one
+- [x] `<header>`/`<nav>`/`<main>` landmarks added to the app shell; exactly one
   `<main>` landmark per screen.
-- [ ] An axe or heading-outline scan of every top-level tab and every community
+- [x] An axe or heading-outline scan of every top-level tab and every community
   screen (feed, profile, challenges, admin) shows a non-empty, logically nested
   heading list.
 
@@ -95,7 +95,143 @@ both apps, including all of Community's community layer.
   scan was run" gap below: it covers the 4 solo tabs for real, but not the
   four community screens the criterion also names (see below).
 
-## Not done — remaining scope
+## Shipped 2026-09-22 — closes this ticket
+
+Everything the "Not done" list below named, plus the tab/tabpanel and
+icon-label halves the audit never separated out. **No visual change**, with
+one deliberate exception noted at the end.
+
+### 1. One `<h1>`, then h2/h3 in order, on every screen
+
+- **The training log** had exactly one heading per screen — its `<h1>` — and
+  nothing under it. Ten of its eleven `.section-label` blocks were plain `<div>`s (the
+  eleventh, the calendar list view's per-date title, was already an `<h2>`
+  inside a `<section aria-label>` — that one was the model). All eleven are
+  now real headings:
+  `<h2>` for a section of a screen ("סיכום האימון", "משקל גוף", "מדדי גוף",
+  "נפח ותדירות לפי קטגוריה", "בנצ'מרקים", "שיאים כלל-זמנים" ×2, the calendar
+  day), `<h3>` for the two that sit inside one of those ("איך היה האימון
+  היום" inside the day card, "כל הניסיונות" inside an expanded benchmark).
+- **`.cat-name`** — the category head above each movement/WOD group, 4 call
+  sites — is now a heading, at the level its mount point dictates: `<h2>` in
+  the WOD catalogue sub-tab (directly under that screen's `<h1>`), `<h3>` in
+  the three pickers (under the dialog's own `<h2>` title). Same class, two
+  levels, because the level is a property of where the list is, not of the
+  list.
+- **The 8 `index.html` dialog titles** (`.modal-title`) were `<span>`s that
+  were already each a `role="dialog"`'s `aria-labelledby` target — they named
+  their dialog and were invisible to heading navigation. Now `<h2>`. This is
+  the app.js half of what the 2026-09-02 pass did for cloud.js's dialogs.
+- **The 48 one-off `<div class="field-label">` sub-headers** the "Not done"
+  list named as the blocker were audited one at a time. **33 became `<h3>`**
+  — every one that heads a list or a multi-part block (invite panels, ended
+  challenges/events, team management, challenge rules/leaderboard/
+  participants/progress, the weekly recap's five lists, the admin analytics
+  groups, onboarding and intro-carousel step editors, monthly-recap months,
+  directory search groups, coach picker). **15 stayed `<div>`** on purpose,
+  and this is the finding the original "~40 sub-headers" count missed: they
+  are not sub-headers. Eight are captions over a single value ("אימונים
+  השבוע" above one number, "האירוע הקרוב" above one link, "לפי scope" /
+  "לפי מקור" above one breakdown row), five are one-off result banners
+  ("הקוד נוצר — זו הפעם היחידה…", "הסיסמה של X"), and two label a form
+  control ("מי רואה את הפוסט" over a radio group, "הטקסט שילווה את התמונה"
+  over a textarea). Promoting those would have added ~15 headings that name
+  no section, which makes heading navigation worse, not better.
+- Two screens genuinely have a section with no visible title — the Add tab's
+  logging form and the WOD "רישום" sub-tab. Each gets a clipped
+  `<h2 class="sr-only">`, so the outline is complete without anything
+  appearing on screen.
+
+### 2. Landmarks
+
+`<main aria-label="תוכן ראשי">`, `<header aria-label="כותרת האפליקציה">`, and
+the two existing `<nav aria-label="ניווט ראשי">`s. Five named `role="region"`
+landmarks on the training log's own mount points (`#historyListArea`,
+`#bodyweightArea`, `#measureArea`, `#wodHistoryListArea`, `#calDetail`), plus
+`#benchmarkArea`, whose role goes on and off with its content because that
+section is gated on a club feature flag and an empty named landmark is noise
+a reader still has to step through. All attributes — no element is added,
+moved or wrapped.
+
+`#contextCol` is deliberately still unnamed. index.html carries a comment
+explaining why (a landmark's name has to describe what is mounted in it, and
+that file does not know), and this pass agrees with it rather than overriding
+it.
+
+### 3. The tab pattern, completed on all six tab strips
+
+Before this pass, three of the six strips were half-declared. Now every
+`role="tablist"` has a Hebrew `aria-label`, every `role="tab"` carries
+`aria-selected` and an `aria-controls` that resolves, and every panel it
+points at is a `role="tabpanel"` with an `aria-labelledby` that resolves:
+
+- `#bottomTabBar` — gained `aria-label="מסכים ראשיים"`; its tabs already had
+  `aria-controls="content"`, and `#content` is now named by the active tab
+  from `render()`.
+- The nav-menu / desktop-sidebar `.nav-destinations` strips — gained
+  `aria-controls="content"`.
+- The WOD `.subtabbar` — gained `aria-label`, per-tab ids, and `#wodContent`
+  is now a `role="tabpanel"` named by the selected sub-tab (kept in sync by
+  the `switch-wod-subtab` handler, which only swaps innerHTML).
+- The feed scope chips — declared `role="tab"` with nothing to control: the
+  list they swap renders under three different ids depending on state and the
+  empty state has no container at all. One stable `#communityFeedPanel`
+  wrapper now completes the pair.
+- The Community and Manage sub-tab bars were already complete (2026-09-10).
+
+### 4. Icon-only buttons
+
+A DOM sweep of every screen for an interactive element with no visible text
+and no accessible name found exactly one live case: `#userGreeting`, which is
+empty until a member has a name and dropped its `aria-label` in that same
+state. It now keeps one either way. The sweep is now a test, so the next one
+fails the build instead of shipping.
+
+### 5. Focus rings
+
+Already correct and now guarded: all three focus rules
+(`:focus-visible`, `.search-box:focus-within`, `.term-mark:focus-visible`)
+draw `outline:2px solid var(--brass)`, and a new test asserts both that no
+focus ring uses a hardcoded colour and that every token one does use is
+defined in all three theme blocks CLAUDE.md describes.
+
+### The one visual change
+
+`.sr-only` was **in use and had no CSS rule anywhere** — cloud.js's staff
+context column spells the moderation count out for a reader beside an
+`aria-hidden` numeral, and that sentence was simply painting on screen next
+to the badge it was meant to replace. The rule now exists (same clip
+technique as the existing `.file-input-hidden`, and it sets no colour, so it
+needs no dark-theme entry). Found while auditing, not reported.
+
+### Verification
+
+- `npm test` — **2116 pass, 0 fail**, 13 of them from the new file below.
+- `test/a11y-screen-structure.test.mjs` (new) — 13 tests. Heading order,
+  landmarks, the full tab/tabpanel contract and the icon-label sweep, applied
+  to all four training-log screens, the three WOD sub-tabs, all four
+  community screens the acceptance criterion names, the staff Manage screen,
+  the feed scope strip, and the challenge detail dialog. Plus the focus-ring
+  token check.
+- `scripts/browser-check/run-all.mjs` — **49 checks, all passed**, including
+  `a11y-axe-scan.mjs` (no serious/critical WCAG violations on any of its
+  seven screens). Run on Chromium 141.0.7390.37, which is the build this
+  sandbox has, NOT the 151/rev-1234 build `scripts/browser-check/
+  package.json` pins and which CLAUDE.md's measured desktop numbers come
+  from. The geometry checks (`desktop-layout`, `desktop-staff-shell`,
+  `desktop-column-widths`) passed on it, but CI's pinned build is the one
+  that settles those.
+- `supabase test db` — not run: needs Docker, and this branch adds no
+  migration and touches no SQL.
+
+## Superseded — what the "Not done" list said before this pass
+
+One item on it is NOT superseded and cannot be from here: applying the same
+conversion to `crossfit-pwa-Noam`. That repository is not in this workspace,
+so this ticket is `done` for **this** repo and the cross-repo half stays with
+COMM-351/353/354, which is where every other "needs the other checkout" item
+already lives. Nothing about it is claimed either way here.
+
 
 - The admin-analytics sub-headers are fixed, but `cloud.js` still has
   roughly 40 other one-off `<div class="field-label">` sub-headers acting
