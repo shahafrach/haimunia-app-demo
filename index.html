@@ -1503,11 +1503,31 @@
      `= true` default, disable the save CTA until a choice exists, emit the
      Hebrew-first labels and remember the member's last choice as their
      personal default. CSS cannot fix a wrong default. */
-  .rx-toggle{ display:flex; gap:8px; margin-bottom:16px; }
+  /* flex-wrap plus the flex-basis/min-width on .rx-btn below, added with the
+     Rx+ option (2026-09-19): the toggle now holds THREE chips, and three at a
+     bare flex:1 on a 360px phone leave ~110px each, which "מותאם (Scaled)"
+     does not fit at 15px. Wrapping lets a chip drop to the next row on the
+     narrowest screens rather than squeezing all three. min-width is on
+     .rx-btn itself rather than in a `.rx-toggle .rx-btn` rule of its own,
+     because the 3.6 guard in test/community-term-disclosure.test.mjs reads
+     the FIRST rule whose selector ends in that class name and checks it for
+     min-height:44px - so a second, more specific selector ending in the same
+     class would shadow the real declaration block from it. (For the same
+     reason, do not write that pattern out in prose here either: the guard's
+     regex does not know a comment from a rule.) No colour in any of it, so
+     there is nothing to mirror into the two dark blocks. */
+  .rx-toggle{ display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px; }
   .rx-toggle.unset{ border:1px dashed var(--brass); border-radius:14px; padding:4px; gap:4px; }
-  .rx-btn{ flex:1; min-height:44px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; padding:8px 6px; border-radius:12px; border:1px solid var(--border); background:var(--surface); font-weight:700; font-size:15px; color:var(--steel); line-height:1.2; }
+  .rx-btn{ flex:1 1 30%; min-width:104px; min-height:44px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; padding:8px 6px; border-radius:12px; border:1px solid var(--border); background:var(--surface); font-weight:700; font-size:15px; color:var(--steel); line-height:1.2; }
   .rx-btn.active-rx{ background:rgba(63,132,85,.15); border-color:var(--green); color:var(--green); }
   .rx-btn.active-scaled{ background:rgba(224,178,60,.15); border-color:var(--yellow); color:var(--yellow); }
+  /* Rx+ — "heavier than prescribed". Built from color-mix over var(--blue)
+     rather than a literal rgba, which is the fix the .active-type comment
+     just below spells out: a hard-coded tint cannot follow a token across
+     themes, and --blue is a different colour in light and dark. Because
+     every part of this rule is a token, it themes itself and needs no copy
+     in either dark block. */
+  .rx-btn.active-plus{ background:color-mix(in srgb, var(--blue) 15%, transparent); border-color:var(--blue); color:var(--blue); }
   /* Direction 06 token fix: this literal (201,75,41) was the PRE-redesign
      light --energy's rgb, so once light --energy moved to match dark's
      coral, this tint silently stopped matching its own border-color/color
@@ -1522,7 +1542,7 @@
      subtitle on a green chip reads as disabled text rather than part of the
      selected option. Slightly dimmed so it stays subordinate to the label. */
   .rx-btn .term-sub{ font-size:12px; margin-top:1px; }
-  .rx-btn.active-rx .term-sub, .rx-btn.active-scaled .term-sub, .rx-btn.active-type .term-sub{ color:inherit; opacity:.8; }
+  .rx-btn.active-rx .term-sub, .rx-btn.active-scaled .term-sub, .rx-btn.active-plus .term-sub, .rx-btn.active-type .term-sub{ color:inherit; opacity:.8; }
   .wod-desc{ color:var(--steel); font-size:12px; margin-top:2px; }
   .text-input{ width:100%; background:var(--surface2); border:1px solid var(--border); border-radius:12px; padding:10px 12px; color:var(--chalk); font-size:16px; }
   /* Live bug hunt (2026-09-11): the ≥1200px staff-tier rule widens #app to

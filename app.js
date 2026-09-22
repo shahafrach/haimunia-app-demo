@@ -786,6 +786,46 @@ function recentEntriesFor(id, days = 14, cap = 5) {
 const PCT_STEPS = [95, 90, 85, 80, 75, 70, 65, 60];
 function roundToPlate(kg) { return Math.round(kg / 2.5) * 2.5; }
 function formatPlateKg(kg) { return Number.isInteger(kg) ? String(kg) : kg.toFixed(1); }
+
+// ---- The percentage CHIPS, gated on club_features.strength_percentages ----
+//
+// The same idea as the table above, on the same screen, one step further: a
+// row of tappable chips that fills the weight stepper, so a member planning
+// 5x5 at 75% does not read a number off a list and then dial it in by hand
+// (~22 taps of a 2.5 kg stepper from the empty bar). The chips REPLACE the
+// table when the club turns the key on - see renderLogTab. Two percentage
+// surfaces on one screen, disagreeing about their rounding, is exactly the
+// drift this codebase is prone to.
+//
+// STRENGTH_PCT_CHIPS is PCT_STEPS' twin and deliberately a superset of it:
+// the same 5% ladder, carried down to 50%, because a chip row can hold ten
+// options where the collapsed table was a list to read. Descending for the
+// reason PCT_STEPS is descending - the heaviest number is the one being
+// planned around, so it is read first.
+//
+// PCT_STEPS and roundToPlate() are left exactly as they are, and that is the
+// deliberate half of the drift: they now serve ONLY the pre-key table, where
+// "rounded to 2.5 kg, the smallest jump a barbell can hold" is the whole
+// argument and there is no member setting to respect. When the key is on, the
+// member has answered that question themselves and roundToIncrement() takes
+// their answer. Both are reachable, neither is dead, and when the key is on
+// club-wide the table and its rounding can be retired together.
+const STRENGTH_PCT_CHIPS = [95, 90, 85, 80, 75, 70, 65, 60, 55, 50];
+// Nearest multiple of `inc`, float dust rounded out of the answer. 82.5 * 0.7
+// is 57.750000000000004 in IEEE 754 and the naive Math.round(x / inc) * inc
+// hands back 57.50000000000001 for some inputs - formatPlateKg() would print
+// that as "57.5" while an === against 57.5 would not recognise it, which is
+// the kind of gap that only ever shows up in the one test nobody wrote. Two
+// decimals is well inside every increment offered.
+//
+// An unknown increment falls back to 2.5 rather than trusting the argument:
+// this is fed from a stored setting, and a hand-edited IndexedDB row must not
+// be able to put "0" in the divisor.
+function roundToIncrement(kg, inc) {
+  const step = PCT_INCREMENTS.includes(inc) ? inc : 2.5;
+  if (typeof kg !== "number" || !isFinite(kg) || kg <= 0) return 0;
+  return Math.round(Math.round(kg / step) * step * 100) / 100;
+}
 function bestEst1RM(id, excludeId, index) {
   // Duration entries carry est1RM: 0 (see sanitizeEntry) so they can't win
   // this max by accident, but they're filtered explicitly anyway so an
@@ -3264,16 +3304,61 @@ function saveWelcomeForm(name) {
 // most members is scaled, and for a competitor is Rx, without either being
 // imposed on the other.
 const WOD_RX_DEFAULT_KEY = "haimunia-demo:wodRxDefault";
+
+// RX+ (2026-09-19). A THIRD ANSWER IN THE SAME FIELD.
+//
+// Rx+ is the standard CrossFit answer above Rx: the workout as prescribed and
+// then heavier - a competitor's weights, or the movement's harder variant. The
+// club asks for it because filing it as plain Rx flattens a real difference in
+// effort, and filing it as a separate boolean beside `rx` would make every
+// reader of an entry ask two questions to learn one fact.
+//
+// So it is the SAME field, with a third value: true (Rx), false (Scaled),
+// "plus" (Rx+). That shape is what makes it safe to add here. Everything that
+// asks `e.rx ?` - the Rx-per-WOD achievements, formatWodEntry's scaled-weight
+// suffix, the club comparison key's rx/scaled bucket - reads "plus" as Rx,
+// which is what Rx+ is: Rx, and more. Only the places that mean the WORD get
+// a third branch, and they all go through wodEffortLabel/wodEffortTag below
+// rather than repeating the ternary, because that ternary had five copies and
+// this is exactly how the fifth one gets missed.
+//
+// AT THE CLOUD BOUNDARY IT IS Rx. club_wod_results.rx is a boolean column and
+// this branch adds no migration, so the three bridges that cross into cloud.js
+// coerce with `!== false`: an Rx+ result publishes to the club board as Rx,
+// which is true, rather than as a string the RPC would silently read as Rx
+// anyway (202609080002's jsonb_typeof guard) without anybody having decided
+// that here. The distinction is kept where it was asked for - the member's own
+// record and their own history.
+const WOD_EFFORT_PLUS = "plus";
+// The guard behind the save CTA, in one predicate instead of three copies of
+// `wodRx !== true && wodRx !== false`. null still means unanswered, and
+// unanswered still refuses to save (design spec §3.6).
+function wodEffortAnswered(rx) { return rx === true || rx === false || rx === WOD_EFFORT_PLUS; }
+// The full label, where a row names the choice in words.
+function wodEffortLabel(rx) {
+  if (rx === WOD_EFFORT_PLUS) return "מוגבר (Rx+)";
+  return rx ? "מלא (Rx)" : "מותאם (Scaled)";
+}
+// The suffix form, where Rx is the unmarked case and only a departure from it
+// is worth the ink. Includes its own separator so a caller cannot forget it.
+function wodEffortTag(rx) {
+  if (rx === WOD_EFFORT_PLUS) return " · Rx+";
+  return rx ? "" : " · מותאם";
+}
 let wodRxDefault = null;
 async function loadWodRxDefault() {
   try {
     const v = await dbGetSetting(WOD_RX_DEFAULT_KEY);
-    wodRxDefault = (v === true || v === false) ? v : null;
+    wodRxDefault = wodEffortAnswered(v) ? v : null;
   } catch (e) { wodRxDefault = null; }
   // A remembered answer pre-selects the toggle; no answer leaves it unset.
   wodRx = wodRxDefault;
 }
 function setWodRx(rx) {
+  // Refuses anything that is not one of the three answers rather than storing
+  // it: this writes the member's remembered default to disk, and a value
+  // loadWodRxDefault() would then reject is a silently forgotten preference.
+  if (!wodEffortAnswered(rx)) return;
   wodRx = rx;
   wodRxDefault = rx;
   dbSetSetting(WOD_RX_DEFAULT_KEY, rx).catch(noteStorageError);
@@ -3296,6 +3381,35 @@ function setBarWeight(kg) {
   updateLogQuickUI("weight");
   const barRow = document.getElementById("barWeightRow");
   if (barRow) barRow.outerHTML = renderBarWeightRow();
+}
+
+// THE MEMBER'S SMALLEST JUMP, for the percentage chips (COMM/strength-pct).
+//
+// A sibling of barWeight above and stored the same way, because it is the
+// same kind of fact: what THIS member's equipment can actually express. 2.5 kg
+// is the default and the standard answer - a pair of 1.25s - but a box with
+// microplates works in 1 kg, and a member running the percentages off
+// dumbbells or a machine stack works in 2. Rounding 72.3 to a number nobody
+// in the room can load is the failure this setting exists to avoid, and the
+// app cannot know which one that is.
+//
+// Deliberately NOT in the Settings sheet: it is only ever meaningful next to
+// the chips it rounds, it is the only control there whose effect is invisible
+// anywhere else, and the chips themselves only exist when the club has turned
+// the key on. So it lives inside the gated block, at the point of use.
+const PCT_INCREMENTS = [1, 2, 2.5];
+const PCT_INCREMENT_KEY = "haimunia-demo:pctIncrement";
+let pctIncrement = 2.5;
+async function loadPctIncrement() {
+  try {
+    const stored = await dbGetSetting(PCT_INCREMENT_KEY);
+    if (PCT_INCREMENTS.includes(stored)) pctIncrement = stored;
+  } catch (e) { /* keep the default */ }
+}
+function setPctIncrement(inc) {
+  if (!PCT_INCREMENTS.includes(inc)) return;
+  pctIncrement = inc;
+  dbSetSetting(PCT_INCREMENT_KEY, inc).catch(noteStorageError);
 }
 
 // Theme preference lives in localStorage, not IndexedDB — it has to be
@@ -3716,6 +3830,13 @@ async function clearAllData() {
   wodHistoryId = null;
   bwWeight = 70;
   barWeight = 20;
+  // A member setting, wiped with the rest of them by dbClearSettings() above -
+  // this is the in-memory half, same as barWeight. clubFeatureFlags is
+  // deliberately NOT reset here: the club's switches are not this member's
+  // data, and "delete my workouts" is not an instruction to turn a club
+  // module off. The cached copy does go with the settings store, so the next
+  // cold start reads off until cloud.js answers again.
+  pctIncrement = 2.5;
   // dbClearSettings() above wiped the remembered Rx choice on disk; this is
   // the in-memory half. Back to unanswered, which is what a member with no
   // history is - the whole point of §3.6 is that the app must not guess.
@@ -3778,6 +3899,81 @@ async function loadCachedClubWods() {
   } catch (e) { /* no cache is a cold start, not an error */ }
 }
 
+// ---------- The club's feature switches, read offline ----------
+//
+// club_features is the community layer's table and cloud.js owns reading it
+// (loadClubFeatures). This is a second, much smaller reader of the same map,
+// and it exists for two reasons that isModuleEnabled() cannot serve:
+//
+//  1. OFFLINE, AND WITH NO SESSION AT ALL. What it gates here is on the LOG
+//     screen - the one surface that has to work on a phone in a basement gym
+//     with no signal and, for a member who never joined the community layer,
+//     no session either. So the map is cached in SETTINGSTORE and hydrated
+//     before the first render, exactly like CLUB_WODS_CACHE_KEY above, and
+//     everything downstream reads this file's own copy rather than reaching
+//     into cloud.js's state for a value that may never arrive.
+//
+//  2. A MISSING KEY MEANS OFF. isModuleEnabled() defaults an unknown key to
+//     TRUE, which is right for what it guards: a shipped module whose real
+//     backstop is RLS, where showing a section for 300ms during load beats
+//     hiding one the club is paying for. It is wrong for a key that does not
+//     exist in the table yet. The `strength_percentages` row is being added
+//     on another branch; until it lands, every member reads no row at all,
+//     and no row must mean "nobody has turned this on", never "on for
+//     everybody". Same reasoning after it lands, for any member whose cache
+//     predates it.
+//
+// So: enabled ONLY on an explicit enabled=true. Unknown key, no cache, a
+// member who never signed into the community, a stale cache from before the
+// key existed - all off.
+const CLUB_FEATURES_CACHE_KEY = "haimunia-demo:clubFeatures";
+let clubFeatureFlags = {};
+function sanitizeClubFeatureFlags(map) {
+  const out = {};
+  if (!map || typeof map !== "object") return out;
+  for (const key of Object.keys(map)) {
+    if (typeof key !== "string" || !key) continue;
+    const row = map[key];
+    // Accepts both shapes cloud.js could hand over - the bare boolean and the
+    // { enabled, config } row club_features actually selects - so this bridge
+    // does not have to be kept in step with which one the caller happens to
+    // pass. Anything else is not an answer and is dropped, which reads as off.
+    if (typeof row === "boolean") out[key] = row;
+    else if (row && typeof row === "object" && typeof row.enabled === "boolean") out[key] = row.enabled;
+  }
+  return out;
+}
+// Called by cloud.js once club_features answers, the same way setClubWods()
+// is called once club_wods_list() does.
+window.setClubFeatureFlags = function (map) {
+  clubFeatureFlags = sanitizeClubFeatureFlags(map);
+  // Best-effort, like setClubWods(): a member with no storage quota still
+  // gets the right switches for this session, they just do not get them
+  // offline next time - and "not offline next time" resolves to off, which
+  // is the safe direction.
+  dbSetSetting(CLUB_FEATURES_CACHE_KEY, clubFeatureFlags).catch(() => {});
+  // The log screen may be on screen when this lands, mid-session, the first
+  // time a member signs into the community - repaint it rather than leaving
+  // the chips missing until the next navigation.
+  //
+  // "add", not "log": the screen is called the log screen everywhere in this
+  // file and renderLogTab() draws it, but its tab id has always been `add`.
+  // Written as `tab === "log"` first, and the browser scenario caught it -
+  // the chips never appeared without a navigation, which is the whole
+  // failure this line exists to prevent.
+  if (tab === "add") render();
+};
+async function loadCachedClubFeatures() {
+  try {
+    const cached = await dbGetSetting(CLUB_FEATURES_CACHE_KEY);
+    if (cached) clubFeatureFlags = sanitizeClubFeatureFlags(cached);
+  } catch (e) { /* no cache is a cold start, not an error */ }
+}
+function clubFeatureOn(key) { return clubFeatureFlags[key] === true; }
+// The one call site's name for the one key, so a typo in the string is a
+// typo in one place. Read by renderLogTab and by nothing else.
+function strengthPercentagesOn() { return clubFeatureOn("strength_percentages"); }
+
 // ---------- The club's board for today (202609080002) ----------
 // THE DIVISION OF LABOUR, and the reason these three bridges exist at all:
 // the SERVER owns the board and every rule about it, and cloud.js owns
@@ -3821,7 +4017,9 @@ window.communityWodLogFor = function (wodId) {
   return wodEntriesFor(wodId).slice()
     .sort((a, b) => (b.ts || 0) - (a.ts || 0))
     .slice(0, 5)
-    .map((e) => ({ id: e.id, date: e.date, resultText: formatWodEntry(e), rx: e.rx }));
+    // `!== false`, not `e.rx`: club_wod_results.rx is a boolean column and
+    // Rx+ publishes as Rx. See WOD_EFFORT_PLUS.
+    .map((e) => ({ id: e.id, date: e.date, resultText: formatWodEntry(e), rx: e.rx !== false }));
 };
 // The raw entry behind one record id, for club_wod_attach_result's p_entry.
 // Re-sanitized on the way out like everything else that crosses out of this
@@ -3835,7 +4033,12 @@ window.communityWodEntryForAttach = function (recordId) {
   // trusting a caller to have checked.
   if (logOwnedByOther) return null;
   const entry = wodEntries.find((e) => e.id === recordId);
-  return entry ? sanitizeWodEntry(entry) : null;
+  if (!entry) return null;
+  const out = sanitizeWodEntry(entry);
+  // The third bridge, coerced for the same reason as the two above: this one
+  // is club_wod_attach_result's p_entry, and its rx lands in a boolean column.
+  if (out) out.rx = out.rx !== false;
+  return out;
 };
 // THE CLUB COPY WINS ON AN ID COLLISION, and that is the whole point rather
 // than a tie-break detail.
@@ -3890,7 +4093,11 @@ function bestWodScore(id, excludeId, rx) {
   // "10 reps of A, 8 of B" to one comparable value. No PR concept for it.
   if (w.scoreType === "emom") return null;
   let list = wodEntriesFor(id, excludeId);
-  if (rx === true || rx === false) list = list.filter((e) => e.rx === rx);
+  // Rx+ gets its own bucket, on the same argument that separated Rx from
+  // Scaled here in the first place: a heavier version of the workout is a
+  // different effort, and a PR against it is not a PR against the prescribed
+  // one. Strict equality does that for all three with no extra branch.
+  if (wodEffortAnswered(rx)) list = list.filter((e) => e.rx === rx);
   if (!list.length) return null;
   if (w.scoreType === "time") return Math.min(...list.map(scoreValue));
   return Math.max(...list.map(scoreValue));
@@ -3911,8 +4118,17 @@ function formatWodBest(id) {
   // Live bug hunt (2026-09-11): prefer the Rx best - the standard/
   // prescribed version of the WOD - falling back to the Scaled best only
   // when there's no Rx attempt on file at all. See bestWodScore()'s comment.
-  const bestRx = bestWodScore(id, null, true);
-  const best = bestRx !== null ? bestRx : bestWodScore(id, null, false);
+  // RX+ (2026-09-19) made this a three-step fallback, and it had to: Rx+ is
+  // its own bucket in bestWodScore() now, so a member whose only attempts at
+  // a WOD are Rx+ had an Rx best of null, a Scaled best of null, and read
+  // "—" next to results they had actually logged. Rx stays first (it is the
+  // prescribed version, the one comparable to everybody else's), Rx+ second
+  // because it is also at-or-above prescribed, Scaled last.
+  let best = null;
+  for (const effort of [true, WOD_EFFORT_PLUS, false]) {
+    best = bestWodScore(id, null, effort);
+    if (best !== null) break;
+  }
   if (best === null) return "—";
   if (w.scoreType === "time") return formatClock(best);
   if (w.scoreType === "amrap") return `${Math.floor(best / 1000)}+${best % 1000}`;
@@ -3958,7 +4174,10 @@ function wodShareCandidate(entry) {
   return { type: "wod_entry", id: entry.id, title: wod.name, resultText: formatWodEntry(entry),
     comparisonKey: entry.scoreType === "emom" ? null : `wod:${entry.wodId}:${entry.scoreType}:${entry.rx ? "rx" : "scaled"}`,
     scoreValue: entry.scoreType === "emom" ? null : scoreValue(entry),
-    scoreDirection: entry.scoreType === "time" ? "lower" : entry.scoreType === "emom" ? null : "higher", occurredOn: entry.date, rx: entry.rx };
+    // Same coercion as communityWodLogFor(), same reason - the community
+    // layer's rx is a boolean everywhere it lands. The comparison key above
+    // already buckets Rx+ with Rx through its own `entry.rx ?`.
+    scoreDirection: entry.scoreType === "time" ? "lower" : entry.scoreType === "emom" ? null : "higher", occurredOn: entry.date, rx: entry.rx !== false };
 }
 function communityShareCandidates() {
   const strength = entries.slice(0, 5).map(strengthShareCandidate).filter(Boolean);
@@ -4287,7 +4506,7 @@ async function saveWod(sanityConfirmed) {
   // is not answered yet. The CTA is disabled in that state (see render()),
   // and this is the guard behind it - a WOD may not be filed as Rx or as
   // scaled because of what the app assumed.
-  if (wodRx !== true && wodRx !== false) return;
+  if (!wodEffortAnswered(wodRx)) return;
   if (!isFinite(wodMinutes) || !isFinite(wodSeconds) || !isFinite(wodRounds) || !isFinite(wodReps) || !isFinite(wodWeight) || !isFinite(wodScaledWeight)) return;
   if (w.scoreType === "emom" && !wodEmomReps.every((r) => isFinite(r))) return;
   const editId = editingWodEntryId;
@@ -4586,6 +4805,60 @@ const ICONS = {
 };
 
 // ---------- Rendering ----------
+// The percentage surface, in its two forms. renderLogTab decides only WHETHER
+// to show one (`est && !isDuration` - no estimate and no percentages, a hold
+// has no 1RM to take a percentage of); these two decide what it looks like.
+//
+// The collapsed table is what shipped before club_features.strength_percentages
+// existed and is what every member still sees until their club turns the key
+// on. Untouched, deliberately, down to its 2.5 kg rounding note.
+function renderPctTable(est) {
+  return `
+    <div style="margin-bottom:12px;">
+      <button data-action="toggle-pct-table" class="movement-btn ${pctTableExpanded ? "active" : ""}" aria-expanded="${pctTableExpanded}" style="width:100%; display:flex; align-items:center; justify-content:space-between; gap:8px;">
+        <span>אחוזים לאימון הבא</span>
+        <span style="display:inline-flex; transition:transform .2s; transform:rotate(${pctTableExpanded ? "90deg" : "180deg"});">${ICONS.chevron}</span>
+      </button>
+      ${pctTableExpanded ? `<div class="chart-card" style="margin-top:8px;">
+        <div class="footer-note" style="margin:0 0 10px;">מחושב מ־1RM משוער (${est} ק״ג) — הערכה מהסטים שרשמתם, לא מקס שנבדק. נקודת פתיחה להתאמה.</div>
+        <div class="log-list">
+          ${PCT_STEPS.map((pct) => `<div class="log-row"><span style="color:var(--steel); font-weight:700;">${pct}%</span><span class="mono" style="font-weight:700; color:var(--brass);">${formatPlateKg(roundToPlate(est * pct / 100))} ק״ג</span></div>`).join("")}
+        </div>
+        <div class="footer-note" style="margin:10px 0 0;">מעוגל ל־2.5 ק״ג — הקפיצה הקטנה ביותר שאפשר להעמיס על המוט.</div>
+      </div>` : ""}
+    </div>`;
+}
+// The chips, behind the key. Every chip is a BUTTON that fills the weight
+// stepper, for the same reason the "last 14 days" chips below became buttons:
+// a number the member has to read and then dial in by hand is ~22 taps of a
+// 2.5 kg stepper away from being useful, and they are standing in a gym.
+//
+// Built entirely from existing tokens and existing classes (.format-chip,
+// .mono, .footer-note, --surface2/--border/--steel/--chalk/--brass), so it
+// themes itself and adds no CSS rule that could be missed from a dark block.
+//
+// It says what it is computed from, in the same words the table does, because
+// that sentence is a product rule and not a caption: a member has to be able
+// to tell an Epley estimate from a tested single before loading a bar to it.
+function renderStrengthPctChips(est) {
+  const chipStyle = "background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:6px 10px; font-size:12.5px; font-weight:700; color:var(--steel); min-height:44px; cursor:pointer;";
+  return `
+    <div style="margin-bottom:12px;" id="strengthPctChips">
+      <div style="color:var(--steel); font-size:11px; font-weight:700; letter-spacing:.5px; margin-bottom:6px;" id="strengthPctLabel">משקלי עבודה — אחוז מ־1RM משוער (${est} ק״ג)</div>
+      <div class="flex wrap gap-8" role="group" aria-labelledby="strengthPctLabel">
+        ${STRENGTH_PCT_CHIPS.map((pct) => {
+          const loadKg = roundToIncrement(est * pct / 100, pctIncrement);
+          const shown = formatPlateKg(loadKg);
+          return `<button type="button" class="mono" data-action="set-weight-from-pct" data-pct="${pct}" data-kg="${esc(String(loadKg))}" aria-label="${esc(`${pct} אחוז — ${shown} ק״ג, מילוי מהיר`)}" style="${chipStyle}">${pct}% <span style="color:var(--chalk);">${shown}</span></button>`;
+        }).join("")}
+      </div>
+      <div style="color:var(--steel); font-size:11px; font-weight:700; letter-spacing:.5px; margin:10px 0 6px;" id="pctIncrementLabel">עיגול לקפיצה של</div>
+      <div class="flex gap-8" role="radiogroup" aria-labelledby="pctIncrementLabel">
+        ${PCT_INCREMENTS.map((inc) => `<button class="format-chip ${pctIncrement === inc ? "active" : ""}" data-action="set-pct-increment" data-inc="${inc}" role="radio" aria-checked="${pctIncrement === inc}">${formatPlateKg(inc)} ק״ג</button>`).join("")}
+      </div>
+      <div class="footer-note" style="margin:10px 0 0;">מחושב מ־1RM משוער (${est} ק״ג) — הערכה מהסטים שרשמתם, לא מקס שנבדק. נקודת פתיחה להתאמה.</div>
+    </div>`;
+}
 function renderBarWeightRow() {
   return `<div id="barWeightRow">
     <div style="color:var(--steel); font-size:11px; font-weight:700; letter-spacing:.5px; margin-bottom:6px;" id="barWeightLabel">משקל המוט</div>
@@ -4871,20 +5144,7 @@ function renderLogTab() {
       </button>` : ""}
     </div>` : ""}
 
-    ${est && !isDuration ? `
-    <div style="margin-bottom:12px;">
-      <button data-action="toggle-pct-table" class="movement-btn ${pctTableExpanded ? "active" : ""}" aria-expanded="${pctTableExpanded}" style="width:100%; display:flex; align-items:center; justify-content:space-between; gap:8px;">
-        <span>אחוזים לאימון הבא</span>
-        <span style="display:inline-flex; transition:transform .2s; transform:rotate(${pctTableExpanded ? "90deg" : "180deg"});">${ICONS.chevron}</span>
-      </button>
-      ${pctTableExpanded ? `<div class="chart-card" style="margin-top:8px;">
-        <div class="footer-note" style="margin:0 0 10px;">מחושב מ־1RM משוער (${est} ק״ג) — הערכה מהסטים שרשמתם, לא מקס שנבדק. נקודת פתיחה להתאמה.</div>
-        <div class="log-list">
-          ${PCT_STEPS.map((pct) => `<div class="log-row"><span style="color:var(--steel); font-weight:700;">${pct}%</span><span class="mono" style="font-weight:700; color:var(--brass);">${formatPlateKg(roundToPlate(est * pct / 100))} ק״ג</span></div>`).join("")}
-        </div>
-        <div class="footer-note" style="margin:10px 0 0;">מעוגל ל־2.5 ק״ג — הקפיצה הקטנה ביותר שאפשר להעמיס על המוט.</div>
-      </div>` : ""}
-    </div>` : ""}
+    ${est && !isDuration ? `${strengthPercentagesOn() ? renderStrengthPctChips(est) : renderPctTable(est)}` : ""}
 
     ${(() => {
       const recent = recentEntriesFor(selectedId);
@@ -5412,7 +5672,7 @@ function renderDayEntriesListHtml(dayEntries, dayWods) {
             <div class="flex items-center gap-8">
               ${e.isPR ? ICONS.flame : ""}
               <span style="font-weight:700; font-size:14px;">${bidiText(w ? w.name : "?")}</span>
-              <span style="color:var(--steel); font-size:11px;">${e.rx ? "מלא (Rx)" : "מותאם (Scaled)"}${e.partnerTag ? ` · ${bidiText(e.partnerTag)}` : ""}</span>
+              <span style="color:var(--steel); font-size:11px;">${wodEffortLabel(e.rx)}${e.partnerTag ? ` · ${bidiText(e.partnerTag)}` : ""}</span>
             </div>
             <div class="flex items-center gap-10">
               <span class="mono" style="color:var(--steel); font-size:13px;">${formatWodEntry(e)}</span>
@@ -6513,7 +6773,7 @@ function syncWodSaveCta(w) {
   if (w) {
     btn.dataset.action = "save-wod";
     label.textContent = `${editingWodEntryId ? "עדכון" : "רישום"} אימון — ${w.name}`;
-    const unanswered = wodRx !== true && wodRx !== false;
+    const unanswered = !wodEffortAnswered(wodRx);
     btn.disabled = unanswered;
     btn.setAttribute("aria-disabled", String(unanswered));
     btn.style.opacity = unanswered ? ".45" : "";
@@ -6659,7 +6919,7 @@ function renderWodLogSection() {
         </div>
         <div style="text-align:left;">
           <div class="stat-label">אחרון (${fmtDate(history[0].date)})</div>
-          <div class="mono" style="font-weight:700; font-size:16px;">${formatWodEntry(history[0])} ${history[0].rx ? "" : "· מותאם"}</div>
+          <div class="mono" style="font-weight:700; font-size:16px;">${formatWodEntry(history[0])}${wodEffortTag(history[0].rx)}</div>
         </div>
       </div>
     </div>` : `
@@ -6675,7 +6935,7 @@ function renderWodLogSection() {
       <div style="margin-bottom:16px;">
         <div style="color:var(--steel); font-size:11px; font-weight:700; letter-spacing:.5px; margin-bottom:6px;">ב-14 הימים האחרונים</div>
         <div class="flex wrap gap-8">
-          ${recent.map((e) => `<span class="mono" style="background:var(--surface2); border-radius:10px; padding:6px 10px; font-size:12.5px; font-weight:700; color:var(--steel);">${esc(fmtDate(e.date))}: <span style="color:var(--chalk);">${esc(formatWodEntry(e))}</span>${e.rx ? "" : " · מותאם"}</span>`).join("")}
+          ${recent.map((e) => `<span class="mono" style="background:var(--surface2); border-radius:10px; padding:6px 10px; font-size:12.5px; font-weight:700; color:var(--steel);">${esc(fmtDate(e.date))}: <span style="color:var(--chalk);">${esc(formatWodEntry(e))}</span>${wodEffortTag(e.rx)}</span>`).join("")}
         </div>
       </div>`;
     })()}
@@ -6698,6 +6958,7 @@ function renderWodLogSection() {
     <div class="rx-toggle ${wodRx === null ? "unset" : ""}" role="radiogroup" aria-label="איך ביצעתם את האימון">
       <button class="rx-btn ${wodRx === true ? "active-rx" : ""}" data-action="set-rx" data-rx="1" role="radio" aria-checked="${wodRx === true}">מלא (Rx)<span class="term-sub">בדיוק כפי שנכתב</span></button>
       <button class="rx-btn ${wodRx === false ? "active-scaled" : ""}" data-action="set-rx" data-rx="0" role="radio" aria-checked="${wodRx === false}">מותאם (Scaled)<span class="term-sub">במשקלים שמתאימים לי</span></button>
+      <button class="rx-btn ${wodRx === WOD_EFFORT_PLUS ? "active-plus" : ""}" data-action="set-rx" data-rx="plus" role="radio" aria-checked="${wodRx === WOD_EFFORT_PLUS}">מוגבר (Rx+)<span class="term-sub">כבד מהמוגדר</span></button>
     </div>
     ${wodRx === null ? `<div class="footer-note" role="status" style="color:var(--brass); margin-top:-10px; margin-bottom:16px;">בחרו איך ביצעתם את האימון</div>` : ""}
 
@@ -6720,7 +6981,7 @@ function renderWodLogSection() {
       <div class="flex items-center gap-8">
         ${dayWods[0].isPR ? ICONS.flame : ""}
         <div style="text-align:right;">
-          <div style="font-weight:700; font-size:13px;">אחרון: ${bidiText(wodById(dayWods[0].wodId) ? wodById(dayWods[0].wodId).name : "?")} — ${formatWodEntry(dayWods[0])} (${dayWods[0].rx ? "מלא (Rx)" : "מותאם (Scaled)"})</div>
+          <div style="font-weight:700; font-size:13px;">אחרון: ${bidiText(wodById(dayWods[0].wodId) ? wodById(dayWods[0].wodId).name : "?")} — ${formatWodEntry(dayWods[0])} (${wodEffortLabel(dayWods[0].rx)})</div>
           <div style="color:var(--steel); font-size:11px;">${dayWods.length} אימון${dayWods.length === 1 ? "" : "ים"} נרשמו ${isToday ? "היום" : `ב-${esc(dayLabel)}`}</div>
         </div>
       </div>
@@ -6748,14 +7009,22 @@ function renderWodDetailCard(w) {
     //  2. Rx and Scaled tracked as separate running bests, matching
     //     bestWodScore()'s own rx-aware fix - a Scaled attempt no longer
     //     "beats" an earlier Rx one just because they share a scoreType.
-    let bestSoFarRx = w.scoreType === "time" ? Infinity : -Infinity;
-    let bestSoFarScaled = w.scoreType === "time" ? Infinity : -Infinity;
+    //
+    // RX+ (2026-09-19) is the twin of that second fix, and the reason this is
+    // a Map keyed on the effort rather than the two named variables it used to
+    // be: bestWodScore() buckets by strict equality on e.rx, so with a third
+    // value the old `e.rx ? rxBucket : scaledBucket` would have filed Rx+ with
+    // Rx here while the stored isPR flag put it on its own - the chart dots
+    // disagreeing with the attempt list underneath them, which is exactly what
+    // fix 1 and 2 were for. One bucket per distinct answer, from the data.
+    const worstPossible = w.scoreType === "time" ? Infinity : -Infinity;
+    const bestSoFar = new Map();
     const chartData = sorted.map((e) => {
       const val = scoreValue(e);
-      const prevBest = e.rx ? bestSoFarRx : bestSoFarScaled;
+      const bucket = String(e.rx);
+      const prevBest = bestSoFar.has(bucket) ? bestSoFar.get(bucket) : worstPossible;
       const isPR = w.scoreType === "time" ? val < prevBest : val > prevBest;
-      if (e.rx) bestSoFarRx = w.scoreType === "time" ? Math.min(bestSoFarRx, val) : Math.max(bestSoFarRx, val);
-      else bestSoFarScaled = w.scoreType === "time" ? Math.min(bestSoFarScaled, val) : Math.max(bestSoFarScaled, val);
+      bestSoFar.set(bucket, w.scoreType === "time" ? Math.min(prevBest, val) : Math.max(prevBest, val));
       return { dateLabel: fmtDate(e.date), est1RM: val, isPR };
     });
     chartHtml = renderChart(chartData);
@@ -6775,7 +7044,7 @@ function renderWodDetailCard(w) {
               <div class="flex items-center gap-8">
                 ${e.isPR ? ICONS.flame : ""}
                 <span style="color:var(--steel); font-size:12px;">${fmtDate(e.date)}</span>
-                <span style="color:var(--steel); font-size:11px;">${e.rx ? "מלא (Rx)" : "מותאם (Scaled)"}${e.partnerTag ? ` · ${bidiText(e.partnerTag)}` : ""}</span>
+                <span style="color:var(--steel); font-size:11px;">${wodEffortLabel(e.rx)}${e.partnerTag ? ` · ${bidiText(e.partnerTag)}` : ""}</span>
               </div>
               <span class="flex items-center gap-6">
                 <span class="mono" style="font-size:13px;">${formatWodEntry(e)}</span>
@@ -7811,6 +8080,21 @@ document.addEventListener("click", (e) => {
   else if (action === "save-bw") { saveBodyweight(); }
   else if (action === "toggle-bodyweight") { bodyweightExpanded = !bodyweightExpanded; renderBodyweightArea(); }
   else if (action === "toggle-pct-table") { pctTableExpanded = !pctTableExpanded; render(); }
+  else if (action === "set-weight-from-pct") {
+    // Exactly what prefill-from-recent does, for the same reason and with the
+    // same named toast: a chip that silently changes a number somewhere above
+    // the fold has not told anyone anything.
+    const loadKg = Number(el.dataset.kg);
+    if (isFinite(loadKg) && loadKg > 0) {
+      applyFieldValue("step", "weight", loadKg);
+      showToast(`מולא: ${el.dataset.pct}% — ${formatPlateKg(loadKg)} ק״ג`);
+    }
+  }
+  else if (action === "set-pct-increment") {
+    // render(), not a patch in place: every chip's kg changes, not one.
+    setPctIncrement(Number(el.dataset.inc));
+    render();
+  }
   else if (action === "open-add-measure-type") { measureAddOpen = true; renderMeasureArea(); }
   else if (action === "cancel-add-measure-type") { measureAddOpen = false; renderMeasureArea(); }
   else if (action === "confirm-add-measure-type") {
@@ -7945,7 +8229,9 @@ document.addEventListener("click", (e) => {
     // setWodRx, not a bare assignment: the choice is also remembered as this
     // member's own default for the next WOD (design spec §3.6), which is what
     // replaces the global Rx default rather than merely removing it.
-    setWodRx(el.dataset.rx === "1");
+    // Three answers now, so the dataset value is mapped rather than compared
+    // to "1": `=== "1"` turned every non-Rx chip, Rx+ included, into Scaled.
+    setWodRx(el.dataset.rx === "plus" ? WOD_EFFORT_PLUS : el.dataset.rx === "1");
     render();
   }
   else if (action === "copy-last-scaled") {
@@ -8078,6 +8364,10 @@ async function init() {
   await loadUserName();
   await loadLastExport();
   await loadBarWeight();
+  await loadPctIncrement();
+  // Before the first render, for the same reason loadCachedClubWods() above
+  // is: the log screen is drawn from the cached answer or from none at all.
+  await loadCachedClubFeatures();
   await loadWodRxDefault();
   await loadBoxStartDate();
   await loadSeenAchievements();
