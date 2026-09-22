@@ -181,7 +181,7 @@ test("an expired announcement drops out of the feed top area defensively, but a 
 // 2000 characters (both its own maxlength attribute and postAnnouncement()'s
 // own client-side slice), but the announcement's own feed card
 // (POST_ANNOUNCEMENT, written from this row by the
-// announcements_feed_card_insert trigger since 202609220006) renders through
+// announcements_feed_card_insert trigger since 202609220007) renders through
 // postBodyHtml() same as every other post type, hard-capped at
 // POST_BODY_MAX (1000 chars) with no ellipsis and no "read more" - anything
 // past 1000 was silently invisible to every member reading the card, with

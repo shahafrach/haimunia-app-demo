@@ -153,7 +153,7 @@ create trigger announcements_feed_card_insert
   for each row execute function public.announcement_feed_card_insert();
 
 comment on function public.announcement_feed_card_insert() is
-  '202609220006. AFTER INSERT on announcements. Writes the announcement''s own POST_ANNOUNCEMENT feed card: authorless, visibility club, published_at = the announcement''s created_at, body capped at 1000, metadata {title, announcement_id, priority}. announcement_id is what feed_page()''s chronological order resolves announcements.expires_at through, so the coach tier holds the card until the announcement expires. Writes nothing when the announcement is already deleted or already expired, or while the announcements module is off. One card per announcement (workout_posts_announcement_card_idx). Takes app.allow_unrated_post_insert around its one INSERT and restores the previous value, so publishing an announcement does not also spend a post_create rate-limit token.';
+  '202609220007. AFTER INSERT on announcements. Writes the announcement''s own POST_ANNOUNCEMENT feed card: authorless, visibility club, published_at = the announcement''s created_at, body capped at 1000, metadata {title, announcement_id, priority}. announcement_id is what feed_page()''s chronological order resolves announcements.expires_at through, so the coach tier holds the card until the announcement expires. Writes nothing when the announcement is already deleted or already expired, or while the announcements module is off. One card per announcement (workout_posts_announcement_card_idx). Takes app.allow_unrated_post_insert around its one INSERT and restores the previous value, so publishing an announcement does not also spend a post_create rate-limit token.';
 
 create or replace function public.announcement_feed_card_sync() returns trigger
 language plpgsql security definer set search_path = '' as $$
@@ -194,6 +194,6 @@ create trigger announcements_feed_card_sync
   for each row execute function public.announcement_feed_card_sync();
 
 comment on function public.announcement_feed_card_sync() is
-  '202609220006. AFTER UPDATE OF title, body, priority, deleted_at OR DELETE on announcements. Keeps the announcement''s feed card in step: a soft-delete or a hard delete soft-deletes the card (under app.allow_moderation_write, restored afterwards), and a title, body or priority edit is copied onto it. expires_at is not copied - feed_page() reads it live through metadata announcement_id.';
+  '202609220007. AFTER UPDATE OF title, body, priority, deleted_at OR DELETE on announcements. Keeps the announcement''s feed card in step: a soft-delete or a hard delete soft-deletes the card (under app.allow_moderation_write, restored afterwards), and a title, body or priority edit is copied onto it. expires_at is not copied - feed_page() reads it live through metadata announcement_id.';
 
 commit;
