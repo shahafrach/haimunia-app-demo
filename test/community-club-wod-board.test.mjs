@@ -240,6 +240,11 @@ function personaMock(who, shared) {
     club_wods: [clubWodRow()],
     club_wod_sessions: [], club_wod_results: [], workout_posts: [],
     clubs: [{ id: "club-1", name: "חיימוניה", member_count: 12 }],
+    // The club_wod module's one event lands here. Until it existed this
+    // feature - a switch, a board and a daily card - was one of eleven
+    // modules docs/audit/usage-queries.sql could only answer "no telemetry"
+    // about, which reads exactly like disuse and is not the same finding.
+    analytics_events: [],
   }, shared || {});
   const mock = createMockSupabase(db);
   mock.setUser({ id: p.id, is_anonymous: false, email: `${p.handle}@members.haimuniya.invalid` });
@@ -391,6 +396,18 @@ test("a coach publishes today's WOD, a member logs it and attaches from the log 
   assert.equal(att.p_entry.timeSeconds, 8 * 60 + 42);
   assert.equal(noaMock.db.club_wod_results.length, 1);
   assert.equal(noaMock.db.club_wod_results[0].result_text, "8:42", "the figure came from structured fields");
+  // club_wod_result_attached: the module's one event, after the RPC, with the
+  // entry point and nothing else. The session id is deliberately absent - it
+  // names one day's programming for the whole club, so a row carrying it
+  // would be a roster of who trained on a named day, in a table read under
+  // community.analytics.view.
+  await waitFor(() => noaMock.db.analytics_events.some((r) => r.event_name === "club_wod_result_attached"), 5000);
+  const attachEvents = noaMock.db.analytics_events.filter((r) => r.event_name === "club_wod_result_attached");
+  assert.equal(attachEvents.length, 1);
+  assert.deepEqual(JSON.parse(JSON.stringify(attachEvents[0].props)), { source: "log_form" });
+  const attachJson = JSON.stringify(attachEvents[0].props);
+  assert.ok(!attachJson.includes(SESSION_ID) && !attachJson.includes("8:42") && !attachJson.includes(WOD_ID),
+    "not the session, not the figure, not the workout - only which control the member used");
   // FIFTEEN RESULTS PRODUCE ZERO EXTRA POSTS. Attaching costs no feed slot,
   // which is the reason a member will do it and the reason the feed cannot
   // flood.
@@ -449,6 +466,12 @@ test("a coach publishes today's WOD, a member logs it and attaches from the log 
   await waitFor(() => !!itai.document.querySelector('[data-cloud-dialog="clubWodBoard"] [data-community-action="club-wod-attach"]'), 5000);
   itai.document.querySelector('[data-cloud-dialog="clubWodBoard"] [data-community-action="club-wod-attach"]').click();
   await waitFor(() => itaiMock.callsTo("club_wod_attach_result").length === 1, 5000);
+  // The board is the other entry point, and it says so rather than being
+  // folded into the log form's number.
+  await waitFor(() => itaiMock.db.analytics_events.some((r) => r.event_name === "club_wod_result_attached"), 5000);
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(itaiMock.db.analytics_events.find((r) => r.event_name === "club_wod_result_attached").props)),
+    { source: "board" });
   await waitFor(() => !!itai.document.querySelector('[data-club-wod-user="member-2"]'), 5000);
 
   const rows = Array.prototype.map.call(

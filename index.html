@@ -2674,6 +2674,26 @@
           <div style="font-weight:600; font-size:14px; color:var(--steel);">הוסיפו למסך הבית: שיתוף ← הוספה למסך הבית</div>
         </div>
       </div>
+      <!-- ONE LINE, and only here. This banner is the app's only install hint
+           on iOS, and maybeShowIOSInstallBanner() (app.js) already shows it
+           exclusively on an iOS device that is NOT running standalone - which
+           is exactly and only the population this sentence is true for, so it
+           needs no gate of its own and must not be copied onto the
+           Chrome/Android banner, where it would be false.
+
+           It is here because iOS withholds the Push API outside an installed
+           app entirely. Without this line the sequence a member meets is: no
+           notifications ever arrive, they go looking, and the settings panel
+           tells them (notifPushUnsupportedReason) what this banner could have
+           told them before they went looking. Data eviction is still the
+           banner's headline argument; notifications are the second one, and a
+           second one is all this is - no new control, no new dismissal, no
+           new state.
+
+           Both colour and spacing come from tokens already on the two lines
+           above, so it themes itself in light and dark with no new rule in
+           either of the two dark blocks. -->
+      <div style="font-weight:600; font-size:13px; color:var(--steel); margin-bottom:12px;">גם התראות עובדות רק מהאפליקציה המותקנת — בדפדפן iOS לא ניתן לקבל אותן.</div>
       <div class="brand-stripe" style="height:4px; margin-bottom:12px;"></div>
       <div class="flex items-center gap-10">
         <button data-action="dismiss-ios-install-hint" class="save-btn" style="flex:1; max-width:none; font-family:inherit; font-weight:800; font-size:15px; padding:12px 0; box-shadow:none;">הבנתי</button>

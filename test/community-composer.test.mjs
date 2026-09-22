@@ -17,6 +17,12 @@ function seeded() {
     profiles: [{ id: "u1", handle: "dana", display_name: "דנה", is_admin: false, recovery_verified_at: VERIFIED, visible_to_club: true }],
     invite_redemptions: [{ user_id: "u1", invite_id: "inv-1", role: "member", redeemed_at: VERIFIED }],
     community_feed: [],
+    // The post_photos module's one event lands here. post_created already
+    // carries has_media, but that prop can only ever speak for photos that
+    // reached a PUBLISHED post - it cannot tell "nobody attaches photos" from
+    // "everybody attaches photos and then abandons the draft", which is the
+    // question the module switch is actually judged on.
+    analytics_events: [],
   });
   mock.setUser({ id: "u1", is_anonymous: false, email: "dana@members.haimuniya.invalid" });
   mock.onRpc("post_create", (args, ctx) => {
@@ -169,4 +175,58 @@ test("a failed publish keeps the composer open with the text intact and shows an
   window.document.querySelector('[data-community-action="composer-publish"]').click();
   await waitFor(() => /פרסום הפוסט נכשל/.test(window.document.getElementById("postComposer").textContent), 3000);
   assert.equal(window.document.querySelector("[data-composer-body]").value, "טקסט שלא ייעלם", "text is preserved for a retry");
+});
+
+// ===== post_photo_attached ==============================================
+
+const photoEvents = (mock) => mock.db.analytics_events.filter((r) => r.event_name === "post_photo_attached");
+
+test("post_photo_attached fires per attached photo, with the running count, and never the storage path", async () => {
+  const mock = seeded();
+  const window = await bootCommunity(mock, { syncEnabled: false });
+  await openComposer(window);
+  stubImage(window);
+  assert.equal(photoEvents(mock).length, 0, "opening the composer attaches nothing");
+
+  addPhoto(window);
+  await waitFor(() => photoEvents(mock).length === 1, 3000);
+  assert.deepEqual(JSON.parse(JSON.stringify(photoEvents(mock)[0].props)), { source: "composer", photo_count: 1 });
+
+  addPhoto(window);
+  await waitFor(() => photoEvents(mock).length === 2, 3000);
+  assert.deepEqual(JSON.parse(JSON.stringify(photoEvents(mock)[1].props)), { source: "composer", photo_count: 2 });
+
+  const json = JSON.stringify(photoEvents(mock).map((r) => r.props));
+  assert.ok(!json.includes("lift.jpg") && !json.includes("webp") && !json.includes("u1/"),
+    "a filename, a mime type and a storage path are all things this row has no business carrying");
+});
+
+test("a photo that fails to upload is not an attached photo", async () => {
+  const mock = seeded();
+  const window = await bootCommunity(mock, { syncEnabled: false });
+  await openComposer(window);
+  window.HaimuniaImage.prepareImage = async () => { const e = new Error("nope"); e.code = "not_an_image"; throw e; };
+
+  addPhoto(window);
+  await waitFor(() => window.document.body.textContent.includes("אינו תמונה"), 3000);
+  assert.equal(photoEvents(mock).length, 0, "recorded on the ready branch only");
+});
+
+test("the count is of attachments, not of posts - a draft nobody publishes still counted the attach", async () => {
+  const mock = seeded();
+  const window = await bootCommunity(mock, { syncEnabled: false });
+  await openComposer(window);
+  stubImage(window);
+  addPhoto(window);
+  await waitFor(() => photoEvents(mock).length === 1, 3000);
+
+  // Nothing is published. The attach is already recorded, and the
+  // published-side cross-check correctly says nothing - which is exactly the
+  // pair docs/audit/usage-queries.sql query 7 reads together: a high attach
+  // count against a low published rate is a composer problem, not a disused
+  // feature, and neither number can say that alone.
+  assert.equal(photoEvents(mock).length, 1, "the attach happened; the publish is a different question");
+  assert.equal(mock.db.analytics_events.filter((r) => r.event_name === "post_created").length, 0,
+    "post_created.has_media has nothing to report, because there is no post");
+  assert.equal(mock.db.__lastPostCreate, undefined);
 });

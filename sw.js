@@ -169,8 +169,40 @@ self.addEventListener("activate", (e) => {
 });
 
 // The update banner in index.html triggers the swap explicitly.
+//
+// PUSH_SELF_TEST is the account-settings "send a test notification to this
+// device" control. The worker draws the notification from its OWN
+// registration - the same surface the push handler below uses, which is the
+// point of testing it here rather than from the page - and then reports the
+// receipt back to whoever asked.
+//
+// IT REPORTS; IT DOES NOT INSERT. A service worker has no Supabase client and
+// deliberately cannot read cloud-config.js (see the push handler's own note
+// on why importScripts there is not worth pulling the keys into this scope),
+// so the analytics row goes through the page's existing writer -
+// analyticsTrack(), the one writer of public.analytics_events - reached by
+// posting back exactly as notificationclick already does. The id is echoed
+// unchanged so a receipt cannot resolve a run other than its own.
 self.addEventListener("message", (e) => {
-  if (e.data && e.data.type === "SKIP_WAITING") self.skipWaiting();
+  if (!e.data) return;
+  if (e.data.type === "SKIP_WAITING") { self.skipWaiting(); return; }
+  if (e.data.type === "PUSH_SELF_TEST") {
+    const id = e.data.id;
+    e.waitUntil(
+      self.registration.showNotification("האימוניה", {
+        body: "זו התראת בדיקה. ההתראות במכשיר הזה עובדות.",
+        icon: "./icon-192.png",
+        badge: "./icon-192-maskable.png",
+        // A tag, so a member who taps the button twice replaces the first
+        // test notification instead of stacking two identical ones.
+        tag: "haimunia-push-self-test",
+        data: { deepLink: "./", selfTest: true },
+      }).then(async () => {
+        const allClients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+        for (const c of allClients) c.postMessage({ type: "PUSH_SELF_TEST_RECEIVED", id: id });
+      }).catch(() => { /* nothing arrived; the page's own timeout is the answer */ })
+    );
+  }
 });
 
 // COMM-229. Behind NOTIF_PUSH_ENABLED client-side (cloud.js); this handler

@@ -477,6 +477,26 @@
     const cur = state.engagement.commentDrafts[key] || "";
     const replaced = cur.replace(/(^|\s)@([^\s@]*)$/, function (full, pre) { return pre + "@[" + name + "](" + id + ") "; });
     state.engagement.commentDrafts[key] = replaced === cur ? cur + "@[" + name + "](" + id + ") " : replaced;
+    // The mentions module's one event. At the PICK, not at the send: the
+    // published comment already carries mention_count through the bus bridge
+    // (BUS_COUNT_KEYS), so what that prop cannot answer - and what decides
+    // whether the "@" picker earns its place - is how often members reach for
+    // it at all, including in drafts they then abandon or edit the mention
+    // back out of.
+    //
+    // `source` is the only prop, and the only one there will ever be. The
+    // picked member's id and display name are both sitting right here in the
+    // arguments and neither goes anywhere near the row: "who tags whom" is a
+    // social graph, analytics_events is readable under
+    // community.analytics.view, and a mention is already delivered to the
+    // person it names through notifications - it does not also need to be
+    // published to whoever runs a usage query.
+    //
+    // Not a WCAM event: the comment that carries the mention is, through
+    // comment_created, and an abandoned draft must make nobody active.
+    // commentKey() is "<postId>" for a top-level box and "<postId>:<parentId>"
+    // for a reply box, and a post id is a uuid, so the colon is the whole test.
+    track(A.MENTION_INSERTED, { source: String(key || "").indexOf(":") >= 0 ? "reply" : "comment" });
     state.engagement.mentionPicker = null;
     rerender();
     restoreCommentFocus(key, state.engagement.commentDrafts[key].length);

@@ -276,6 +276,22 @@
     // one trigger - and the state.feed.seen guard above is what makes both
     // of them exactly once per post per feed session.
     track(A.POST_IMPRESSION, { post_id: postId, position: Math.max(0, Number(position) || 0), feed_session_id: state.feed.sessionId });
+    // The new_member_posts module's one event, and it rides this trigger on
+    // purpose rather than getting its own. The module is a SERVER trigger
+    // (post_new_member_on_join, 202609160004) that writes one card into
+    // everybody's feed; the only thing a client can observe about it is
+    // whether that card was ever actually seen, which is precisely what the
+    // impression guard above already measures exactly once per post per feed
+    // session. A second name and a second guard for the same moment would be
+    // two counters that can disagree.
+    //
+    // post_impression carries only the post id, so it cannot answer "how many
+    // of those impressions were welcome cards" without a join against
+    // workout_posts - a table the analytics reader may not hold. This can.
+    // No id, no member: the card is about a named newcomer and the count is
+    // the whole question.
+    const impressed = typeof findFeedPost === "function" ? findFeedPost(postId) : null;
+    if (impressed && impressed.post_type === "POST_NEW_MEMBER") track(A.NEW_MEMBER_POST_VIEWED, { source: "feed" });
     state.feed.pending.push({
       post_id: postId,
       position: Math.max(0, Number(position) || 0),

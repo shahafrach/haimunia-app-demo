@@ -61,7 +61,21 @@ async function openAccount(window) {
 // A faithful-enough stand-in for the browser's Push API: one mutable
 // subscription slot per stub, so a test can simulate "already subscribed"
 // (seed opts.existingEndpoint) and "the browser dropped it" (setSub(null)).
+//
+// It also puts the window in STANDALONE by default, and that is not
+// incidental scaffolding. Since the permission gate landed
+// (pushAskGateReason, src/community/notifications.js) the app does not ask
+// for notification permission outside the installed app on any platform, so
+// a stub that left navigator.standalone unset would be stubbing a Push API
+// that this app would never reach - every test below would pass or fail on
+// the gate rather than on what it means to test. Pass `standalone: false` to
+// exercise the gate itself; test/community-push-gate-and-self-test.test.mjs
+// is where that is done deliberately.
 function stubPushApis(window, opts = {}) {
+  Object.defineProperty(window.navigator, "standalone", {
+    value: opts.standalone !== false,
+    configurable: true,
+  });
   const calls = { requestPermission: 0, subscribe: 0, getSubscription: 0 };
   let sub = opts.existingEndpoint ? makeSub(opts.existingEndpoint) : null;
   function makeSub(endpoint) {

@@ -42,6 +42,22 @@ const SPEC_77_EVENTS = [
   // WCAM - viewing a card is not participation, the same reading
   // leaderboard_viewed has always had.
   "classmates_card_viewed",
+  // The eleven-module pass. None of these is a spec 77 name either: section
+  // 77 was a list of COMMUNITY actions, and what these measure is the eleven
+  // club_features modules that had a switch, a surface and no event at all -
+  // so usage-queries.sql could only ever answer "nothing measures it" about
+  // them, which reads exactly like disuse and is not the same finding.
+  "announcement_viewed", "member_of_week_published", "welcome_sent",
+  "monthly_recap_viewed", "club_wod_result_attached", "new_member_post_viewed",
+  "post_photo_attached", "mention_inserted", "outward_share_completed",
+  "streak_nudge_opened", "engagement_flag_actioned",
+  // The session shape and the push funnel. app_opened is the first name here
+  // that is not about the community at all - isStandalone() had been computed
+  // in app.js since the install banner shipped and never sent anywhere.
+  // push_permission records the answer push_opt_in structurally cannot see: a
+  // denial writes no subscription row. push_self_test is the account-settings
+  // device test, received or not.
+  "app_opened", "push_permission", "push_self_test",
 ];
 
 // An object built inside the jsdom window carries that realm's

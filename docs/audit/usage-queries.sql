@@ -36,11 +36,14 @@
 -- THE EVENT-TO-MODULE MAP
 -- ---------------------------------------------------------------------------
 --
--- A `module` here is a `club_features.module_key` wherever one exists — the
--- same 21 keys an admin can actually switch off (202609010012, 202609050006,
--- 202609100002, 202609150014, 202609150016, 202609160004, 202609160006,
--- 202609170003). Eight surfaces produce events but have no toggle of their
--- own; they are marked `*` and are NOT club_features keys.
+-- A `module` here is a `club_features.module_key` wherever one exists. This
+-- paragraph used to say "the same 21 keys an admin can actually switch off
+-- (202609010012, 202609050006, 202609100002, 202609150014, 202609150016,
+-- 202609160004, 202609160006, 202609170003)"; 202609190002 has since added
+-- seven more, so the registry holds 28 and the panel offers 28, of which
+-- those seven are marked `planned` because nothing is behind them yet.
+-- Eight surfaces produce events but have no toggle of their own; they are
+-- marked `*` and are NOT club_features keys.
 --
 --   event_name                | module            | why
 --   --------------------------+-------------------+----------------------------
@@ -85,24 +88,86 @@
 --                             |                   | on purpose: the card's whole
 --                             |                   | question is how often it had
 --                             |                   | anything to show
+--   announcement_viewed       | announcements     | the archive on screen, with
+--                             |                   | rows in it. Announcements
+--                             |                   | render inline and are never
+--                             |                   | "opened", so a view is the
+--                             |                   | only honest event here
+--   member_of_week_published  | member_of_week    | the coach's publish
+--   welcome_sent              | welcome_flow      | a welcome comment written,
+--                             |                   | from the feed card or the
+--                             |                   | coach section
+--   monthly_recap_viewed      | monthly_recap     | the MEMBER card. The staff
+--                             |                   | draft preview is not this
+--   club_wod_result_attached  | club_wod          | a member puts their own
+--                             |                   | logged result on the board
+--   new_member_post_viewed    | new_member_posts  | the welcome card actually
+--                             |                   | seen in a feed session
+--   post_photo_attached       | post_photos       | a photo attached in either
+--                             |                   | composer, including drafts
+--                             |                   | that are never published
+--   mention_inserted          | mentions          | somebody picked from the
+--                             |                   | "@" picker
+--   outward_share_completed   | outward_share     | the share sheet settled,
+--                             |                   | including `cancelled`
+--   streak_nudge_opened       | streak_risk_nudges| a streak_at_risk
+--                             |                   | notification opened. THE
+--                             |                   | ONE DELIBERATE DOUBLE: the
+--                             |                   | same tap also writes
+--                             |                   | notification_opened, which
+--                             |                   | belongs to `notifications`.
+--                             |                   | Per-module counts stay
+--                             |                   | right; a SUM across modules
+--                             |                   | does not, and query 2 does
+--                             |                   | not take one
+--   engagement_flag_actioned  | engagement_alerts | a coach reached out to,
+--                             |                   | reviewed or dismissed a
+--                             |                   | flag
+--   push_permission           | push_notifications| the browser's own answer,
+--                             |                   | including a denial, which
+--                             |                   | push_opt_in can never see
+--   push_self_test            | push_notifications| the account-settings device
+--                             |                   | test, received or not
 --   club_tab_viewed           | shell*            | navigation, not a module.
 --                             |                   | Query 6 splits it by
 --                             |                   | props->>'tab'
+--   app_opened                | shell*            | one row per page load, with
+--                             |                   | display_mode and platform.
+--                             |                   | A session, not a module —
+--                             |                   | excluded from queries 2-5
+--                             |                   | exactly like club_tab_viewed
 --   write_failed              | platform*         | a failed community write.
 --                             |                   | Health signal, not usage —
 --                             |                   | excluded from queries 2-5
 --
--- 28 event names, which is every entry in `EVENTS`. `write_failed` was not in
+-- 42 event names, which is every entry in `EVENTS`. `write_failed` was not in
 -- metrics.md's trigger table when this file was written; the row is added in
 -- the same change.
 --
--- MODULES THAT EMIT NOTHING. Eleven club_features keys have no event mapped to
+-- MODULES THAT EMIT NOTHING. None, as of the fourteen names added above.
+-- This block used to read: "Eleven club_features keys have no event mapped to
 -- them at all: announcements, member_of_week, welcome_flow, monthly_recap,
 -- club_wod, new_member_posts, post_photos, mentions, outward_share,
--- streak_risk_nudges, engagement_alerts. Query 5 lists them separately from
--- the modules that are merely unused, because "nobody uses it" and "nothing
--- measures it" are different findings and only one of them is about members.
--- Two of those eleven have a partial prop-level signal; query 7 reads it.
+-- streak_risk_nudges, engagement_alerts." Every one of those eleven now has
+-- exactly one event of its own, at the surface that is the module's own
+-- point, so query 5's "no telemetry" verdict no longer fires for any module
+-- that has a feature behind it.
+--
+-- WHAT IS STILL UNMEASURABLE, and why that is correct: the seven keys
+-- 202609190002 added (coach_tasks, onboarding_challenge, benchmarks,
+-- strength_percentages, gym_display, owner_report, arbox_attendance) are
+-- switches that arrive BEFORE their features. There is nothing behind them to
+-- emit anything, so query 5 still reports "no telemetry" for those seven and
+-- that is the honest answer, not a gap to close. The branch that builds each
+-- feature adds its event and its row here in the same change.
+--
+-- THE TWO PROP-LEVEL SIGNALS in query 7 (post_created.has_media and
+-- comment_created.mention_count) are kept. They are no longer the ONLY thing
+-- that can speak for post_photos and mentions - both have their own event now
+-- - but they answer a different question: the event counts attachments and
+-- picks, the props count PUBLISHED posts and comments that carried one. Read
+-- together they separate "nobody attaches photos" from "everybody attaches
+-- photos and then deletes the draft".
 --
 -- ===========================================================================
 
@@ -142,7 +207,21 @@ from (values
   ('report_submitted',        'moderation',         false),
   ('attendance_recorded',     'attendance',         false),
   ('classmates_card_viewed',  'classmates_today',   false),
+  ('announcement_viewed',     'announcements',      true),
+  ('member_of_week_published','member_of_week',     true),
+  ('welcome_sent',            'welcome_flow',       true),
+  ('monthly_recap_viewed',    'monthly_recap',      true),
+  ('club_wod_result_attached','club_wod',           true),
+  ('new_member_post_viewed',  'new_member_posts',   true),
+  ('post_photo_attached',     'post_photos',        true),
+  ('mention_inserted',        'mentions',           true),
+  ('outward_share_completed', 'outward_share',      true),
+  ('streak_nudge_opened',     'streak_risk_nudges', true),
+  ('engagement_flag_actioned','engagement_alerts',  true),
+  ('push_permission',         'push_notifications', true),
+  ('push_self_test',          'push_notifications', true),
   ('club_tab_viewed',         'shell',              false),
+  ('app_opened',              'shell',              false),
   ('write_failed',            'platform',           false)
 ) as m(event_name, module, is_club_feature)
 order by is_club_feature desc, module, event_name;
@@ -181,7 +260,24 @@ with module_map(event_name, module) as (values
   ('search_performed','search'),
   ('report_submitted','moderation'),
   ('attendance_recorded','attendance'),
-  ('classmates_card_viewed','classmates_today')
+  ('classmates_card_viewed','classmates_today'),
+  -- The eleven modules that used to emit nothing, plus the two push names.
+  -- shell (club_tab_viewed, app_opened) and platform (write_failed) stay out
+  -- of this map deliberately: navigation, a session and a failure signal are
+  -- not module usage.
+  ('announcement_viewed','announcements'),
+  ('member_of_week_published','member_of_week'),
+  ('welcome_sent','welcome_flow'),
+  ('monthly_recap_viewed','monthly_recap'),
+  ('club_wod_result_attached','club_wod'),
+  ('new_member_post_viewed','new_member_posts'),
+  ('post_photo_attached','post_photos'),
+  ('mention_inserted','mentions'),
+  ('outward_share_completed','outward_share'),
+  ('streak_nudge_opened','streak_risk_nudges'),
+  ('engagement_flag_actioned','engagement_alerts'),
+  ('push_permission','push_notifications'),
+  ('push_self_test','push_notifications')
 ),
 staff as (
   select p.id
@@ -198,7 +294,9 @@ rows_30d as (
   left join module_map m on m.event_name = e.event_name
   left join staff s on s.id = e.user_id
   where e.created_at >= now() - interval '30 days'
-    and e.event_name not in ('club_tab_viewed', 'write_failed')
+    -- app_opened joins the two already here: one row per page load is a
+    -- session, not a module being used. Query 9 reads it on its own.
+    and e.event_name not in ('club_tab_viewed', 'app_opened', 'write_failed')
 )
 select r.module,
        count(distinct r.user_id)                                          as unique_users,
@@ -276,7 +374,24 @@ with module_map(event_name, module) as (values
   ('search_performed','search'),
   ('report_submitted','moderation'),
   ('attendance_recorded','attendance'),
-  ('classmates_card_viewed','classmates_today')
+  ('classmates_card_viewed','classmates_today'),
+  -- The eleven modules that used to emit nothing, plus the two push names.
+  -- shell (club_tab_viewed, app_opened) and platform (write_failed) stay out
+  -- of this map deliberately: navigation, a session and a failure signal are
+  -- not module usage.
+  ('announcement_viewed','announcements'),
+  ('member_of_week_published','member_of_week'),
+  ('welcome_sent','welcome_flow'),
+  ('monthly_recap_viewed','monthly_recap'),
+  ('club_wod_result_attached','club_wod'),
+  ('new_member_post_viewed','new_member_posts'),
+  ('post_photo_attached','post_photos'),
+  ('mention_inserted','mentions'),
+  ('outward_share_completed','outward_share'),
+  ('streak_nudge_opened','streak_risk_nudges'),
+  ('engagement_flag_actioned','engagement_alerts'),
+  ('push_permission','push_notifications'),
+  ('push_self_test','push_notifications')
 ),
 bounds as (
   select (now() - interval '30 days') as win_start, now() as win_end
@@ -318,9 +433,15 @@ order by o.module, w.week_start;
 -- 5. Modules with near-zero use — and modules nothing can measure.
 --    Answers: what should be considered for removal, and what cannot be
 --    judged yet. The two are reported in one list with a `verdict` column and
---    must not be confused: eleven club_features modules emit no event at all,
---    so their silence is a telemetry gap, not a member verdict, and deleting
---    one on the strength of this query would be deleting it on no evidence.
+--    must not be confused: a module nothing measures is a telemetry gap, not
+--    a member verdict, and deleting one on the strength of this query would
+--    be deleting it on no evidence.
+--
+--    This paragraph used to name eleven such modules. All eleven have an
+--    event now. What still returns "no telemetry" is the seven keys
+--    202609190002 added ahead of their features - switches with nothing
+--    behind them - which is the correct answer for a feature that does not
+--    exist, and the one case where "no telemetry" is not a gap to close.
 --
 --    Edit `near_zero_users` in the params CTE. 2 is a starting point for a
 --    single gym: fewer than three distinct members in a month.
@@ -344,7 +465,24 @@ module_map(event_name, module) as (values
   ('search_performed','search'),
   ('report_submitted','moderation'),
   ('attendance_recorded','attendance'),
-  ('classmates_card_viewed','classmates_today')
+  ('classmates_card_viewed','classmates_today'),
+  -- The eleven modules that used to emit nothing, plus the two push names.
+  -- shell (club_tab_viewed, app_opened) and platform (write_failed) stay out
+  -- of this map deliberately: navigation, a session and a failure signal are
+  -- not module usage.
+  ('announcement_viewed','announcements'),
+  ('member_of_week_published','member_of_week'),
+  ('welcome_sent','welcome_flow'),
+  ('monthly_recap_viewed','monthly_recap'),
+  ('club_wod_result_attached','club_wod'),
+  ('new_member_post_viewed','new_member_posts'),
+  ('post_photo_attached','post_photos'),
+  ('mention_inserted','mentions'),
+  ('outward_share_completed','outward_share'),
+  ('streak_nudge_opened','streak_risk_nudges'),
+  ('engagement_flag_actioned','engagement_alerts'),
+  ('push_permission','push_notifications'),
+  ('push_self_test','push_notifications')
 ),
 -- Every module that could appear: the club_features registry plus the
 -- untoggleable surfaces the map names. A module_key added by a later
@@ -413,13 +551,24 @@ order by visits desc;
 
 
 -- ===========================================================================
--- 7. Prop-level signal for two modules that emit no event of their own.
---    Answers: are photos on posts and mentions in comments being used at all?
---    `post_photos` and `mentions` have club_features rows and no event, but
---    post_created carries has_media and comment_created carries mention_count
---    (BUS_PROP_KEYS / BUS_COUNT_KEYS, src/analytics.js), which is enough to
---    tell "never used" from "not measured". It is a rate, not a module usage
---    count, so it is deliberately not folded into query 2.
+-- 7. Published-rate cross-check for post_photos and mentions.
+--    Answers: of the posts and comments that were actually PUBLISHED, how
+--    many carried a photo or a mention?
+--
+--    This block used to be titled "prop-level signal for two modules that
+--    emit no event of their own", and that is no longer what it is. Both
+--    modules have their own event now (post_photo_attached,
+--    mention_inserted), and the two measurements are deliberately different
+--    ends of the same funnel:
+--      - the EVENT counts the act - a photo attached in a composer, a member
+--        picked from the "@" picker - including drafts that are abandoned and
+--        mentions that are typed and then deleted;
+--      - the PROP below counts what survived to publication, off
+--        post_created.has_media and comment_created.mention_count
+--        (BUS_PROP_KEYS / BUS_COUNT_KEYS, src/analytics.js).
+--    A high event count against a low published rate is a composer problem,
+--    not a disused feature, and neither number can say that alone. Still a
+--    rate rather than a module usage count, so still not folded into query 2.
 -- ===========================================================================
 select 'post_photos'                                              as module,
        'post_created.has_media'                                   as signal,
@@ -634,3 +783,76 @@ select join_month,
 from cohort
 group by join_month
 order by join_month desc;
+
+
+-- ===========================================================================
+-- 9. How the app is being run, and how far the push funnel gets.
+--    Answers: the two questions the eleven-module pass was really about.
+--
+--    9a. INSTALL SHARE. app_opened is one row per page load carrying
+--    display_mode ('standalone' | 'browser') and platform ('ios' | 'android'
+--    | 'other'). Read the member column, not the session column: one member
+--    who opens the app nine times a week is nine sessions and one install.
+--    A member can legitimately appear in BOTH display modes - the installed
+--    app on their phone, a browser tab on a laptop - so the two member counts
+--    do not sum to the roster.
+--
+--    Note the floor: app_opened is written from the session-ready path, so a
+--    session that never signs in produces no row. This measures members, not
+--    visitors, which is the population every decision behind it is about.
+-- ===========================================================================
+select e.props ->> 'platform'                          as platform,
+       e.props ->> 'display_mode'                      as display_mode,
+       count(distinct e.user_id)                       as members,
+       count(*)                                        as sessions,
+       max(e.created_at)                               as last_seen
+from public.analytics_events e
+where e.event_name = 'app_opened'
+  and e.created_at >= now() - interval '30 days'
+group by platform, display_mode
+order by members desc, sessions desc;
+
+
+-- ===========================================================================
+--    9b. THE PUSH FUNNEL, in the order a member walks it. Four rows, each
+--    from its own event, and the gaps between them are the finding:
+--      permission_default  - asked nothing of them yet (read off the Account
+--                            tab, so it counts members who LOOKED)
+--      permission_granted  - said yes
+--      permission_denied   - said no. push_opt_in can never see these, which
+--                            is why push_permission exists
+--      opted_in            - a push_subscriptions row was actually written
+--      self_test_received  - a notification really reached the device
+--      self_test_missing   - the member ran the test and nothing arrived.
+--                            This is the row to act on: a granted permission
+--                            with no delivery is a broken install, not a
+--                            preference.
+-- ===========================================================================
+select 'permission_default'  as step, count(distinct user_id) as members, count(*) as events
+from public.analytics_events
+where event_name = 'push_permission' and props ->> 'status' = 'default'
+  and created_at >= now() - interval '30 days'
+union all
+select 'permission_granted', count(distinct user_id), count(*)
+from public.analytics_events
+where event_name = 'push_permission' and props ->> 'status' = 'granted'
+  and created_at >= now() - interval '30 days'
+union all
+select 'permission_denied', count(distinct user_id), count(*)
+from public.analytics_events
+where event_name = 'push_permission' and props ->> 'status' = 'denied'
+  and created_at >= now() - interval '30 days'
+union all
+select 'opted_in', count(distinct user_id), count(*)
+from public.analytics_events
+where event_name = 'push_opt_in' and created_at >= now() - interval '30 days'
+union all
+select 'self_test_received', count(distinct user_id), count(*)
+from public.analytics_events
+where event_name = 'push_self_test' and props ->> 'result' = 'received'
+  and created_at >= now() - interval '30 days'
+union all
+select 'self_test_missing', count(distinct user_id), count(*)
+from public.analytics_events
+where event_name = 'push_self_test' and props ->> 'result' = 'not_received'
+  and created_at >= now() - interval '30 days';
