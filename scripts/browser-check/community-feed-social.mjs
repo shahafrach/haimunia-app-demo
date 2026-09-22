@@ -220,12 +220,15 @@ console.log("\n--- 390px ---");
   const strip = await page.evaluate(() => {
     const s = document.querySelector('[data-classmates-today="ready"]');
     const firstCard = document.querySelector('[data-post-id="p1"]');
-    const filters = document.getElementById("communityFeedFilters");
-    if (!s || !firstCard || !filters) return null;
+    if (!s || !firstCard) return null;
     const row = s.querySelector(".classmates-strip-row");
+    // `aboveFilters` used to be reported here alongside aboveFeed. It was
+    // never checked, and it stopped meaning anything when the scope chips
+    // became one control on the "הפיד שלי" section head - the filter now
+    // sits ABOVE the strip by construction, so the number could only ever
+    // mislead the next reader.
     return {
       aboveFeed: s.getBoundingClientRect().top < firstCard.getBoundingClientRect().top,
-      aboveFilters: s.getBoundingClientRect().top < filters.getBoundingClientRect().top,
       h: s.getBoundingClientRect().height,
       scrolls: !!row && getComputedStyle(row).overflowX === "auto",
       follow: !!s.querySelector('[data-community-action="follow"]'),

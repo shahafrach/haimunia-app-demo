@@ -113,10 +113,16 @@ test("a member's own tap still rerenders synchronously - the fix must not defer 
   await new Promise((r) => setTimeout(r, 300));
 
   const probe = countRenders(window);
-  // setFeedScope is the plainest user action on this screen: a filter tab.
-  const tab = window.document.querySelector('#communityFeedFilters [role="tab"]:not([aria-selected="true"])');
-  assert.ok(tab, "the feed has a filter tab to switch to");
-  tab.click();
+  // setFeedScope is the plainest user action on this screen: changing the
+  // feed's scope. It was four role="tab" chips and is one <select> now, so
+  // the action is a "change" rather than a click - the point of the test is
+  // unchanged, that a thing the member just did repaints in the same turn.
+  const select = window.document.getElementById("communityFeedFilters");
+  assert.ok(select, "the feed has a scope filter to switch with");
+  const other = Array.from(select.options).find((o) => o.value !== select.value);
+  assert.ok(other, "the filter offers a scope to switch to");
+  select.value = other.value;
+  select.dispatchEvent(new window.Event("change", { bubbles: true }));
   // NO await. If this action had been routed through the coalescing path the
   // DOM would still be the old one at this point in the same turn.
   const immediate = probe.count;

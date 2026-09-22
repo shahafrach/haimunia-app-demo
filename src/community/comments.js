@@ -320,6 +320,18 @@
     // is not offered here.
     if (target && target.author_id !== state.user.id) return;
     const snapshot = list.slice();
+    // The array slice is NOT enough to put this comment back, and the old
+    // failure path quietly assumed it was: the removal below mutates the
+    // row object in place, and `snapshot` holds the same object reference,
+    // so restoring the array restored a row that still said status:
+    // "removed". The two fields it actually changes are remembered here and
+    // put back by hand, on the undo path and on the failure path alike.
+    const prevStatus = target ? target.status : null;
+    const prevDeletedAt = target ? target.deleted_at : null;
+    const putBack = () => {
+      if (target) { target.status = prevStatus; target.deleted_at = prevDeletedAt; }
+      state.engagement.comments[postId] = snapshot;
+    };
     // Bug fix: this used to be a raw hard DELETE, which (parent_comment_id
     // is `on delete set null`) silently reparented any reply to the deleted
     // comment up to top-level, and never showed the "התגובה נמחקה"
@@ -330,17 +342,27 @@
     // in place here too, rather than filtering it out of the array, so a
     // reply keeps its visual parent immediately instead of only after the
     // reload below.
-    if (target) { target.status = "removed"; target.deleted_at = new Date().toISOString(); }
-    rerender();
-    const { error } = await client.rpc("comment_delete", { p_comment_id: commentId });
-    if (error) {
-      state.engagement.comments[postId] = snapshot;
-      setMessage("מחיקת התגובה נכשלה");
-      rerender();
-      return;
-    }
-    await loadCommentsFor(postId);
-    await loadFeed();
+    // comment_delete() is a SOFT delete with no inverse a client can call,
+    // so the undo cannot be a restore — the RPC is held for the toast's
+    // window instead and simply never sent if the member taps בטלו. See
+    // deferCommunityDelete() (cloud.js) for why that is the only shape this
+    // could take without a migration.
+    deferCommunityDelete({
+      label: "התגובה נמחקה",
+      remove: () => { if (target) { target.status = "removed"; target.deleted_at = new Date().toISOString(); } },
+      restore: putBack,
+      commit: async () => {
+        const { error } = await client.rpc("comment_delete", { p_comment_id: commentId });
+        if (error) {
+          putBack();
+          setMessage("מחיקת התגובה נכשלה");
+          rerender();
+          return;
+        }
+        await loadCommentsFor(postId);
+        await loadFeed();
+      },
+    });
   }
   // A MEMBER EDITING A COMMENT MUST NOT BE SHOWN A STRANGER'S UUID.
   //

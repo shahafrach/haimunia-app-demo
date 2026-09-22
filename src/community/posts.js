@@ -93,11 +93,30 @@
     if (!error && data) { signedCachePut(photoUrlCache, path, data.signedUrl); scheduleRerender(); }
   }
 
+  // THE TWIN, named here so the next reader does not fix one of them. This
+  // is the legacy card's own "הסרת שיתוף" (a direct delete on
+  // workout_posts, author-scoped in the query); postDeleteViaMenu() below is
+  // the typed card's "מחיקה" through the post_delete() RPC. Two rows in the
+  // same table, two call sites, and until now two different promises about
+  // whether a member could take it back. Both run through
+  // deferCommunityDelete() (cloud.js) and both say the same thing in their
+  // confirm sheet.
   async function deletePost(postId) {
     if (!state.user) return;
-    const { error } = await client.from("workout_posts").delete().eq("id", postId).eq("author_id", state.user.id);
-    if (error) return setMessage(failText("הסרת השיתוף נכשלה", error));
-    await loadFeed(); setMessage("השיתוף הוסר");
+    const snapshot = Array.isArray(state.feed.items) ? state.feed.items.slice() : null;
+    deferCommunityDelete({
+      label: "השיתוף הוסר",
+      remove: () => { if (snapshot) state.feed.items = state.feed.items.filter((p) => p && p.id !== postId); },
+      restore: () => { if (snapshot) state.feed.items = snapshot; },
+      commit: async () => {
+        const { error } = await client.from("workout_posts").delete().eq("id", postId).eq("author_id", state.user.id);
+        // A failed write puts the post back on screen. It was only ever
+        // hidden optimistically, so the row is still there and the member
+        // has to be told the removal did not happen.
+        if (error) { if (snapshot) state.feed.items = snapshot; rerender(); return setMessage(failText("הסרת השיתוף נכשלה", error)); }
+        await loadFeed();
+      },
+    });
   }
   async function publishWorkout(type, id, visibility, photoFile) {
     if (!state.user || !state.profile || typeof window.communityShareCandidateFor !== "function") return;
@@ -1480,12 +1499,22 @@
     setMessage("הנראוּת עודכנה");
     rerender();
   }
+  // The second half of the twin deletePost() names above. The optimistic
+  // hide was already here — it just ran AFTER the RPC returned, so there was
+  // nothing to undo by the time the post left the screen. It now runs first
+  // and the RPC is what waits.
   async function postDeleteViaMenu(postId) {
-    const { error } = await client.rpc("post_delete", { post_id: postId });
-    if (error) { setMessage(failText("מחיקת הפוסט נכשלה", error)); return; }
-    if (Array.isArray(state.feed.items)) state.feed.items = state.feed.items.filter((p) => p && p.id !== postId);
-    setMessage("הפוסט נמחק");
-    rerender();
+    const snapshot = Array.isArray(state.feed.items) ? state.feed.items.slice() : null;
+    deferCommunityDelete({
+      label: "הפוסט נמחק",
+      remove: () => { if (snapshot) state.feed.items = state.feed.items.filter((p) => p && p.id !== postId); },
+      restore: () => { if (snapshot) state.feed.items = snapshot; },
+      commit: async () => {
+        const { error } = await client.rpc("post_delete", { post_id: postId });
+        if (error) { if (snapshot) state.feed.items = snapshot; rerender(); return setMessage(failText("מחיקת הפוסט נכשלה", error)); }
+        rerender();
+      },
+    });
   }
   const WELCOME_TEMPLATE_BODY = "שמחים שהגעת למועדון! 💪";
   // Live bug hunt (2026-09-11): two entry points share this write
