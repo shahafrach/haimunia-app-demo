@@ -438,9 +438,9 @@
     // The same second net the classmates card carries (blockFilteredList in
     // directory.js), applied for the same reason and not because the server
     // is doubted: post_training_partners_read already refuses a row across a
-    // block edge, but a block made in THIS session is in state.members.blocks
-    // before the next page load re-asks, and the member who just blocked
-    // somebody must not keep seeing their name until then.
+    // block edge, but a block made in THIS session lands in the client's own
+    // blocked-id set before the next page load re-asks, and the member who
+    // just blocked somebody must not keep seeing their name until then.
     const rows = (loaded || []).filter((r) => !(typeof isBlockedUser === "function" && isBlockedUser(r.user_id)));
     if (!loaded || !rows.length) return "";
     const pid = esc(post.id);
