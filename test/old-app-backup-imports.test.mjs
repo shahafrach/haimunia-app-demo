@@ -11,7 +11,7 @@
 //
 // The fixture is the exact SHAPE of a real export taken from the old app on
 // 2026-09-16 (verified against it), with invented numbers - there is no reason
-// for one person's bodyweight to live in a public repository.
+// for one person's bodyweight to live in a repository whose every file is served.
 //
 // What makes the old format interesting is what it LACKS: no `sessionNotes`
 // key and no `customWodMovementTags`, both of which the current export writes.

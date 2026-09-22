@@ -1,15 +1,15 @@
 # Launch-readiness audit, SEC-014.
 #
-# GitHub Pages cannot set response headers, so the app's CSP lives in a
-# <meta> tag - and `frame-ancestors` is SPEC-IGNORED in a meta CSP. The
-# result is that the app has NO clickjacking protection in production
-# today, which matters because ~19 destructive actions sit behind a
-# confirm sheet that a framing attacker could bait a click onto.
+# `frame-ancestors` is SPEC-IGNORED in a <meta> CSP, so clickjacking
+# protection has to arrive as a real response header - which matters
+# because ~19 destructive actions sit behind a confirm sheet that a
+# framing attacker could bait a click onto.
 #
-# This file is the Netlify/Cloudflare Pages format. It is inert on GitHub
-# Pages (harmless), and becomes the fix the moment the site is fronted by
-# a host that reads it. See docs/deploy/HEADERS.md for nginx/Cloudflare
-# Workers equivalents and for what to verify after switching.
+# This file is the Cloudflare Pages format, and Cloudflare Pages has been
+# the host since 2026-09-16: these headers are what production sends. (The
+# previous host, GitHub Pages, could not send headers at all, which is why
+# frame-guard.js and the meta CSP exist as backstops.) docs/deploy/HEADERS.md
+# is the superseded plan from that era; verify with `curl -sI` on the site.
 /*
   X-Frame-Options: DENY
   Content-Security-Policy: frame-ancestors 'none'

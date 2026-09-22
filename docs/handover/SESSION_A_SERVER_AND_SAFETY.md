@@ -83,11 +83,13 @@ read it.
 - **Node 20 deprecation warnings** on `actions/upload-artifact` and
   `actions/download-artifact`. Harmless today - the runner forces Node 24 - and
   worth pinning to a current release properly, with a real SHA.
-- **`scheduled-job-alert` has failed every day since 2026-09-15**, by design:
-  it needs three secrets and fails closed. One is `SUPABASE_SERVICE_ROLE_KEY`,
-  which bypasses every RLS policy on member data. Nothing is watching the cron
-  jobs until this is decided, and it deserves a decision rather than a
-  checklist tick.
+- ~~**`scheduled-job-alert` has failed every day since 2026-09-15**, by design:
+  it needs three secrets and fails closed.~~ **Decided and closed, 2026-09-19
+  (PR #14, migration `202609190001`):** the workflow no longer needs any
+  Supabase secret. It reads `public.job_health_status()` with the publishable
+  key, and the check itself runs hourly inside the database. The red run
+  history after that date has a different cause — see
+  `docs/ops/MONITORING.md` §1b, "Its red run history".
 - **Required status checks are still being bypassed** on every push. Now that
   CI is green end to end, that should stop.
 - **The `headcoach` password** is still the weak one, and was in public git

@@ -1,9 +1,11 @@
 // ---------- IndexedDB ----------
 // Deliberately distinct from the real production app's own database name.
-// Both apps are served from the same GitHub Pages origin (haimuniya.
+// Both apps were once served from one GitHub Pages origin (haimuniya.
 // github.io), just different paths, and IndexedDB is scoped per-origin,
-// not per-path — reusing that name would mean a real member's local
-// training data and this demo's community/social code share one database.
+// not per-path — reusing that name meant a real member's local training
+// data and this demo's community/social code shared one database. The
+// hosts are separate now (Cloudflare Pages since 2026-09-16); the name
+// stays distinct so the two can never collide again on any shared origin.
 const DB_NAME = "haimunia-demo-db", STORE = "entries", MOVSTORE = "movements", WODSTORE = "wodEntries", CUSTOMWODSTORE = "customWods", BWSTORE = "bodyweight", SETTINGSTORE = "settings", MEASTYPESTORE = "measureTypes", MEASSTORE = "measurements", OUTBOXSTORE = "syncOutbox", WODTAGSTORE = "wodMovementTags",
       // Launch-readiness audit, RELIABILITY. The community write queue -
       // deliberately a SECOND store rather than more rows in syncOutbox:

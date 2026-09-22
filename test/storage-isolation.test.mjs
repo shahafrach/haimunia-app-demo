@@ -1,5 +1,6 @@
 // This app and the real production app (haimuniya.github.io/haimunia-app/)
-// are served from the same GitHub Pages origin, just different paths —
+// were served from the same GitHub Pages origin, just different paths, until
+// this app moved to Cloudflare Pages on 2026-09-16 —
 // browser storage (IndexedDB, localStorage, sessionStorage, Cache Storage)
 // is scoped per-origin, not per-path. Before this fix, this demo used the
 // production app's exact IndexedDB name ("box-log-db") and localStorage
