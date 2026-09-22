@@ -1114,7 +1114,13 @@
     // a row carries one, so no existing row changed.
     { key: "onboarding_challenge", label: "אתגר כניסה לחבר/ה חדש/ה", desc: "אתגר ראשון קצר שמוצע אוטומטית למי שהצטרף/ה זה עתה למועדון.", clientOnly: true, planned: true },
     { key: "benchmarks", label: "אימוני בנצ'מרק", desc: "האימונים המוכרים בשמם (Fran, Grace ודומיהם) ומעקב אחרי השיפור בהם לאורך זמן.", clientOnly: true, planned: true },
-    { key: "strength_percentages", label: "אחוזים ממשקל מקסימלי", desc: "חישוב משקלי עבודה לפי אחוז מהמקסימום האישי (1RM) של כל חבר/ה.", clientOnly: true, planned: true },
+    // planned: true came off with the feature (2026-09-21). The percentage
+    // chips on the log screen read this key, so "בפיתוח" would now be a lie -
+    // which is exactly the handover 202609190002 set up: the marker comes off
+    // in the same change that adds the gate. clientOnly STAYS: the gate is a
+    // display hide in app.js, there is no RLS clause behind this key, and the
+    // row must not start claiming enforcement it does not have.
+    { key: "strength_percentages", label: "אחוזים ממשקל מקסימלי", desc: "חישוב משקלי עבודה לפי אחוז מהמקסימום האישי (1RM) של כל חבר/ה.", clientOnly: true },
     { key: "gym_display", label: "מסך תצוגה במועדון", desc: "מסך לצפייה בלבד שנתלה בחדר האימון ומציג את אימון היום ואת לוחות המובילים.", clientOnly: true, planned: true },
   ];
   const COACH_MODULE_TOGGLES = [
@@ -1192,6 +1198,12 @@
     for (const row of (data || [])) next[row.module_key] = { enabled: row.enabled, config: row.config || {} };
     state.club.features = next;
     state.club.featuresLoaded = true;
+    // Hands the map to app.js, the same way setClubWods() hands it the
+    // catalogue. app.js keeps its OWN cached copy because what it gates
+    // (the percentage chips on the log screen) has to render offline, with
+    // no session and with this function never having run - see
+    // CLUB_FEATURES_CACHE_KEY there, and note its default is off, not on.
+    if (typeof window.setClubFeatureFlags === "function") window.setClubFeatureFlags(next);
   }
   // Defaults to true while not yet loaded and for any key with no row at
   // all - deliberately not mirroring notifPrefsLoaded's skeleton-row

@@ -148,7 +148,15 @@ function sanitizeWodEntry(e) {
   const scoreType = WOD_SCORE_TYPES.includes(e.scoreType) ? e.scoreType : "time";
   // EMOM has no cross-attempt scoring (yet) — never let a hand-edited import
   // claim a PR flame for it.
-  const out = { id, wodId, date, scoreType, ts: cleanTs(e.ts, date), rx: e.rx !== false, isPR: scoreType === "emom" ? false : e.isPR === true };
+  // rx is THREE-VALUED (see WOD_EFFORT_PLUS in app.js): true Rx, false Scaled,
+  // "plus" Rx+. `e.rx !== false` alone flattened Rx+ into plain Rx on the next
+  // reload - every stored row goes back through here via reloadFromDb() and
+  // applyRemotePrivateRecord(), so an unlisted third value is not merely
+  // unvalidated, it is erased. The string is matched exactly and anything else
+  // still collapses to Rx, which is the pre-existing default for a row that
+  // never carried the field at all.
+  const rx = e.rx === "plus" ? "plus" : e.rx !== false;
+  const out = { id, wodId, date, scoreType, ts: cleanTs(e.ts, date), rx, isPR: scoreType === "emom" ? false : e.isPR === true };
   if (scoreType === "time") out.timeSeconds = cleanNum(e.timeSeconds, 0, LIMITS.minutes * 60 + 59, 0);
   else if (scoreType === "amrap") {
     out.rounds = Math.round(cleanNum(e.rounds, 0, LIMITS.rounds, 0));
