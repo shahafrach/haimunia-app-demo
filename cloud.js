@@ -585,6 +585,24 @@
     },
 
     // ---- analytics: the admin dashboards (COMM-310..313) ----
+    // 202609220004. The monthly owner report, client half.
+    //
+    // `months` is the raw owner_reports rows, newest first - whatever the
+    // table returned, never reshaped here, the same "the server holds the one
+    // definition" posture the monthly recap figures already follow. `month`
+    // is which of them is on screen (the first, until a leader pages back).
+    // `list` is the drill-down: one metric's members at a time, because a
+    // report showing seven lists at once is not a report.
+    //
+    // listError is separate from error on purpose: a failed drill-down must
+    // not blank the seven figures that loaded fine, and a failed read is not
+    // an empty list - "nobody stopped attending" is exactly the wrong thing
+    // to tell a head coach whose request failed.
+    ownerReport: {
+      loading: false, loaded: false, error: false,
+      months: [], month: null,
+      list: { metric: null, loading: false, loaded: false, error: false, rows: [] },
+    },
     analytics: {
       // COMM-310 admin community analytics dashboard, client half. THE
       // FOUNDATIONAL SHELL later Phase 3 admin tickets extend - COMM-311
@@ -1076,10 +1094,46 @@
   // against another head coach that the server would then refuse.
   const ROLE_RANK = { member: 10, coach: 20, head_coach: 30, staff: 40, admin: 50, owner: 60 };
   function myRoleRank() {
-    if (inMgmtContext()) return mgmtIsAdmin() ? ROLE_RANK.admin : (mgmtIsStaff() ? ROLE_RANK.coach : 0);
+    // THE MANAGEMENT BRANCH READS THE ACCOUNT'S REAL ROLE, and until
+    // 202609220004 it did not: it collapsed every staff account to
+    // ROLE_RANK.coach, because the two facts it had - mgmtIsStaff() and
+    // mgmtIsAdmin() - could not tell a coach from a head coach. That was
+    // invisible while nothing asked the question; the monthly owner report is
+    // head_coach-and-above, so the head coach it is FOR would have been
+    // refused their own screen by their own client.
+    //
+    // state.admin.mgmt.role has carried the redeemed role code since the
+    // management identity was introduced (see unlockPanel), so this is now
+    // the same two-source max as the member branch below - a redeemed role
+    // and the legacy is_admin flag - asked of the account that signed into
+    // the panel rather than of the member using the phone.
+    //
+    // It also makes canRemoveMember() agree with admin_remove_member(), which
+    // has always re-derived both ranks server-side: a head coach in the club
+    // panel now sees the remove control against a coach, which the server
+    // would already have permitted and the client alone was hiding.
+    if (inMgmtContext()) {
+      const m = state.admin.mgmt;
+      const mgmtRedeemed = (m && ROLE_RANK[m.role]) || 0;
+      const mgmtFlagged = (m && m.isAdmin) ? ROLE_RANK.admin : 0;
+      return Math.max(mgmtRedeemed, mgmtFlagged);
+    }
     const redeemed = (state.redemption && ROLE_RANK[state.redemption.role]) || 0;
     const flagged = (state.profile && state.profile.is_admin) ? ROLE_RANK.admin : 0;
     return Math.max(redeemed, flagged);
+  }
+  // 202609220004. head_coach and above - the client half of the server's
+  // owner_report_viewer(), and the one place the app asks for a rank BETWEEN
+  // is_staff() (coach and above) and isAdmin(). Built on myRoleRank() rather
+  // than on a second role lookup, so there is one definition of "what rank am
+  // I" and this cannot drift away from canRemoveMember()'s answer.
+  //
+  // THE SERVER IS THE AUTHORITY, as everywhere else: owner_reports' select
+  // policy and owner_report_list() both re-derive the rank. This decides what
+  // to DRAW, so a coach is not shown a tab whose every read would come back
+  // empty or refused.
+  function isClubLeader() {
+    return myRoleRank() >= ROLE_RANK.head_coach;
   }
   // The client half of admin_remove_member()'s two gates: the permission,
   // and target rank strictly below mine. is_admin is checked on the row
@@ -1256,7 +1310,21 @@
         { id: "no_contact_days", label: "התראה אחרי ימים ללא קשר", def: 30, min: 1, max: 365 },
         { id: "onboarding_window_days", label: "חלון קליטה (ימים)", def: 90, min: 1, max: 730 },
       ] },
-    { key: "owner_report", label: "דוח לבעלי המועדון", desc: "סיכום תקופתי על פעילות המועדון למי שמנהל/ת אותו.", clientOnly: true, planned: true },
+    // BUILT 2026-09-22 (202609220004). Both markers come off: owner_reports'
+    // one SELECT policy carries club_feature_enabled('owner_report'), and
+    // owner_report_list() refuses while the key is off - so switching it off
+    // stops a head coach reading a figure even with a hand-made request,
+    // which is what "נאכף בשרת" means and what clientOnly would have denied.
+    //
+    // The row stays in COACH_MODULE_TOGGLES even though its audience is
+    // NARROWER than the coach tools around it (head_coach and above, not
+    // is_staff()). This group is "כלי מאמנים" - what the coaching side of the
+    // club gets - and moving it to the members' content list to signal a
+    // different audience would say something even less true.
+    { key: "owner_report", label: "דוח לבעלי המועדון", desc: "סיכום חודשי על פעילות המועדון למי שמנהל/ת אותו — נראה למאמן/ת ראשי/ת ולמנהל/ת בלבד.",
+      settings: [
+        { id: "strong_start_sessions", label: "אימונים להתחלה טובה בחודש הראשון", def: 4, min: 1, max: 30 },
+      ] },
     { key: "arbox_attendance", label: "נוכחות מ-Arbox", desc: "משיכת נוכחות בשיעורים מ-Arbox במקום הסתמכות על דיווח עצמי בלבד.", clientOnly: true, planned: true },
   ];
   const CLUB_MODULE_KEYS = CLUB_MODULE_TOGGLES.concat(COACH_MODULE_TOGGLES).map((m) => m.key);
@@ -4729,6 +4797,11 @@
     // tab bar, which is a count and a shortcut, not a list.
     members: "רשימת חברי המועדון לפי סדר ההצטרפות, ותמונת המצב הכללית של הקהילה.",
     moderation: "כלים שמשתמשים בהם לעיתים רחוקות: דיווחים, הגדרות המועדון, נתונים, יומן פעולות ותוכן הקליטה.",
+    // 202609220004. Says who it is for, because that is the one thing about
+    // this tab that differs from every other management surface, and says
+    // that the numbers open - otherwise a leader reads seven figures and
+    // never discovers the lists behind them.
+    ownerreport: "תמונת החודש שנסגר: מי התאמן, מי הצטרף, מי הפסיק להגיע ומה הצוות מטפל בו. לחיצה על מספר פותחת את רשימת החברים שמאחוריו. נראה למאמן/ת ראשי/ת ולמנהל/ת בלבד.",
   });
   function manageTabIntro(id) {
     const text = MANAGE_TAB_INTRO[id];
@@ -4947,6 +5020,20 @@
       // keeps its own isAdmin() gate for the role/password controls inside it,
       // so a head coach sees the roster without the app-level controls.
       ...(isAdminMode ? [] : [{ id: "members", label: "המועדון", html: renderCommunityHealthScore() + renderMemberManagement() + manageArea("manageArea-roster", renderMemberRoster()) }]),
+      // 3. 202609220004. The month that just closed, for whoever runs the
+      // club. A TAB rather than a fourth <details> area inside "ניהול",
+      // because every number on it opens a list of people underneath itself
+      // and that does not fit in a stack of collapsed rows - and because its
+      // audience is not the tab's audience: everything in "ניהול" is
+      // is_staff(), this is head_coach and above.
+      //
+      // ABSENT ENTIRELY rather than rendered empty for a coach, and absent
+      // while the module is off. A tab that opens onto "you may not see this"
+      // is a worse answer than no tab: the server refuses the read either
+      // way, and a coach has no way to act on the refusal.
+      ...(isAdminMode || !isClubLeader() || !isModuleEnabled("owner_report")
+        ? []
+        : [{ id: "ownerreport", label: "דוח חודשי", html: renderOwnerReport() }]),
       // 3. The rare and the administrative. Keeps the moderation badge: it
       // is the one number on this screen that means "someone is waiting",
       // and burying it inside a tab without it would have been the
@@ -5767,6 +5854,13 @@
     // week) is fetched the first time an analytics holder or real admin
     // lands on the tab the analytics area now sits in.
     if (mt === "moderation" && (hasPerm(PERM.ANALYTICS_VIEW) || isAdmin()) && !state.analytics.dashboard.loaded && !state.analytics.dashboard.loading) loadAdminAnalyticsDashboard();
+    // 202609220004. Same lazy pattern, its own tab and its own gate: the
+    // report loads the first time a head coach (or an admin, or the owner)
+    // lands on it, and never for a coach - renderManagePanel() does not build
+    // the tab for one, so `mt` cannot be "ownerreport" for them, and this
+    // re-states the rank anyway rather than relying on that.
+    if (mt === "ownerreport" && isClubLeader() && isModuleEnabled("owner_report")
+        && !state.ownerReport.loaded && !state.ownerReport.loading) loadOwnerReport();
     // COMM-313. Same lazy pattern, its OWN gate: real is_admin() alone, not
     // the ANALYTICS_VIEW-or-admin pair the load just above uses - so a
     // community.analytics.view holder who is not an admin never even
@@ -6113,6 +6207,12 @@
     else if (action === "mention-pick") mentionPick(el.dataset.key, el.dataset.id, el.dataset.name);
     else if (action === "set-tab") setCommunityTab(el.dataset.tab);
     else if (action === "set-manage-tab") setManageTab(el.dataset.tab, el.dataset.scroll);
+    // 202609220004. The monthly owner report: reload the figures, page to
+    // another month, open the list behind a number, close it again.
+    else if (action === "owner-report-retry") loadOwnerReport();
+    else if (action === "owner-report-month") setOwnerReportMonth(el.dataset.month);
+    else if (action === "owner-report-metric") openOwnerReportMetric(el.dataset.metric);
+    else if (action === "owner-report-list-close") closeOwnerReportMetric();
     else if (action === "verify-recovery") verifyRecovery({ force: true });
     else if (action === "hide-my-leaderboard-result") savePrivacyField("in_leaderboards", false);
     // COMM-210/211/212 leaderboards. Note the deliberate split from the line
