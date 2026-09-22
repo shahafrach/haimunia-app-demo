@@ -2010,8 +2010,29 @@
   .wod-board-ghost{ background:rgba(242,236,225,.06); border-color:rgba(242,236,225,.15); color:#F2ECE1; }
   .post-card{ padding:16px; }
   .post-head{ display:flex; align-items:center; gap:10px; margin-bottom:10px; }
-  .post-head-text{ display:flex; flex-direction:column; gap:1px; min-width:0; }
-  .post-author{ font-weight:800; font-size:14px; }
+  .post-head-text{ display:flex; flex-direction:column; gap:1px; min-width:0; flex:1 1 auto; }
+  /* THE NAME LINE: the profile link, then the role badge, on ONE line.
+     Measured on a 390px phone, both halves of this were wrong. The name is a
+     real <button> carrying .link-btn, so it inherited that idiom's UNDERLINE
+     - a heavy rule under the heaviest text on the card, which reads as a
+     defect rather than as a link - and .link-btn's `display:inline-flex`
+     made `text-overflow:ellipsis` a no-op, so a long Hebrew display name
+     wrapped to a second line and pushed the timestamp down with it. The
+     badge sat INSIDE that same button, so it wrapped with it.
+     The row is the fix: the name takes whatever room is left and ellipses on
+     one line, the badge never shrinks and never wraps, and neither is
+     underlined. `min-width:0` on both the row and the link is what actually
+     lets a flex item shrink below its content width - without it the
+     ellipsis never triggers. */
+  .post-author-row{ display:flex; align-items:center; gap:6px; min-width:0; }
+  .post-author{ font-weight:800; font-size:14px; color:var(--chalk); min-width:0; max-width:100%;
+    display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  /* Beats .link-btn (two classes to its one) on exactly the three properties
+     that idiom sets and this one cannot live with. Everything else about
+     .link-btn - that it is a button, its cursor, its focus ring - is kept. */
+  .post-author.link-btn{ text-decoration:none; display:block; min-height:0; padding:0; font-size:14px; }
+  .post-author.link-btn:hover{ text-decoration:none; }
+  .post-author-row .badge-tag{ flex:0 0 auto; font-size:9.5px; padding:1px 6px; }
   .post-time{ color:var(--steel); font-size:11px; }
   .post-title{ font-size:16px; margin-bottom:4px; }
   .post-result{ color:var(--brass); font-weight:700; }
@@ -2070,10 +2091,38 @@
   /* .coach-badge and .pr-badge were two independently-inlined copies of the
      exact same small filled pill - one shared rule, matching how
      .admin-tag/.tag already centralize their own pill look. */
-  .badge-tag{ display:inline-block; vertical-align:middle; font-size:10px; font-weight:800; color:#0c0c0c; background:var(--brass); border-radius:999px; padding:1px 7px; }
-  .post-menu-wrap{ position:relative; margin-inline-start:auto; }
-  .post-menu{ position:absolute; inset-inline-start:0; top:100%; z-index:30; min-width:150px; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:4px; box-shadow:0 10px 30px rgba(0,0,0,.25); }
-  .post-menu-item{ display:block; width:100%; text-align:right; padding:9px 12px; background:none; border:0; color:var(--chalk); font-size:13px; cursor:pointer; }
+  /* nowrap and no underline here rather than only on the feed's copy: this
+     pill is a LABEL ("מאמן/ת ראשי/ת"), and a label that breaks across two
+     lines or picks up the underline of whatever link it happens to sit
+     inside is wrong on the comment rows too. */
+  .badge-tag{ display:inline-block; vertical-align:middle; font-size:10px; font-weight:800; color:#0c0c0c; background:var(--brass); border-radius:999px; padding:1px 7px; white-space:nowrap; text-decoration:none; }
+  .post-menu-wrap{ position:relative; margin-inline-start:auto; flex:0 0 auto; }
+  /* THE ⋯ MENU, ANCHORED ON THE SIDE THE ROOM IS ON.
+     `margin-inline-start:auto` above puts the button at the card's
+     inline-END - the LEFT edge on a Hebrew screen. The panel was anchored
+     `inset-inline-start:0`, which in RTL is `right:0`: its right edge pinned
+     to the button's right edge, 172px of menu growing LEFTWARD, off the card
+     and then off the screen. Nothing showed it as overflow, either, because
+     #app is `overflow-x:hidden` - the part that fell outside was simply
+     clipped away, which is the "items are cut off" half of the same defect.
+     `inset-inline-end:0` anchors the panel's END edge to the button's END
+     edge instead, so it grows back INTO the card, where the room is, and
+     stays aligned to the control that opened it. The width is capped against
+     the viewport as well, so a longer label or a larger text scale cannot
+     push it back out. */
+  .post-menu{ position:absolute; inset-inline-end:0; top:calc(100% + 6px); z-index:60;
+    min-width:172px; max-width:min(240px, calc(100vw - 48px));
+    background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:4px;
+    box-shadow:0 10px 30px rgba(0,0,0,.25); }
+  /* 44px is this app's own tap-target floor (.tabbtn, .icon-btn, .link-btn--tap
+     all declare it) and these are destructive actions being tapped with a
+     thumb. A label too long for one line wraps INSIDE the item and the item
+     grows - the panel is an overlay, so it costs the card nothing. */
+  .post-menu-item{ display:flex; align-items:center; width:100%; text-align:start; padding:10px 12px;
+    background:none; border:0; border-radius:8px; color:var(--chalk); font-size:13px; line-height:1.4;
+    min-height:44px; cursor:pointer; }
+  .post-menu-item:hover{ background:var(--surface2); }
+  .post-menu-item:focus-visible{ background:var(--surface2); }
   .post-menu-item.danger{ color:var(--red-text); }
 
   /* ===== The social feed pass =========================================
@@ -2101,6 +2150,14 @@
   .reaction-pill.is-mine{ background:color-mix(in srgb, var(--energy) 18%, var(--surface)); border-color:var(--energy); }
   .reaction-pill .reaction-icon{ flex:0 0 auto; }
   .reaction-pill .reaction-count{ font-variant-numeric:tabular-nums; }
+  /* The comment count beside it: the same pill geometry so the two line up,
+     but deliberately NOT the same filled treatment - it opens a thread
+     rather than registering a reaction, and the rule just below keeps it
+     transparent and quiet. Its glyph is a stroke icon on currentColor, so it
+     takes --steel from that rule in both themes. */
+  .comment-pill{ display:inline-flex; align-items:center; gap:6px; }
+  .comment-pill .action-icon{ flex:0 0 auto; }
+  .comment-pill .reaction-count{ font-variant-numeric:tabular-nums; }
   /* "דנה ועוד 4" - a name, not a number, and a real button because tapping
      it opens the list of who. */
   .reaction-summary{ color:var(--steel); font-size:12px; font-weight:600; padding:0 2px; }
@@ -2113,10 +2170,58 @@
   .comment-preview .comment-row{ background:var(--surface2); border-color:transparent; }
   .comment-more{ color:var(--steel); font-size:12px; font-weight:600; }
 
+  /* THE SEND CONTROL LIVES INSIDE THE FIELD, AND ONLY ONCE THERE IS TEXT.
+     It used to be a filled orange .chip-btn beside the input, and on a 390px
+     phone the two did not fit on one line: the form is flex-wrap, so the
+     button dropped underneath - a full-width primary CTA reading "שליחה"
+     under EVERY card in the feed, on an empty field it could do nothing
+     with. One send affordance per card, appearing when it has something to
+     send, is the whole of the fix. It is still the form's <button
+     type="submit">, so Enter in the field and a tap on the icon are the same
+     submit they always were, and it is hidden with display:none (not
+     opacity) so it is out of the tab order and out of the accessibility tree
+     while there is nothing to send. */
+  /* The form keeps the margin and the positioning context the inline styles
+     it replaced were carrying: .mention-picker is `position:absolute;
+     top:100%` and hangs off THIS element, so dropping `position:relative`
+     here would send the @-picker to the initial containing block. */
+  .comment-form{ position:relative; margin-top:8px; }
+  .comment-form .text-input{ width:100%; padding-inline-end:46px; }
+  .comment-send{ position:absolute; inset-inline-end:5px; top:50%; transform:translateY(-50%);
+    width:36px; height:36px; border:0; border-radius:999px; padding:0; background:transparent;
+    color:var(--energy-text); cursor:pointer; display:none; align-items:center; justify-content:center; }
+  .comment-form[data-has-text="1"] .comment-send{ display:inline-flex; }
+  .comment-send:hover{ background:color-mix(in srgb, var(--energy) 12%, transparent); }
+  .comment-send:disabled{ color:var(--steel); cursor:default; }
+
   /* The composer row: the fake input plus the camera beside it. */
   .post-composer-row{ display:flex; align-items:center; gap:8px; margin:0 0 10px; }
   .post-composer-row .post-composer-trigger{ flex:1 1 auto; margin:0; }
   .composer-photo-btn{ flex:0 0 auto; width:40px; height:40px; border-radius:999px; background:var(--surface); border:1px solid var(--border); color:var(--steel); font-size:17px; line-height:1; box-shadow:var(--shadow-card); display:flex; align-items:center; justify-content:center; }
+
+  /* The streak figure on "החברים הפעילים במועדון". It used to be a .mono
+     span holding the WHOLE phrase, and .mono is `direction:ltr;
+     unicode-bidi:isolate` - so "3 ימים ברצף" was laid out in an LTR
+     paragraph inside an RTL row: the digit was flung to the far side of the
+     Hebrew words with the gap between them, and at a streak of exactly one
+     the string carried no digit at all. Only the NUMBER is monospaced now -
+     digits are what .mono is for - and the words around it stay in the
+     document's own direction. */
+  .streak-count{ color:var(--brass); font-weight:700; font-size:12.5px; white-space:nowrap; flex:0 0 auto; }
+  .streak-count .streak-days{ font-weight:800; font-size:13px; }
+  /* THE SAME UNDERLINE, ONE CARD DOWN. The rows of that list put the avatar
+     and the member's name inside one .link-btn, which is this app's INLINE
+     link idiom - so the name carried the same rule under it that the post
+     author's did, on the same screen. A whole row is not an inline link:
+     no underline, no 36px floor of its own (the row sets its own height),
+     and the name ellipses rather than shoving the streak off the end.
+     Declared as a class rather than as a fourth inline style block because
+     eleven other member-name links in this module still carry the underline
+     on surfaces this pass did not photograph - see the PR - and this is what
+     they move to. */
+  .member-row-link{ display:flex; align-items:center; gap:10px; min-width:0; padding:0; min-height:0;
+    color:inherit; text-decoration:none; text-align:start; }
+  .member-row-link .member-row-name{ font-weight:700; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
   /* "התאמנו היום" - the same rows the card used, laid out as faces. Scrolls
      horizontally rather than wrapping, so six classmates cost one row at any
