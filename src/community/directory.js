@@ -876,6 +876,13 @@
       // next, and resolve the roles of the authors on the Posts tab.
       if (data.role != null) state.members.roles[userId] = data.role;
       loadMemberRoles((Array.isArray(data.posts) ? data.posts : []).map((p) => p && p.author_id)).then(() => rerender());
+      // 202609220005 "התאמנו יחד". The Posts tab below renders through the
+      // SAME renderPostCard() the feed does, so without this the identical
+      // card printed its partners line on one screen and not on the other -
+      // the sibling-drift shape CLAUDE.md describes, one surface fixed and
+      // its twin missed. Same call, same non-awaited shape and the same
+      // re-render as the role lookup directly above it.
+      loadTrainingPartners((Array.isArray(data.posts) ? data.posts : []).map((p) => p && p.id)).then(() => rerender());
     }
     rerender();
   }

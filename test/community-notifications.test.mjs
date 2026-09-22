@@ -452,12 +452,17 @@ test("the Account panel lists every type with Push (disabled), In-app and Off", 
   // engagement_decline_flagged are both staff/moderator-only
   // (mod_alert_recipients()) and are deliberately absent here: this seeded
   // member holds no moderation permission, so both rows are gated out -
-  // see the dedicated staff test below.
+  // see the dedicated staff test below. trained_together was added by
+  // 202609220005 ("התאמנו יחד"): a plain member-visible type, and its own
+  // row rather than a fold into `mentions`, because notif_pref_key() has an
+  // arm for mention/coach_mention and none for trained_together - one
+  // toggle could not honestly write both server keys.
   const types = new Set([...window.document.querySelectorAll('[data-community-action="notif-pref"]')].map((b) => b.dataset.type));
   assert.deepEqual([...types].sort(), [
     "achievement_unlocked", "announcements", "challenges", "comment_on_post", "comment_reply",
-    "events", "feed_activity", "friend_achievements", "mentions", "monthly_club_recap", "reactions", "streak_at_risk", "weekly_recap",
-  ], "all thirteen member-visible preference types are listed");
+    "events", "feed_activity", "friend_achievements", "mentions", "monthly_club_recap", "reactions",
+    "streak_at_risk", "trained_together", "weekly_recap",
+  ], "all fourteen member-visible preference types are listed");
   assert.ok(!types.has("new_report"), "the moderator-only type is not shown to a plain member");
   assert.ok(!types.has("engagement_decline_flagged"), "the staff-only engagement alert type is not shown to a plain member");
 
