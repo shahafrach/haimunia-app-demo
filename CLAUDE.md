@@ -195,3 +195,46 @@ supabase test db                      # pgTAP, RLS enforced for real by Postgres
 
 `npm test` cannot see layout — jsdom has none. A claim about geometry that
 was not measured in Chromium is a guess.
+
+---
+
+## Budget rules
+
+**The usage budget is limited. Work efficiently.** A session that spends its
+budget re-running a green suite has no budget left for the change it was
+asked to make. These rules are about what not to spend it on.
+
+**Skip `npm ci` if `node_modules` already exists.** The install is minutes of
+budget for a directory that is already there. Run it when `node_modules` is
+missing, or when a change touches `package.json` or `package-lock.json` —
+not as a reflex at the top of a session.
+
+**While working, run only what relates to the change.** One test file, one
+browser scenario — `node --test test/<the-one>.test.mjs`, or
+`node scripts/browser-check/<the-one>.mjs`. The whole suite is a final check,
+not a feedback loop.
+
+**At the end, run the full `npm test` once and the browser checks once.**
+Both in the foreground, and wait for each to finish — a suite that was
+started and not read is budget spent for no result, and reporting on it
+would be inventing the number. Both, once, and then stop.
+
+**Never start background watchers, sleep loops or repeated polling.** No
+`--watch`, no `sleep` loop waiting on a file, no re-running a command to see
+whether the answer changed. They burn budget while producing nothing, and
+nothing in this repository needs them.
+
+**Never run the same suite twice unless a fix changed code.** A second
+identical run cannot tell you anything the first did not. If a suite failed
+and you changed nothing, it still fails; if you changed code, run it again
+and report the second number.
+
+**If `community-render-cost` fails, note it once and move on.** It measures
+render cost against a threshold and is the one check that reports differently
+on a loaded machine. Say it failed, say what it printed, and do not re-run it
+hunting for a green.
+
+**Keep the final report under 20 lines.** The suite numbers, what changed,
+what you could not run and why. A long report is not a more honest one — the
+Verification rules above say what has to be in it, and nothing says it has to
+be padded.
