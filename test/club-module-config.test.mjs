@@ -142,6 +142,33 @@ test("a non-numeric entry is dropped rather than sent, and the range is stated o
     "a fraction is rounded to a whole number of days - half a day is not a threshold this schema can express");
 });
 
+test("a save carries forward config keys the form does not own, so a server-written fact survives it", async () => {
+  // club_features_stamp_enabled_at() (202609220002) writes `enabled_at` into
+  // the same object the thresholds live in, and no_contact_30 counts its
+  // quiet period from it. The server carries that key forward on its own -
+  // it must, because a record of something the club did cannot be erasable
+  // through a "save" button - but the panel has no business asking it to be
+  // dropped either, and the next server-owned key will not necessarily have
+  // its own carry-forward.
+  const mock = seeded([
+    { club_id: "club-1", module_key: "coach_tasks", enabled: true, config: { enabled_at: "2026-09-01T08:00:00+00", checkin_day: 60 } },
+  ]);
+  const calls = [];
+  mock.onRpc("admin_set_club_feature", (args) => { calls.push(args); return { data: null, error: null }; });
+  const window = await bootCommunity(mock, { syncEnabled: false });
+  await openModuleSettings(window);
+
+  window.document.querySelector('[data-club-feature-setting="coach_tasks"][data-setting-key="checkin_day"]').value = "45";
+  window.document.querySelector('[data-community-action="save-club-feature-config"][data-key="coach_tasks"]').click();
+  await waitFor(() => calls.length === 1, 3000);
+
+  assert.equal(calls[0].p_config.enabled_at, "2026-09-01T08:00:00+00", "the key the form does not own is sent back unchanged");
+  assert.equal(calls[0].p_config.checkin_day, 45, "and the one it does own carries the new value");
+  // And it is not rendered as a field: enabled_at is not a setting, and an
+  // admin offered a text box for it would reasonably assume it was theirs.
+  assert.equal(fields(window, "coach_tasks").length, 7, "no eighth field appeared for it");
+});
+
 test("the panel says what an empty field means, because 'clear it to reset' is not guessable", async () => {
   const window = await bootCommunity(seeded(), { syncEnabled: false });
   await openModuleSettings(window);

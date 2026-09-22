@@ -2002,10 +2002,27 @@
   // "clear it to go back to the default" true: club_feature_number() falls
   // back to its own default for an absent key, and a written 0 would be a
   // real, clamped, very different number.
+  //
+  // IT STARTS FROM THE CONFIG THAT IS THERE, and only the keys this form owns
+  // are added or removed. The config object is not this form's property: the
+  // server writes `enabled_at` into it when a module is switched on
+  // (club_features_stamp_enabled_at, 202609220002) and no_contact_30 counts
+  // its quiet period from that stamp, so a form that sent only its own seven
+  // fields would be asking the server to drop a fact the club did not type.
+  //
+  // The server refuses to drop THAT one - the trigger carries enabled_at
+  // forward across every write that is not a fresh enable, because a record
+  // of something the club did must not be erasable through a button that says
+  // "save". This merge is therefore not the thing standing between the club
+  // and a flooded task list; it is what keeps the panel from round-tripping a
+  // config it did not author, which matters for the next server-owned key as
+  // much as for this one.
   async function saveClubFeatureConfig(key) {
     const def = CLUB_MODULE_TOGGLES.concat(COACH_MODULE_TOGGLES).find((m) => m.key === key);
     if (!state.user || !def || !def.settings || state.club.moduleBusy || state.club.configBusy) return;
-    const config = {};
+    const existing = (state.club.features[key] && state.club.features[key].config) || {};
+    const config = Object.assign({}, existing);
+    for (const sett of def.settings) delete config[sett.id];
     for (const sett of def.settings) {
       const el = document.querySelector(`[data-club-feature-setting="${key}"][data-setting-key="${sett.id}"]`);
       const raw = el ? String(el.value).trim() : "";

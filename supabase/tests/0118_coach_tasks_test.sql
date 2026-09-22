@@ -65,6 +65,115 @@ select tests.clear_auth();
 update public.club_features set enabled = true where module_key = 'coach_tasks';
 
 -- ===========================================================================
+-- 1b. Switching it on does not open a task for every member at once
+-- ===========================================================================
+-- THE FAILURE THIS PREVENTS. member_contact_log is empty on a club that has
+-- never had a reason to fill it, so an unfloored no_contact_30 opens a task
+-- for very nearly every member the moment the switch is flipped - two hundred
+-- names on day one, which is a wall rather than a work queue, and a coach
+-- handed that closes the tab. The rule therefore counts the quiet period from
+-- the LATER of the member's own clock and the day the module was switched on.
+--
+-- m1 is the proof: they joined 40 days ago and nobody has ever spoken to
+-- them, so by their own clock they are ten days past the threshold - and by
+-- the club's they are zero days past it, because the switch was flipped one
+-- statement ago.
+select isnt(public.club_feature_enabled_at('coach_tasks'), null,
+  'switching a module on records the day it was switched on, in the module''s own config');
+select ok(public.club_feature_enabled_at('coach_tasks') >= now() - interval '1 minute',
+  'and the stamp is the moment it was switched on, not some other time');
+
+select is(public.coach_tasks_sync() > 0, true,
+  'the sync does open the onboarding tasks m1 is due - the floor is on rule 5 alone, not on the whole feature');
+select is(
+  (select count(*)::int from public.coach_tasks where rule_key = 'no_contact_30'),
+  0,
+  'NOBODY gets a no-contact task on the day the switch is flipped, however long they have been ignored');
+
+-- THE BOUNDARY, FROM BOTH SIDES, because "counted from the switch" has two
+-- ways to be wrong a single-sided test cannot tell apart: a floor that never
+-- lifts, and an off-by-one that lifts a day early. Ageing the stamp is
+-- indistinguishable from waiting and is the only input under a test's
+-- control.
+create function pg_temp.age_enabled_at(p_age interval) returns void
+language sql as $$
+  update public.club_features
+     set config = jsonb_set(config, '{enabled_at}',
+                            to_jsonb(to_char(now() - p_age, 'YYYY-MM-DD"T"HH24:MI:SSOF')))
+   where module_key = 'coach_tasks';
+$$;
+
+select pg_temp.age_enabled_at(interval '29 days');
+select is(public.coach_tasks_sync() >= 0, true, 'sync at 29 days since the switch');
+select is(
+  (select count(*)::int from public.coach_tasks where rule_key = 'no_contact_30'),
+  0, 'twenty-nine days after the switch, still nothing');
+
+select pg_temp.age_enabled_at(interval '31 days');
+select is(public.coach_tasks_sync() > 0, true, 'sync at 31 days since the switch');
+select is(
+  (select count(*)::int from public.coach_tasks where rule_key = 'no_contact_30' and user_id = tests.uid('m1')),
+  1, 'thirty-one days after the switch, the member nobody has spoken to appears - deferred, never dropped');
+select is(
+  (select (detail ->> 'counted_from')::timestamptz from public.coach_tasks
+    where rule_key = 'no_contact_30' and user_id = tests.uid('m1')),
+  public.club_feature_enabled_at('coach_tasks'),
+  'and the row says on its face that it was counted from the switch, not from a contact nobody remembers making');
+
+-- A config write that is NOT a toggle must not move the stamp, or every
+-- threshold edit would restart the quiet period for the whole club.
+select tests.set_auth(tests.uid('owner'));
+select lives_ok(
+  $$ select public.admin_set_club_feature('coach_tasks', true, '{"checkin_day": 45}'::jsonb) $$,
+  'an admin edits a threshold while the module is already on');
+select tests.clear_auth();
+select ok(public.club_feature_enabled_at('coach_tasks') <= now() - interval '30 days',
+  'editing a threshold leaves the enable date exactly where it was');
+
+-- AND THE OTHER HALF: a call that says nothing about the config must not
+-- erase it. admin_set_club_feature() wrote coalesce(p_config, '{}') into the
+-- row while its own admin_actions entry recorded coalesce(p_config,
+-- v_before.config) - the function disagreed with its own audit trail from the
+-- day it shipped (202609010012), and it never mattered while every config was
+-- empty. It matters now: the panel's switch calls this with two arguments, so
+-- toggling coach_tasks off and on again would have erased every threshold the
+-- club had set and the enable stamp with them. 0055 owns this function; this
+-- assertion is here because this is the feature that made it load-bearing.
+select tests.set_auth(tests.uid('owner'));
+select lives_ok(
+  $$ select public.admin_set_club_feature('coach_tasks', true) $$,
+  'an admin toggles the module with no config argument at all');
+select tests.clear_auth();
+select is(
+  (select (cf.config ->> 'checkin_day')::int from public.club_features cf where cf.module_key = 'coach_tasks'),
+  45, 'the thresholds survive a toggle that said nothing about them');
+select isnt(public.club_feature_enabled_at('coach_tasks'), null,
+  'and so does the enable stamp');
+-- An empty object IS a request to clear the thresholds - and it still cannot
+-- take the enable stamp with them. `enabled_at` is a record of something the
+-- club did, not a setting somebody chose, and the trigger carries it forward
+-- across every write that is not a fresh enable. Without that, clearing the
+-- numbers would remove rule 5's floor through a button that says "save", and
+-- the next sync would open a task for every member of the club.
+select tests.set_auth(tests.uid('owner'));
+select lives_ok(
+  $$ select public.admin_set_club_feature('coach_tasks', true, '{}'::jsonb) $$,
+  'an admin clears the thresholds explicitly');
+select tests.clear_auth();
+select is(
+  (select cf.config - 'enabled_at' from public.club_features cf where cf.module_key = 'coach_tasks'),
+  '{}'::jsonb, 'every threshold is gone - an explicit empty object really does clear');
+select isnt(public.club_feature_enabled_at('coach_tasks'), null,
+  'and the enable stamp is NOT gone - no client can delete it, because no client wrote it');
+
+-- Fixture reset for everything below: the rule-5 rows opened above belong to
+-- this section's clock, and the sections that follow are about the MEMBER's.
+-- The stamp goes back far enough to floor nothing, which is the state a club
+-- that has been running the module for a while is actually in.
+delete from public.coach_tasks;
+select pg_temp.age_enabled_at(interval '400 days');
+
+-- ===========================================================================
 -- 2. The five rules
 -- ===========================================================================
 -- m1: joined 40 days ago, never trained, never contacted, assigned to coach.
@@ -368,6 +477,19 @@ select is(
   0, 'and the list is empty rather than an error');
 select tests.clear_auth();
 select is(public.coach_tasks_sync(), 0, 'and the sync opens nothing while it is off');
+
+-- ===========================================================================
+-- 9. Switching it off and on again restarts the quiet period
+-- ===========================================================================
+-- The same answer as the first enable, for the same reason: the rule is about
+-- what the club has had the chance to act on, and a club that turned the
+-- module off was not acting on it. Tasks already opened are rows and stay
+-- open; only new firings move.
+select ok(public.club_feature_enabled_at('coach_tasks') <= now() - interval '300 days',
+  'the stamp is still the old one while the module is off - disabling does not touch it');
+update public.club_features set enabled = true where module_key = 'coach_tasks';
+select ok(public.club_feature_enabled_at('coach_tasks') >= now() - interval '1 minute',
+  're-enabling restamps, so the club gets its quiet period back');
 
 select * from finish();
 rollback;

@@ -42,21 +42,24 @@ begin;
 --                         contact task on day 21.
 --   day_60_checkin        a check-in at day `checkin_day` (60).
 --   no_contact_30         ANY member with no staff contact for
---                         `no_contact_days` (30) days.
+--                         `no_contact_days` (30) days, counted from the LATER
+--                         of their last contact (or their join date) and the
+--                         day the club switched this module on.
 --
 -- The first four are scoped to a member's first `onboarding_window_days`
 -- (90) days; the fifth is not, because "nobody has spoken to this member
 -- since July" is not an onboarding question.
 --
--- WHAT THE FIRST SYNC LOOKS LIKE ON A LIVE CLUB, said plainly because it
--- will surprise whoever flips the switch otherwise: member_contact_log has
--- one row per coach outreach ever logged, and most clubs have logged few.
--- So the first run of no_contact_30 opens one task for very nearly every
--- member, dated thirty days after they joined. That is the correct answer to
--- the question the rule asks - it is not a bug and it must not be quietly
--- suppressed - but it means the list starts long and shortens as the club
--- works through it. The read is capped at 100 rows and ordered overdue-first,
--- so the top of the list is the right place to start.
+-- WHAT THE FIRST SYNC LOOKS LIKE ON A LIVE CLUB. Almost nothing, and that is
+-- deliberate. member_contact_log has one row per coach outreach ever logged
+-- and most clubs have logged few, so an unfloored no_contact_30 would open a
+-- task for very nearly every member the moment the switch was flipped - two
+-- hundred names on day one, which is a wall rather than a work queue. The
+-- rule therefore counts from the later of the member's own clock and the day
+-- the module was switched on; see section 0b, and rule 5 itself for the
+-- expression. The four onboarding rules DO fire immediately for anyone
+-- currently inside their first 90 days, which is a small, bounded set and
+-- exactly the set the club asked to be reminded about.
 --
 -- A TASK CLOSES WHEN A member_contact_log ROW EXISTS FOR THAT MEMBER AFTER
 -- THE TASK OPENED. That sentence is the whole closing model, and it is
@@ -178,6 +181,167 @@ revoke all on function public.club_feature_number(text, text, numeric, numeric, 
 grant execute on function public.club_feature_number(text, text, numeric, numeric, numeric) to authenticated;
 comment on function public.club_feature_number(text, text, numeric, numeric, numeric) is
   'Reads one numeric setting out of club_features.config for p_module_key, clamped to [p_min, p_max]. Any absent, null, non-numeric or unparseable value falls back to p_default rather than raising: the value is admin-supplied jsonb and a threshold reader that throws would take a whole surface down over a typo. Shared by coach_tasks and onboarding_challenge so the "read a threshold" line has exactly one copy.';
+
+-- ---------------------------------------------------------------------------
+-- 0b. WHEN A MODULE WAS SWITCHED ON
+-- ---------------------------------------------------------------------------
+-- THE PROBLEM THIS SOLVES, and it is a product problem rather than a
+-- technical one. no_contact_30 asks "has anybody spoken to this member in the
+-- last thirty days", and member_contact_log is empty on a club that has never
+-- had a reason to fill it. So the first sync after the switch is flipped
+-- would open a task for very nearly every member at once - a list of two
+-- hundred names on day one, which is not a work queue, it is a wall. A coach
+-- handed that closes the tab.
+--
+-- The fix is to count the quiet period from the later of the member joining
+-- and the day the module was switched on, so the club gets thirty quiet days
+-- to work with and the rule starts producing tasks at the rate it will keep
+-- producing them at. Nothing is lost: a member nobody speaks to in those
+-- thirty days still gets their task, thirty days later.
+--
+-- WHY A TRIGGER ON THE TABLE and not a line inside admin_set_club_feature().
+-- The RPC is the path an admin takes, and it is not the only one: 202609150016
+-- turned club_wod on with a plain `update public.club_features`, and a
+-- dashboard fix or a future migration can do the same. A stamp that only the
+-- RPC applies would be missing exactly when somebody enabled a module the
+-- other way, and the rule above would silently fall back to flooding. On the
+-- table, every path is covered.
+--
+-- GENERIC, not scoped to coach_tasks. "When was this module switched on" is a
+-- fact about every row in this table and the answer is the same shape for all
+-- of them; a special case for one key would be a line that acquires a second
+-- copy the first time another module wants it.
+--
+-- RE-ENABLING RESTAMPS. A club that switches the module off and on again gets
+-- a fresh thirty days, which is the same answer for the same reason - the
+-- rule is about what the club has had the chance to act on. Tasks already
+-- opened are rows and stay open; only new firings move.
+-- `enabled_at` IS SERVER-OWNED, and both halves of that are in this function.
+--
+-- It is STAMPED on the transition into enabled, and it is CARRIED FORWARD
+-- across every other write, so no caller can delete it - not the admin
+-- panel's threshold form, not `admin_set_club_feature(key, true, '{}')`, not
+-- a hand-written UPDATE. It is a record of something the club did, in the
+-- same object as the numbers the club chose, and it must not be erasable by
+-- somebody editing the numbers. Without the carry-forward, clearing every
+-- threshold would silently remove rule 5's floor and the next sync would open
+-- a task for every member of the club - which is exactly the failure the
+-- stamp exists to prevent, reachable through a button that says "save".
+--
+-- THE INSERT BRANCH LOOKS FOR THE ROW ITSELF rather than trusting tg_op, and
+-- that is not defensive writing - it is the bug this function had on its
+-- first draft. admin_set_club_feature() is an INSERT ... ON CONFLICT DO
+-- UPDATE, and Postgres fires the BEFORE INSERT trigger on every one of those
+-- before it discovers the conflict. So a threshold edit on a module that was
+-- already on stamped a fresh date into `excluded.config`, the DO UPDATE wrote
+-- it, and every save of a number restarted the club's quiet period. Caught by
+-- 0118's "editing a threshold leaves the enable date exactly where it was".
+create or replace function public.club_features_stamp_enabled_at() returns trigger
+language plpgsql set search_path = '' as $$
+declare
+  v_existing jsonb;
+  v_is_new boolean;
+begin
+  new.config := coalesce(new.config, '{}'::jsonb);
+
+  select cf.config into v_existing
+    from public.club_features cf
+   where cf.club_id = new.club_id and cf.module_key = new.module_key;
+  v_is_new := not found;
+
+  if new.enabled and (v_is_new or (tg_op = 'UPDATE' and not coalesce(old.enabled, false))) then
+    new.config := new.config
+                  || jsonb_build_object('enabled_at', to_char(now() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SSOF'));
+  elsif not (new.config ? 'enabled_at') and v_existing ? 'enabled_at' then
+    new.config := new.config || jsonb_build_object('enabled_at', v_existing -> 'enabled_at');
+  end if;
+  return new;
+end $$;
+revoke all on function public.club_features_stamp_enabled_at() from public, anon, authenticated;
+
+create trigger club_features_stamp_enabled_at_trigger
+  before insert or update on public.club_features
+  for each row execute function public.club_features_stamp_enabled_at();
+
+comment on function public.club_features_stamp_enabled_at() is
+  'BEFORE INSERT OR UPDATE on club_features. Writes config.enabled_at (an ISO-8601 UTC string) whenever a module crosses from off to on, by ANY path - admin_set_club_feature(), a migration''s own UPDATE, a dashboard fix - and CARRIES IT FORWARD across every other write, so no caller can delete it by saving a config that omits it. Leaves it alone on a threshold edit and on a disable; re-enabling restamps. The "is this a new row" test is a lookup rather than tg_op, because an INSERT ... ON CONFLICT DO UPDATE fires the BEFORE INSERT trigger before it finds the conflict, and trusting tg_op restamped the date on every threshold save. Read back by club_feature_enabled_at(), which coach_tasks_sync() uses so that switching a module on does not open a task for every member of the club at once.';
+
+-- The reader, with the same "never raise on admin-supplied jsonb" discipline
+-- club_feature_number() above carries: the value is a string in a config
+-- object, it can be absent, null, the wrong type or unparseable, and every
+-- one of those reads as "not recorded" rather than as an error that would
+-- take the whole task list down.
+create or replace function public.club_feature_enabled_at(p_module_key text) returns timestamptz
+language plpgsql stable security definer set search_path = '' as $$
+declare
+  v_raw jsonb;
+begin
+  select cf.config -> 'enabled_at' into v_raw
+    from public.club_features cf
+   where cf.club_id = public.default_club_id() and cf.module_key = p_module_key;
+  if v_raw is null or jsonb_typeof(v_raw) <> 'string' then return null; end if;
+  return (v_raw #>> '{}')::timestamptz;
+exception when others then
+  return null;
+end $$;
+revoke all on function public.club_feature_enabled_at(text) from public, anon;
+grant execute on function public.club_feature_enabled_at(text) to authenticated;
+comment on function public.club_feature_enabled_at(text) is
+  'When p_module_key was last switched on, from config.enabled_at as club_features_stamp_enabled_at() writes it. Null when the module has never been enabled since 202609220002, or when the value is absent, of the wrong type or unparseable - every rejection is a null rather than a raise, for the same reason club_feature_number() falls back rather than throwing.';
+
+-- ---------------------------------------------------------------------------
+-- 0c. admin_set_club_feature(): a null config now KEEPS the config
+-- ---------------------------------------------------------------------------
+-- BYTE-IDENTICAL to 202609010012 except for the `coalesce(p_config, ...)` in
+-- the INSERT, and that one change is a bug fix rather than a new behaviour.
+--
+-- THE BUG. The function writes `coalesce(p_config, '{}'::jsonb)` into the
+-- row, so a caller that passes no config RESETS the config - while the
+-- admin_actions entry it writes three lines later records the `after` config
+-- as `coalesce(p_config, v_before.config)`, i.e. claims the old config was
+-- kept. The function's own audit trail has disagreed with what it does since
+-- the day it shipped. It has never mattered, because every config in this
+-- table was `{}` and nothing had ever sent a non-null p_config.
+--
+-- It matters now, twice over. The admin panel's switch calls this with two
+-- arguments, so flipping coach_tasks off and on again would have erased every
+-- threshold the club had set - and, since 0b above, the enabled_at stamp with
+-- them. The audit entry is the one that was right: a call that says nothing
+-- about the config is not a call to clear it.
+--
+-- Clearing a config is still possible and is now something a caller has to
+-- ASK for, by passing '{}'::jsonb explicitly, which is what the panel's
+-- threshold form does when every field is empty.
+create or replace function public.admin_set_club_feature(p_module_key text, p_enabled boolean, p_config jsonb default null)
+returns void
+language plpgsql security definer set search_path = '' as $$
+declare v_before record;
+begin
+  if not public.has_perm('community.club.manage_modules') then
+    raise exception 'not authorized';
+  end if;
+  if p_module_key !~ '^[a-z][a-z0-9_]{2,31}$' then
+    raise exception 'invalid module_key';
+  end if;
+
+  select enabled, config into v_before from public.club_features
+    where club_id = public.default_club_id() and module_key = p_module_key;
+
+  insert into public.club_features (club_id, module_key, enabled, config, updated_by, updated_at)
+  values (public.default_club_id(), p_module_key, p_enabled,
+          coalesce(p_config, v_before.config, '{}'::jsonb), auth.uid(), now())
+  on conflict (club_id, module_key) do update
+    set enabled = excluded.enabled, config = excluded.config,
+        updated_by = excluded.updated_by, updated_at = now();
+
+  perform public.log_admin_action(
+    'club_feature_toggle', 'club', null,
+    jsonb_build_object('module_key', p_module_key, 'enabled', v_before.enabled, 'config', v_before.config),
+    jsonb_build_object('module_key', p_module_key, 'enabled', p_enabled, 'config', coalesce(p_config, v_before.config))
+  );
+end $$;
+revoke all on function public.admin_set_club_feature(text, boolean, jsonb) from public, anon;
+grant execute on function public.admin_set_club_feature(text, boolean, jsonb) to authenticated;
 
 -- ---------------------------------------------------------------------------
 -- 1. Who counts as a member for these two features
@@ -415,6 +579,7 @@ declare
   v_checkin integer;
   v_quiet integer;
   v_window integer;
+  v_since timestamptz;
   v_opened integer := 0;
   v_n integer;
 begin
@@ -433,6 +598,11 @@ begin
   -- same shape coach_new_members() uses for p_within_days: this is a number
   -- typed into an admin panel, not a caller's argument.
   if v_welcome_by < v_welcome_from then v_welcome_by := v_welcome_from; end if;
+
+  -- The day the club switched this module on, or null if it has never been
+  -- stamped. Only rule 5 uses it; see that rule for why, and 0b above for why
+  -- it exists at all.
+  v_since := public.club_feature_enabled_at('coach_tasks');
 
   -- ---- rule 1: welcome, by a named coach, in days 1..7 -------------------
   insert into public.coach_tasks (user_id, rule_key, opened_at, due_on, assigned_coach_id, detail)
@@ -521,15 +691,42 @@ begin
   -- it. Its opened_at MOVES: thirty days after the contact that closed the
   -- last one, a new firing opens a new row, which is what makes this a
   -- recurring task rather than a one-off.
+  --
+  -- THE CLOCK STARTS AT THE LATER OF THREE THINGS, and the third is the one
+  -- worth reading. `greatest(coalesce(last_contact, joined), enabled_at)` is:
+  --
+  --   the last time a coach spoke to them, or failing that the day they
+  --   joined - which is the rule as stated - and never earlier than the day
+  --   the club switched this module on.
+  --
+  -- Without that floor, the first sync after the switch is flipped opens a
+  -- task for very nearly every member of the club at once, because
+  -- member_contact_log is empty on a club that has never had a reason to fill
+  -- it. See 0b for the whole argument. Nobody is lost by the floor: a member
+  -- nobody speaks to in the first thirty days after the switch still gets
+  -- their task, on day thirty-one.
+  --
+  -- A NULL enabled_at IS NO FLOOR AT ALL, on purpose. greatest() in Postgres
+  -- ignores nulls, so a club whose row predates the stamping trigger behaves
+  -- exactly as this rule did before it existed rather than deferring forever,
+  -- which is the safe direction for a rule whose job is to notice silence.
+  -- In practice it cannot happen: 202609190002 seeded this key OFF and
+  -- asserts it, and the trigger stamps every path from off to on.
   insert into public.coach_tasks (user_id, rule_key, opened_at, due_on, assigned_coach_id, detail)
   select m.user_id,
          'no_contact_30',
-         coalesce(m.last_contact_at, m.joined_at) + make_interval(days => v_quiet),
-         (coalesce(m.last_contact_at, m.joined_at) + make_interval(days => v_quiet))::date,
+         greatest(coalesce(m.last_contact_at, m.joined_at), v_since) + make_interval(days => v_quiet),
+         (greatest(coalesce(m.last_contact_at, m.joined_at), v_since) + make_interval(days => v_quiet))::date,
          m.assigned_coach_id,
-         jsonb_build_object('last_contact_at', m.last_contact_at, 'quiet_days', v_quiet)
+         jsonb_build_object(
+           'last_contact_at', m.last_contact_at,
+           'quiet_days', v_quiet,
+           -- On the row, so a coach looking at a task opened in the club's
+           -- first month can see it was counted from the switch rather than
+           -- from a contact nobody remembers making.
+           'counted_from', greatest(coalesce(m.last_contact_at, m.joined_at), v_since))
     from public.coach_task_members() m
-   where coalesce(m.last_contact_at, m.joined_at) + make_interval(days => v_quiet) <= now()
+   where greatest(coalesce(m.last_contact_at, m.joined_at), v_since) + make_interval(days => v_quiet) <= now()
   on conflict (user_id, rule_key, opened_at) do nothing;
   get diagnostics v_n = row_count; v_opened := v_opened + v_n;
 
@@ -562,7 +759,7 @@ revoke all on function public.coach_tasks_sync() from public, anon;
 -- is gated by the module key at its first line.
 grant execute on function public.coach_tasks_sync() to authenticated;
 comment on function public.coach_tasks_sync() is
-  'Opens any coach_tasks row the five rules call for and closes every open task a member_contact_log row at or after its opened_at satisfies. Returns the number of tasks opened. Idempotent: every insert conflicts on (user_id, rule_key, opened_at). Returns 0 immediately when club_feature_enabled(''coach_tasks'') is false. Thresholds come from club_features.config via club_feature_number(): welcome_from_day 1, welcome_by_day 7, first_class_followup_days 3, low_attendance_window_days 21, low_attendance_min_sessions 2, checkin_day 60, no_contact_days 30, onboarding_window_days 90. Rules 1-4 are scoped to onboarding_window_days; no_contact_30 is not.';
+  'Opens any coach_tasks row the five rules call for and closes every open task a member_contact_log row at or after its opened_at satisfies. Returns the number of tasks opened. Idempotent: every insert conflicts on (user_id, rule_key, opened_at). Returns 0 immediately when club_feature_enabled(''coach_tasks'') is false. Thresholds come from club_features.config via club_feature_number(): welcome_from_day 1, welcome_by_day 7, first_class_followup_days 3, low_attendance_window_days 21, low_attendance_min_sessions 2, checkin_day 60, no_contact_days 30, onboarding_window_days 90. Rules 1-4 are scoped to onboarding_window_days; no_contact_30 is not, and counts its quiet period from greatest(last contact or join date, club_feature_enabled_at(''coach_tasks'')) so that switching the module on does not open a task for every member of the club at once.';
 
 -- ---------------------------------------------------------------------------
 -- 6. The list, which syncs before it reads
