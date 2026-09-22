@@ -323,7 +323,7 @@
       rerender();
       return;
     }
-    const welcomed = await welcomeNewMember(post.id);
+    const welcomed = await welcomeNewMember(post.id, "coach_section");
     if (welcomed) state.coach.welcome.welcomed[memberId] = true;
     delete state.coach.welcome.busy[memberId];
     rerender();
@@ -510,6 +510,20 @@
     if (ok) {
       client.from("member_contact_log").insert({ user_id: item.user_id, note: "פנייה יזומה בעקבות ירידה בפעילות" }).then(() => {});
       state.coach.engage.reachedOut[flagId] = true; setMessage("");
+      // The engagement_alerts module's one event. After the outreach post
+      // actually wrote, inside the `ok` branch, so an alert a coach looked at
+      // and could not act on is not recorded as one they acted on.
+      //
+      // `level` is the coarse engagement enum the row already carries and the
+      // row's own badge already shows a coach. The flagged member's id is NOT
+      // a prop: a table of "who the club thinks is drifting away", readable by
+      // anyone holding community.analytics.view, is exactly the kind of row
+      // this module's server-side gate exists to keep narrow.
+      //
+      // Not a WCAM event. Triaging a queue is staff administration; the coach
+      // becomes an active member through the POST_COACH post this just
+      // published, which post_created already counts.
+      track(A.ENGAGEMENT_FLAG_ACTIONED, { action: "reach_out", level: item.level || null });
     }
     else setMessage("לא ניתן היה לשלוח פנייה. נסו שוב.");
     rerender();
@@ -531,6 +545,10 @@
       .eq("id", flagId);
     state.coach.engage.busy = null;
     if (error) { setMessage(failText("לא ניתן היה לבצע את הפעולה. נסו שוב.", error)); rerender(); return; }
+    // Read BEFORE the filter below removes the row - `level` lives on the
+    // item and the next line is what drops it.
+    const resolved = state.coach.engage.items.find((it) => it.id === flagId);
+    track(A.ENGAGEMENT_FLAG_ACTIONED, { action: status === "reviewed" ? "reviewed" : "dismissed", level: (resolved && resolved.level) || null });
     state.coach.engage.items = state.coach.engage.items.filter((it) => it.id !== flagId);
     delete state.coach.engage.reachedOut[flagId];
     setMessage(status === "reviewed" ? "סומן כנבדק" : "הפריט נדחה");
@@ -641,6 +659,21 @@
     state.coach.memberOfWeek.pickReason = "";
     setMessage("חבר/ת השבוע פורסמ/ה");
     await loadCoachMemberOfWeek();
+    // The member_of_week module's one event, recorded after the reload
+    // because the SERVER - not this client - resolves which category the row
+    // records (see this function's own header), so the envelope is the only
+    // honest source for `category`. `source` is the client's own half of the
+    // same question: which of the two controls published, the computed
+    // shortlist or the coach's free pick.
+    //
+    // It counts for WCAM, for the publishing coach, on exactly
+    // coach_congratulate_sent's reasoning: the row's user_id is the actor.
+    // The recognised member is never made active by somebody else choosing
+    // them - never a prop here either, for the same reason.
+    track(A.MEMBER_OF_WEEK_PUBLISHED, {
+      category: (state.coach.memberOfWeek.envelope && state.coach.memberOfWeek.envelope.category) || null,
+      source: busyKey === "pick" ? "manual" : "candidate",
+    });
     state.coach.memberOfWeek.busy = null;
     rerender();
   }

@@ -404,6 +404,12 @@ function stubPushApis(window) {
   window.navigator.serviceWorker = Object.assign(window.navigator.serviceWorker || {}, { ready: Promise.resolve(reg) });
   window.PushManager = function () {};
   window.Notification = { permission: "default", requestPermission: async () => "granted" };
+  // Standalone, because the app no longer asks for notification permission
+  // outside the installed app on any platform (pushAskGateReason,
+  // src/community/notifications.js). Without this the two push_opt_in tests
+  // below would be measuring the gate, not the opt-in. The gate has its own
+  // tests in test/community-push-gate-and-self-test.test.mjs.
+  Object.defineProperty(window.navigator, "standalone", { value: true, configurable: true });
 }
 
 test("push_opt_in is recorded once the subscription row is written, with the control that asked and never the endpoint", async () => {

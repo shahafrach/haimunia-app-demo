@@ -33,10 +33,21 @@
   //    navigator.share() is only ever reached from the share button's own
   //    click. Nothing is auto-shared, nothing is pre-uploaded, and the card
   //    image is NEVER sent to Supabase - it is a Blob that lives in this tab
-  //    until the sheet closes and is revoked on the way out. That also means
-  //    an outward share leaves no server-side trace at all, which is the
-  //    correct privacy posture and also why there is no analytics call here
-  //    (see the note on OUTWARD_SHARE_RESULTS).
+  //    until the sheet closes and is revoked on the way out.
+  //
+  //    THAT PART IS UNCHANGED, and it is the part that matters. What DID
+  //    change: this block used to say an outward share leaves no server-side
+  //    trace at all and that this was why there was no analytics call here.
+  //    The premise was right about the CARD and wrong as a rule about the
+  //    ACTION - it left outward_share as one of eleven club_features keys a
+  //    club could switch on, switch off, and never learn anything about,
+  //    which is not privacy, it is an unanswerable question. One row now
+  //    records that a share of a given KIND ended in a given RESULT, and
+  //    nothing else: no image, no caption, no title, no date, no subject id,
+  //    and specifically not the share TARGET, which navigator.share() does
+  //    not report back and which this app must not try to infer. Rules 2, 3
+  //    and 4 are untouched, and OUTWARD_CARD_NEVER is still the contract for
+  //    everything that reaches the canvas.
   //
   // 2. THE CARD CARRIES THE MEMBER'S OWN DATA AND NOTHING ELSE. The spec is
   //    BUILT from a named allow-list per subject kind (OUTWARD_CARD_FIELDS)
@@ -812,6 +823,20 @@
     if (state.posts.outwardShare !== s) return;
     s.sharing = false;
     s.result = result;
+    // The outward_share module's one event. Both props are closed enums that
+    // already exist in this file - OUTWARD_CARD_FIELDS' three subject kinds
+    // and OUTWARD_SHARE_RESULTS' five outcomes - which is what makes the row
+    // impossible to widen by accident from here.
+    //
+    // `cancelled` is recorded, not dropped. "Members open the sheet and back
+    // out" and "members never open it" are different findings and only one of
+    // them is about the feature; a share sheet that is opened and abandoned
+    // at scale is the single most useful thing this event can say.
+    //
+    // Not a WCAM event: this is a share to somewhere that is not this club,
+    // the same line the module map already draws between workout_shared and
+    // outward_share.
+    track(A.OUTWARD_SHARE_COMPLETED, { kind: (s.spec && s.spec.kind) || null, result: result });
     setMessage(outwardShareResultText(result));
     if (typeof window.showToast === "function") window.showToast(outwardShareResultText(result));
     rerender();
@@ -825,6 +850,10 @@
     }
     if (state.posts.outwardShare !== s) return;
     s.result = ok ? OUTWARD_SHARE_RESULTS.COPIED : OUTWARD_SHARE_RESULTS.FAILED;
+    // The sheet's second exit. Same name and same two props as the share
+    // button above: a member who copied the text shared outwardly just as
+    // much as one whose device had a share sheet to offer.
+    track(A.OUTWARD_SHARE_COMPLETED, { kind: (s.spec && s.spec.kind) || null, result: s.result });
     const text = ok ? "הטקסט הועתק." : OUTWARD_SHARE_RESULT_TEXT.failed;
     setMessage(text);
     if (typeof window.showToast === "function") window.showToast(text);

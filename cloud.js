@@ -743,6 +743,15 @@
       center: null, unread: 0, unreadLoaded: false,
       prefs: {}, prefsLoaded: false, prefSaving: {},
       _rtUid: null, pushSub: null, pushChecked: false,
+      // The account-settings push self-test. status walks
+      // idle -> sending -> waiting -> received | not_received | failed, and
+      // it is per device and per page load on purpose: "did a notification
+      // reach THIS phone just now" is not a fact worth persisting, and a
+      // stored answer from last week would be worse than no answer.
+      // id is the token the service worker echoes back, so a receipt from an
+      // earlier run cannot resolve a later one. reason carries the Hebrew
+      // sentence for the failed branch.
+      selfTest: { status: "idle", id: "", reason: "" },
     },
 
     // ---- onboarding (COMM-220..222, COMM-316) ----
@@ -955,6 +964,28 @@
     if (analyticsConfigured || !client || !window.HaimuniaAnalytics) return false;
     analyticsConfigured = true;
     window.HaimuniaAnalytics.configure({ client, getUserId: () => (state.user ? state.user.id : null) });
+    // app_opened. One row per page load, written from the first moment there
+    // is anything to write it with - which is also the earliest moment the
+    // row can carry a user_id, and this event is only worth having per
+    // member.
+    //
+    // WHY IT EXISTS. isStandalone() has been computed in app.js since the
+    // install banner shipped, and app.js is where it stays; nothing ever sent
+    // the answer anywhere, so "how many of our members actually installed the
+    // app" - the question underneath the push gate, the iOS notification
+    // line, the seven-day IndexedDB eviction on iOS Safari and every future
+    // argument about whether an install banner is worth its screen space -
+    // could only be answered by asking members one at a time.
+    //
+    // Two props, both coarse enums (communityDisplayMode /
+    // communityPlatformBucket, src/community/notifications.js). Never the
+    // user agent string: it is long enough to identify a device in a table
+    // whose read grant is a permission rather than a role.
+    //
+    // It is NOT a WCAM event. Opening the app is not participating in the
+    // club, and a session event that counted would make WCAM a measure of
+    // installs.
+    track(A.APP_OPENED, { display_mode: communityDisplayMode(), platform: communityPlatformBucket() });
     return true;
   }
 
@@ -2662,13 +2693,64 @@
   // view, which is the honest reading of "viewed" and the only signal
   // cloud.js can see without app.js telling it which top-level tab is up.
   let lastClubTabView = null;
+  // The announcements and monthly_recap modules' own once-per-entry guards.
+  // Both surfaces render INLINE - an announcement archive and a published
+  // month's figures are on the screen, never opened - so there is no open to
+  // hook and the view is the only honest thing to record. They ride
+  // lastClubTabView's own lifecycle rather than a loader's: leaving the
+  // Community tab ends the visit, coming back is a new one, and a re-render
+  // in between (a follow toggling, a realtime comment arriving) records
+  // nothing.
+  let announcementsViewLogged = false;
+  let monthlyRecapViewLogged = false;
   // COMM-233. Where the member came from when they land on the roster. Set
   // by the one control that routes there from somewhere else (COMM-232's
   // "find people" call to action on the leaderboard), consumed by the next
   // directory view and reset, so a later plain tab tap is not still
   // attributed to it.
   let directoryEntrySource = "club_tab";
-  function resetClubTabView() { lastClubTabView = null; }
+  function resetClubTabView() { lastClubTabView = null; announcementsViewLogged = false; monthlyRecapViewLogged = false; }
+  // The announcements module's one event. Recorded from afterRenderCommunity
+  // for the same reason noteClubTabView and noteClassmatesCardView are: that
+  // hook is the only place cloud.js learns the archive is actually in the
+  // document rather than merely fetched. It never fires for an empty archive
+  // - renderAnnouncementsArchive emits the marker only on its non-empty
+  // branch - so "how often were there club notices to read" and "how often
+  // did somebody see them" are the same number by construction.
+  //
+  // `rows` is a count and `source` says which of the two identical renders it
+  // was (the member feed, or the desktop staff home). Never a title: an
+  // announcement is club-authored text, and this table is not where text
+  // goes.
+  //
+  // NOT a WCAM event. The WCAM definition in docs/community/metrics.md lists
+  // "opened an announcement" among the qualifying acts; that clause still has
+  // no producer and this is not it, because nothing in this app opens an
+  // announcement. Recorded here so the next reader does not assume otherwise.
+  function noteAnnouncementsView() {
+    if (announcementsViewLogged) return;
+    if (!state.user || !state.profile) return;
+    const el = document.querySelector('[data-announcements-archive="ready"]');
+    if (!el) return;
+    announcementsViewLogged = true;
+    track(A.ANNOUNCEMENT_VIEWED, {
+      rows: Math.max(0, Number(el.getAttribute("data-announcements-rows")) || 0),
+      source: el.getAttribute("data-announcements-source") || "feed",
+    });
+  }
+  // The monthly_recap module's one event, same hook and same shape. The
+  // member-facing card renders only once a month has actually been published
+  // (renderMonthlyRecapMemberSection returns "" otherwise), so this cannot
+  // fire on an empty month, and the staff DRAFT preview carries no marker at
+  // all - a coach checking a draft is not a member reading the recap, and
+  // folding the two together would make the number unreadable.
+  function noteMonthlyRecapView() {
+    if (monthlyRecapViewLogged) return;
+    if (!state.user || !state.profile) return;
+    if (!document.querySelector("[data-monthly-recap-section]")) return;
+    monthlyRecapViewLogged = true;
+    track(A.MONTHLY_RECAP_VIEWED, { source: "account" });
+  }
   function noteClubTabView() {
     if (!state.user || !state.profile) return;
     const tab = state.ui.tab || "feed";
@@ -3891,7 +3973,7 @@
     // VISIBLE render as before; the rest sit behind the same <details>
     // disclosure renderAuditLog()'s "עוד סינונים" already uses, so nothing
     // is hidden, only de-prioritized past the first screenful.
-    const announcementsList = renderAnnouncementsArchive(otherAnnouncements, !!pinnedToday);
+    const announcementsList = renderAnnouncementsArchive(otherAnnouncements, !!pinnedToday, "feed");
     // ONE RAIL. pinnedHtml has moved OUT of this section and into the rail
     // above the feed, where it competes for a slot on merit like everything
     // else. What is left here is the archive: older announcements and the
@@ -5437,6 +5519,11 @@
     // only this hook can see. Runs on every render and records at most once
     // per load of the card.
     noteClassmatesCardView();
+    // The announcements and monthly_recap modules, same hook, same de-duping
+    // shape, same reason: an inline surface is "viewed" when it is in the
+    // document, which is a fact only this hook can see.
+    noteAnnouncementsView();
+    noteMonthlyRecapView();
     // COMM-141. Re-arm the own-row notification channel; setCommunityTab
     // tears every channel down, so this self-heals the same way the feed
     // observers above do.
@@ -5689,7 +5776,7 @@
     if (!isStaff()) return `<div class="empty">אין הרשאה</div>`;
     const liveAnnouncements = state.club.announcements.filter((a) => !isAnnouncementExpired(a));
     const announcements = isModuleEnabled("announcements")
-      ? `<div class="ach-section">${sectionHead("var(--brass)", "הודעות מהמועדון")}${renderAnnouncementsArchive(liveAnnouncements, false)}</div>`
+      ? `<div class="ach-section">${sectionHead("var(--brass)", "הודעות מהמועדון")}${renderAnnouncementsArchive(liveAnnouncements, false, "staff_home")}</div>`
       : "";
     return `<div class="staff-home">
       <h1 class="page-title">לוח המכון</h1>
@@ -6074,7 +6161,7 @@
     else if (action === "visibility-pick") postApplyVisibility(el.dataset.value);
     else if (action === "visibility-cancel") { state.posts.visibilityEdit = null; rerender(); }
     else if (action === "post-delete") askConfirm({ title: "מחיקת פוסט", message: "הפוסט יוסר מהפיד. הפעולה אינה ניתנת לביטול מיידי.", confirmLabel: "מחיקה", destructive: true, action: "post-delete-rpc", payload: { postId: el.dataset.id } });
-    else if (action === "welcome-member") welcomeNewMember(el.dataset.id);
+    else if (action === "welcome-member") welcomeNewMember(el.dataset.id, "feed_card");
     else if (action === "view-profile") viewCommunityProfile(el.dataset.id);
     else if (action === "close-profile") closeCommunityProfile();
     else if (action === "profile-tab") setProfileViewTab(el.dataset.tab);
@@ -6118,6 +6205,10 @@
     else if (action === "notif-toggle-group") { const c = state.notif.center; if (c) { c.expanded[el.dataset.key] = !c.expanded[el.dataset.key]; rerender(); } }
     else if (action === "notif-pref") setNotifPref(el.dataset.type, el.dataset.channel);
     else if (action === "notif-push-disable") disableNotifPush();
+    // The self-test is a click and nothing else reaches it, which is half of
+    // what makes "never asked on first load" true of the permission prompt
+    // it may raise.
+    else if (action === "notif-push-self-test") runPushSelfTest();
     // COMM-201/207. The club-top shortcut opens the real challenge detail
     // when club_summary handed back an id; a missing id (an older/failed
     // club_summary read) still lands the member on the Boards sub-tab
@@ -6580,6 +6671,7 @@
         state.coach.engage = { items: [], loading: false, loaded: false, error: false, profiles: {}, reachedOut: {}, busy: null };
         state.coach.memberOfWeek = { loading: false, loaded: false, error: false, envelope: null, publishedProfile: null, previousProfile: null, pickHandle: "", pickReason: "", busy: null, publishErr: "" };
         state.coach.monthlyRecap = { loading: false, loaded: false, error: false, row: null, busy: null, publishErr: "" };
+        announcementsViewLogged = false; monthlyRecapViewLogged = false; /* Same reason as the classmates guard on the next line: the next member to sign in on this device gets their own first view of each inline surface, never the previous session's already-counted one. */
         classmatesCardViewLogged = false; /* COMM-307: the next member to sign in on this device gets a fresh card and a fresh classmates_card_viewed, never the previous session's rows or its already-counted view. */
         anonSignInAttempted = false;
         recoveryVerifyAttempted = false;

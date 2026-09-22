@@ -1150,6 +1150,21 @@
       return false;
     }
     if (data) applyClubWodBoard(data);
+    // The club_wod module's one event. Attaching a logged result to the
+    // club's board is the module's whole point - a coach programs a day and
+    // members put their own results on it - and it is the only thing on that
+    // surface a member does rather than reads. After the RPC succeeds, like
+    // every other write-backed name.
+    //
+    // The session id is deliberately absent. It identifies one day's
+    // programming for the whole club, which makes any row carrying it a
+    // roster of who trained on a named day, in a table read under
+    // community.analytics.view. `source` says which of the two entry points
+    // the member used and nothing else.
+    //
+    // Not a WCAM event: the training this attaches was already counted, once,
+    // as attendance_recorded.
+    track(A.CLUB_WOD_RESULT_ATTACHED, { source: (v && v.sessionId === sessionId) ? "board" : "log_form" });
     setMessage("התוצאה צורפה ללוח של המועדון");
     rerender();
     return true;

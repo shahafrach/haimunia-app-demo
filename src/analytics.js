@@ -90,6 +90,45 @@
     // "how often did it exist, and how many people were on it" a question no
     // other event can answer.
     CLASSMATES_CARD_VIEWED: "classmates_card_viewed",
+
+    // ---- The session shape, and push ------------------------------------
+    // app_opened is the first event that is not about the community at all:
+    // it is one row per session saying HOW the app is being run. isStandalone()
+    // has been computed in app.js since the install banner shipped and was
+    // never sent anywhere, so "how many of our members actually installed it"
+    // - the question every other decision on this list depends on - could only
+    // be answered by asking members one at a time.
+    APP_OPENED: "app_opened",
+    // The browser's own notification permission, as it stands when the app
+    // asks or when it finds the answer already settled. Distinct from
+    // push_opt_in, which fires only on the success path after a subscription
+    // row is written: a denial writes no subscription and therefore wrote
+    // nothing at all until this name existed, which is exactly the number
+    // worth knowing.
+    PUSH_PERMISSION: "push_permission",
+    // The account-settings self-test: a real notification, shown by this
+    // device's own service worker, and whether it came back. The row is
+    // written from the service worker's receipt (through the page - a worker
+    // has no Supabase client), or from the page when the wait times out.
+    PUSH_SELF_TEST: "push_self_test",
+
+    // ---- The eleven silent modules --------------------------------------
+    // Every one of these eleven club_features keys had a switch, a surface
+    // and no event, so docs/audit/usage-queries.sql could only ever answer
+    // "nothing measures it" about them - a telemetry gap that reads exactly
+    // like disuse and must never be mistaken for it. One event each, at the
+    // surface that is the module's own point.
+    ANNOUNCEMENT_VIEWED: "announcement_viewed",
+    MEMBER_OF_WEEK_PUBLISHED: "member_of_week_published",
+    WELCOME_SENT: "welcome_sent",
+    MONTHLY_RECAP_VIEWED: "monthly_recap_viewed",
+    CLUB_WOD_RESULT_ATTACHED: "club_wod_result_attached",
+    NEW_MEMBER_POST_VIEWED: "new_member_post_viewed",
+    POST_PHOTO_ATTACHED: "post_photo_attached",
+    MENTION_INSERTED: "mention_inserted",
+    OUTWARD_SHARE_COMPLETED: "outward_share_completed",
+    STREAK_NUDGE_OPENED: "streak_nudge_opened",
+    ENGAGEMENT_FLAG_ACTIONED: "engagement_flag_actioned",
   });
   const KNOWN = new Set(Object.values(EVENTS));
 
@@ -135,6 +174,48 @@
   // strength of another member's session. A follow or a profile open from the
   // card counts, through member_followed and profile_opened, because those
   // are the member acting.
+  //
+  // The eleven-module pass reviewed each of its own new names the same way,
+  // one at a time, and added exactly two:
+  // - welcome_sent counts. welcomeNewMember() writes a real comment through
+  //   add_post_comment, and "created a comment" is the definition's own first
+  //   bullet. It bypasses the composer, so no COMMENT_CREATED bus event is
+  //   emitted for it - this is a gap in the existing count being closed, not
+  //   a new kind of activity being admitted.
+  // - member_of_week_published counts, FOR THE PUBLISHING COACH, on exactly
+  //   coach_congratulate_sent's reasoning: the row's user_id is the actor,
+  //   and recognising a member in front of the club is the same act of
+  //   community participation from the same side of it. The recognised
+  //   member is never made active by somebody else's action.
+  // Everything else the pass added does not count, and each for a stated
+  // reason rather than by default:
+  // - announcement_viewed, monthly_recap_viewed and new_member_post_viewed
+  //   are views, and viewing is not the bar the definition sets - the same
+  //   call leaderboard_viewed and classmates_card_viewed already made. NOTE
+  //   that the WCAM
+  //   definition's "opened an announcement" clause still has no producer:
+  //   announcements are rendered inline in an archive and in a feed card,
+  //   never opened, so there is no open to record. Recorded here so the
+  //   clause is not mistaken for something this event implements.
+  // - club_wod_result_attached does not. The member is already counted for
+  //   the day they trained, through attendance_recorded, and attaching a
+  //   result they already logged is the same session reaching a second
+  //   surface, not a second act.
+  // - post_photo_attached and mention_inserted do not. Both happen INSIDE a
+  //   composer, before anything is published; the publish itself is
+  //   post_created / comment_created and already counts. An abandoned draft
+  //   must never make anyone active.
+  // - outward_share_completed does not. It is a share to somewhere that is
+  //   not this club - the same distinction the module map already draws
+  //   between workout_shared and outward_share.
+  // - streak_nudge_opened does not, because notification_opened fires on the
+  //   same tap and already counts that member once.
+  // - engagement_flag_actioned does not. It is staff triage of a queue, the
+  //   administrative half of coach_tools rather than a community act, and the
+  //   coach becomes active through the pfanie they then send.
+  // - app_opened, push_permission and push_self_test do not. Opening the app
+  //   is not participation, and a permission or a device test is account
+  //   configuration - push_opt_in's own reasoning, unchanged.
   const ACTIVE_MEMBER_EVENTS = Object.freeze([
     EVENTS.POST_CREATED,
     EVENTS.WORKOUT_SHARED,
@@ -151,6 +232,8 @@
     EVENTS.WEEKLY_RECAP_SHARED,
     EVENTS.COACH_CONGRATULATE_SENT,
     EVENTS.ATTENDANCE_RECORDED,
+    EVENTS.WELCOME_SENT,
+    EVENTS.MEMBER_OF_WEEK_PUBLISHED,
   ]);
   const ACTIVE_MEMBER_EVENT_SET = new Set(ACTIVE_MEMBER_EVENTS);
 
@@ -242,6 +325,33 @@
     // allow-list is the thing that keeps them from riding along into a table
     // whose read grant is community.analytics.view.
     [EVENTS.CLASSMATES_CARD_VIEWED]: ["rows", "source"],
+    // The session shape. display_mode is the enum "standalone"/"browser" and
+    // platform is a coarse bucket ("ios", "android", "other") derived from the
+    // user agent - never the user agent string itself, which is long enough to
+    // be a fingerprint and is already carried, deliberately and only, on a
+    // support report the member chose to send.
+    [EVENTS.APP_OPENED]: ["display_mode", "platform"],
+    [EVENTS.PUSH_PERMISSION]: ["status", "source", "display_mode"],
+    [EVENTS.PUSH_SELF_TEST]: ["result"],
+    // The eleven. Counts, enums and surfaces only. Specifically NOT here, and
+    // each for its own reason: the announcement title (member-visible club
+    // text, but still text), the recognised member's id on
+    // member_of_week_published and the flagged member's id on
+    // engagement_flag_actioned (both are a row ABOUT another member, and
+    // analytics_events is readable by anyone holding community.analytics.view),
+    // and above all the mentioned member on mention_inserted - a table of "who
+    // gets tagged by whom" is a social graph nobody asked to publish.
+    [EVENTS.ANNOUNCEMENT_VIEWED]: ["rows", "source"],
+    [EVENTS.MEMBER_OF_WEEK_PUBLISHED]: ["category", "source"],
+    [EVENTS.WELCOME_SENT]: ["source"],
+    [EVENTS.MONTHLY_RECAP_VIEWED]: ["source"],
+    [EVENTS.CLUB_WOD_RESULT_ATTACHED]: ["source"],
+    [EVENTS.NEW_MEMBER_POST_VIEWED]: ["source"],
+    [EVENTS.POST_PHOTO_ATTACHED]: ["source", "photo_count"],
+    [EVENTS.MENTION_INSERTED]: ["source"],
+    [EVENTS.OUTWARD_SHARE_COMPLETED]: ["kind", "result"],
+    [EVENTS.STREAK_NUDGE_OPENED]: ["was_unread"],
+    [EVENTS.ENGAGEMENT_FLAG_ACTIONED]: ["action", "level"],
   });
 
   function projectHandProps(eventName, props) {

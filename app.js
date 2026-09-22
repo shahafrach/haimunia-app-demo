@@ -2114,6 +2114,13 @@ let firstLogArrivalPending = false;
 let celebrationShowingArrival = false;
 
 function totalLoggedEntries() { return entries.length + wodEntries.length; }
+// Exported for the community layer's notification-permission gate
+// (pushAskGateReason, src/community/notifications.js), which will not ask a
+// member for permission to interrupt them until the app holds at least one
+// thing of theirs. Same window.haimunia* handle every other app.js -> cloud.js
+// fact already travels on; the training log itself stays entirely in this
+// file.
+window.haimuniaTotalLoggedEntries = totalLoggedEntries;
 
 // S2. The tour card retires itself two ways - the member took the tour, or
 // they have logged three entries and demonstrably do not need it. After that
@@ -8249,6 +8256,12 @@ async function init() {
     navigator.serviceWorker.addEventListener("message", (e) => {
       if (e.data && e.data.type === "PUSH_NOTIFICATION_CLICK" && typeof window.communityHandlePushDeepLink === "function") {
         window.communityHandlePushDeepLink(e.data.deepLink);
+      }
+      // The push self-test's receipt, on exactly the same split and for the
+      // same reason: the worker observed the notification, the page owns the
+      // session and is the only side that can write the analytics row.
+      if (e.data && e.data.type === "PUSH_SELF_TEST_RECEIVED" && typeof window.communityHandlePushSelfTestReceipt === "function") {
+        window.communityHandlePushSelfTestReceipt(e.data.id);
       }
     });
   }

@@ -52,6 +52,12 @@ function seeded(profile) {
     }, profile || {})],
     invite_redemptions: [{ user_id: "u1", invite_id: "inv-1", role: "member", redeemed_at: VERIFIED }],
     community_feed: [],
+    // The outward_share module's one event lands here. Rule 1 of this file's
+    // own header used to say an outward share leaves no server-side trace at
+    // all; that was right about the CARD and wrong as a rule about the
+    // ACTION, and it left the module unmeasurable. The card still never
+    // leaves the device - the tests below are what keep that true.
+    analytics_events: [],
   });
   mock.setUser({ id: "u1", is_anonymous: false, email: "dana@members.haimuniya.invalid" });
   mock.onRpc("pr_share", (args, ctx) => { ctx.db.__prShare = args; return { data: "pr-post-1", error: null }; });
@@ -547,4 +553,83 @@ test("the never-list and the allow-list are disjoint, so the two halves of rule 
   for (const key of api.NEVER) {
     assert.ok(!allowed.has(key), `${key} is on both the allow-list and the never-list`);
   }
+});
+
+// ===== outward_share_completed ==========================================
+
+const shareEvents = (mock) => mock.db.analytics_events.filter((r) => r.event_name === "outward_share_completed");
+
+test("a completed share records the kind and the result, and nothing that was on the card", async () => {
+  const mock = seeded();
+  const window = await bootReady(mock);
+  window.navigator.share = async () => {};
+  window.navigator.canShare = (payload) => !!(payload && payload.files && payload.files.length);
+
+  window.HaimuniaEvents.emit(window.PRODUCT_EVENTS.PR_CREATED, { record: RECORD });
+  await waitFor(() => !!window.document.getElementById("prPrompt"), 3000);
+  window.document.querySelector('[data-community-action="outward-pr"]').click();
+  await waitFor(() => !!window.document.querySelector('[data-outward-preview="ready"]'), 3000);
+  assert.equal(shareEvents(mock).length, 0, "opening the sheet is not sharing, and is not recorded as one");
+
+  window.document.querySelector('[data-community-action="outward-go"]').click();
+  await waitFor(() => shareEvents(mock).length === 1, 3000);
+
+  const props = JSON.parse(JSON.stringify(shareEvents(mock)[0].props));
+  assert.deepStrictEqual(props, { kind: "pr", result: "shared_image" });
+  const json = JSON.stringify(props);
+  // Everything the card carried, and the one thing navigator.share never
+  // reports back and this app must not try to infer.
+  for (const leak of ["Deadlift", "180", "172.5", "+7.5", "2026-08-28", "דנה כהן", "rec-42"]) {
+    assert.ok(!json.includes(leak), `${leak} is on the card and must not be in the row`);
+  }
+  assert.equal(props.target, undefined, "where a share went is not knowable and is not guessed at");
+});
+
+test("a cancelled share is recorded too - opening the sheet and backing out is the finding", async () => {
+  const mock = seeded();
+  const window = await bootReady(mock);
+  window.navigator.share = async () => { const e = new Error("aborted"); e.name = "AbortError"; throw e; };
+  window.navigator.canShare = () => true;
+
+  window.HaimuniaEvents.emit(window.PRODUCT_EVENTS.PR_CREATED, { record: RECORD });
+  await waitFor(() => !!window.document.getElementById("prPrompt"), 3000);
+  window.document.querySelector('[data-community-action="outward-pr"]').click();
+  await waitFor(() => !!window.document.querySelector('[data-community-action="outward-go"]:not([disabled])'), 3000);
+  window.document.querySelector('[data-community-action="outward-go"]').click();
+  await waitFor(() => shareEvents(mock).length === 1, 3000);
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(shareEvents(mock)[0].props)), { kind: "pr", result: "cancelled" });
+});
+
+test("the copy-text exit is the same event, because a member who copied shared outwardly too", async () => {
+  const mock = seeded();
+  const window = await bootReady(mock);
+  assert.equal(typeof window.navigator.share, "undefined");
+  window.navigator.clipboard = { writeText: async () => {} };
+
+  window.HaimuniaEvents.emit(window.PRODUCT_EVENTS.PR_CREATED, { record: RECORD });
+  await waitFor(() => !!window.document.getElementById("prPrompt"), 3000);
+  window.document.querySelector('[data-community-action="outward-pr"]').click();
+  await waitFor(() => !!window.document.querySelector('[data-community-action="outward-go"]:not([disabled])'), 3000);
+  window.document.querySelector('[data-community-action="outward-go"]').click();
+  await waitFor(() => shareEvents(mock).length === 1, 3000);
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(shareEvents(mock)[0].props)), { kind: "pr", result: "copied" });
+});
+
+test("the card image itself is still never uploaded - the event changed nothing about rule 1", async () => {
+  const mock = seeded();
+  const window = await bootReady(mock);
+  window.navigator.share = async () => {};
+  window.navigator.canShare = () => true;
+
+  window.HaimuniaEvents.emit(window.PRODUCT_EVENTS.PR_CREATED, { record: RECORD });
+  await waitFor(() => !!window.document.getElementById("prPrompt"), 3000);
+  window.document.querySelector('[data-community-action="outward-pr"]').click();
+  await waitFor(() => !!window.document.querySelector('[data-outward-preview="ready"]'), 3000);
+  window.document.querySelector('[data-community-action="outward-go"]').click();
+  await waitFor(() => shareEvents(mock).length === 1, 3000);
+
+  assert.equal(mock.db.__prShare, undefined, "an outward share must not post to the club feed");
+  const everything = JSON.stringify(mock.db.analytics_events);
+  assert.ok(!everything.includes("blob:") && !everything.includes("image/png"),
+    "the card is a Blob that lives in the tab until the sheet closes, and that is all it ever is");
 });
