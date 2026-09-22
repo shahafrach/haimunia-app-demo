@@ -1113,7 +1113,16 @@
     // has seen than for "אירועים", and clubModuleRow() renders it only when
     // a row carries one, so no existing row changed.
     { key: "onboarding_challenge", label: "אתגר כניסה לחבר/ה חדש/ה", desc: "אתגר ראשון קצר שמוצע אוטומטית למי שהצטרף/ה זה עתה למועדון.", clientOnly: true, planned: true },
-    { key: "benchmarks", label: "אימוני בנצ'מרק", desc: "האימונים המוכרים בשמם (Fran, Grace ודומיהם) ומעקב אחרי השיפור בהם לאורך זמן.", clientOnly: true, planned: true },
+    // planned: true came off with the feature (2026-09-22), the same handover
+    // 202609190002 set up and strength_percentages below went through first:
+    // the marker comes off in the commit that adds the gate. The benchmark
+    // section on the progress screen reads this key (benchmarksOn() in
+    // app.js), so "בפיתוח" would now be a lie. clientOnly STAYS - the gate is
+    // a display hide in app.js over the member's OWN training log, there is
+    // no RLS clause behind the key (attempts are ordinary private_records
+    // rows, protected by that table's own self-only policies, not by this
+    // switch), and the row must not claim enforcement it does not have.
+    { key: "benchmarks", label: "אימוני בנצ'מרק", desc: "האימונים המוכרים בשמם (Fran, Grace ודומיהם) ומעקב אחרי השיפור בהם לאורך זמן.", clientOnly: true },
     // planned: true came off with the feature (2026-09-21). The percentage
     // chips on the log screen read this key, so "בפיתוח" would now be a lie -
     // which is exactly the handover 202609190002 set up: the marker comes off

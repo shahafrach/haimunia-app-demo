@@ -44,7 +44,6 @@ const seedSql = fs.readFileSync(new URL("202609190002_seven_switches_before_thei
 // later edit moved a coach tool into the members' content list.
 const PLANNED = [
   { key: "onboarding_challenge", group: "CLUB_MODULE_TOGGLES" },
-  { key: "benchmarks", group: "CLUB_MODULE_TOGGLES" },
   { key: "gym_display", group: "CLUB_MODULE_TOGGLES" },
   { key: "coach_tasks", group: "COACH_MODULE_TOGGLES" },
   { key: "owner_report", group: "COACH_MODULE_TOGGLES" },
@@ -62,6 +61,11 @@ const PLANNED_KEYS = PLANNED.map((p) => p.key);
 // asserts a real gate and no marker.
 const BUILT = [
   { key: "strength_percentages", group: "CLUB_MODULE_TOGGLES" },
+  // 2026-09-22. The benchmark section on the progress screen - the eight named
+  // workouts and the member's own 1RM lifts, each with its attempts, its best
+  // and a chart. Gated in app.js through clubFeatureOn("benchmarks"), the same
+  // reader and the same file strength_percentages taught this test to look in.
+  { key: "benchmarks", group: "CLUB_MODULE_TOGGLES" },
 ];
 const BUILT_KEYS = BUILT.map((b) => b.key);
 // Everything 202609190002 seeded, which is what the migration half checks:
@@ -381,6 +385,9 @@ test("a shipped key's row drops בפיתוח and says only that it is a display 
 test("the description is tied to its switch for a screen reader, not folded into the switch's name", async () => {
   const window = await bootCommunity(seeded(), { syncEnabled: false });
   await openModuleSettings(window);
+  // benchmarks specifically, and still the right example after its feature
+  // shipped: desc is not a planned-only field, and this is the row with the
+  // longest description in either group.
   const box = window.document.querySelector('[data-club-feature="benchmarks"]');
   const describedBy = box.getAttribute("aria-describedby");
   assert.ok(describedBy, "the switch points at its description");
