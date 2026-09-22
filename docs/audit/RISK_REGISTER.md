@@ -105,8 +105,14 @@ Use this as the implementation todo list. Ordered roughly by risk.
 2. **AUDIT0827-OPS-H1 / RESCAN-H4** — No deployment workflow. `.github/workflows/` holds
    only `test.yml`; no artifact packaging, staging, smoke test, approval, or rollback.
 3. **DSYNC-SEC-2 / COMM-338** — Live/production RLS behaviour never verified against a
-   real project. `scripts/smoke-test-multi-role.mjs` exists but has never been run (no
-   staging project, no provisioned test accounts).
+   real project. `scripts/smoke-test-multi-role.mjs` ran for the first time on
+   2026-09-22, but against a **local** stack at 178 migrations (the same count
+   `npm run check:drift` reports for production), not against the live project: 18 of its
+   19 assertions passed, and the single failure was a bug in the script itself
+   (`private_records?select=id` — no such column; the table is keyed
+   `(user_id, record_type, record_id)`), fixed 2026-09-22. So the script is now known to
+   work; the deployed project is still unverified (no staging project, no provisioned
+   test accounts).
 4. **AUDIT0827-QA-4** — No end-to-end community test against a live/staging environment.
 5. **AUDIT0827-SEC-M4 / RESCAN-M1 / DSYNC-SEC-1 / COMM-337** — Clickjacking headers still
    inert. GitHub Pages cannot send `frame-ancestors`/`X-Frame-Options`; the meta tag is
@@ -300,7 +306,7 @@ Use this as the implementation todo list. Ordered roughly by risk.
 | AUDIT0827-QA-1 | AUDIT0827 | High | QA | Browser checks do not run in CI | `.github/workflows/test.yml` `browser-checks` job installs Playwright Chromium and runs `run-all.mjs` | VERIFIED_FIXED | |
 | AUDIT0827-QA-2 | AUDIT0827 | High | QA | Aggregate browser runner omits existing scripts | `scripts/browser-check/run-all.mjs:15` auto-discovers every scenario and runs all regardless of earlier failures; 29 scenarios on disk | VERIFIED_FIXED | Also closes DSYNC-QA-2 (abort-on-first-failure). |
 | AUDIT0827-QA-3 | AUDIT0827 | High | QA | No automated two-user RLS suite | 77 files in `supabase/tests/`; `migration-check` job runs `supabase start` + `supabase test db` with no `continue-on-error` | PARTIAL | The suite is real, large and a hard gate. It has never been validated against the live project, and it creates no storage objects, so storage policies are still untested (`docs/community/backlog.md:160-164`). |
-| AUDIT0827-QA-4 | AUDIT0827 | High | QA | No end-to-end community test against staging | `scripts/smoke-test-multi-role.mjs` exists, deliberately outside CI, never executed (no staging project, no test accounts) | STILL_OPEN | Same root cause as DSYNC-SEC-2 / COMM-338. |
+| AUDIT0827-QA-4 | AUDIT0827 | High | QA | No end-to-end community test against staging | `scripts/smoke-test-multi-role.mjs` exists, deliberately outside CI; first run 2026-09-22, against a LOCAL stack at 178 migrations (the same count `npm run check:drift` reports for production): 18/19 assertions passed, the one failure being the script's own `private_records?select=id` bug (that table is keyed `(user_id, record_type, record_id)` and has no `id` column, so PostgREST answered 400 before reaching any policy), fixed 2026-09-22. No staging project and no test accounts, so still nothing has run against a deployed project | STILL_OPEN | Same root cause as DSYNC-SEC-2 / COMM-338. A local run is not a staging run. |
 | AUDIT0827-QA-5 | AUDIT0827 | Medium | QA | Accessibility automation absent | `test/tablist-keyboard.test.mjs`, `test/community-dialog-focus.test.mjs`, `test/heading-outline.test.mjs`, `test/chart-accessible-name.test.mjs`, `test/brass-contrast.test.mjs` exist; no axe dependency in `package.json`; no 320 px/200% reflow check | PARTIAL | Targeted a11y tests shipped; the scanner-based half did not. |
 | AUDIT0827-QA-6 | AUDIT0827 | Medium | QA | Offline recovery needs fault injection | `test/storage-quota-exceeded.test.mjs` covers quota; nothing covers partial cache, IDB denial, corrupt records, clock skew, interrupted upgrades | STILL_OPEN | |
 | AUDIT0827-QA-7 | AUDIT0827 | Medium | QA | Cross-browser coverage undefined | `scripts/browser-check/*` import `chromium` only; no matrix documented | STILL_OPEN | |
@@ -425,7 +431,7 @@ being re-adjudicated.
 | ID | Source | Priority | Category | Finding | Current evidence | Status | Notes |
 |---|---|---|---|---|---|---|---|
 | DSYNC-SEC-1 | DSYNC | P1 | Security | Clickjacking mitigation structurally absent | See AUDIT0827-SEC-M4 | STILL_OPEN | COMM-337 `todo` — the only `todo` in the design-sync ticket table. |
-| DSYNC-SEC-2 | DSYNC | P1 | Security | Live/production RLS behaviour unverified | `scripts/smoke-test-multi-role.mjs` written for 5 roles, never executed; no staging project, no test accounts | STILL_OPEN | COMM-338 `partial`. Blocking for go-live. |
+| DSYNC-SEC-2 | DSYNC | P1 | Security | Live/production RLS behaviour unverified | `scripts/smoke-test-multi-role.mjs` written for 5 roles; first run 2026-09-22, against a LOCAL stack at 178 migrations (the same count `npm run check:drift` reports for production): 18/19 assertions passed, the one failure being the script's own `private_records?select=id` bug (that table is keyed `(user_id, record_type, record_id)` and has no `id` column, so PostgREST answered 400 before reaching any policy), fixed 2026-09-22. All five roles ran (19 assertions = 3 anonymous + 4 each for member, coach, admin and posting-restricted member), against local accounts, not a deployed project | STILL_OPEN | COMM-338 `partial`. Blocking for go-live. The 2026-09-22 run moved the script from never-executed to executed-once-locally and cost it one real bug; it did **not** move this row, whose whole subject is the LIVE project, which remains unverified. |
 | DSYNC-SEC-3 | DSYNC | P2 | Product | Moderation has `review_report()` but no admin queue UI | See RESCAN-M9 | VERIFIED_FIXED | |
 | DSYNC-SEC-4 | DSYNC | P2 | Supply chain | `vendor/supabase.js` version-checked but not checksum-checked | `scripts/check-vendored-supabase-version.mjs` matches a `t.version="X.Y.Z"` string only; `test/vendored-supabase-version.test.mjs` runs it under `npm test` | PARTIAL | The check runs in CI (via `npm test`), but a tampered bundle self-reporting the right version still passes. |
 | DSYNC-SEC-5 | DSYNC | P2 | Security | Anon-key-plus-RLS assumption sampled, not exhaustively verified | Migration count grew 75 → 101 since; `202609060001`/`202609060009` closed a real anonymous-read hole the sampled pass missed | PARTIAL | The recommended full policy-by-policy pass has still not been done — and AUDIT-RECON-001 proves sampling was insufficient. |
@@ -515,7 +521,7 @@ being re-adjudicated.
 | ID | Source | Priority | Category | Finding | Current evidence | Status | Notes |
 |---|---|---|---|---|---|---|---|
 | COMM-337 | backlog | P1 | Security | Move hosting off GitHub Pages to enable clickjacking headers | `backlog.md:3047` status `todo` — the only `todo` in the design-sync table | STILL_OPEN | Same as AUDIT0827-SEC-M4. |
-| COMM-338 | backlog | P1 | QA | Run pgTAP in CI + multi-role live smoke test before deploy | `backlog.md:3048` `partial`; `scripts/smoke-test-multi-role.mjs` never executed | PARTIAL | Same as DSYNC-SEC-2. Needs a staging project and 5 provisioned accounts — a product-owner decision. |
+| COMM-338 | backlog | P1 | QA | Run pgTAP in CI + multi-role live smoke test before deploy | `backlog.md:3048` `partial`; `scripts/smoke-test-multi-role.mjs` first run 2026-09-22, against a LOCAL stack at 178 migrations (the same count `npm run check:drift` reports for production): 18/19 assertions passed, the one failure being the script's own `private_records?select=id` bug (that table is keyed `(user_id, record_type, record_id)` and has no `id` column, so PostgREST answered 400 before reaching any policy), fixed 2026-09-22 | PARTIAL | Same as DSYNC-SEC-2. All five roles were provisioned locally and all 19 assertions ran; what is still missing is the project they were meant to run against. Needs a staging project and its 5 accounts — a product-owner decision. |
 | COMM-329 | backlog | P0 | Accessibility | Headings and landmarks in the app shell | `backlog.md:3039` `partial`; `test/heading-outline.test.mjs:1-24` documents exactly what is uncovered | PARTIAL | Same as DSYNC-A11Y-2. |
 | COMM-143 | backlog | P1 | Notifications | Phase 1 notifications wired | `backlog.md:227,230-238` `partial` — client renders every type; the server trigger set is documented but partly unbuilt | PARTIAL | |
 | COMM-P01..P07 | backlog | — | Product | Attendance-blocked parked bucket | `backlog.md:1368-1449` — all seven closed by COMM-302/305/306/307/304/316 | VERIFIED_FIXED | The parked bucket is complete as a historical record; nothing in it is live work. |

@@ -187,7 +187,19 @@ test("the dialog registry keeps DOM keys and state paths separate", () => {
   // a new one, deliberately: this is the box's programming, a club-wide
   // surface beside clubWods, and the namespace pin above is a review trigger
   // that a genuinely club-shaped feature should not be spending.
-  assert.equal(entries.length, 16, "every dialog entry needs a key and an isOpen getter");
+  // 17 since the social feed pass added "reactors", the who-reacted sheet, in
+  // LAST position. The full reasoning - why a dialog rather than an inline
+  // expansion of the reaction strip, and why last - is written out beside the
+  // matching key-order pin in community-destructive-symmetry.test.mjs, so the
+  // two pins do not drift into two different half-explanations.
+  //
+  // The half that is THIS file's own assertion: state.engagement.reactorsFor
+  // must default to null like every other dialog flag. It holds the post id
+  // whose list is open, and the loop below checks for `null` exactly - so a
+  // dialog genuinely starts closed. It lives inside the existing `engagement`
+  // namespace beside reactions/reactionError rather than in a new one: it is
+  // a second view of the reaction set that namespace already owns.
+  assert.equal(entries.length, 17, "every dialog entry needs a key and an isOpen getter");
   const state = readStateLiteral();
   for (const [, key, path] of entries) {
     const value = path.split(".").slice(1).reduce((o, k) => (o == null ? o : o[k]), state);

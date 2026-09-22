@@ -124,7 +124,14 @@ console.log("\n== anonymous ==");
   } else {
     const profiles = await rest("profiles?select=id&limit=1", { token: anon.token });
     check("a fresh anonymous session reads zero profile rows (no redemption yet)", profiles.status === 200 && Array.isArray(profiles.body) && profiles.body.length === 0, `HTTP ${profiles.status}`);
-    const priv = await rest("private_records?select=id&limit=1", { token: anon.token });
+    // select=user_id, NOT select=id: private_records is keyed by
+    // (user_id, record_type, record_id) and has no id column at all
+    // (202608260001). PostgREST answers a select of a column that does not
+    // exist with 400 and never reaches the policy, so `select=id` turned a
+    // passing RLS boundary into a FAIL that said nothing about RLS. Every
+    // column named here has to exist on the table for the assertion to be
+    // about the policy rather than about the request.
+    const priv = await rest("private_records?select=user_id&limit=1", { token: anon.token });
     check("a fresh anonymous session reads zero private_records rows", priv.status === 200 && Array.isArray(priv.body) && priv.body.length === 0, `HTTP ${priv.status}`);
     const grant = await rpc("admin_grant_coach", { p_user_id: anon.userId, p_role: "coach" }, anon.token);
     check("an anonymous session cannot call admin_grant_coach", grant.status >= 400, `HTTP ${grant.status}`);
