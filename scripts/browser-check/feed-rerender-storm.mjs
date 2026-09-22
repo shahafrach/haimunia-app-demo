@@ -156,6 +156,16 @@ await burst("switch to feed filter tab", async () => {
   const b = await page.$('#communityFeedFilters [role="tab"]:nth-child(2)');
   if (b) await b.click();
 });
+// BACK TO THE DEFAULT SCOPE FIRST. The burst above leaves the feed on the
+// second chip ("אחרי מי שאני עוקב/ת"), which has no posts in this fixture -
+// so the two bursts below found no card, clicked nothing, and reported a
+// perfectly clean "0 full rebuilds" for two interactions that never happened.
+// Both of them matter more now that a card carries a comment preview and a
+// reaction summary, so they are made to run against a feed that has cards in
+// it. (Found while fixing a real regression this file caught on the scroll
+// burst - see loadCommentsFor's scheduleRerender.)
+await page.click('#communityFeedFilters [role="tab"]:nth-child(1)');
+await page.waitForSelector('#communityFeedList .post-card', { timeout: 5000 });
 await burst("tap a reaction", async () => {
   const b = await page.$('#communityFeedList .post-card [data-community-action="cheer"]');
   if (b) await b.click(); else console.log("   (no reaction button found)");

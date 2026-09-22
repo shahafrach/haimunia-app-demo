@@ -162,7 +162,15 @@
     const rows = error ? [] : (data || []);
     state.engagement.comments[postId] = rows;
     await loadMemberRoles(rows.map((c) => c.author_id));
-    rerender();
+    // ONE FRAME, not one rebuild per post whose comments came back - the same
+    // change loadReactionsFor() above already carries, and now for the same
+    // reason. This used to be a direct rerender() and could afford to be:
+    // comments only ever loaded for the ONE thread a member had opened. The
+    // two-comment preview under every card means a page of twenty posts can
+    // resolve twenty of these at once, and twenty full rebuilds of the feed
+    // in one scroll is exactly what scripts/browser-check/
+    // feed-rerender-storm.mjs exists to catch - it caught this.
+    scheduleRerender();
   }
   // COMM-124 / COMM-160. The coach badge on every surface a member is shown
   // (comment, feed post author, profile header, people search, member
@@ -532,6 +540,83 @@
       : (total === 1 ? "הגבה אחת" : `${total} הגבות`);
     return `<div class="reaction-strip">${avatars ? `<span class="flex" style="padding-inline-start:6px;">${avatars}</span>` : ""}<span style="color:var(--steel);font-size:11.5px;">${esc(label)}</span></div>`;
   }
+
+  // ---- "דנה ועוד 4", beside the pill ------------------------------------
+  // The summary a social feed puts next to its reaction button: a NAME, not a
+  // bare number, because the first thing a member wants from a count is
+  // whether anyone they know is in it. Tapping it opens the full list.
+  //
+  // The name is the first reactor the viewer may see - loadReactionsFor()
+  // returns them in created_at order and isBlockedUser() has already dropped
+  // the block edges, so nothing is disclosed here that the avatar strip
+  // directly below it was not already disclosing. The COUNT stays the
+  // server's `count`, which is the count of ALL reactions and can therefore
+  // be larger than the list; "ועוד N" is computed from the same total so it
+  // never contradicts the pill beside it.
+  function reactionSummaryHtml(post) {
+    const pid = post && post.id;
+    if (!pid) return "";
+    const rs = reactionState(pid);
+    const total = Number(rs.count || 0);
+    if (!total) return "";
+    const visible = (rs.list || []).filter((r) => !isBlockedUser(r.id));
+    const mineFirst = rs.mine ? [{ id: state.user && state.user.id, name: "אתם" }] : [];
+    const named = mineFirst.concat(visible.filter((r) => !rs.mine || !state.user || r.id !== state.user.id));
+    const first = named.length ? (named[0].name || "חבר/ה") : "";
+    // Nobody nameable yet (the list is still loading, or every reactor is
+    // someone this viewer may not see): fall back to the plain count rather
+    // than inventing a name or rendering an empty button.
+    const label = !first ? (total === 1 ? "הגבה אחת" : `${total} הגבות`)
+      : total > 1 ? `${first} ועוד ${total - 1}`
+      : first;
+    return `<button class="link-btn reaction-summary" data-community-action="reactors" data-id="${esc(pid)}" aria-haspopup="dialog" aria-label="מי הגיב, ${total}">${esc(label)}</button>`;
+  }
+
+  function openReactors(postId) {
+    if (!postId) return;
+    ensureReactionsLoaded(postId);
+    // Always re-read: a strip loaded ten minutes ago is exactly the list this
+    // sheet must not show as "who reacted" right now.
+    if (state.engagement.reactions[postId]) loadReactionsFor(postId);
+    state.engagement.reactorsFor = postId;
+    rerender();
+  }
+  function closeReactors() { state.engagement.reactorsFor = null; rerender(); }
+
+  function renderReactorsSheet() {
+    const pid = state.engagement.reactorsFor;
+    if (!pid) return "";
+    const rs = reactionState(pid);
+    const rows = (rs.list || []).filter((r) => !isBlockedUser(r.id));
+    const total = Number(rs.count || 0);
+    // THREE STATES, and the third is the honest one this app keeps
+    // insisting on: the list can be SHORTER than the count, because a
+    // reaction from a member this viewer may not see is still a reaction.
+    // Said in as many words rather than quietly showing a list that does not
+    // add up to the number on the pill.
+    const hidden = Math.max(0, total - rows.length);
+    const body = !rs.loaded && !rows.length
+      ? `<div class="empty">טוען…</div>`
+      : rows.length
+      ? `<div class="log-list">${rows.map((r) => `<div class="log-row" data-reactor-user="${esc(r.id)}">
+          <button class="link-btn" data-community-action="view-profile" data-id="${esc(r.id)}" style="padding:0;display:flex;gap:10px;align-items:center;color:inherit;text-align:right;">
+            ${avatarHtml(r.name || "חבר/ה", 32, r.avatar_url)}
+            <span style="font-weight:700;">${esc(r.name || "חבר/ה")}</span>
+          </button>
+        </div>`).join("")}</div>${hidden ? `<div class="footer-note" style="margin-top:8px;">${esc("ועוד " + hidden + " שאי אפשר להציג כאן")}</div>` : ""}`
+      : `<div class="empty">אין עדיין תגובות עידוד</div>`;
+    return `<div class="modal-overlay open" role="dialog" aria-modal="true" aria-labelledby="reactorsTitle" data-cloud-dialog="reactors" style="align-items:flex-end;padding:0;">
+      <div class="modal-sheet" style="border-radius:20px 20px 0 0;max-height:70vh;overflow:auto;width:100%;">
+        <div style="padding:18px 18px calc(env(safe-area-inset-bottom,0px) + 16px);">
+          <div class="flex" style="justify-content:space-between;align-items:center;margin-bottom:12px;">
+            <h2 id="reactorsTitle" style="margin-top:0;font-weight:800;font-size:16px;margin-bottom:0;">מי הגיב</h2>
+            <button class="chip-btn" data-community-action="reactors-close" aria-label="סגירה">✕</button>
+          </div>
+          ${body}
+        </div>
+      </div>
+    </div>`;
+  }
   // COMM-124. Text carries the meaning, not colour alone.
   function coachBadgeHtml(role) {
     const label = role === "head_coach" ? "מאמן/ת ראשי/ת" : role === "coach" ? "מאמן/ת" : "";
@@ -602,11 +687,73 @@
         ${mentionPickerHtml(key)}
       </form>`;
   }
+  // COMMENTS ARE NO LONGER BEHIND A TAP. The two latest sit under every card
+  // with their time and a reply link, and the "הוספת תגובה…" box is always
+  // there - the closed state used to be a bare reaction strip and a 💬 count,
+  // so the club's conversation was invisible from the feed and the only way
+  // to find out whether a post had one was to open it.
+  const COMMENT_PREVIEW_COUNT = 2;
+
+  // The preview's own loader gate, and it is deliberately the SAME shape
+  // reactionStripHtml() has used since COMM-120: fetch for a card that says
+  // it has something, never for one that says it has nothing. comment_count
+  // comes down with the feed row, so a page of twenty posts asks only for the
+  // threads that actually exist, and a post with no comments costs no query
+  // at all - the common case on this feed. ensureCommentsLoaded() is itself
+  // idempotent (it returns early once the map has an entry), so this runs on
+  // every render and fetches once.
+  function ensureCommentPreviewLoaded(post) {
+    const pid = post && post.id;
+    if (!pid) return;
+    if (Number(post.comment_count || 0) <= 0) return;
+    ensureCommentsLoaded(pid);
+  }
+
+  // The two latest top-level comments, newest LAST so the card reads in the
+  // same order an open thread does. Replies are not previewed: a reply lives
+  // under its parent and a preview that hoisted one would show an answer with
+  // no question. The reply link opens the same two-level composer the open
+  // thread uses - there is no second reply path here.
+  function commentPreviewHtml(post) {
+    const pid = post.id;
+    const all = state.engagement.comments[pid] || [];
+    const visible = all.filter((c) => !c.parent_comment_id
+      && !isBlockedUser(c.author_id)
+      && !c.deleted_at
+      && (!c.status || c.status === "active"));
+    const sorted = visible.slice().sort((a, b) => (a.created_at > b.created_at ? 1 : a.created_at < b.created_at ? -1 : 0));
+    const latest = sorted.slice(-COMMENT_PREVIEW_COUNT);
+    const hiddenCount = Number(post.comment_count || 0) - latest.length;
+    const more = hiddenCount > 0
+      ? `<button class="link-btn comment-more" data-community-action="toggle-comments" data-id="${esc(pid)}">${esc(hiddenCount === 1 ? "עוד תגובה אחת" : "עוד " + hiddenCount + " תגובות")}</button>`
+      : "";
+    // The reply box a preview'd comment's "תגובה" link opens renders here,
+    // indented under the previewed list, so replying never forces the whole
+    // thread open first.
+    const replyOpen = state.engagement.replyTo[pid];
+    const replyBox = replyOpen && latest.some((c) => c.id === replyOpen)
+      ? `<div style="margin-inline-start:26px;">${commentComposerHtml(pid, replyOpen)}</div>`
+      : "";
+    return `${more}${latest.length ? `<div class="log-list comment-preview" style="margin-top:6px;">${latest.map((c) => renderCommentBubble(post, c, { reply: false })).join("")}</div>` : ""}${replyBox}`;
+  }
+
   function renderComments(post) {
     const pid = post && post.id;
     if (!pid) return "";
     const strip = reactionStripHtml(post);
-    if (!state.engagement.openComments[pid]) return strip;
+    if (!state.engagement.openComments[pid]) {
+      // The module gate is the composer's, not the strip's: a club with
+      // comments turned off still has reactions, and postActionsHtml()
+      // already drops the 💬 button in that state.
+      if (!isModuleEnabled("comments")) return strip;
+      ensureCommentPreviewLoaded(post);
+      // data-comment-thread distinguishes the two states for anything that
+      // has to tell them apart. It matters now in a way it never did before:
+      // the top-level comment FORM used to exist only while the thread was
+      // open, so `[data-comment-post-id]` was itself the "is it open" test -
+      // and the box is on every card now, so that test would always say yes.
+      return `${strip}<div class="comment-preview-wrap" data-comment-thread="preview">${commentPreviewHtml(post)}${commentComposerHtml(pid, null)}</div>`;
+    }
     ensureCommentsLoaded(pid);
 
     const all = state.engagement.comments[pid] || [];
@@ -646,5 +793,5 @@
     const listHtml = (tops.slice().sort(sortByTime).map(nodeFor).join("") + orphanHtml)
       || `<div class="empty" style="padding:6px 0;">התחילו את השיחה</div>`;
 
-    return `${strip}<div style="margin-top:10px;"><div class="log-list">${listHtml}</div>${commentComposerHtml(pid, null)}</div>`;
+    return `${strip}<div data-comment-thread="open" style="margin-top:10px;"><div class="log-list">${listHtml}</div>${commentComposerHtml(pid, null)}</div>`;
   }

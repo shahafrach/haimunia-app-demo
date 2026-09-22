@@ -500,6 +500,32 @@ export function createMockSupabase(seedTables = {}) {
             error: null,
           });
         }
+        // 202609080002's two board reads, served from a `club_wod_board_rows`
+        // fixture in the exact club_wod_board_json shape the migration
+        // documents - the same "serve the fixture, do not re-implement the
+        // function" choice feed_page_rows below makes, and for the same
+        // reason: the interesting behaviour here is the SERVER's (the
+        // visible_to_club / show_workout_results split on each row, the
+        // attached_at ordering, the viewer block) and it is asserted in
+        // pgTAP. What a client test can prove is that the client reads the
+        // shape it is handed, which is all this stands in for.
+        if (name === "club_wod_boards") {
+          // club_wod_boards() with no arguments means TODAY, and it excludes
+          // cancelled sessions - both are properties of the real function
+          // the client depends on, so the stand-in keeps them.
+          const today = new Date().toISOString().slice(0, 10);
+          const from = (args && args.p_from) || today;
+          const to = (args && args.p_to) || from;
+          const data = rows("club_wod_board_rows")
+            .filter((b) => b && !b.cancelled_at && String(b.session_date) >= String(from) && String(b.session_date) <= String(to));
+          return Promise.resolve({ data, error: null });
+        }
+        if (name === "club_wod_board") {
+          const b = rows("club_wod_board_rows").find((x) => x && x.session_id === (args && args.p_session_id));
+          // The real function raises 'session not found' rather than
+          // returning null for an unknown id.
+          return Promise.resolve(b ? { data: b, error: null } : { data: null, error: { message: "session not found" } });
+        }
         if (name === "feed_page") {
           const all = rows("feed_page_rows").length ? rows("feed_page_rows") : rows("community_feed");
           const scope = (args && args.p_scope) || "for_you";

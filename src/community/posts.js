@@ -221,7 +221,57 @@
     const nameHtml = authorId
       ? `<button class="post-author link-btn" data-community-action="view-profile" data-id="${esc(authorId)}" style="padding:0;font:inherit;color:inherit;font-weight:800;">${nameInner}</button>`
       : `<div class="post-author">${nameInner}</div>`;
-    return `<div class="post-head">${avatar}<div class="post-head-text">${nameHtml}<div class="post-time">${esc(relativeTime(postTimestamp(post)))}${opts.badge ? ` · ${esc(opts.badge)}` : ""}</div></div>${opts.hideMenu ? "" : postMenuHtml(post)}</div>`;
+    return `<div class="post-head">${avatar}<div class="post-head-text">${nameHtml}<div class="post-time">${esc(relativeTime(postTimestamp(post)))}${postTypeTagHtml(post, opts)}</div></div>${opts.hideMenu ? "" : postMenuHtml(post)}</div>`;
+  }
+
+  // ONE CARD, and this is the part of it a member reads first: who, when, and
+  // what KIND of thing this is. Every type gets a label - a small tag on the
+  // time line, not a `· word` glued to the timestamp, which is how it used to
+  // read and which made "הודעת מועדון" look like part of the date.
+  //
+  // opts.badge still wins where a renderer already had a better word for its
+  // own card than the generic type name (the announcement card's
+  // "הודעת מועדון", the coach card's "מאמן/ת"), so no existing label text
+  // changes - only where it is drawn and that the eleven types that never had
+  // one now do too.
+  const POST_TYPE_LABELS = {
+    POST_TEXT: "",
+    POST_PHOTO: "תמונה",
+    POST_WORKOUT: "אימון",
+    POST_CLUB_WOD: "אימון המועדון",
+    POST_PR: "שיא אישי",
+    POST_ACHIEVEMENT: "הישג",
+    POST_ATTENDANCE_MILESTONE: "אבן דרך",
+    POST_CHALLENGE: "אתגר",
+    POST_EVENT: "אירוע",
+    POST_ANNOUNCEMENT: "הודעת מועדון",
+    POST_NEW_MEMBER: "חבר/ה חדש/ה",
+    POST_COACH: "מאמן/ת",
+    POST_SYSTEM: "מהמועדון",
+  };
+  function postTypeLabel(post, opts) {
+    if (opts && opts.badge) return opts.badge;
+    return POST_TYPE_LABELS[(post && post.post_type) || ""] || "";
+  }
+  function postTypeTagHtml(post, opts) {
+    const label = postTypeLabel(post, opts);
+    // A plain post with nothing structured in it is not a "kind" of anything,
+    // so POST_TEXT deliberately maps to "" and renders no tag at all rather
+    // than a tag reading "פוסט" on nine cards out of ten.
+    return label ? ` <span class="post-type-tag">${esc(label)}</span>` : "";
+  }
+
+  // ONE BODY ORDER, for every type: media first when there is any, then the
+  // member's own words, then whatever structured result the type adds.
+  //
+  // Before this, each of the fourteen renderers chose its own order - the
+  // text card put the caption above the photo, the photo card put it below,
+  // the workout card put the result above both and the PR card put the media
+  // last - so two cards carrying the same three things read as two different
+  // layouts while scrolling past them. `result` is the only thing a renderer
+  // still decides, and it is always last.
+  function postCardBody(post, result) {
+    return postMediaHtml(post) + postBodyHtml(post) + (result || "");
   }
 
   function postMenuHtml(post) {
@@ -260,13 +310,28 @@
     </div>`;
   }
 
+  // The reaction mark. The feed's one reaction is a cheer for a session
+  // somebody logged, so it is drawn as the thing they logged it with rather
+  // than as a flame emoji - the same dumbbell ICONS.dumbbell (app.js) draws
+  // on every empty chart in the app, re-cut here at pill size and on
+  // `currentColor` so it takes the pill's own colour in both themes instead
+  // of carrying a hardcoded stroke.
+  const DUMBBELL_ICON = '<svg class="reaction-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M4 9v6M20 9v6M2 10v4M22 10v4M7 12h10"/></svg>';
+
   function postActionsHtml(post, opts) {
     opts = opts || {};
     const id = esc(post && post.id);
     const reactions = Number((post && (post.reaction_count != null ? post.reaction_count : post.cheer_count)) || 0);
     const comments = Number((post && post.comment_count) || 0);
+    const mine = !!(state.engagement.reactions[post && post.id] && state.engagement.reactions[post && post.id].mine);
+    // ONE REACTION PER MEMBER, unchanged: this is still toggle_reaction on
+    // the same `cheer` kind, and the pill is pressed or not pressed. What is
+    // new is that it SAYS which, through aria-pressed and a filled state,
+    // instead of leaving a member to compare a number against the one they
+    // remember seeing.
     return `<div class="chip-row post-actions">
-      <button class="chip-btn" data-community-action="cheer" data-id="${id}" aria-label="עידוד, ${reactions} עידודים">🔥 ${reactions}</button>
+      <button class="chip-btn reaction-pill${mine ? " is-mine" : ""}" data-community-action="cheer" data-id="${id}" aria-pressed="${mine ? "true" : "false"}" aria-label="עידוד, ${reactions} עידודים">${DUMBBELL_ICON}<span class="reaction-count">${reactions}</span></button>
+      ${typeof reactionSummaryHtml === "function" ? reactionSummaryHtml(post) : ""}
       ${isModuleEnabled("comments") ? `<button class="chip-btn" data-community-action="toggle-comments" data-id="${id}" aria-label="תגובות, ${comments}">💬 ${comments}</button>` : ""}
       ${opts.extra || ""}
     </div>`;
@@ -336,8 +401,12 @@
     </article>`;
   }
 
-  function renderTextPostCard(post) { return postCardShell(post, postBodyHtml(post) + postMediaHtml(post)); }
-  function renderPhotoPostCard(post) { return postCardShell(post, postMediaHtml(post) + postBodyHtml(post)); }
+  // Both of these used to be the whole difference between two "types": the
+  // text card printed the caption first, the photo card printed it second.
+  // postCardBody() settles it for all fourteen, so the two are now the same
+  // card and differ only in the type tag their head carries.
+  function renderTextPostCard(post) { return postCardShell(post, postCardBody(post)); }
+  function renderPhotoPostCard(post) { return postCardShell(post, postCardBody(post)); }
 
   function renderWorkoutPostCard(post) {
     const m = post.metadata || {};
@@ -361,10 +430,11 @@
       ${when ? `<div style="color:var(--steel);font-size:12px;">${esc(shortHebDate(when))}</div>` : ""}
       ${result ? `<div class="mono post-result">${esc(result)}</div>` : ""}
       ${metaParts.length ? `<div style="color:var(--steel);font-size:12px;">${metaParts.join(" · ")}</div>` : ""}`;
-    const caption = post.body ? `<div class="post-body" style="white-space:pre-wrap;margin-top:6px;">${bidiText(String(post.body).slice(0, POST_BODY_MAX))}</div>` : "";
     const src = m.source_id || post.source_id || post.source_record_id;
     const extra = src ? `<button class="chip-btn" data-community-action="open-source" data-source-type="${esc(m.source_type || post.source_type || "workout")}" data-source-id="${esc(src)}">פתיחת האימון</button>` : "";
-    return postCardShell(post, detail + caption + postMediaHtml(post), { extra });
+    // `detail` is this type's RESULT BLOCK and so goes last, after the photo
+    // and after whatever the member wrote about it.
+    return postCardShell(post, postCardBody(post, `<div class="post-result-block">${detail}</div>`), { extra });
   }
 
   function renderPrPostCard(post) {
@@ -376,10 +446,9 @@
       ["שיפור", m.improvement],
       ["תאריך", (m.achieved_on || post.occurred_on) ? String(m.achieved_on || post.occurred_on).slice(0, 10) : ""],
     ].filter((r) => r[1] != null && r[1] !== "");
-    const inner = `<div class="post-title">${bidiText(movement)} <span class="pr-badge badge-tag">PR</span></div>
-      <div class="log-list" style="margin-top:6px;">${rows.map((r) => `<div class="log-row"><span>${esc(r[0])}</span><span class="mono" style="color:var(--brass);">${esc(r[1])}</span></div>`).join("")}</div>
-      ${post.body ? `<div class="post-body" style="white-space:pre-wrap;margin-top:6px;">${bidiText(String(post.body).slice(0, POST_BODY_MAX))}</div>` : ""}`;
-    return postCardShell(post, inner + postMediaHtml(post));
+    const result = `<div class="post-result-block"><div class="post-title">${bidiText(movement)} <span class="pr-badge badge-tag">PR</span></div>
+      <div class="log-list" style="margin-top:6px;">${rows.map((r) => `<div class="log-row"><span>${esc(r[0])}</span><span class="mono" style="color:var(--brass);">${esc(r[1])}</span></div>`).join("")}</div></div>`;
+    return postCardShell(post, postCardBody(post, result));
   }
 
   function renderAchievementPostCard(post) {
@@ -388,13 +457,12 @@
     const icon = m.badge_icon || "🏅";
     const when = m.earned_on || post.occurred_on || "";
     const why = m.explanation || post.result_text || "";
-    const inner = `<div class="flex gap-10" style="align-items:center;">
+    const result = `<div class="post-result-block"><div class="flex gap-10" style="align-items:center;">
         <span aria-hidden="true" style="font-size:26px;">${esc(icon)}</span>
         <div><div class="post-title" style="margin:0;">${bidiText(title)}</div>${when ? `<div style="color:var(--steel);font-size:12px;">${esc(shortHebDate(when))}</div>` : ""}</div>
       </div>
-      ${why ? `<div style="color:var(--steel);font-size:13px;margin-top:6px;">${bidiText(why)}</div>` : ""}
-      ${post.body ? `<div class="post-body" style="white-space:pre-wrap;margin-top:6px;">${bidiText(String(post.body).slice(0, POST_BODY_MAX))}</div>` : ""}`;
-    return postCardShell(post, inner + postMediaHtml(post));
+      ${why ? `<div style="color:var(--steel);font-size:13px;margin-top:6px;">${bidiText(why)}</div>` : ""}</div>`;
+    return postCardShell(post, postCardBody(post, result));
   }
 
   // COMM-101: the renderer exists so the dispatch is total, but attendance
@@ -403,8 +471,8 @@
   function renderAttendanceMilestonePostCard(post) {
     const m = post.metadata || {};
     const label = m.milestone_label || post.title || "אבן דרך בנוכחות";
-    const inner = `<div class="post-title">🎯 ${bidiText(label)}</div>${m.count != null ? `<div class="mono post-result">${esc(m.count)}</div>` : ""}${post.body ? `<div class="post-body" style="white-space:pre-wrap;margin-top:6px;">${bidiText(String(post.body).slice(0, POST_BODY_MAX))}</div>` : ""}`;
-    return postCardShell(post, inner);
+    const result = `<div class="post-result-block"><div class="post-title">🎯 ${bidiText(label)}</div>${m.count != null ? `<div class="mono post-result">${esc(m.count)}</div>` : ""}</div>`;
+    return postCardShell(post, postCardBody(post, result));
   }
 
   // COMM-201/203/207: a real challenge card, not the COMM-101 fallback link
@@ -425,11 +493,10 @@
       rows.push(`<div class="mono post-result" style="color:var(--brass);">${esc(m.my_progress)}${m.target_value != null ? ` / ${esc(m.target_value)}` : ""}</div>`);
       if (pct != null) rows.push(`<div class="progress-track"><div style="width:${pct}%;"></div></div>`);
     }
-    const inner = `<div class="post-title">🏆 ${bidiText(m.challenge_title || post.title || "אתגר")}</div>
+    const result = `<div class="post-result-block"><div class="post-title">🏆 ${bidiText(m.challenge_title || post.title || "אתגר")}</div>
       ${rows.join("")}
-      ${post.body ? `<div class="post-body" style="white-space:pre-wrap;margin-top:4px;">${bidiText(String(post.body).slice(0, POST_BODY_MAX))}</div>` : ""}
-      <div class="chip-row"><button class="chip-btn" data-community-action="open-challenge" data-id="${esc(m.challenge_id || post.source_id || "")}">פתיחת האתגר</button></div>`;
-    return postCardShell(post, inner, { authorless: !postAuthorName(post) });
+      <div class="chip-row"><button class="chip-btn" data-community-action="open-challenge" data-id="${esc(m.challenge_id || post.source_id || "")}">פתיחת האתגר</button></div></div>`;
+    return postCardShell(post, postCardBody(post, result), { authorless: !postAuthorName(post) });
   }
   // COMM-213: upgraded from the COMM-101 fallback link card to a real event
   // card, once the events cluster's own state.events.byId has the live row
@@ -447,19 +514,19 @@
       meta.push(participantsLabel(going));
       if (ev.status === "cancelled") meta.push("בוטל");
       const image = ev.image_url ? `<img src="${esc(ev.image_url)}" alt="" style="width:100%;max-height:160px;object-fit:cover;border-radius:10px;margin-top:6px;"/>` : "";
-      const inner = `<div class="post-title">📅 ${bidiText(ev.title)}</div>
+      // The event image is this card's MEDIA and keeps its place at the top,
+      // ahead of the body, exactly as a post photo does - it is the same
+      // "media first when present" rule, just media the events module owns.
+      const result = `<div class="post-result-block"><div class="post-title">📅 ${bidiText(ev.title)}</div>
         <div style="color:var(--steel);font-size:12px;">${meta.map(bidiText).join(" · ")}</div>
-        ${image}
-        ${post.body ? `<div class="post-body" style="white-space:pre-wrap;margin-top:6px;">${bidiText(String(post.body).slice(0, POST_BODY_MAX))}</div>` : ""}
-        <div class="chip-row"><button class="chip-btn" data-community-action="open-event" data-id="${esc(ev.id)}">פתיחת האירוע</button></div>`;
-      return postCardShell(post, inner, { authorless: !postAuthorName(post) });
+        <div class="chip-row"><button class="chip-btn" data-community-action="open-event" data-id="${esc(ev.id)}">פתיחת האירוע</button></div></div>`;
+      return postCardShell(post, image + postCardBody(post, result), { authorless: !postAuthorName(post) });
     }
     const when = m.starts_at ? String(m.starts_at).slice(0, 16).replace("T", " ") : "";
-    const inner = `<div class="post-title">📅 ${bidiText(m.event_title || post.title || "אירוע")}</div>
+    const result = `<div class="post-result-block"><div class="post-title">📅 ${bidiText(m.event_title || post.title || "אירוע")}</div>
       ${when ? `<div style="color:var(--steel);font-size:12px;">${esc(when)}</div>` : ""}
-      ${post.body ? `<div class="post-body" style="white-space:pre-wrap;margin-top:4px;">${bidiText(String(post.body).slice(0, POST_BODY_MAX))}</div>` : ""}
-      <div class="chip-row"><button class="chip-btn" data-community-action="open-event" data-id="${esc(m.event_id || post.source_id || "")}">פתיחת האירוע</button></div>`;
-    return postCardShell(post, inner, { authorless: !postAuthorName(post) });
+      <div class="chip-row"><button class="chip-btn" data-community-action="open-event" data-id="${esc(m.event_id || post.source_id || "")}">פתיחת האירוע</button></div></div>`;
+    return postCardShell(post, postCardBody(post, result), { authorless: !postAuthorName(post) });
   }
 
   // HOISTED OUT OF feedTab (2026-09-18), byte-for-byte, so the staff desktop
@@ -488,7 +555,7 @@
   function renderAnnouncementPostCard(post) {
     const m = post.metadata || {};
     const title = m.title || post.title || "";
-    const inner = `${title ? `<div class="post-title" style="color:var(--brass);">${bidiText(title)}</div>` : ""}${postBodyHtml(post)}${postMediaHtml(post)}`;
+    const inner = postMediaHtml(post) + `${title ? `<div class="post-title" style="color:var(--brass);">${bidiText(title)}</div>` : ""}` + postBodyHtml(post);
     // data-post-type="POST_ANNOUNCEMENT" (postCardShell, unchanged) is what
     // the card-level tint/border in index.html keys off - markIcon here only
     // replaces the head's own avatar mark, the two together are what makes a
@@ -497,7 +564,7 @@
     return postCardShell(post, inner, { badge: "הודעת מועדון", authorless: !postAuthorName(post), markIcon: "📣" });
   }
   function renderCoachPostCard(post) {
-    return postCardShell(post, postBodyHtml(post) + postMediaHtml(post), { badge: "מאמן/ת" });
+    return postCardShell(post, postCardBody(post), { badge: "מאמן/ת" });
   }
 
   function renderNewMemberPostCard(post) {
@@ -505,16 +572,16 @@
     const memberId = m.member_id || post.author_id || "";
     const memberName = m.member_name || postAuthorName(post) || "חבר/ה חדש/ה";
     const joined = m.joined_on || post.occurred_on || postTimestamp(post);
-    const inner = `<div class="post-title">👋 שמחים שהגעת למועדון</div>
+    const result = `<div class="post-result-block"><div class="post-title">👋 שמחים שהגעת למועדון</div>
       <div class="flex gap-10" style="align-items:center;margin-top:6px;">
         ${/* COMM-318: no avatar_url available here on purpose - post_new_member_on_join's metadata is stamped at redemption time, before the profile row usually even exists, so a photo could never be threaded through without a second live lookup for a rarely-seen card. Initials only, matching the club-logo exception. */ avatarHtml(memberName, 40)}
         <div>
           ${memberId ? `<button class="link-btn" data-community-action="view-profile" data-id="${esc(memberId)}" style="padding:0;font-weight:800;color:inherit;">${esc(memberName)}</button>` : `<div style="font-weight:800;">${esc(memberName)}</div>`}
           ${joined ? `<div style="color:var(--steel);font-size:12px;">${esc(String(joined).slice(0, 10))}</div>` : ""}
         </div>
-      </div>`;
+      </div></div>`;
     const extra = `${memberId ? followButtonHtml(memberId) : ""}<button class="chip-btn" data-community-action="welcome-member" data-id="${esc(post.id)}">ברכה</button>`;
-    return postCardShell(post, inner, { extra, authorless: true, clubName: "המועדון", hideMenu: true });
+    return postCardShell(post, postCardBody(post, result), { extra, authorless: true, clubName: "המועדון", hideMenu: true });
   }
 
   // COMM-107: system notices read as club voice. No profile link, muted, no
@@ -524,7 +591,7 @@
   }
 
   function renderUnknownPostCard(post) {
-    return postCardShell(post, postBodyHtml(post) + postMediaHtml(post), { unknown: true });
+    return postCardShell(post, postCardBody(post), { unknown: true });
   }
   function renderErrorPostCard(post) {
     const authorId = post && post.author_id;
@@ -533,8 +600,14 @@
       ${authorId ? `<div class="chip-row"><button class="chip-btn" data-community-action="view-profile" data-id="${esc(authorId)}">מעבר לפרופיל</button></div>` : ""}
     </article>`;
   }
+  // The loading card. Shaped like the card it stands in for - avatar, name,
+  // time, a media block, two text lines and an action row - so the feed does
+  // not visibly jump when the real rows land on top of it. Every block is
+  // .skeleton-block, which is one token-built rule in index.html (and one
+  // @media (prefers-reduced-motion) guard on its shimmer), not an inline
+  // background repeated six times here.
   function renderPostCardSkeleton() {
-    return `<article class="chart-card post-card" aria-hidden="true"><div class="post-head"><span class="avatar-badge" style="width:36px;height:36px;background:var(--border);"></span><div class="post-head-text"><div class="post-author" style="width:90px;height:12px;background:var(--border);border-radius:6px;"></div><div class="post-time" style="width:60px;height:10px;background:var(--border);border-radius:6px;margin-top:4px;"></div></div></div><div style="height:40px;background:var(--border);border-radius:8px;margin-top:10px;"></div></article>`;
+    return `<article class="chart-card post-card" aria-hidden="true"><div class="post-head"><span class="avatar-badge skeleton-block" style="width:40px;height:40px;border-radius:50%;"></span><div class="post-head-text"><div class="skeleton-block" style="width:110px;height:12px;"></div><div class="skeleton-block" style="width:64px;height:10px;margin-top:6px;"></div></div></div><div class="skeleton-block" style="height:150px;border-radius:12px;margin-top:10px;"></div><div class="skeleton-block" style="height:11px;margin-top:12px;"></div><div class="skeleton-block" style="height:11px;width:70%;margin-top:7px;"></div><div class="skeleton-block" style="height:28px;width:150px;border-radius:999px;margin-top:14px;"></div></article>`;
   }
 
   const POST_CARD_RENDERERS = {
@@ -579,12 +652,31 @@
   window.renderPostCard = renderPostCard;
 
   // ---- Composer (COMM-102, COMM-103) --------------------------------------
-  function openComposer(triggerEl) {
+  // `withPhoto` is the feed composer row's camera button and nothing else: it
+  // opens the SAME composer, through the same state, and then reaches for the
+  // photo control the composer already has. No second upload path, no second
+  // file input - composerAddPhoto/prepareImage/uploadPreparedPhoto are
+  // untouched, which is the whole point of routing the button here rather
+  // than giving the feed row a file input of its own that would have to
+  // re-do EXIF stripping, the failed-tile retry and the alt-text field.
+  function openComposer(triggerEl, withPhoto) {
     state.posts.composerTrigger = triggerEl || null;
     state.posts.composer = { body: "", visibility: "club", photos: [], links: {}, error: "", publishing: false };
     state.posts.openMenu = null;
     rerender();
-    setTimeout(() => { const t = document.querySelector("[data-composer-body]"); if (t && t.focus) t.focus(); }, 0);
+    setTimeout(() => {
+      if (withPhoto) {
+        // The picker, not the textarea: a member who tapped the camera asked
+        // for a photo first. Wrapped because a browser that refuses the
+        // synthetic click (no transient activation left) must still leave a
+        // usable composer open rather than throw on the way out - the
+        // "הוספת תמונה" control is right there either way.
+        const f = document.querySelector("[data-composer-file]");
+        if (f && f.click) { try { f.click(); } catch (e) { /* activation expired; the visible control still works */ } }
+      }
+      const t = document.querySelector("[data-composer-body]");
+      if (t && t.focus) t.focus();
+    }, 0);
   }
   window.openPostComposer = openComposer;
   function closeComposer() {

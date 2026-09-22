@@ -364,5 +364,24 @@ test("subjectSentenceHtml escapes both halves and isolates only the name, and no
     //   is the same fact stated in the other direction: earliest sibling
     //   paints lowest.
     "clubWodBoard",
+    // 17 since the social feed pass added "reactors" - the list behind the
+    // "דנה ועוד 4" summary beside a post's reaction pill. Treated as the
+    // review trigger this pin is meant to be:
+    //
+    //   WHY A DIALOG AND NOT A REUSE. The candidates were askConfirm and an
+    //   inline expansion of the reaction strip already on the card. askConfirm
+    //   is a decision - title, message, confirm, cancel - and this asks for
+    //   none; it is a list of members, each a tap to a profile. An inline
+    //   expansion was the closer call and was rejected on behaviour rather
+    //   than on looks: it would push every card below it down the feed at the
+    //   moment a member taps something, which is the exact thing the new-posts
+    //   pill exists to stop the feed doing.
+    //
+    //   WHY IT IS LAST, beside clubWodBoard and for the identical reason:
+    //   this registry returns the FIRST array match, not the topmost dialog,
+    //   so an entry must be checked before any dialog it can be stacked on.
+    //   Nothing can be covered BY this sheet - it is only ever opened from a
+    //   feed card - while the confirm and term sheets can both cover it.
+    "reactors",
   ], "a dialog was added or removed - say why here and update the pin in community-state-namespaces.test.mjs too");
 });
