@@ -2007,6 +2007,95 @@
   .post-menu{ position:absolute; inset-inline-start:0; top:100%; z-index:30; min-width:150px; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:4px; box-shadow:0 10px 30px rgba(0,0,0,.25); }
   .post-menu-item{ display:block; width:100%; text-align:right; padding:9px 12px; background:none; border:0; color:var(--chalk); font-size:13px; cursor:pointer; }
   .post-menu-item.danger{ color:var(--red-text); }
+
+  /* ===== The social feed pass =========================================
+     EVERY RULE BELOW IS BUILT FROM TOKENS (--surface, --surface2, --border,
+     --steel, --chalk, --brass, --energy, --energy-text, --blue), which is
+     why none of them is repeated in the two dark blocks further down: a
+     colour that is a token themes itself, and a duplicate would be a second
+     place to forget. The only literals here are geometry and alpha.
+     ===================================================================== */
+
+  /* The type tag on the head's time line. Was a `· word` glued onto the
+     timestamp, which read as part of the date. */
+  .post-type-tag{ display:inline-block; vertical-align:baseline; margin-inline-start:6px; padding:1px 7px; border-radius:999px; background:var(--surface2); color:var(--steel); font-size:10px; font-weight:800; letter-spacing:.02em; }
+
+  /* The structured half of a card - a workout's figures, a PR's rows, an
+     event's meta - separated from the member's own words above it by a hair
+     rather than by a box, so a card with one still reads as one card. */
+  .post-result-block{ margin-top:10px; }
+  .post-result-block:first-child{ margin-top:0; }
+
+  /* The reaction pill. Same filled-pill treatment the cheer chip already
+     had, plus a pressed state: one reaction per member, so the button is
+     either pressed or it is not, and aria-pressed says which. */
+  .reaction-pill{ display:inline-flex; align-items:center; gap:6px; background:color-mix(in srgb, var(--energy) 8%, var(--surface)); border-color:color-mix(in srgb, var(--energy) 50%, transparent); color:var(--energy-text); font-weight:800; }
+  .reaction-pill.is-mine{ background:color-mix(in srgb, var(--energy) 18%, var(--surface)); border-color:var(--energy); }
+  .reaction-pill .reaction-icon{ flex:0 0 auto; }
+  .reaction-pill .reaction-count{ font-variant-numeric:tabular-nums; }
+  /* "דנה ועוד 4" - a name, not a number, and a real button because tapping
+     it opens the list of who. */
+  .reaction-summary{ color:var(--steel); font-size:12px; font-weight:600; padding:0 2px; }
+  .reaction-summary:hover{ color:var(--chalk); text-decoration:underline; }
+
+  /* Comments under every card: the two latest, the reply links and the
+     always-present "הוספת תגובה…" box. The hairline is what separates the
+     conversation from the post without adding a second card edge. */
+  .comment-preview-wrap{ margin-top:10px; padding-top:8px; border-top:1px solid var(--border); }
+  .comment-preview .comment-row{ background:var(--surface2); border-color:transparent; }
+  .comment-more{ color:var(--steel); font-size:12px; font-weight:600; }
+
+  /* The composer row: the fake input plus the camera beside it. */
+  .post-composer-row{ display:flex; align-items:center; gap:8px; margin:0 0 10px; }
+  .post-composer-row .post-composer-trigger{ flex:1 1 auto; margin:0; }
+  .composer-photo-btn{ flex:0 0 auto; width:40px; height:40px; border-radius:999px; background:var(--surface); border:1px solid var(--border); color:var(--steel); font-size:17px; line-height:1; box-shadow:var(--shadow-card); display:flex; align-items:center; justify-content:center; }
+
+  /* "התאמנו היום" - the same rows the card used, laid out as faces. Scrolls
+     horizontally rather than wrapping, so six classmates cost one row at any
+     width. RTL: the row is a plain flex and inherits the document direction,
+     so the first face sits at the trailing (right) edge like every other
+     list on this screen. */
+  .classmates-strip{ margin:0 0 12px; }
+  .classmates-strip-row{ display:flex; gap:12px; overflow-x:auto; padding-bottom:4px; }
+  .classmate-cell{ flex:0 0 auto; display:flex; flex-direction:column; align-items:center; gap:5px; width:62px; }
+  .classmate-chip{ display:flex; flex-direction:column; align-items:center; gap:5px; width:100%; background:none; border:0; padding:0; color:inherit; cursor:pointer; }
+  .classmate-chip-name{ font-size:11px; color:var(--steel); max-width:62px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  /* The card's follow control, at strip size. Only the metrics change - the
+     button, its action and follow() behind it are the shared ones. */
+  .classmate-chip-follow .chip-btn{ padding:2px 10px; font-size:10.5px; min-height:0; }
+
+  /* Stacked avatars on the club-WOD roll-up. The negative inline margin is
+     what makes them overlap; :first-child cancels it so the group still
+     starts flush with whatever precedes it. */
+  .stacked-avatars{ display:flex; align-items:center; }
+  .stacked-avatar{ display:inline-flex; margin-inline-start:-8px; border-radius:50%; box-shadow:0 0 0 2px var(--surface); }
+  .stacked-avatar:first-child{ margin-inline-start:0; }
+  .stacked-avatar-more{ width:28px; height:28px; align-items:center; justify-content:center; background:var(--surface2); color:var(--steel); font-size:11px; font-weight:800; }
+  .club-wod-rollup .field-label{ margin-bottom:4px; }
+
+  /* "פוסטים חדשים". Sticky rather than fixed, so it rides the top of the
+     feed panel and never covers the tab bar or the composer. */
+  .new-posts-pill-wrap{ position:sticky; top:8px; z-index:20; display:flex; justify-content:center; pointer-events:none; height:0; }
+  .new-posts-pill{ pointer-events:auto; box-shadow:0 6px 18px rgba(0,0,0,.18); }
+
+  /* Pull to refresh. Height is written by the touchmove handler, never by a
+     render; data-ready flips once the pull passes the trigger distance. */
+  .pull-refresh{ height:0; overflow:hidden; display:flex; align-items:center; justify-content:center; transition:height .18s ease; }
+  .pull-refresh-mark{ width:22px; height:22px; border-radius:50%; border:2px solid var(--border); border-top-color:var(--brass); }
+  .pull-refresh[data-ready="1"] .pull-refresh-mark{ border-color:var(--brass); border-top-color:var(--energy); }
+  @media (prefers-reduced-motion: no-preference){
+    .pull-refresh[data-ready="1"] .pull-refresh-mark{ animation:pullSpin .9s linear infinite; }
+  }
+  @keyframes pullSpin{ to{ transform:rotate(360deg); } }
+
+  /* Skeleton blocks. One rule for all six shapes the loading card uses, and
+     the shimmer is behind a reduced-motion guard like every other animation
+     in this file. */
+  .skeleton-block{ background:var(--border); border-radius:8px; }
+  @media (prefers-reduced-motion: no-preference){
+    .skeleton-block{ background:linear-gradient(90deg, var(--border) 25%, var(--surface2) 50%, var(--border) 75%); background-size:200% 100%; animation:skeletonShimmer 1.4s ease-in-out infinite; }
+  }
+  @keyframes skeletonShimmer{ 0%{ background-position:200% 0; } 100%{ background-position:-200% 0; } }
   .progress-track{ background:var(--border); border-radius:999px; height:6px; overflow:hidden; margin-top:4px; }
   .progress-track > div{ height:100%; background:var(--brass); }
   .notif-group{ border-inline-start:3px solid transparent; }

@@ -54,7 +54,19 @@ test("block, delete-account, and migrate all route through askConfirm with a des
 
 test("deletePost is scoped to the caller's own post, and only the author sees a delete action (report otherwise)", () => {
   assert.match(src, /async function deletePost\(postId\) \{\s*if \(!state\.user\) return;\s*const \{ error \} = await client\.from\("workout_posts"\)\.delete\(\)\.eq\("id", postId\)\.eq\("author_id", state\.user\.id\);/);
-  assert.match(src, /post\.author_id === \(state\.user && state\.user\.id\) \? `<button class="chip-btn" data-community-action="delete-post"/);
+  // The delete control MOVED, and that is the point of this line rather than
+  // a weakening of it. It used to be an inline chip on the legacy (no
+  // post_type) feed card, sitting loose beside the reaction and comment
+  // buttons; the social feed pass put every destructive control on every card
+  // behind the one ⋯ menu, so what is pinned now is that the author - and
+  // only the author - is offered a delete there, and that everyone else is
+  // offered report instead. Same two branches, same two actions, one menu.
+  const menu = src.slice(src.indexOf("function postMenuHtml("), src.indexOf("function postActionsHtml("));
+  assert.match(menu, /if \(own\) \{/, "the menu still branches on whether the post is the caller's own");
+  assert.match(menu, /mi\("post-delete", "מחיקה", post\.id, true\)/, "the author is offered delete, marked destructive");
+  assert.match(menu, /\} else \{[\s\S]*mi\("report", "דיווח", post\.id\)/, "and everyone else is offered report");
+  assert.doesNotMatch(src, /<div class="chip-row post-actions">\s*<button class="chip-btn" data-community-action="delete-post"/,
+    "no card may put a delete chip back into the action row");
   assert.match(src, /askConfirm\(\{ title: "הסרת שיתוף".*action: "delete-post", payload: \{ postId: el\.dataset\.id \} \}\)/);
 });
 

@@ -227,10 +227,29 @@ test("reaching the end shows the caught-up marker and no load more control", asy
 
 // --- COMM-110 frontend states --------------------------------------------
 
-test("an empty feed shows the scope's own empty line, not an error", async () => {
+// An empty DEFAULT feed is a new member's first impression, so it is the one
+// scope that answers with a welcome rather than with a line of grey text -
+// see renderFeedEmptyState() in cloud.js. What this test still pins is the
+// part that never changed: an empty feed is not an error and offers no retry.
+test("an empty default feed shows the welcome card, not an error", async () => {
   const window = await bootCommunity(seeded([]), { syncEnabled: false });
   window.document.getElementById("tabCommunityBtn").click();
-  await waitFor(() => /פעילות המועדון תופיע כאן/.test(window.document.getElementById("content").textContent), 4000);
+  await waitFor(() => !!window.document.querySelector('[data-feed-welcome="ready"]'), 4000);
+  assert.match(window.document.getElementById("content").textContent, /ברוכים הבאים לקהילת המועדון/);
+  assert.equal(window.document.querySelector('[data-community-action="feed-retry"]'), null);
+});
+
+// ...and every OTHER scope still answers with its own empty line. A filter
+// with nothing behind it is not an empty club, and welcoming a member who
+// asked "show me the people I follow" would be answering a question they
+// did not ask.
+test("an empty non-default scope shows that scope's own empty line, not the welcome", async () => {
+  const window = await bootCommunity(seeded([]), { syncEnabled: false });
+  window.document.getElementById("tabCommunityBtn").click();
+  await waitFor(() => !!window.document.querySelector('[data-community-action="feed-scope"][data-scope="following"]'), 4000);
+  window.document.querySelector('[data-community-action="feed-scope"][data-scope="following"]').click();
+  await waitFor(() => /אין עדיין פוסטים ממי שאתם עוקבים אחריו/.test(window.document.getElementById("content").textContent), 4000);
+  assert.equal(window.document.querySelector('[data-feed-welcome="ready"]'), null);
   assert.equal(window.document.querySelector('[data-community-action="feed-retry"]'), null);
 });
 

@@ -295,6 +295,13 @@
       items: [], scope: "for_you", cursor: null, loading: false, error: false,
       loadingMore: false, moreError: false, end: false, pagesLoaded: 0,
       sessionId: null, seen: {}, pending: [],
+      // The ids of posts that have landed over Realtime SINCE this list was
+      // built. `pending` two lines up is the impression queue and is a
+      // different thing entirely - these are the "פוסטים חדשים" pill's count,
+      // and they are ids and nothing else: the raw INSERT row has been
+      // through no ranking and no visibility pass, so it is never rendered.
+      // See noteIncomingPost() in src/community/feed.js.
+      incoming: [],
     },
 
     // ---- posts: composing, own-post controls, sharing (COMM-100..108) ----
@@ -326,6 +333,9 @@
       comments: {}, openComments: {}, commentDrafts: {}, commentErrors: {},
       commentSending: null, commentEdit: null, openReplies: {}, replyTo: {},
       reactions: {}, reactionError: null, mentionPicker: null,
+      // The post id whose "who reacted" sheet is open, or null. A dialog, so
+      // it starts closed and lives in CLOUD_DIALOGS like every other one.
+      reactorsFor: null,
     },
 
     // ---- members: search results, directory, follow/block, profiles ----
@@ -390,9 +400,12 @@
     // ---- club: the box itself and its club-wide surfaces ----
     // `row` is the caller's own club record. features/featuresLoaded is the
     // club_features module map; moduleBusy (COMM-321) is which module_key (if
-    // any) has an in-flight toggle write.
+    // any) has an in-flight toggle write, and configBusy (202609220002) the
+    // same for a threshold save. Two fields rather than one because the two
+    // writes disable different things: a toggle in flight greys every switch
+    // on the panel, a threshold save greys only its own module's fields.
     club: {
-      row: null, features: {}, featuresLoaded: false, moduleBusy: null,
+      row: null, features: {}, featuresLoaded: false, moduleBusy: null, configBusy: null,
       announcements: [], announcementSaving: false, streaks: [],
       inactiveMembers: [], newMembers: [], activitySignal: null,
       weeklyChallenge: null, weeklyLeaderboard: [],
@@ -431,6 +444,12 @@
       // The open board dialog: { sessionId, board, loading, error, busy,
       // errorText }. null - a dialog starts closed (CLOUD_DIALOGS).
       wodBoardView: null,
+      // Boards fetched BY THE FEED, keyed by session id. Deliberately not
+      // folded into wodBoards above: that list is TODAY (it is what app.js's
+      // attach control reads), and a feed card for last Thursday needs its
+      // board without that board joining today's strip. See
+      // ensureClubWodBoardLoaded() in src/community/club.js.
+      wodBoardsById: {},
       // The staff publish form's draft, always present (it is a panel, not a
       // dialog): { wodId, date, note, saving }.
       wodSessionForm: { wodId: "", date: "", note: "", saving: false },
@@ -710,6 +729,13 @@
       view: null, form: null,
       _rtId: null,
       _consistencyWeekLogged: {}, _consistencySessionCounts: {},
+      // 202609220002. The caller's own onboarding challenge, exactly as
+      // onboarding_challenge_state() returns it - {state, goal_sessions,
+      // window_days, progress, days_left, ...}. `state` is deliberately null
+      // rather than "none" until the first read: "we have not asked" and "we
+      // asked and they are not eligible" render differently, and defaulting
+      // to the second would flash a decision at a member we had not made yet.
+      onboarding: { data: null, loading: false, loaded: false, error: false, busy: false },
     },
 
     // ---- events (COMM-213..217) ----
@@ -891,6 +917,13 @@
       // all three actions on one row share it, so a row disables itself
       // entirely rather than only the one control that was tapped.
       engage: { items: [], loading: false, loaded: false, error: false, profiles: {}, reachedOut: {}, busy: null },
+      // 202609220002. coach_tasks_refresh() rows exactly as returned, already
+      // ordered as a work queue (overdue first) - never re-sorted here, the
+      // same rule celebrate.items follows. busy holds the id of whichever
+      // task has a close or a contact in flight. contactDrafts is the
+      // optional note beside each task, keyed by MEMBER id rather than task
+      // id, because one note is one contact even when it closes four tasks.
+      tasks: { items: [], loading: false, loaded: false, error: false, busy: null, contactDrafts: {} },
       // COMM-315. Coach Dashboard's own recognition section: Member of the
       // Week, one rotating category a week (consistency streak -> most PRs ->
       // challenge completion -> coach's pick, member_of_week_category() -
@@ -1174,7 +1207,22 @@
     // Hebrew sentence matters far more for a switch whose feature nobody
     // has seen than for "אירועים", and clubModuleRow() renders it only when
     // a row carries one, so no existing row changed.
-    { key: "onboarding_challenge", label: "אתגר כניסה לחבר/ה חדש/ה", desc: "אתגר ראשון קצר שמוצע אוטומטית למי שהצטרף/ה זה עתה למועדון.", clientOnly: true, planned: true },
+    // BUILT 2026-09-22 (202609220002). planned came off with the feature, and
+    // so did clientOnly: onboarding_challenge_state()/_respond() refuse while
+    // the key is off, and onboarding_challenge_offers' own SELECT policy
+    // carries club_feature_enabled('onboarding_challenge'). That is a real
+    // server gate, so the panel may say so.
+    //
+    // The description no longer says "אוטומטית". It is offered automatically
+    // and ACCEPTED deliberately, and the distinction is the whole feature -
+    // an admin reading this row must not switch on something they think
+    // enrolls their members.
+    { key: "onboarding_challenge", label: "אתגר כניסה לחבר/ה חדש/ה", desc: "אתגר קצר שמוצע לכל מי שהצטרף/ה זה עתה, ומתחיל רק אם בחרו לקבל אותו.",
+      settings: [
+        { id: "goal_sessions", label: "מספר אימונים ליעד", def: 8, min: 1, max: 60 },
+        { id: "window_days", label: "אורך האתגר בימים", def: 30, min: 1, max: 365 },
+        { id: "offer_within_days", label: "עד כמה ימים מההצטרפות מציעים", def: 30, min: 1, max: 365 },
+      ] },
     // planned: true came off with the feature (2026-09-22), the same handover
     // 202609190002 set up and strength_percentages below went through first:
     // the marker comes off in the commit that adds the gate. The benchmark
@@ -1215,7 +1263,21 @@
     // The coach-side three of 202609190002's seven. See the block in
     // CLUB_MODULE_TOGGLES above for what planned/clientOnly mean here and
     // why the keys exist before the features do.
-    { key: "coach_tasks", label: "משימות למאמן/ת", desc: "רשימת משימות שהמאמן/ת עובר/ת עליהן - לברך, לקלוט או לחזור אל מי שנעלם/ה.", clientOnly: true, planned: true },
+    // BUILT 2026-09-22 (202609220002). Both markers come off: coach_tasks'
+    // own SELECT and UPDATE policies carry club_feature_enabled('coach_tasks'),
+    // so switching it off stops a coach reading a task even with a hand-made
+    // request - which is what "נאכף בשרת" means and what clientOnly would
+    // have denied.
+    { key: "coach_tasks", label: "משימות למאמן/ת", desc: "רשימת משימות שהמאמן/ת עובר/ת עליהן - לברך, לקלוט או לחזור אל מי שנעלם/ה.",
+      settings: [
+        { id: "welcome_by_day", label: "ברכה עד יום", def: 7, min: 1, max: 180 },
+        { id: "first_class_followup_days", label: "מעקב אחרי אימון ראשון (ימים)", def: 3, min: 0, max: 60 },
+        { id: "low_attendance_window_days", label: "חלון בדיקת נוכחות (ימים)", def: 21, min: 1, max: 180 },
+        { id: "low_attendance_min_sessions", label: "מינימום אימונים בחלון", def: 2, min: 1, max: 30 },
+        { id: "checkin_day", label: "שיחת מעקב ביום", def: 60, min: 1, max: 365 },
+        { id: "no_contact_days", label: "התראה אחרי ימים ללא קשר", def: 30, min: 1, max: 365 },
+        { id: "onboarding_window_days", label: "חלון קליטה (ימים)", def: 90, min: 1, max: 730 },
+      ] },
     { key: "owner_report", label: "דוח לבעלי המועדון", desc: "סיכום תקופתי על פעילות המועדון למי שמנהל/ת אותו.", clientOnly: true, planned: true },
     { key: "arbox_attendance", label: "נוכחות מ-Arbox", desc: "משיכת נוכחות בשיעורים מ-Arbox במקום הסתמכות על דיווח עצמי בלבד.", clientOnly: true, planned: true },
   ];
@@ -2011,7 +2073,12 @@
   // kept pointing at the old name - and the only thing that noticed was a
   // pre-launch read-through. One constant, plus a test that the card's
   // sentence contains it, is what keeps them honest.
-  const POST_COMPOSER_PLACEHOLDER = "מה קורה היום?";
+  // "מה עשית היום?" rather than "מה קורה היום?", and that is the whole of
+  // this change: a training club's feed asks what you just did, not what the
+  // news is. The constant above is why it only had to be changed here - the
+  // welcome step and the empty-feed card both quote it rather than repeating
+  // the string, so both moved with it.
+  const POST_COMPOSER_PLACEHOLDER = "מה עשית היום?";
   // WHAT TO DO WHEN THE PASSWORD IS GONE. Pre-launch review, 2026-09-15.
   //
   // This screen offered a username, a password and a button, and nothing else
@@ -3634,6 +3701,20 @@
     if (!realtimeChannelOpen("feed-reactions")) {
       window.HaimuniaRealtime.subscribe("feed-reactions", { table: "reactions", event: "*" }, onFeedReactionRealtime);
     }
+    // The third channel, and the one that does the LEAST: it counts, it never
+    // renders. A workout_posts INSERT on the wire has been through none of
+    // feed_page's ranking, diversity or visibility work, so the row itself is
+    // not something this client may draw - what it is good for is knowing
+    // that the list on screen is now behind, which is exactly what the
+    // "פוסטים חדשים" pill says. Same INSERT-only shape as feed-comments.
+    if (!realtimeChannelOpen("feed-posts")) {
+      window.HaimuniaRealtime.subscribe("feed-posts", { table: "workout_posts", event: "INSERT" }, onFeedPostRealtime);
+    }
+  }
+  function onFeedPostRealtime(payload) {
+    const rec = payload && (payload.new || payload.record);
+    if (!rec || !rec.id) return;
+    noteIncomingPost(rec.id, rec.author_id);
   }
   // A postgres_changes payload carries `new` on INSERT/UPDATE and `old` on
   // DELETE; a reaction removal is a DELETE, so both are read here.
@@ -3717,6 +3798,11 @@
     // can ever be under it, since the board is only opened from the feed or
     // the club-home strip.
     return renderClubWodBoardOverlay()
+      // The "who reacted" sheet, right after the board for the same reason:
+      // it is opened FROM a feed card and from a card inside the board, and
+      // nothing can stack on top of it except the confirm and term sheets,
+      // which render further down.
+      + renderReactorsSheet()
       + renderPostComposer() + renderPrSharePrompt() + renderWorkoutSharePrompt() + renderAchievementUnlockCelebration() + renderCommunityProfileOverlay() + renderNotificationCenter()
       + renderReportSheet() + renderModActionSheet() + renderGhostReclaimSheet() + renderModContextOverlay() + renderChallengeViewOverlay() + renderEventViewOverlay() + renderRecapViewOverlay()
       // Third-to-last, for the same DOM-order/z-order reason as the two
@@ -4100,6 +4186,54 @@
     // Progress) via renderShareControl(), collapsed to a single icon
     // until tapped.
 
+    // ---- An empty feed is a first impression, not an error state ----------
+    //
+    // A member who joined this morning used to be met by one grey line
+    // ("עדיין אין כאן פעילות") on the busiest screen in the app, which reads
+    // as a club with nobody in it. It is replaced by the two things that are
+    // actually true and actually useful on day one: what this screen is for,
+    // with the composer prompt quoted from POST_COMPOSER_PLACEHOLDER so the
+    // instruction and the button can never drift apart, and WHO IS HERE.
+    //
+    // "Most active" is community_streaks(), which is already loaded at boot
+    // for the Boards tab (loadStreaks, src/community/boards.js) and already
+    // filtered to current_streak > 0 - so this adds no read, no RPC and no
+    // new disclosure: it is the same ranked list the consistency board has
+    // always shown, cut to five. blockFilteredList is not used because
+    // community_streaks() is server-filtered the same way the board's own
+    // rows are; the rows here are the rows that surface already renders.
+    //
+    // THE SECOND HALF IS OMITTED RATHER THAN EMPTIED when there are no
+    // streaks - a brand-new club has none, and "החברים הפעילים ביותר"
+    // followed by nothing is worse than the welcome card alone.
+    const ACTIVE_MEMBERS_SHOWN = 5;
+    function renderFeedEmptyState() {
+      const scopeEmpty = feedScopeDef(state.feed.scope).empty || "פעילות המועדון תופיע כאן.";
+      // Only the default scope gets the welcome. "אין עדיין פוסטים ממי
+      // שאתם עוקבים אחריו" is a filter with nothing in it, not an empty
+      // club, and answering it with a welcome card would be answering a
+      // question the member did not ask.
+      if (state.feed.scope !== "for_you") {
+        return emptyStateHtml({ key: "feed-empty", icon: "people", headline: "עדיין אין כאן פעילות", body: scopeEmpty });
+      }
+      const active = (state.club.streaks || []).slice(0, ACTIVE_MEMBERS_SHOWN);
+      const activeHtml = active.length ? `<div class="chart-card" data-feed-active-members="ready" style="margin-top:10px;">
+        <h3 class="field-label" style="margin:0 0 8px;">החברים הפעילים במועדון</h3>
+        <div class="log-list">${active.map((m) => `<div class="log-row">
+          <button class="link-btn" data-community-action="view-profile" data-id="${esc(m.user_id || "")}" style="padding:0;display:flex;gap:10px;align-items:center;color:inherit;text-align:right;">
+            ${/* community_streaks returns user_id, handle, display_name, current_streak and last_activity_on - and no avatar_url, so this is initials by data shape, not by choice. */ avatarHtml(m.display_name || m.handle, 32)}
+            <span style="font-weight:700;">${nameHtml(m.display_name, m.handle)}</span>
+          </button>
+          <span class="mono" style="color:var(--brass);">${esc(Number(m.current_streak) === 1 ? "יום רצוף" : Number(m.current_streak) + " ימים ברצף")}</span>
+        </div>`).join("")}</div>
+      </div>` : "";
+      return `<div class="chart-card" data-feed-welcome="ready">
+        <div class="post-title" style="margin-bottom:4px;">👋 ברוכים הבאים לקהילת המועדון</div>
+        <div style="color:var(--steel);font-size:13px;line-height:1.6;">${esc("כאן רואים מה חברי המועדון עושים, מגיבים ומעודדים. השורה „" + POST_COMPOSER_PLACEHOLDER + "\u201d בראש הפיד פותחת את השיתוף הראשון שלכם.")}</div>
+        <div class="chip-row" style="margin-top:12px;"><button class="chip-btn primary" data-community-action="open-composer">כתיבת הפוסט הראשון</button></div>
+      </div>${activeHtml}`;
+    }
+
     // COMM-115. The club strip: mark, name, member count, the active
     // challenge shortcut and the notification bell. Every value comes from
     // club_summary(); a failed read degrades to the compose button alone,
@@ -4153,9 +4287,19 @@
     // list rather than beside that card because it is a post-class moment
     // ("right after logging a session, a member sees who else trained today")
     // and a moment buried under twenty ranked posts is not a moment.
-    // renderClassmatesTodayCard() is the only thing that decides whether it
+    // renderClassmatesTodayStrip() is the only thing that decides whether it
     // exists, so there is no branch here.
-    const classmatesTodayHtml = renderClassmatesTodayCard();
+    //
+    // IT IS NO LONGER A RAIL CARD. It is a strip at the very top of the feed
+    // list (see feedHtml below), which is where the post-class moment it
+    // exists for actually belongs: in the rail it competed for one of the two
+    // above-feed slots against the pinned note and today's programming and
+    // usually lost to both, so the card most worth seeing right after logging
+    // was the one a member had to scroll to. The strip form costs roughly a
+    // quarter of the height, so it needs no slot at all. Every privacy
+    // guarantee is unchanged and is the server's - see the comment block on
+    // renderClassmatesTodayStrip().
+    const classmatesTodayHtml = renderClassmatesTodayStrip();
 
     const clubWodTodayHtml = renderClubWodTodayStrip();
 
@@ -4169,10 +4313,11 @@
     //   3. today's programming - what the box is doing today, the question
     //      most members open the app to answer.
     //   4. the upcoming event - time-sensitive, and useless once it passes.
-    //   5. who else trained today - a post-class moment, valuable but only to
-    //      the member who just logged.
-    //   6. other pinned targets - staff bookkeeping, lowest claim on a member's
+    //   5. other pinned targets - staff bookkeeping, lowest claim on a member's
     //      first screen.
+    // "Who else trained today" WAS fifth here and is no longer in this list at
+    // all: it is now a strip at the top of the feed (classmatesTodayHtml
+    // above), where it costs no slot instead of losing one.
     // Only the first two with content render above the feed; the rest are
     // interleaved a few posts in rather than dropped.
     const clubRail = [
@@ -4180,7 +4325,6 @@
       pinnedHtml,
       clubWodTodayHtml,
       upcomingEventHtml,
-      classmatesTodayHtml,
       renderPinnedStrip(pinnedToday && pinnedToday.id),
     ].filter(Boolean);
     const railAbove = clubRail.slice(0, RAIL_ABOVE_FEED).join("");
@@ -4211,23 +4355,38 @@
     // the reason the live chips each carry role="tab".
     const filterHtml = `<div class="chip-row" id="communityFeedFilters" role="tablist" aria-label="סינון הפיד" style="margin:0 0 10px;">${FEED_SCOPES.map((s) => `<button class="chip-btn${state.feed.scope === s.id ? " selected" : ""}" id="feedScope-${s.id}" data-community-action="feed-scope" data-scope="${s.id}" role="tab" aria-controls="communityFeedPanel" aria-selected="${state.feed.scope === s.id ? "true" : "false"}" tabindex="${state.feed.scope === s.id ? "0" : "-1"}">${esc(s.label)}</button>`).join("")}</div>`;
 
+    // ONE CARD PER CLUB-WOD SESSION. The individual result posts a session
+    // card now carries are dropped from the list here rather than inside
+    // renderPostCard - a renderer that returned "" for some of its inputs
+    // would break the impression observer, which counts CARDS, and would
+    // leave railInterleave() splicing the rail after three entries of which
+    // two might be empty strings. See feedGroupedPostIds() for the match.
+    const groupedIds = feedGroupedPostIds(state.feed.items);
+    const feedItems = state.feed.items.filter((post) => !(post && post.id && groupedIds[post.id]));
     const feed = state.feed.loading && !state.feed.items.length
       ? `<div class="log-list" aria-busy="true">${renderPostCardSkeleton().repeat(3)}</div>`
       : state.feed.error && !state.feed.items.length
       ? `<div class="empty">לא ניתן לטעון את פיד המועדון.<div class="chip-row" style="justify-content:center;"><button class="chip-btn primary" data-community-action="feed-retry">ניסיון חוזר</button></div></div>`
-      : state.feed.items.length ? `<div class="log-list" id="communityFeedList">${railInterleave(state.feed.items.map((post) => post && post.post_type ? renderPostCard(post) : `<article class="chart-card post-card">
-      <div class="post-head">${avatarHtml(post.display_name || post.handle, 36, (post.author && post.author.avatar_url) || post.avatar_url)}<div class="post-head-text"><div class="post-author">${nameHtml(post.display_name, post.handle)}</div><div class="post-time">${relativeTime(post.published_at)}</div></div></div>
-      <div class="post-title">${bidiText(post.title)}</div>
-      <div class="mono post-result">${esc(post.result_text)}</div>
+      : feedItems.length ? `<div class="log-list" id="communityFeedList">${railInterleave(feedItems.map((post) => post && post.post_type ? renderPostCard(post) : `<article class="chart-card post-card">
+      ${/* THE TWIN. This is the pre-COMM-101 card, still reached by a feed row
+            that carries no post_type at all (legacy workout_posts rows), and
+            it is the one card renderPostCard's dispatch never sees. It used
+            to hand-roll its own head, its own 🔥 pill and its own inline
+            delete/report chips - so the ONE change this branch made to the
+            typed cards (media first, one type tag, a dumbbell pill with a
+            summary, everything destructive in the ⋯ menu) would have stopped
+            at exactly this card. It now shares postHeadHtml() and
+            postActionsHtml() with the other fourteen. Only its own two
+            things stay local: the legacy photo_path image (the typed cards
+            read `media`, this row predates it) and the comparison strip,
+            which no typed card has. */""}
+      ${postHeadHtml(post, {})}
       ${post.photo_path && signedCacheGet(photoUrlCache, post.photo_path) ? `<img src="${signedCacheGet(photoUrlCache, post.photo_path)}" alt="" class="post-photo" onerror="window.__haimuniaEvictSignedUrl&&window.__haimuniaEvictSignedUrl('photo',this.dataset.k)" data-k="${esc(post.photo_path)}"/>` : ""}
-      <div class="chip-row post-actions">
-        <button class="chip-btn" data-community-action="cheer" data-id="${esc(post.id)}" aria-label="עידוד, ${Number(post.cheer_count || 0)} עידודים">🔥 ${Number(post.cheer_count || 0)}</button>
-        ${isModuleEnabled("comments") ? `<button class="chip-btn" data-community-action="toggle-comments" data-id="${esc(post.id)}" aria-label="תגובות, ${Number(post.comment_count || 0)}">💬 ${Number(post.comment_count || 0)}</button>` : ""}
-        ${post.comparison_key ? `<button class="chip-btn${state.posts.comparisonForPostId === post.id ? " selected" : ""}" data-community-action="compare" data-key="${esc(post.comparison_key)}" data-id="${esc(post.id)}">השוואה</button>` : ""}
-        ${post.author_id === (state.user && state.user.id) ? `<button class="chip-btn" data-community-action="delete-post" data-id="${esc(post.id)}">הסרה</button>` : `<button class="chip-btn" data-community-action="report" data-id="${esc(post.id)}">דיווח</button>`}
-      </div>
+      <div class="post-result-block"><div class="post-title">${bidiText(post.title)}</div>
+      <div class="mono post-result">${esc(post.result_text)}</div></div>
+      ${postActionsHtml(post, { extra: post.comparison_key ? `<button class="chip-btn${state.posts.comparisonForPostId === post.id ? " selected" : ""}" data-community-action="compare" data-key="${esc(post.comparison_key)}" data-id="${esc(post.id)}">השוואה</button>` : "" })}
       ${state.posts.comparisonForPostId === post.id ? `<div class="log-list" style="margin-top:10px;">${state.posts.comparison.length ? state.posts.comparison.map((item, index) => `<div class="log-row"><span>${index + 1}. ${nameHtml(item.display_name, item.handle)}</span><span class="mono" style="color:var(--brass);">${esc(item.result_text)}</span></div>`).join("") : `<div class="empty">אין עדיין תוצאות להשוואה</div>`}</div>` : ""}
-      ${renderComments(post)}</article>`), railRest)}</div>` : `${emptyStateHtml({ key: "feed-empty", icon: "people", headline: "עדיין אין כאן פעילות", body: feedScopeDef(state.feed.scope).empty || "פעילות המועדון תופיע כאן." })}${railRest.join("")}`;
+      ${renderComments(post)}</article>`), railRest)}</div>` : `${renderFeedEmptyState()}${railRest.join("")}`;
     // COMM-113. The sentinel is what IntersectionObserver watches; the
     // button under it is the same call for keyboard and for anywhere the
     // observer is unavailable. Reaching the end is a quiet marker, never an
@@ -4245,15 +4404,27 @@
     // other identity in this file uses - no new photo-loading path) beside
     // a greyed placeholder that reads like an unfilled text field. Same
     // data-action, so open-composer's own handler is untouched.
-    const composeBtn = `<button class="post-composer-trigger" data-community-action="open-composer">
-      ${avatarHtml(selfDisplayName(), 40, state.profile && state.profile.avatar_url)}
-      <span class="post-composer-trigger-text">${esc(POST_COMPOSER_PLACEHOLDER)}</span>
-    </button>`;
-    // classmatesTodayHtml and upcomingEventHtml are no longer concatenated
-    // here. Both are now rail cards. The event card in particular used to
-    // render AFTER ${feed} - the one time-sensitive item on the screen sat
-    // underneath an infinite list, so a member who kept scrolling passed it
-    // and a member who did not never saw it at all.
+    // THE COMPOSER ROW. The fake-input row plus a camera beside it, which is
+    // the shape every social feed uses and the one this row was half of
+    // already. The camera is NOT a second upload path: it opens the same
+    // composer through the same openComposer(), which then reaches for the
+    // composer's own file input - so prepareImage()'s EXIF stripping, the
+    // per-photo alt-text field, the failed-tile retry and the four-photo cap
+    // are all still the only photo code in the module. It renders only while
+    // the post_photos module is on, matching the composer's own gate.
+    const composeBtn = `<div class="post-composer-row">
+      <button class="post-composer-trigger" data-community-action="open-composer">
+        ${avatarHtml(selfDisplayName(), 40, state.profile && state.profile.avatar_url)}
+        <span class="post-composer-trigger-text">${esc(POST_COMPOSER_PLACEHOLDER)}</span>
+      </button>
+      ${isModuleEnabled("post_photos") ? `<button class="composer-photo-btn" data-community-action="open-composer-photo" aria-label="פוסט עם תמונה"><span aria-hidden="true">📷</span></button>` : ""}
+    </div>`;
+    // upcomingEventHtml is no longer concatenated here - it is a rail card.
+    // It used to render AFTER ${feed}: the one time-sensitive item on the
+    // screen sat underneath an infinite list, so a member who kept scrolling
+    // passed it and a member who did not never saw it at all.
+    // classmatesTodayHtml is not concatenated here either, and is not a rail
+    // card any more: it is the strip inside feedHtml just below.
     // Launch-readiness audit follow-up (COMM-329). The scope chips were
     // already declared role="tab" inside a role="tablist", but there was no
     // element for them to control: the list they swap is rendered under three
@@ -4261,8 +4432,15 @@
     // empty state has no container of its own at all. One stable wrapper is
     // what completes the pattern - a plain block div inside a plain block
     // .ach-section, so nothing about the layout moves.
-    const feedPanel = `<div id="communityFeedPanel" role="tabpanel" aria-labelledby="feedScope-${state.feed.scope}">${feed}${feedMoreHtml}</div>`;
-    const feedHtml = `<div class="ach-section">${sectionHead("var(--blue)", "הפיד שלי")}${composeBtn}${filterHtml}${feedPanel}</div>`;
+    const feedPanel = `<div id="communityFeedPanel" role="tabpanel" aria-labelledby="feedScope-${state.feed.scope}">${renderNewPostsPill()}${feed}${feedMoreHtml}</div>`;
+    // communityPullRefresh is the pull gesture's own indicator and nothing
+    // else: it is a zero-height strip whose height is written directly by the
+    // touchmove handler (src/community/feed.js), never by a render - a feed
+    // rebuilt on every frame of a drag is the one thing this gesture must not
+    // do. communityFeedTop is what the "פוסטים חדשים" pill scrolls back to.
+    const feedHtml = `<div class="ach-section" id="communityFeedTop">
+      <div id="communityPullRefresh" class="pull-refresh" data-ready="0" aria-hidden="true"><span class="pull-refresh-mark"></span></div>
+      ${sectionHead("var(--blue)", "הפיד שלי")}${composeBtn}${classmatesTodayHtml}${filterHtml}${feedPanel}</div>`;
 
     // COMM-155. The pinned strip sits above everything else on the Club home.
     // 202609080002. Directly under the club header and ABOVE the feed list:
@@ -5226,6 +5404,10 @@
     // destination the member navigates TO, when the whole premise of the
     // feature is that it arrives in the feed they are already reading.
     { key: "clubWodBoard", isOpen: () => state.club.wodBoardView, close: function () { closeClubWodBoard(); } },
+    // The "who reacted" list. LAST, beside the board, and for the identical
+    // reason: it is only ever opened from a feed card, so nothing can be
+    // covered BY it, while the confirm and term sheets can both cover it.
+    { key: "reactors", isOpen: () => state.engagement.reactorsFor, close: function () { closeReactors(); } },
   ];
   const cloudDialogOpeners = {};
   let cloudOpenDialogKey = null;
@@ -5528,6 +5710,13 @@
     // feed_leaderboard() call the first time a member lands on the Boards
     // sub-tab, not on every session boot.
     if (state.ui.tab === "boards" && state.user && !state.leaderboard.loaded && !state.leaderboard.loading) loadConsistencyLeaderboard();
+    // 202609220002. The member's own onboarding challenge, fetched the first
+    // time they open the sub-tab its card lives on - the same lazy shape the
+    // leaderboard above uses, and the same reason: a member who never opens
+    // Boards costs the server nothing. onboarding_challenge_state() is the
+    // call that CREATES the offer, so this is also where an eligible new
+    // member is first offered it.
+    if (state.ui.tab === "boards" && state.user && !state.challenges.onboarding.loaded && !state.challenges.onboarding.loading) loadOnboardingChallenge();
     // COMM-231. The directory's own paginated roster, fetched the first time
     // a member lands on the Directory sub-tab.
     if (state.ui.tab === "directory" && state.user && !state.members.directory.loaded && !state.members.directory.loading) loadDirectory(true);
@@ -5566,6 +5755,10 @@
     // too (COMM-226: no code path reaches coach_engagement_flags outside
     // the flag-gated staff surface).
     if (state.ui.tab === "coach" && isStaff()) {
+      // 202609220002. Same lazy shape as the three below it. The module gate
+      // is inside loadCoachTasks() rather than here, so there is one place
+      // that decides whether this feature reads anything.
+      if (!state.coach.tasks.loaded && !state.coach.tasks.loading) loadCoachTasks();
       if (!state.coach.celebrate.loaded && !state.coach.celebrate.loading) loadCoachCelebrate();
       if (!state.coach.welcome.loaded && !state.coach.welcome.loading) loadCoachWelcome();
       if (!state.coach.memberOfWeek.loaded && !state.coach.memberOfWeek.loading) loadCoachMemberOfWeek();
@@ -5596,6 +5789,12 @@
     });
     document.querySelectorAll("[data-coach-contact-note]").forEach((el) => {
       el.addEventListener("input", () => { state.coach.welcome.contactDrafts[el.dataset.coachContactNote] = el.value; });
+    });
+    // 202609220002. The task list's own note field, same no-rerender-on-input
+    // shape and for the same reason. Keyed by MEMBER id, not task id: one
+    // note is one contact even when that contact closes four tasks.
+    document.querySelectorAll("[data-coach-task-note]").forEach((el) => {
+      el.addEventListener("input", () => { state.coach.tasks.contactDrafts[el.dataset.coachTaskNote] = el.value; });
     });
     // COMM-315. Same no-rerender-on-input shape as the two listeners just
     // above. The reason field's live 500-char counter is DOM-patched
@@ -5641,6 +5840,11 @@
     // are no longer in the document.
     observeFeedImpressions();
     observeFeedSentinel();
+    // Pull to refresh. Bound ONCE on document, not per render - see
+    // bindPullToRefresh(); the handlers read state at event time and do
+    // nothing unless the feed is the tab on screen, the page is at the top
+    // and the pointer is coarse.
+    bindPullToRefresh();
     // COMM-170. This hook is the only place cloud.js learns that the
     // Community tab is actually on screen, so the club_tab_viewed event is
     // recorded from here rather than from setCommunityTab - which also
@@ -5808,6 +6012,12 @@
     document.querySelectorAll(".manage-area").forEach((el) => {
       el.addEventListener("toggle", () => { state.admin.openAreas[el.id] = el.open; });
     });
+    // 202609220002. The per-module threshold disclosures, same persistence
+    // and the same store. Without it, saving a value rerenders the panel and
+    // the fields an admin is working in fold shut under them.
+    document.querySelectorAll(".club-module-settings").forEach((el) => {
+      el.addEventListener("toggle", () => { state.admin.openAreas[el.id] = el.open; });
+    });
     // Same persistence, deliberately NOT the .manage-area class - see
     // renderInviteManagement()'s own comment for why this one disclosure
     // keeps its own styling instead of adopting that system's look.
@@ -5944,6 +6154,10 @@
          </button>`
       : "";
     const sections = [
+      // 202609220002, first in the rail. "דורש תשומת לב" is the one place on
+      // this screen allowed to be a to-do list, and this is the only section
+      // in it that literally is one.
+      renderCoachTasksSection(),
       state.featureFlags.coachEngage ? renderCoachEngageSection() : "",
       renderCoachCelebrateSection(),
       renderCoachWelcomeSection(),
@@ -5957,6 +6171,7 @@
   // app.js after it renders the staff home.
   window.staffHomeAfterRender = function () {
     if (!state.user || !isStaff()) return;
+    if (!state.coach.tasks.loaded && !state.coach.tasks.loading) loadCoachTasks();
     if (!state.coach.celebrate.loaded && !state.coach.celebrate.loading) loadCoachCelebrate();
     if (!state.coach.welcome.loaded && !state.coach.welcome.loading) loadCoachWelcome();
     if (state.featureFlags.coachEngage && !state.coach.engage.loaded && !state.coach.engage.loading) loadCoachEngageFlags();
@@ -6280,6 +6495,7 @@
     else if (action === "close-password-reset-result") { state.admin.passwordResetResult = null; rerender(); }
     else if (action === "toggle-share") toggleShare(el.dataset.type, el.dataset.id);
     else if (action === "open-composer") openComposer(el);
+    else if (action === "open-composer-photo") openComposer(el, true);
     else if (action === "composer-cancel") tryCloseComposer();
     else if (action === "composer-publish") publishComposer();
     else if (action === "composer-remove-photo") composerRemovePhoto(el.dataset.id);
@@ -6325,6 +6541,12 @@
     else if (action === "outward-close") closeOutwardShare();
     else if (action === "feed-scope") setFeedScope(el.dataset.scope);
     else if (action === "feed-load-more") loadMoreFeed();
+    // The "פוסטים חדשים" pill: the member asked for the new rows, so the
+    // feed is re-read from the top rather than patched with the raw INSERT
+    // payloads the pill was counting.
+    else if (action === "feed-take-new") takeIncomingPosts();
+    else if (action === "reactors") openReactors(el.dataset.id);
+    else if (action === "reactors-close") closeReactors();
     else if (action === "feed-retry") { state.feed.pagesLoaded = 0; loadFeed().then(rerender); rerender(); }
     // COMM-140..142 notification centre.
     else if (action === "feed-notifications") openNotifCenter();
@@ -6453,6 +6675,15 @@
       const item = state.coach.celebrate.items.find((it) => celebrateItemKey(it) === el.dataset.key);
       if (item) congratulateCelebrateItem(item);
     }
+    // 202609220002 the onboarding challenge. Two taps, and they are the only
+    // two things in the app that can enrol a member in it.
+    else if (action === "save-club-feature-config") saveClubFeatureConfig(el.dataset.key);
+    else if (action === "onboarding-challenge-accept") onboardingChallengeRespond(true);
+    else if (action === "onboarding-challenge-decline") onboardingChallengeRespond(false);
+    // 202609220002 coach tasks.
+    else if (action === "coach-tasks-retry") { state.coach.tasks.loaded = false; loadCoachTasks(); }
+    else if (action === "coach-task-contact") coachTaskContact(el.dataset.id);
+    else if (action === "coach-task-dismiss") coachTaskDismiss(el.dataset.id);
     else if (action === "coach-welcome-retry") loadCoachWelcome();
     else if (action === "coach-welcome-member") coachWelcomeMember(el.dataset.id);
     else if (action === "coach-assign-self") coachAssignCoach(el.dataset.id, state.user && state.user.id);
@@ -6718,6 +6949,7 @@
         state.leaderboard.scope = "club"; state.leaderboard.rows = []; state.leaderboard.loading = false;
         state.leaderboard.loaded = false; state.leaderboard.error = false;
         state.feed.items = [];
+        state.feed.incoming = [];
         // The club WOD board is a signed-in surface: today's boards, the open
         // dialog and the coach's publish draft all go, and app.js is told the
         // list is empty so the attach control in the log form disappears with
@@ -6725,6 +6957,7 @@
         state.club.wodBoards = []; state.club.wodBoardsLoaded = false;
         state.club.wodBoardsLoading = false; state.club.wodBoardsError = false;
         state.club.wodBoardView = null;
+        state.club.wodBoardsById = {};
         state.club.wodSessionForm = { wodId: "", date: "", note: "", saving: false };
         clubWodSessionsToApp();
         state.posts.openShare = {}; state.posts.comparisonForPostId = null; state.posts.comparison = [];
@@ -6740,6 +6973,7 @@
         state.engagement.commentErrors = {}; state.engagement.commentSending = null; state.engagement.commentEdit = null;
         state.engagement.openReplies = {}; state.engagement.replyTo = {}; state.engagement.reactions = {};
         state.engagement.reactionError = null; state.engagement.mentionPicker = null;
+        state.engagement.reactorsFor = null;
         state.members.search = ""; state.members.results = []; state.members.profileView = null; state.members.roles = {};
         state.members.blockedIds = []; state.members.blocksLoaded = false;
         state.members.suggestions = { items: [], loading: false, loaded: false, error: false, busy: {} };
@@ -6747,7 +6981,7 @@
         state.members.classmatesToday = { items: [], loading: false, loaded: false, error: false };
         state.club.streaks = []; state.club.announcements = []; state.club.announcementSaving = false;
         state.club.weeklyChallenge = null; state.club.weeklyLeaderboard = []; state.club.inactiveMembers = [];
-        state.club.newMembers = []; state.club.activitySignal = null; state.club.moduleBusy = null; state.club.features = {}; state.club.featuresLoaded = false;
+        state.club.newMembers = []; state.club.activitySignal = null; state.club.moduleBusy = null; state.club.configBusy = null; state.club.features = {}; state.club.featuresLoaded = false;
         state.admin.reports = []; state.admin.modQueue = []; state.admin.modQueueLoaded = false;
         state.admin.modQueueStatus = "open"; state.admin.modQueueLoading = false; state.admin.modQueueError = false;
         state.admin.modAction = null; state.admin.modContext = null; state.admin.reportSheet = null; state.admin.pins = [];

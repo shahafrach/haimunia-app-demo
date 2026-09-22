@@ -286,20 +286,30 @@ test("COMM-209: an unreachable realtime service leaves the detail on its existin
 
 // ===== COMM-227 comments, reaction counts, notification badge ===========
 
-test("COMM-227: a feed session opens two shared table channels, not one per card", async () => {
+test("COMM-227: a feed session opens three shared table channels, not one per card", async () => {
   const mock = seeded({ feed_page_rows: [feedRow(), feedRow({ id: "p2", body: "פוסט שני" })] });
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openCommunity(window);
-  await waitFor(() => mock.openChannels().includes("feed-reactions"), 4000);
+  await waitFor(() => mock.openChannels().includes("feed-posts"), 4000);
 
   const open = mock.openChannels();
   assert.ok(open.includes("feed-comments"));
   assert.ok(open.includes("feed-reactions"));
-  assert.strictEqual(open.filter((n) => n.startsWith("feed-")).length, 2, "two channels for the whole feed, however many cards are rendered");
+  // THREE since the social feed pass, and the number is what this test is
+  // for: the ceiling is per FEED, not per card, and it moved by exactly one.
+  // feed-posts is a third SHARED table channel on the same terms as the two
+  // above it - one subscription for the whole list, however many cards are
+  // rendered - and it is the cheapest of the three: it only counts, it never
+  // renders, because a raw workout_posts INSERT has been through none of
+  // feed_page's ranking or visibility work and is not a row this client may
+  // draw. What it feeds is the "פוסטים חדשים" pill.
+  assert.ok(open.includes("feed-posts"));
+  assert.strictEqual(open.filter((n) => n.startsWith("feed-")).length, 3, "three channels for the whole feed, however many cards are rendered");
   // Shared channels are unfiltered on purpose: postgres_changes filters
   // are eq-only, so a per-post filter would need one channel per card.
   assert.deepStrictEqual(bindingFor(mock, "feed-comments"), { event: "INSERT", schema: "public", table: "post_comments" });
   assert.deepStrictEqual(bindingFor(mock, "feed-reactions"), { event: "*", schema: "public", table: "reactions" });
+  assert.deepStrictEqual(bindingFor(mock, "feed-posts"), { event: "INSERT", schema: "public", table: "workout_posts" });
   assert.ok(window.HaimuniaRealtime.count() <= window.HaimuniaRealtime.MAX_SUBSCRIPTIONS);
 });
 

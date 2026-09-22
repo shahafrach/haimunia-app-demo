@@ -520,6 +520,55 @@ test("both workout-share callers go through the one write, with the on-conflict 
 });
 
 // ---------------------------------------------------------------------------
+// The card the prompt produces, in the feed the social pass rebuilt
+// ---------------------------------------------------------------------------
+
+test("what the prompt writes is a POST_WORKOUT, and reads as one in the rebuilt card", async () => {
+  // The social-feed pass (#33) gave every type a tag on the time line and one
+  // body order for all fourteen renderers. The prompt's post is not exempt
+  // from either, and it never names post_type - it relies on
+  // default_post_type() (202608280004), the BEFORE INSERT trigger that maps
+  // source_type 'strength_entry'/'wod_entry' to POST_WORKOUT. So this checks
+  // the two halves separately rather than inferring one from the other:
+  // what the client actually wrote, and how a row of that type actually
+  // renders through the real card.
+  const mock = seeded();
+  const window = await bootReady(mock);
+  await logPastTheArrivalCard(window, "Card Deadlift");
+  await logReps(window, 117);
+  await waitFor(() => !!promptEl(window), 3000);
+  promptEl(window).querySelector('[data-community-action="workout-share"]').click();
+  await waitFor(() => sharedPosts(mock).length === 1, 3000);
+
+  const written = sharedPosts(mock)[0];
+  assert.ok(["strength_entry", "wod_entry"].includes(written.source_type),
+    "the trigger keys POST_WORKOUT off source_type, so this is the half the client owns");
+  assert.equal(written.post_type, undefined,
+    "and the client deliberately does not name post_type - pr_share's later upgrade to POST_PR must not be undone by a re-share");
+
+  // The other half: the row the server hands back, drawn by the real card.
+  mock.db.feed_page_rows = [{
+    id: "prompt-post-1", post_type: "POST_WORKOUT", author_id: "u1",
+    author: { display_name: "דנה", handle: "dana" },
+    title: written.title, result_text: written.result_text,
+    occurred_on: written.occurred_on, visibility: "club",
+    created_at: VERIFIED, published_at: VERIFIED,
+    reaction_count: 0, comment_count: 0, media: [],
+    metadata: { source_type: written.source_type, source_id: written.source_record_id },
+  }];
+  window.document.getElementById("tabCommunityBtn").click();
+  await waitFor(() => !!window.document.querySelector('[data-post-id="prompt-post-1"]'), 4000);
+
+  const cardEl = window.document.querySelector('[data-post-id="prompt-post-1"]');
+  assert.equal(cardEl.querySelector(".post-type-tag").textContent, "אימון",
+    "the new head tag, not a `· word` glued to the timestamp");
+  assert.ok(cardEl.querySelector(".post-result-block"), "and the result block the unified body order puts last");
+  assert.match(cardEl.textContent, /117/);
+  assert.ok(cardEl.querySelector('[data-community-action="open-source"]'),
+    "the deep link back into the member's own log still resolves off source_record_id");
+});
+
+// ---------------------------------------------------------------------------
 // The offline outbox
 // ---------------------------------------------------------------------------
 

@@ -62,7 +62,12 @@ async function openFeed(window) {
 }
 async function openComments(window) {
   window.document.querySelector('[data-post-id="p1"] [data-community-action="toggle-comments"]').click();
-  await waitFor(() => !!window.document.querySelector('[data-comment-post-id="p1"]'), 4000);
+  // Waits on the OPEN thread, not on the comment form. The form used to be
+  // proof the thread was open because it only existed then; the feed now
+  // carries an inline "הוספת תגובה…" box on every card, closed or open, so
+  // `[data-comment-post-id]` resolves instantly and this helper would return
+  // before the thread it was asked to open had rendered a single comment.
+  await waitFor(() => !!window.document.querySelector('[data-post-id="p1"] [data-comment-thread="open"]'), 4000);
 }
 function card(window) { return window.document.querySelector('[data-post-id="p1"]'); }
 function fireInput(window, el, value) {

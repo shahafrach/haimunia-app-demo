@@ -966,6 +966,89 @@
       </div>
     </article>`;
   }
+  // ---- The onboarding challenge (202609220002) -----------------------------
+  // The member's own 30 days, offered once and never started without a tap.
+  //
+  // metric_type IS THE HANDLE, not the title and not the id: the container
+  // challenge is matched by it here and named by it in the migration, and a
+  // title is copy that will be rewritten one day.
+  const ONBOARDING_CHALLENGE_METRIC = "onboarding_first_30_days";
+  function isOnboardingContainer(c) { return !!c && c.metric_type === ONBOARDING_CHALLENGE_METRIC; }
+  async function loadOnboardingChallenge() {
+    if (!state.user || !isModuleEnabled("onboarding_challenge") || !isModuleEnabled("challenges")) return;
+    state.challenges.onboarding.loading = true;
+    const { data, error } = await client.rpc("onboarding_challenge_state");
+    state.challenges.onboarding.loading = false;
+    state.challenges.onboarding.loaded = true;
+    state.challenges.onboarding.error = !!error;
+    if (!error) state.challenges.onboarding.data = data || null;
+    rerender();
+  }
+  // THE ONLY WAY A MEMBER IS EVER ENROLLED. There is no other call site, and
+  // the server has no other write path into challenge_participants for this
+  // challenge - see onboarding_challenge_respond()'s comment.
+  async function onboardingChallengeRespond(accept) {
+    const o = state.challenges.onboarding;
+    if (!state.user || o.busy) return;
+    o.busy = true;
+    rerender();
+    const { data, error } = await client.rpc("onboarding_challenge_respond", { p_accept: !!accept });
+    o.busy = false;
+    if (error) { setMessage(failText("לא ניתן היה לבצע את הפעולה. נסו שוב.", error)); return rerender(); }
+    o.data = data || null;
+    setMessage(accept ? "האתגר התחיל. בהצלחה!" : "הבנו, לא הפעם.");
+    rerender();
+  }
+  function renderOnboardingChallengeCard() {
+    if (!isModuleEnabled("onboarding_challenge") || !isModuleEnabled("challenges")) return "";
+    const o = state.challenges.onboarding;
+    const d = o.data;
+    // Nothing at all until we have asked. "we have not asked" and "they are
+    // not eligible" are different facts and only one of them is worth a card.
+    if (!d || d.state === "off" || d.state === "none" || d.state === "declined") return "";
+    const goal = Number(d.goal_sessions) || 0;
+    const days = Number(d.window_days) || 0;
+    const busy = !!o.busy;
+
+    if (d.state === "offered") {
+      return `<div class="chart-card" data-onboarding-challenge="offered" style="margin-bottom:10px;">
+        <div style="font-weight:800;margin-bottom:6px;">אתגר הכניסה שלך</div>
+        <div style="color:var(--steel);font-size:12.5px;line-height:1.7;margin-bottom:10px;">${bidiText(`${goal} אימונים ב-${days} הימים הקרובים. בקצב שלך, בלי תחרות מול אף אחד - ואפשר גם לוותר, זה בסדר גמור.`)}</div>
+        <div class="chip-row">
+          <button class="chip-btn primary" data-community-action="onboarding-challenge-accept"${busy ? " disabled" : ""}>${busy ? "רגע…" : "אני בפנים"}</button>
+          <button class="chip-btn" data-community-action="onboarding-challenge-decline"${busy ? " disabled" : ""}>לא עכשיו</button>
+        </div>
+      </div>`;
+    }
+
+    const progress = Number(d.progress) || 0;
+    const pct = goal > 0 ? Math.min(100, Math.round((progress / goal) * 100)) : 0;
+    if (d.state === "completed") {
+      return `<div class="chart-card" data-onboarding-challenge="completed" style="margin-bottom:10px;">
+        <div style="font-weight:800;margin-bottom:6px;">🎯 אתגר הכניסה הושלם</div>
+        <div style="color:var(--steel);font-size:12.5px;line-height:1.7;">${bidiText(`${progress} מתוך ${goal} אימונים. המדליה כבר אצלך.`)}</div>
+      </div>`;
+    }
+    if (d.state === "expired") {
+      // Not a failure, and it must not read like one. The window closed; the
+      // training did not stop being training.
+      return `<div class="chart-card" data-onboarding-challenge="expired" style="margin-bottom:10px;">
+        <div style="font-weight:800;margin-bottom:6px;">אתגר הכניסה הסתיים</div>
+        <div style="color:var(--steel);font-size:12.5px;line-height:1.7;">${bidiText(`סיימת עם ${progress} מתוך ${goal} אימונים. כל אימון נשאר רשום ביומן.`)}</div>
+      </div>`;
+    }
+    const left = Number(d.days_left);
+    const leftText = !Number.isFinite(left) ? "" : left === 0 ? "היום האחרון" : left === 1 ? "נשאר יום אחד" : `נשארו ${left} ימים`;
+    return `<div class="chart-card" data-onboarding-challenge="accepted" style="margin-bottom:10px;">
+      <div class="flex" style="justify-content:space-between;align-items:baseline;margin-bottom:8px;">
+        <span style="font-weight:800;">אתגר הכניסה שלך</span>
+        <span style="color:var(--steel);font-size:12px;">${esc(leftText)}</span>
+      </div>
+      ${challengeProgressBarHtml(pct)}
+      <div style="color:var(--steel);font-size:12.5px;line-height:1.7;margin-top:8px;">${bidiText(`${progress} מתוך ${goal} אימונים. נספר לבד מכל אימון שנרשם ביומן.`)}</div>
+    </div>`;
+  }
+
   function renderChallengesListSection() {
     // COMM-321. RLS already makes challenges_read return nothing (including
     // a staff creator's own draft, per the migration's own OR-branch gate)
@@ -973,8 +1056,16 @@
     // showing beside an always-empty list.
     if (!isModuleEnabled("challenges")) return "";
     const staff = hasPerm(PERM.CHALLENGE_CREATE);
-    const active = state.challenges.items.filter((c) => c.status === "active" || (staff && c.status === "draft"));
-    const past = state.challenges.items.filter((c) => c.status === "completed" || c.status === "archived");
+    // 202609220002. The onboarding challenge's container never belongs in
+    // this list. A member cannot read it at all (it is a draft, and
+    // challenges_read shows a draft only to its author or to a
+    // community.challenge.create holder), but a COACH can - and a container
+    // rendered as "an unpublished club challenge" beside the real ones is
+    // exactly the confusion the draft status was chosen to avoid. Matched on
+    // metric_type, which the migration owns, rather than on the title.
+    const listable = state.challenges.items.filter((c) => !isOnboardingContainer(c));
+    const active = listable.filter((c) => c.status === "active" || (staff && c.status === "draft"));
+    const past = listable.filter((c) => c.status === "completed" || c.status === "archived");
     const createBtn = staff ? `<button class="chip-btn primary" data-community-action="open-challenge-form" style="margin-bottom:10px;">אתגר חדש</button>` : "";
     const list = (state.challenges.loading && !state.challenges.loaded)
       ? `<div aria-busy="true">${`<div class="chart-card" style="height:64px;background:var(--border);opacity:.35;margin-bottom:10px;"></div>`.repeat(2)}</div>`
@@ -1007,7 +1098,10 @@
           : "כשצוות המועדון יפתח אתגר חדש הוא יופיע כאן, ואפשר יהיה להצטרף אליו בלחיצה.",
       });
     const pastHtml = past.length ? `<div style="margin-top:16px;"><h3 class="field-label" style="margin-bottom:6px;">אתגרים שהסתיימו</h3>${past.map(renderChallengeCard).join("")}</div>` : "";
-    return `<div class="ach-section">${sectionHead("var(--energy)", "אתגרי המועדון")}${createBtn}${state.challenges.form ? renderChallengeForm() : ""}${list}${pastHtml}</div>`;
+    // The member's own onboarding card sits ABOVE the club's challenges and
+    // above the create button: it is the one thing on this screen addressed
+    // to them personally, and it is time-limited.
+    return `<div class="ach-section">${sectionHead("var(--energy)", "אתגרי המועדון")}${renderOnboardingChallengeCard()}${createBtn}${state.challenges.form ? renderChallengeForm() : ""}${list}${pastHtml}</div>`;
   }
 
 

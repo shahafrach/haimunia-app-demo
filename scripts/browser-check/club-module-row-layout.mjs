@@ -42,20 +42,34 @@ function check(label, ok, detail = "") {
 // within-list control for the markers, but they need no fixture row: a key
 // with no club_features row defaults to enabled, which is what they are.
 //
-// SEEDED, not PLANNED, and the rename is the point. Every row here gets the
-// same geometry checks whether or not its feature has shipped - a switch
-// pushed off a 390px screen is a bug either way - but two of the seven are
-// BUILT now (strength_percentages 2026-09-21, benchmarks 2026-09-22) and the
-// marker checks below are the half that has to tell them apart. Calling the
-// whole list PLANNED is how this file came to read a בפיתוח marker off a row
-// that had, correctly, just stopped carrying one.
+// SEEDED, not PLANNED, and the rename is the point. THE GEOMETRY IS MEASURED
+// FOR ALL SEVEN whether or not a feature has shipped - a switch pushed off a
+// 390px screen is a bug either way - but four of the seven are BUILT now
+// (strength_percentages 2026-09-21, benchmarks 2026-09-22, and since
+// 202609220002 coach_tasks and onboarding_challenge), and the marker checks
+// below are the half that has to tell them apart. Calling the whole list
+// PLANNED is how this file came to read a בפיתוח marker off a row that had,
+// correctly, just stopped carrying one.
 const SEEDED = ["onboarding_challenge", "benchmarks", "strength_percentages", "gym_display", "coach_tasks", "owner_report", "arbox_attendance"];
-// The two halves of 202609190002's handover, same split as
-// test/planned-module-switches.test.mjs keeps - a key moves from one to the
-// other in the commit that adds its gate, and both lists are asserted, so the
-// row and the code cannot disagree in either direction.
-const STILL_PLANNED = "onboarding_challenge";
-const ALREADY_BUILT = "benchmarks";
+
+// THE HANDOVER, IN THREE LISTS, same split test/planned-module-switches.test.mjs
+// keeps - a key moves between them in the commit that adds its gate, and all
+// three are asserted, so the row and the code cannot disagree in either
+// direction. The distinction the middle list exists for: shipping a feature
+// always removes בפיתוח, but it only removes בתצוגה בלבד when the gate
+// is a real policy rather than a display hide. Asserting one shape for every
+// built row would force one of these two groups to lie.
+const STILL_PLANNED = ["gym_display", "owner_report", "arbox_attendance"];
+// Built, but the gate is a display hide in app.js over the member's own data:
+// no בפיתוח, and בתצוגה בלבד STAYS.
+const BUILT_CLIENT_ONLY = ["strength_percentages", "benchmarks"];
+// Built with a real RLS clause behind the key (202609220002): no בפיתוח, and
+// the row may claim נאכף בשרת.
+const BUILT_ENFORCED = ["coach_tasks", "onboarding_challenge"];
+// 202609220002. The same two rows now also render a collapsed threshold
+// disclosure BELOW the label - a second block in the same row whose fields
+// must not overflow either.
+const WITH_SETTINGS = BUILT_ENFORCED;
 
 const target = await resolveLocalOnlyTarget();
 console.log(`Target: ${target.url} (local static server, mocked backend)`);
@@ -164,21 +178,67 @@ const readMarker = (key) => page.evaluate((k) => {
   return label.textContent.replace(/\s+/g, " ").trim();
 }, key);
 
-const markerText = await readMarker(STILL_PLANNED);
-check("a planned row states in visible text that it is not built yet", /בפיתוח/.test(markerText), markerText.slice(0, 80));
-check("and that it is not server-enforced", /בתצוגה בלבד/.test(markerText), markerText.slice(0, 80));
+for (const key of STILL_PLANNED) {
+  const markerText = await readMarker(key);
+  check(`${key}: states in visible text that it is not built yet`, /בפיתוח/.test(markerText), markerText.slice(0, 80));
+  check(`${key}: and that it is not server-enforced`, /בתצוגה בלבד/.test(markerText), markerText.slice(0, 80));
+}
 
-// The other half of the handover, and the assertion this file was missing:
-// a key whose feature has shipped must have LOST בפיתוח while keeping
-// בתצוגה בלבד. Without it, reading the marker off a built row was the same
-// check as reading it off a planned one, which is exactly how this scenario
-// failed the day benchmarks shipped - the row was right and the script was
-// pointing at it.
-const builtMarkerText = await readMarker(ALREADY_BUILT);
-check("a row whose feature has shipped no longer says it is in development",
-  !/בפיתוח/.test(builtMarkerText), builtMarkerText.slice(0, 80));
-check("but still says it is a display-only hide, because that has not changed",
-  /בתצוגה בלבד/.test(builtMarkerText) && !/נאכף בשרת/.test(builtMarkerText), builtMarkerText.slice(0, 80));
+// The other half of the handover, and the assertion this file was missing: a
+// key whose feature has shipped must have LOST בפיתוח. Without it, reading
+// the marker off a built row was the same check as reading it off a planned
+// one, which is exactly how this scenario failed the day benchmarks shipped -
+// the row was right and the script was pointing at it.
+//
+// Checked on the real screen and not only in a source test, because it is the
+// screen an admin reads before deciding what to switch on.
+for (const key of BUILT_CLIENT_ONLY) {
+  const text = await readMarker(key);
+  check(`${key}: shipped, so it no longer says it is in development`, !/בפיתוח/.test(text), text.slice(0, 80));
+  check(`${key}: but still says it is a display-only hide, because that has not changed`,
+    /בתצוגה בלבד/.test(text) && !/נאכף בשרת/.test(text), text.slice(0, 80));
+}
+for (const key of BUILT_ENFORCED) {
+  const text = await readMarker(key);
+  check(`${key}: shipped, so it no longer says it is in development`, !/בפיתוח/.test(text), text.slice(0, 80));
+  check(`${key}: and claims the server enforcement it now really has`,
+    /נאכף בשרת/.test(text) && !/בתצוגה בלבד/.test(text), text.slice(0, 80));
+}
+
+// The threshold fields: opened, measured, and still inside the row. A number
+// input is wider than a chip and this is the width where that matters.
+await page.evaluate((keys) => { for (const k of keys) document.getElementById(`clubModuleSettings-${k}`).open = true; }, WITH_SETTINGS);
+const settings = await page.evaluate((keys) => {
+  const vw = document.documentElement.clientWidth;
+  return {
+    vw, docScrollW: document.documentElement.scrollWidth,
+    rows: keys.map((k) => {
+      const d = document.getElementById(`clubModuleSettings-${k}`);
+      const inputs = [...d.querySelectorAll("input[type=number]")].map((i) => {
+        const r = i.getBoundingClientRect();
+        return { left: Math.round(r.left), right: Math.round(r.right), w: Math.round(r.width), h: Math.round(r.height) };
+      });
+      const box = document.querySelector(`[data-club-feature="${k}"]`).getBoundingClientRect();
+      return { key: k, inputs, boxLeft: Math.round(box.left), boxRight: Math.round(box.right) };
+    }),
+  };
+}, WITH_SETTINGS);
+for (const r of settings.rows) {
+  check(`${r.key}: the threshold fields are on screen`, r.inputs.length > 0, `${r.inputs.length} fields`);
+  check(`${r.key}: every threshold field is fully inside the viewport`,
+    r.inputs.every((i) => i.left >= 0 && i.right <= settings.vw),
+    r.inputs.map((i) => `${i.left}..${i.right}`).join(" "));
+  check(`${r.key}: and each is big enough to tap`,
+    r.inputs.every((i) => i.w >= 44 && i.h >= 28),
+    r.inputs.map((i) => `${i.w}×${i.h}`).join(" "));
+  // The switch itself must not have been pushed anywhere by the block that
+  // opened underneath it - the disclosure is a SIBLING of the label, not a
+  // child, precisely so it cannot.
+  check(`${r.key}: the switch is still inside the viewport with the fields open`,
+    r.boxLeft >= 0 && r.boxRight <= settings.vw, `x=${r.boxLeft}..${r.boxRight}`);
+}
+check("no horizontal overflow with every threshold field open",
+  settings.docScrollW <= settings.vw + 1, `scrollWidth=${settings.docScrollW}, clientWidth=${settings.vw}`);
 
 const liveMarkerText = await readMarker("events");
 check("a live, RLS-gated row says so instead", /נאכף בשרת/.test(liveMarkerText) && !/בפיתוח/.test(liveMarkerText), liveMarkerText.slice(0, 80));

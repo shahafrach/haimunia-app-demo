@@ -204,6 +204,16 @@
     // means "not a member", never "not loaded yet".
     if (!state.redemption) { state.feed.items = []; state.feed.error = false; state.feed.loading = false; return; }
     const pages = Math.max(1, state.feed.pagesLoaded || 1);
+    // Whatever the pill was counting is about to be IN the list, or was never
+    // ours to show. Either way it is no longer news, so the count is cleared
+    // by the read itself rather than only by the pill that triggered one -
+    // every other caller of loadFeed (a scope change, a retry, a publish, a
+    // block) is just as much a fresh read.
+    clearIncomingPosts();
+    // A fresh read of the feed is also the retry path for the per-card club
+    // WOD board reads - see resetClubWodBoardAsks() for why those are not
+    // retried on their own.
+    resetClubWodBoardAsks();
     startFeedSession();
     state.ui.loading = true;
     state.feed.loading = true;
@@ -449,6 +459,191 @@
     const out = cards.slice();
     out.splice(Math.min(RAIL_INTERLEAVE_AFTER, out.length), 0, ...rail);
     return out.join("");
+  }
+
+  // ---- One card per club-WOD session ---------------------------------------
+  //
+  // A POST_WORKOUT that is one member's own result for a club WOD whose
+  // SESSION CARD IS ALSO IN THIS FEED is folded into that card
+  // (clubWodSessionRollupHtml, src/community/club.js) and is not drawn again
+  // as a card of its own. Fifteen people doing Fran on a Tuesday morning
+  // produced fifteen near-identical cards, and the one card that actually
+  // said what the club was doing was buried under them.
+  //
+  // THE MATCH IS EXACT, NOT FUZZY, and it is made of two things the rows
+  // already carry:
+  //   * the session card's metadata.club_wod_id, which club_wod_session_
+  //     publish() stamps, and
+  //   * the result post's comparison_key, which app.js writes as
+  //     `wod:<wodId>:<scoreType>:<rx|scaled>` (app.js:4218).
+  // The wodId in the second is the club_wod_id in the first, so a prefix
+  // match on `wod:<id>:` identifies the workout, and occurred_on against
+  // session_date identifies the DAY - without it, a member repeating the
+  // same WOD three weeks later would have that result swallowed by an
+  // unrelated session card.
+  //
+  // FOLDED ONLY WHEN THE SESSION CARD IS PRESENT. The map is built from the
+  // feed's own POST_CLUB_WOD rows, not from state.club.wodBoards, precisely
+  // so a result can never be hidden with nothing on screen carrying it:
+  // scroll past the session card, or load a page that has no session card on
+  // it, and the individual posts render exactly as they did before. A post
+  // the viewer wrote themselves is folded on the same terms as anyone
+  // else's - their own row is in the roll-up, with their figure and their
+  // place on it, which is more than the standalone card said.
+  function feedGroupedPostIds(items) {
+    const grouped = {};
+    if (!Array.isArray(items) || !items.length) return grouped;
+    const sessions = [];
+    for (const row of items) {
+      if (!row || row.post_type !== "POST_CLUB_WOD") continue;
+      const m = row.metadata || {};
+      const wodId = m.club_wod_id;
+      const date = String(m.session_date || row.occurred_on || "").slice(0, 10);
+      if (wodId && date) sessions.push({ prefix: "wod:" + wodId + ":", date });
+    }
+    if (!sessions.length) return grouped;
+    for (const row of items) {
+      if (!row || row.post_type !== "POST_WORKOUT" || !row.id) continue;
+      const key = String(row.comparison_key || (row.metadata && row.metadata.comparison_key) || "");
+      if (!key) continue;
+      const on = String(row.occurred_on || (row.metadata && row.metadata.workout_date) || "").slice(0, 10);
+      if (!on) continue;
+      if (sessions.some((sn) => sn.date === on && key.indexOf(sn.prefix) === 0)) grouped[row.id] = true;
+    }
+    return grouped;
+  }
+
+  // ---- "פוסטים חדשים" ------------------------------------------------------
+  //
+  // A post arriving over Realtime while a member is reading must NOT push
+  // what they are reading down the screen - which is what happened before,
+  // because every path that learned about new content called loadFeed() and
+  // rebuilt the list under them. It is counted instead, and the member
+  // decides when to take it, through the pill at the top of the list.
+  //
+  // COUNTED, NOT COLLECTED: the row on the wire is the raw workout_posts
+  // INSERT, which has been through no ranking, no diversity pass and none of
+  // feed_page's visibility filtering - so it is not something this client may
+  // render, and it is never pushed into state.feed.items. All this keeps is
+  // that SOMETHING landed, and taking the pill re-reads the feed properly.
+  // A post the viewer wrote themselves is skipped: their own publish already
+  // refreshes the feed, and a pill offering a member their own post back is
+  // noise.
+  // A ceiling on the count, not on the behaviour. Past it the pill would be
+  // saying the same thing ("a lot arrived, take a refresh") with a bigger
+  // number, and the list of ids would keep growing for a member who has left
+  // the tab open all afternoon - it is only ever a de-dupe key set, never
+  // content, so there is nothing to lose by stopping.
+  const FEED_INCOMING_MAX = 99;
+  function noteIncomingPost(postId, authorId) {
+    if (!postId) return;
+    if (state.user && authorId && authorId === state.user.id) return;
+    if (state.feed.incoming.length >= FEED_INCOMING_MAX) return;
+    if (state.feed.incoming.indexOf(postId) >= 0) return;
+    // Already on screen (a feed reload raced the event): nothing is new.
+    if (findFeedPost(postId)) return;
+    state.feed.incoming.push(postId);
+    scheduleRerender();
+  }
+  function clearIncomingPosts() { state.feed.incoming = []; }
+  // The pill itself. Takes the member to the top of the list as well as
+  // reloading it, because "show me what is new" that leaves you eleven cards
+  // down has not shown you anything.
+  function takeIncomingPosts() {
+    clearIncomingPosts();
+    state.feed.pagesLoaded = 0;
+    loadFeed().then(function () {
+      rerender();
+      const list = document.getElementById("communityFeedTop");
+      if (list && list.scrollIntoView) { try { list.scrollIntoView({ block: "start" }); } catch (e) { list.scrollIntoView(); } }
+    });
+    rerender();
+  }
+  function renderNewPostsPill() {
+    const n = state.feed.incoming.length;
+    if (!n) return "";
+    return `<div class="new-posts-pill-wrap"><button class="chip-btn primary new-posts-pill" data-community-action="feed-take-new" aria-live="polite">↑ ${esc(n === 1 ? "פוסט חדש" : n + " פוסטים חדשים")}</button></div>`;
+  }
+
+  // ---- Pull to refresh -----------------------------------------------------
+  //
+  // TOUCH ONLY, and gated on the browser actually having a coarse pointer -
+  // a laptop trackpad's overscroll is not a refresh gesture and wiring one
+  // there would fire on an ordinary flick back to the top of the list.
+  //
+  // Registered ONCE, on document, rather than per render: afterRenderCommunity
+  // runs after every rerender and the feed's own cards are replaced each time,
+  // so a per-render listener would either stack up or need tearing down. The
+  // handlers read state at event time and do nothing at all unless the feed
+  // tab is the one on screen and the page is already scrolled to the top.
+  const PULL_REFRESH_TRIGGER_PX = 72;   // how far past the top counts as a pull
+  const PULL_REFRESH_MAX_PX = 96;       // where the indicator stops following
+  let pullStartY = null;
+  let pullDistance = 0;
+  function pullRefreshArmed() {
+    if (!state.user || state.ui.tab !== "feed") return false;
+    // ON SCREEN, not merely "the remembered sub-tab". state.ui.tab is the
+    // COMMUNITY sub-tab and app.js owns the top-level one, so a member who
+    // last looked at the feed and is now on the training log still reads as
+    // tab === "feed" - and a pull there would silently reload a feed they
+    // cannot see. The indicator element is only ever emitted inside the feed
+    // tab's own markup, so its presence in the document is the test.
+    if (!pullRefreshIndicator()) return false;
+    if (state.feed.loading) return false;
+    if (typeof window.matchMedia !== "function") return false;
+    try { if (!window.matchMedia("(pointer: coarse)").matches) return false; } catch (e) { return false; }
+    const top = window.scrollY || (document.documentElement && document.documentElement.scrollTop) || 0;
+    return top <= 0;
+  }
+  function pullRefreshIndicator() {
+    return document.getElementById("communityPullRefresh");
+  }
+  function onPullStart(e) {
+    pullDistance = 0;
+    pullStartY = pullRefreshArmed() && e.touches && e.touches.length === 1 ? e.touches[0].clientY : null;
+  }
+  function onPullMove(e) {
+    if (pullStartY == null || !e.touches || !e.touches.length) return;
+    const dy = e.touches[0].clientY - pullStartY;
+    if (dy <= 0) { pullDistance = 0; const el0 = pullRefreshIndicator(); if (el0) el0.style.height = "0px"; return; }
+    pullDistance = Math.min(dy, PULL_REFRESH_MAX_PX);
+    const el = pullRefreshIndicator();
+    // The indicator is moved by touching its own style, never by a rerender:
+    // rebuilding the feed on every touchmove frame is the one thing a pull
+    // gesture must not do.
+    if (el) {
+      el.style.height = pullDistance + "px";
+      el.setAttribute("data-ready", pullDistance >= PULL_REFRESH_TRIGGER_PX ? "1" : "0");
+    }
+  }
+  function onPullEnd() {
+    const dist = pullDistance;
+    const el = pullRefreshIndicator();
+    if (el) { el.style.height = "0px"; el.setAttribute("data-ready", "0"); }
+    pullStartY = null;
+    pullDistance = 0;
+    if (dist < PULL_REFRESH_TRIGGER_PX) return;
+    // Re-asked at RELEASE rather than trusted from touchstart, because a tab
+    // change or a reload can land mid-gesture. Not pullRefreshArmed(), which
+    // also asks "is the page at scrollTop 0" - true when the pull began and
+    // not necessarily now.
+    if (!state.user || state.ui.tab !== "feed" || !pullRefreshIndicator() || state.feed.loading) return;
+    // The same reload the retry button and the new-posts pill run, so there
+    // is one refresh path and it is the one that has always been tested.
+    clearIncomingPosts();
+    state.feed.pagesLoaded = 0;
+    track(A.FEED_VIEWED, { scope: state.feed.scope, source: "pull_refresh" });
+    loadFeed().then(rerender);
+    rerender();
+  }
+  let pullRefreshBound = false;
+  function bindPullToRefresh() {
+    if (pullRefreshBound || typeof document.addEventListener !== "function") return;
+    pullRefreshBound = true;
+    document.addEventListener("touchstart", onPullStart, { passive: true });
+    document.addEventListener("touchmove", onPullMove, { passive: true });
+    document.addEventListener("touchend", onPullEnd, { passive: true });
+    document.addEventListener("touchcancel", onPullEnd, { passive: true });
   }
 
   // p_surfacedAnnouncementId: the announcement that is ALREADY on screen as

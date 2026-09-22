@@ -57,8 +57,18 @@ test("all three photo surfaces honour the post_photos toggle", () => {
   //
   // These toggles only hide the offer, by design, so a surface that keeps
   // offering is the entire failure.
+  // FOUR since the social feed pass added the camera button beside the feed's
+  // composer row. It is a fourth SURFACE, not a fourth upload path: it opens
+  // the same composer through the same openComposer() and reaches for that
+  // composer's own file input, so there is still exactly one piece of photo
+  // code in the module. What it does need is its own gate, for the reason
+  // this test was written - a club that switched photos off must not be
+  // offered a camera - and the count is how a fifth surface that forgets one
+  // gets caught.
   const uses = cloudJs.split('isModuleEnabled("post_photos")').length - 1;
-  assert.equal(uses, 3, `all three photo surfaces must be gated, found ${uses}`);
+  assert.equal(uses, 4, `every photo surface must be gated, found ${uses}`);
+  assert.match(cloudJs, /isModuleEnabled\("post_photos"\) \? `<button class="composer-photo-btn" data-community-action="open-composer-photo"/,
+    "the feed composer row's camera gates itself");
   const at = cloudJs.indexOf("window.renderShareControl = function (");
   const body = cloudJs.slice(at, at + 2600);
   assert.match(body, /isModuleEnabled\("post_photos"\) \? `<input type="file" id="photo-/,
