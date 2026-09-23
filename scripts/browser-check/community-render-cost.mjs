@@ -35,6 +35,18 @@ function check(label, ok, detail = "") {
 // The spike's own reversal threshold: a full rerender over 16 ms at 4x CPU
 // throttle means the full-tree model no longer fits a frame on a mid-range
 // phone, and the migration plan in that note's §6 comes off the shelf.
+//
+// THE BASELINE, AND WHICH BROWSER IT CAME FROM. Two sets of 4x numbers exist
+// for this build, and they are not the same measurement:
+//   * ~8 ms  - the pinned Chromium 151 (playwright 1.62.1, see
+//              ./package.json) on an idle machine. This is the baseline.
+//   * 17-26 ms - the readings recorded in several PRs. Those came from an
+//              UNPINNED Chromium 141 inside a cloud sandbox, before the pin,
+//              on a machine running other work. They are a report about
+//              that browser and that machine, not about this code.
+// So a 4x reading near 8 ms is normal, and one in the high teens on the
+// pinned build is worth reading; one in the high teens on anything else is
+// the environment. Re-measure on the pinned build before trusting either.
 const TRIPWIRE_MS_AT_4X = 16;
 
 const VERIFIED = new Date().toISOString();
@@ -113,9 +125,10 @@ const measure = await page.evaluate(() => {
   // a machine that also runs the rest of the suite, and contention can only
   // ever ADD time to a sample - a single GC pause or a scheduler stall drags
   // a mean far past the budget while the code's actual cost is unchanged.
-  // Measured alone this render costs ~4.9 ms against a 16 ms budget; the same
-  // build measured 23.3 ms inside run-all and failed the gate, which is a
-  // report about the machine, not about the code. A median of 50 keeps the
+  // One build read 4.9 ms measured alone and 23.3 ms inside run-all, and
+  // failed the gate on the second - a report about the machine, not about
+  // the code (see TRIPWIRE_MS_AT_4X above for which browser the baseline
+  // numbers come from). A median of 50 keeps the
   // real signal (the number climbs when renders genuinely get more expensive)
   // and drops the outliers that made this gate fail at random.
   const mid = (xs) => { const a = xs.slice().sort((x, y) => x - y); return a[Math.floor(a.length / 2)]; };

@@ -1,5 +1,5 @@
 // Resolves what URL a check script should run against.
-//   TARGET_URL=https://haimuniya.github.io/haimunia-app/ node ladder.mjs
+//   TARGET_URL=https://haimunia-app.pages.dev/ node ladder.mjs
 // verifies the live deployed site. With no env var, spins up a throwaway
 // local static server over the working tree instead, so uncommitted changes
 // can be checked before pushing.

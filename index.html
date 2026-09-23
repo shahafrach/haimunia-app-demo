@@ -41,10 +41,10 @@
   ships the same kind of meta-tag CSP as this demo, on the same
   no-real-headers host, and its meta tag already lists frame-ancestors
   'none' too (as inertly as it does here) — it is not "no CSP at all" as an
-  earlier version of this comment claimed. The only real remaining gap on
-  both apps, at the header/CSP layer specifically, is the same one: moving
-  off GitHub Pages (or fronting it with an edge layer) to get real response
-  headers.
+  earlier version of this comment claimed. At that date the only real
+  remaining gap on both apps, at the header/CSP layer specifically, was the
+  same one: moving off GitHub Pages to get real response headers. This app
+  closed it by moving to Cloudflare Pages on 2026-09-16 (the headers above).
 
   Security hunt round 8: that gap is not being left fully unmitigated
   anymore. frame-guard.js (loaded first, before this meta tag is even

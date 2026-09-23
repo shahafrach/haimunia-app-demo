@@ -1109,8 +1109,8 @@
   // route strings the server writes into notifications.deep_link and never
   // appear in the address bar. This one has to survive being typed, printed,
   // and opened cold on a device that has never run the app, which on a
-  // static host (GitHub Pages, no rewrites) means a query on a real file
-  // path and nothing else.
+  // static host (Cloudflare Pages, repo root, no rewrite rules) means a
+  // query on a real file path and nothing else.
   //
   // Same client-side shape redeem_invite_code enforces server-side. A code
   // that does not match is dropped rather than pre-filled, so a mistyped or

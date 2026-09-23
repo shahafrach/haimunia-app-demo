@@ -346,7 +346,7 @@ export function waitFor(check, timeoutMs = 2000, intervalMs = 5) {
 export const ADMIN_STEP_UP_PASSWORD = "Aa123456789!";
 // The management account's address. A fixed, obviously-fake value: the real
 // one lives only in Supabase Auth and must never appear in this repo, which
-// GitHub Pages serves in full to anyone who asks.
+// the host serves from its root - every committed file is a URL.
 export const ADMIN_STEP_UP_EMAIL = "manage@example.test";
 export function seedAdminStepUp(mock, userId, email) {
   if (mock && typeof mock.seedCredentials === "function") {
