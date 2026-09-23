@@ -65,6 +65,10 @@ const VIEWPORT = { width: 390, height: 844 };
 // the exact geometry that shipped, not an approximation of it.
 const PREFIX_TOAST_BOTTOM = "calc(env(safe-area-inset-bottom,0px) + 84px)";
 const PREFIX_ADD_PHOTO = "clamp(360px, 56svh, 500px)";
+// Add's value AFTER finding 3, named so the check below can say "Calendar's
+// height is not Add's" without restating a literal that would then have two
+// places to drift from.
+const ADD_PHOTO_AFTER = "clamp(320px, 46svh, 440px)";
 
 const rect = (page, sel) =>
   page.evaluate((s) => {
@@ -146,10 +150,25 @@ const otherScenePhoto = await page.evaluate(async () => {
   await new Promise((r) => setTimeout(r, 400));
   return v;
 });
+// UPDATED, and the assertion it makes is unchanged in substance. What this
+// line pins is that finding 3 is ADD-SPECIFIC - that reducing Add's photo did
+// not quietly move every other scene with it - and the way it pins that is by
+// reading Calendar's own token off the live Calendar page. Calendar has since
+// been reduced too, deliberately and separately (a later real-phone report:
+// "the scene photo still takes almost half the screen on the workouts
+// library, progress and calendar tabs"), so the value it must hold is its
+// new one. The property is still "Calendar carries a height of its own,
+// different from Add's", which the inequality below states directly rather
+// than leaving implied by two literals.
 check(
-  "the other scenes' photo height is untouched — Calendar still resolves its own 40svh + 16px",
-  otherScenePhoto === "calc(40svh + 16px)",
+  "the other scenes keep a photo height of their own — Calendar resolves its own 33svh + 16px, not Add's",
+  otherScenePhoto === "calc(33svh + 16px)",
   String(otherScenePhoto),
+);
+check(
+  "and it is not Add's value — the two are still tuned separately",
+  otherScenePhoto !== ADD_PHOTO_AFTER,
+  `${otherScenePhoto} vs Add's ${ADD_PHOTO_AFTER}`,
 );
 
 await page.waitForSelector(".exercise-select", { state: "visible", timeout: 5000 });
@@ -328,7 +347,15 @@ console.log("\n---- finding 2: the calendar's volume-report flags ----");
 await page.evaluate(() => window.scrollTo(0, 0));
 await selectMovement(page, "Back Squat");
 await page.waitForSelector("#bottomBarBtn", { state: "visible", timeout: 5000 });
-await logSetOn(page, isoDaysAgo(20));
+// 45 DAYS, NOT 20. When this check was written the overdue threshold was 14
+// days, so 20 was comfortably past it. It is 30 now (VOLUME_OVERDUE_DAYS, a
+// later real-phone report: at 14 days a member on a block programme saw four
+// of six rows red on an ordinary fortnight, which teaches that red here means
+// nothing). 20 days is deliberately NEUTRAL under the new rule, so seeding it
+// here would make the control below assert the absence of the very signal it
+// exists to prove is present. The finding this file pins - never-logged is
+// not red - is unchanged; only the fixture had to move past the new line.
+await logSetOn(page, isoDaysAgo(45));
 await dismissFirstLogArrival(page);
 
 await switchTab(page, "tabCalendarBtn");
@@ -356,7 +383,7 @@ const never = flags.filter((f) => !["Squat", "Press"].includes(f.cat));
 // with no red left anywhere, which would be a different regression of the
 // same finding.
 check(
-  "control: a category trained 20 days ago is STILL flagged in red — red survives as the overdue signal",
+  "control: a category trained 45 days ago is STILL flagged in red — red survives as the overdue signal",
   !!overdue && overdue.color === "rgb(255, 120, 105)" && overdue.bg === "rgba(216, 69, 60, 0.1)",
   overdue ? `${overdue.text} ${overdue.color} on ${overdue.bg}` : "no overdue row on screen to compare against",
 );

@@ -188,8 +188,19 @@ test("an attempt shows up with its best, its history and a chart", async () => {
   const card = area(window).querySelector(".chart-card");
   assert.ok(card, "tapping opens the detail card");
   assert.equal(rowFor(window, "wod:fran").getAttribute("aria-expanded"), "true");
-  assert.ok(card.querySelector("svg[role='img']"), "the existing chart component, not a new one");
-  assert.match(card.querySelector("svg").getAttribute("aria-label"), /גרף התקדמות/,
+  // [role='img'], not svg[role='img'], since the compact state landed: this
+  // benchmark has two attempts, and renderChart() no longer draws a 174px
+  // plot for fewer than three points - it draws the same points as a compact
+  // readout instead (a real-phone report, see renderCompactChart in app.js).
+  // What this line is actually about is unchanged and is what it still
+  // asserts: this screen renders THE shared chart component, with the
+  // accessible summary that component owns, rather than a second one of its
+  // own. scripts/browser-check/training-log-polish.mjs measures the heights
+  // on both sides of the threshold; test/chart-accessible-name.test.mjs pins
+  // which markup each side emits.
+  const chart = card.querySelector("[role='img']");
+  assert.ok(chart, "the existing chart component, not a new one");
+  assert.match(chart.getAttribute("aria-label"), /גרף התקדמות/,
     "including the summary it exposes to assistive tech");
   // Every attempt, not just the record.
   assert.equal(attemptRows(window).length, 2, "every attempt over time, not only the record");

@@ -102,20 +102,32 @@ const badgeHiddenFresh = await page.evaluate(() => document.getElementById("noti
 check("bell badge shows nothing for a fresh install", badgeHiddenFresh);
 await page.click("[data-action='open-notifications']");
 await page.waitForTimeout(200);
+// THE BELL NO LONGER OPENS AN EMPTY CHANGELOG, and this pair of checks used
+// to require that it did.
+//
+// The self-cleaning fix this block was written for is unchanged and is still
+// asserted below: the list must never dump RELEASE_NOTES' full history at a
+// member who has already seen it (live report, "currently it's super old").
+// What changed underneath it is the answer to a tap on a NOTIFICATIONS
+// control when there is nothing to notify. Reported from a real phone: "the
+// מה חדש sheet opens on the log screen with only אין עדכונים חדשים" - the
+// path being the bell's fallback to this sheet on a device whose badge is
+// counting community notifications the community centre cannot open.
+// openNotifications({onlyIfUnseen:true}) now refuses, and the tap is
+// answered with a toast instead.
 const notifOpen = await page.evaluate(() => document.getElementById("notificationsOverlay").classList.contains("open"));
-check("bell opens the notifications overlay", notifOpen);
-// Self-cleaning fix (live report: "currently it's super old" - the list
-// used to always dump RELEASE_NOTES' full history, forever, regardless of
-// what a member had already seen, since only the per-item "new" tag - not
-// what actually rendered - was gated on lastSeenVersion). A fresh install
-// has nothing to catch up on by definition (lastSeenVersion is set to the
-// current APP_VERSION the moment a fresh install boots, same fact the
-// "no what's-new popup" check above relies on), so manually opening the
-// bell here must now say so, not show history this member never lived
-// through.
+check("the bell does not open an empty changelog on a fresh install", !notifOpen);
+const notifToast = await page.evaluate(() => (document.getElementById("appToastDock")?.textContent || "").trim());
+check("and the tap is answered rather than swallowed", /אין התראות/.test(notifToast), notifToast);
+// The empty state itself still has to be right, because Settings' own
+// "מה חדש" row opens this sheet unconditionally - there the question is
+// direct and an empty answer is the honest one. That is where the
+// seen/unseen filter is now proved.
+await page.evaluate(() => openNotifications());
+await page.waitForTimeout(200);
 const notifEmptyState = await page.evaluate(() => document.getElementById("notificationsList").textContent.trim());
 check(
-  "a fresh install's notifications list says there's nothing new, not a wall of old history",
+  "asked directly, a fresh install's list says there's nothing new rather than a wall of old history",
   notifEmptyState === "אין עדכונים חדשים",
   notifEmptyState,
 );

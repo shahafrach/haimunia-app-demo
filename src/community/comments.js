@@ -636,7 +636,7 @@
         <div style="padding:18px 18px calc(env(safe-area-inset-bottom,0px) + 16px);">
           <div class="flex" style="justify-content:space-between;align-items:center;margin-bottom:12px;">
             <h2 id="reactorsTitle" style="margin-top:0;font-weight:800;font-size:16px;margin-bottom:0;">מי הגיב</h2>
-            <button class="chip-btn" data-community-action="reactors-close" aria-label="סגירה">✕</button>
+            ${sheetCloseBtnHtml("reactors-close")}
           </div>
           ${body}
         </div>
