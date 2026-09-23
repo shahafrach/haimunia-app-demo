@@ -363,3 +363,57 @@ test("the three redacted action types are the three the trigger covers", () => {
     assert.ok(migration.includes(t), `trigger still covers ${t}`);
   }
 });
+
+// ---------------------------------------------------------------------------
+// S13, S14, S15: three statements that had drifted away from the code.
+// Each is pinned to the CODE that makes it true, not just to its own wording,
+// because the failure mode here is the code moving and the prose staying.
+// ---------------------------------------------------------------------------
+const swJs = fs.readFileSync(new URL("../sw.js", import.meta.url), "utf8");
+
+test("S13: the policy no longer claims nothing leaves the phone while browsing", () => {
+  // sw.js fetches cloud-config.js with cache:"no-store" on EVERY load and
+  // revalidates shell assets, so the host sees an IP and a user-agent every
+  // time the app opens. The old wording ("שום מידע לא יוצא מהטלפון" / "nothing
+  // leaves your phone") was simply false.
+  assert.match(swJs, /cloud-config\.js/, "the config fetch is what makes the old claim false");
+  assert.match(swJs, /cache:\s*["']no-store["']/, "and it is unconditional, not cached");
+
+  assert.doesNotMatch(flatMd, /שום מידע לא יוצא מהטלפון/, "Hebrew still makes the absolute claim");
+  assert.doesNotMatch(flatMd, /nothing leaves your phone/, "English still makes the absolute claim");
+  assert.doesNotMatch(flatHtml, /שום מידע לא יוצא מהטלפון/);
+  assert.doesNotMatch(flatHtml, /nothing leaves your phone/);
+
+  // And the honest replacement is present in all four places.
+  for (const [name, doc] of [["PRIVACY.md", flatMd], ["privacy.html", flatHtml]]) {
+    assert.match(doc, /שום נתון שלכם לא יוצא מהטלפון/, `${name} Hebrew states the narrower truth`);
+    assert.match(doc, /none of your data leaves your phone/, `${name} English states the narrower truth`);
+    assert.match(doc, /כמו כל אתר/, `${name} Hebrew admits the app is fetched like any site`);
+    assert.match(doc, /exactly like any website/, `${name} English admits the same`);
+  }
+});
+
+test("S14: Turnstile is disclosed for backup start, not only the sign-in screens", () => {
+  // src/community/auth.js runs signInAnonymously - the account cloud backup
+  // opens - inside withCaptcha(), so the captcha loads there too.
+  const authJs = fs.readFileSync(new URL("../src/community/auth.js", import.meta.url), "utf8");
+  assert.match(authJs, /withCaptcha\(\(captchaToken\)\s*=>\s*\n?\s*client\.auth\.signInAnonymously/,
+    "the anonymous backup sign-in still goes through the captcha");
+  for (const [name, doc] of [["PRIVACY.md", flatMd], ["privacy.html", flatHtml]]) {
+    assert.match(doc, /וגם כשהגיבוי לענן נפתח בפעם הראשונה/, `${name} Hebrew names backup start`);
+    assert.match(doc, /also when cloud backup first starts/, `${name} English names backup start`);
+  }
+});
+
+test("S15: the backup copy does not promise an automatic backup while consent is pending", () => {
+  // app.js owns the pending state; cloud.js must branch on it rather than
+  // telling a member their next save will be backed up when it will instead
+  // show them a card and wait.
+  const cloud = cloudSource();
+  assert.match(cloud, /window\.haimuniaBackupConsentPending/,
+    "cloud.js reads the pending state app.js owns");
+  assert.match(cloud, /backupConsentPending\(\)\s*\n?\s*\?/,
+    "and branches the copy on it rather than asserting the automatic case");
+  assert.match(cloud, /נשאל אתכם על גיבוי לענן אחרי השמירה הבאה/,
+    "the pending-state status line says a question is coming, not a backup");
+});

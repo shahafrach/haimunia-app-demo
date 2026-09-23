@@ -5722,7 +5722,17 @@
   window.cloudStorageStatusText = function () {
     if (!configured) return "נשמר במכשיר הזה בלבד, ללא שרת";
     if (backupOptedOut()) return "נשמר במכשיר הזה בלבד — גיבוי אוטומטי כבוי";
-    if (!state.user) return "נשמר במכשיר; יגובה אוטומטית ופרטית עם השמירה הבאה";
+    // S15. "will be backed up with the next save" is true only once consent is
+    // settled. While the card is still pending (backupConsent === null,
+    // app.js) the next save does NOT start a backup - it shows the card and
+    // waits for an answer. Promising otherwise told a member their data was
+    // about to leave the device when it was not, which is the wrong direction
+    // for a status line to be wrong in.
+    if (!state.user) {
+      return backupConsentPending()
+        ? "נשמר במכשיר; נשאל אתכם על גיבוי לענן אחרי השמירה הבאה"
+        : "נשמר במכשיר; יגובה אוטומטית ופרטית עם השמירה הבאה";
+    }
     return state.syncEnabled ? "נשמר במכשיר ומגובה אוטומטית ופרטית לחשבון" : "נשמר במכשיר; סנכרון ענן ממתין לאישורכם";
   };
   // Settings > "נתונים וגיבוי" (window.renderSettingsBody in app.js embeds
@@ -5754,6 +5764,17 @@
   // both knows they are looking at two mechanisms and not one broken one.
   // The other card is referenced by its title rather than its position on
   // the screen, so re-ordering the settings pane cannot make this a lie.
+  // S15. window.haimuniaBackupConsentPending (app.js) is the one owner of the
+  // pending state; read through a wrapper so a missing app.js - the community
+  // module is loaded on its own in some tests - degrades to "not pending"
+  // rather than throwing inside a render.
+  function backupConsentPending() {
+    try {
+      return typeof window.haimuniaBackupConsentPending === "function"
+        && window.haimuniaBackupConsentPending() === true;
+    } catch { return false; }
+  }
+
   const BACKUP_PANEL_TITLE = `<div style="font-weight:800;font-size:13.5px;margin-bottom:4px;">גיבוי אוטומטי לענן</div>`;
   // The two facts a member switching this off almost certainly believes it
   // does, and does not. Both are stated plainly in PRIVACY.md ("כיבוי לא
@@ -5793,7 +5814,7 @@
       return `${BACKUP_PANEL_TITLE}<div class="footer-note" style="margin-bottom:8px;">כבוי. מהשמירה הבאה האימונים נשמרים במכשיר הזה בלבד.</div>${BACKUP_OPTOUT_TRUTHS}<button class="link-btn" data-community-action="backup-enable">הפעלת גיבוי אוטומטי</button>${backupDeleteHtml()}${state.ui.message ? `<div class="footer-note" role="status" style="margin-top:10px;color:var(--brass);">${esc(state.ui.message)}</div>` : ""}`;
     }
     if (!state.user) {
-      return `${BACKUP_PANEL_TITLE}<div class="footer-note" style="margin-bottom:8px;">מהשמירה הראשונה האימונים שלכם מתחילים להיות מגובים לענן ברקע, אוטומטית ופרטית — רק אתם רואים אותם. הסנכרון קורה מעצמו ואין כאן קובץ להוריד; „קובץ גיבוי להורדה" הוא דבר נפרד במסך הזה. אפשר לכבות בכל שלב.</div><button class="link-btn" data-community-action="backup-optout">כיבוי גיבוי אוטומטי</button>`;
+      return `${BACKUP_PANEL_TITLE}<div class="footer-note" style="margin-bottom:8px;">${backupConsentPending() ? "אחרי השמירה הבאה נשאל אתכם אם לגבות את האימונים לענן. עד שתענו הכול נשאר במכשיר הזה בלבד." : "מהשמירה הראשונה האימונים שלכם מתחילים להיות מגובים לענן ברקע, אוטומטית ופרטית — רק אתם רואים אותם."} הסנכרון קורה מעצמו ואין כאן קובץ להוריד; „קובץ גיבוי להורדה" הוא דבר נפרד במסך הזה. אפשר לכבות בכל שלב.</div><button class="link-btn" data-community-action="backup-optout">כיבוי גיבוי אוטומטי</button>`;
     }
     // How much is actually at stake, and how loudly to say it. See
     // src/dormancy.js - the short version is that an anonymous account is
