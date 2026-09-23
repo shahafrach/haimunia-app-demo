@@ -1,3 +1,196 @@
+## The community becomes a feed, the switches reach the server, and the phone gets a real pass — 2026-09-23
+
+Thirty-three branches merged since the last consolidation (#20, which covered
+#15, #17 and #14). This is the largest gap the file has carried, and it spans
+four different kinds of work: the community feed becoming a feed, five of the
+seven pre-seeded module switches growing features, the first pass over the app
+on a real 390px phone, and the launch-readiness audit starting to be worked
+off. App version **4.77.0 → 4.78.0**.
+
+### The community feed became a feed
+
+**One card, one conversation** (#33). Every post type now renders in one card
+layout — media, then the member's own words, then the type's result block —
+with hide, save, report, edit, delete and block behind the ⋯ menu on every
+card including the legacy one. Reactions are a dumbbell pill with a "דנה ועוד 4"
+summary that opens the full list; the two latest comments sit under every card
+with an inline box to add one. Club WOD results are one card per session rather
+than one per member. New posts arrive as a "פוסטים חדשים" pill instead of
+shifting the feed under a reader's thumb.
+
+**The feed is chronological again, and the ranked one is a switch away** (#35).
+Newest first, with pinned posts, coach posts, announcements and today's club WOD
+held above the stream — a coach post for 72 hours (editable), an announcement
+until its own expiry. An admin can switch back to the ranked order from the
+modules panel. Nobody's visibility changed: hidden, blocked and moderated posts
+stay out of both orders.
+
+**The feed fills itself from real training** (#36). After a workout, a PR or a
+medal, one short question — <span dir="rtl">"לשתף עם המועדון?"</span> — with
+share and not-now. Nothing publishes without a tap, each workout is asked at
+most once, the suggestions can be switched off entirely, and a share made
+offline is queued and sent on reconnect.
+
+**Announcements become feed cards** (#49, renumbered in #54). Publishing an
+announcement used to fill the archive and send a notification but never reach
+the feed, despite a comment claiming otherwise. `announcements_feed_card_insert`
+now writes one authorless club-visible card per announcement, and
+`announcements_feed_card_sync` carries edits onto it and soft-deletes it when
+the announcement is withdrawn.
+
+**<span dir="rtl">התאמנו יחד</span>** (#37). The author of a workout post can
+name who was in the room — suggested from who else logged that day, up to ten
+per post. The named are notified, and any of them can remove their own tag from
+the card, even if the post is no longer visible to them and even if the club
+switched the module off. Off by default.
+
+### Five switches grew the features they were waiting for
+
+202609190002 seeded seven module keys ahead of their features and marked each
+<span dir="rtl">בפיתוח</span>. Five of the seven have now stopped saying it:
+
+- **<span dir="rtl">אחוזים ממשקל מקסימלי</span>** (#24) — ten percentage chips
+  from 95% to 50% on the log screen, each showing the weight and filling the
+  field on tap, rounded to the smallest plate the club actually owns. Rx+ also
+  arrives as a third answer to "how did you do it", with a personal best of its
+  own that neither overwrites nor is overwritten by Rx.
+- **<span dir="rtl">בנצ'מרקים</span>** (#30) — the eight classic named workouts
+  and every lift with a 1RM estimate, each with its attempts over time and a
+  retest flag past 90 days. It stores nothing new: an attempt is the
+  `wod_entry` or `strength_entry` the app already wrote.
+- **<span dir="rtl">משימות למאמן/ת</span> and <span dir="rtl">אתגר כניסה</span>**
+  (#31) — join date, training log and contact log become one daily task list for
+  staff, counted from the later of last contact and the day the module was
+  switched on so enabling it does not open a task against every member at once.
+  The onboarding challenge is opt-in, never automatic.
+- **<span dir="rtl">דוח לבעלי המועדון</span>** (#38) — one screen a month for
+  head coach and admin, every figure opening the members behind it with training
+  days and never a date or a result. **No list is ever stored**: `owner_reports`
+  holds counts and has no column a member's name could go in. Read is
+  `head_coach` and above, enforced in the row policy.
+
+### The switches now reach the server (#53)
+
+Switching off feed, events, challenges, achievements, leaderboards or
+announcements refuses the matching server calls — `feed_page`, `post_create`,
+`event_rsvp`, `chal_progress`, `ach_claim`, `community_streaks`, announcement
+publishing — instead of only hiding the control. A switched-off announcements
+module sends no notifications. Feed, events, challenges and achievements are
+marked <span dir="rtl">נאכף בשרת חלקית</span> until their remaining server
+paths are gated; that follow-up is still open.
+
+### The app met a real phone
+
+**The member surfaces** (#43). The management account no longer appears to
+members anywhere — directory, search or people-you-may-know — while coaches
+deliberately still do, because a coach is somebody you train with. That rule was
+drawn too wide at first and hid the owner, who trains here; `202609220007`
+narrowed it to membership rather than rank, since `public.roles` puts owner (60)
+above staff (40). Blocking moved into the ⋯ menu, notification preferences are
+one row per type instead of seventeen blocks, and the push self-test now
+explains how to allow notifications rather than stopping at "not allowed".
+
+**The staff surfaces** (#44). A quiet week no longer stacks six large empty
+states — each is one line under a single summary. Member of the week is a
+search with suggestions instead of a typed username, and one orange action
+leads each screen.
+
+**The community feed at 390px** (#40, #41). The ⋯ menu opens inside the card
+instead of off the screen edge, with full keyboard navigation. The feed filter
+is one list in the header rather than a wrapping chip row, ~80px shorter.
+Deleting your own post or comment offers <span dir="rtl">בטלו</span> for five
+seconds, like deleting a set. The community hero shows the club logo once
+rather than twice.
+
+**Fourteen training-log fixes, one of them in the stylesheet** (#45). Weights
+and units were painting in the wrong order — `90 ק״ג × 1` reaching the screen
+as `ק״ג × 1 90` — everywhere a number sits beside a Hebrew unit, because
+`.mono` declared `direction:ltr` for a phrase whose base direction is Hebrew.
+A shared `bidiUnit` helper states the base rather than letting it be guessed,
+and a test walks every rendered readout. The photo on three screens came down
+from half the screen to a third.
+
+**Four UX-review findings** (#39). The save confirmation stopped covering the
+save button — its `position:fixed` bar at `bottom:84px` sat at y=704–760 while
+the save button sits at y=716–768, so `elementFromPoint()` returned the toast
+for the full five-second window and every save blinded the control that made
+it. It is an absolutely positioned child of the bottom-nav wrapper now, docked
+at `bottom:100%`. In the calendar, a movement never logged stopped wearing
+overdue's red and says <span dir="rtl">טרם נרשם</span>. Four 36px links got a
+44px tap target.
+
+### Security and launch readiness
+
+- **Management login hardened** (#52) — no real username in the placeholder, the
+  same Turnstile captcha as member login, and one identical refusal for a wrong
+  password and for a correct password on an account without the role.
+- **Public surface** (#55, #56) — `/.claude/`, `/mockups/`, `/photos/`,
+  `/package.json` and `/package-lock.json` are no longer served.
+  `admin_reset_password` no longer accepts the retired `haimuniya.github.io`
+  origin; **deployed to production 2026-09-23**, version 6 → 7, verified by CORS
+  preflight (github.io gets no `Access-Control-Allow-Origin`, pages.dev does).
+- **Expired photo URLs recover** (#55) — the inline `onerror` the CSP blocked is
+  a delegated listener now, and a failed photo is re-signed once.
+- **Privacy policy** (#50, #23) — bug reports, staff free-text notes, Gmail and
+  the push service are disclosed; the policy stopped saying CAPTCHA and push
+  were off, four days after they were switched on.
+- **The launch-readiness audit** (#46) — 6 blockers, 20 should-fix, 15
+  nice-to-have, checked against code rather than memory.
+
+### Accessibility, analytics, plumbing
+
+- **Structure** (#32) — one `<h1>` per screen with correctly nested headings,
+  Hebrew landmark names on `<main>`, `<header>` and six regions, and all six tab
+  strips declaring the full tab/tabpanel pair. `.sr-only` finally has a rule, so
+  the staff rail's screen-reader count stopped printing on screen.
+- **Analytics** (#29, #49) — sixteen modules that emitted nothing now emit one
+  event each, so "nobody uses it" and "nothing measures it" can be told apart.
+  `EVENTS` went from 42 to 47. Permission is asked only from a press, only in
+  the installed app, and only after a first workout or joining the community.
+  An event recorded offline is queued rather than dropped.
+- **Dependencies** (#21, #51) — `@supabase/supabase-js` 2.116.0 with bundle and
+  declaration together, `playwright` pinned to exactly 1.62.1 so the Chromium
+  build the layout scenarios measure in is a decision someone makes,
+  `upload-artifact` 7.0.1, `download-artifact` 8.0.1, `jsdom` 30.1.0.
+- **Rules** (#21, #42) — CLAUDE.md gained the parallel-work failure it was
+  missing (a branch that *adds* a file to an enumerated directory can break main
+  with no conflict) and a Budget rules section.
+
+### Two migration-ledger defects, both found the hard way
+
+`202609220007` was used twice — the technical-account migration and the
+announcement feed-card migration — so Supabase treated the second as already
+applied and it never reached production. Renamed to `202609220008` (#54) and
+pushed. Nothing in the repository detected either the collision or the rename:
+`check-migration-immutability.mjs` walks the files present on disk, so a
+migration that is deleted or renamed is invisible to it. Both guards are in
+flight as this is written.
+
+### Known and not fixed here
+
+- `202609230001` is committed and **not yet applied to production**.
+- Feed, events, challenges and achievements remain
+  <span dir="rtl">נאכף בשרת חלקית</span>; the remaining server paths are listed
+  in #53's description.
+- `onboarding_step_content`'s seeded welcome body still names the composer by
+  its old label. The client corrects it at render time; the real repair is one
+  guarded UPDATE.
+- **The backup passphrase was lost and rotated on 2026-09-23.** See below.
+
+### The backup passphrase
+
+The `BACKUP_PASSPHRASE` repository secret used by
+`.github/workflows/backup-database.yml` **was lost and a new one was set on
+2026-09-23.** The consequence is not reversible and is worth stating plainly:
+every database backup artifact produced before that date is encrypted under the
+old passphrase and **cannot be decrypted**. Those artifacts should be treated as
+gone, not as a restore path. The first backup taken under the new passphrase is
+the oldest restorable one, and the restore drill in
+`docs/audit/ROUND_10_AND_KNOWN_LIMITATIONS.md` should be re-run against it
+before it is relied on. Nothing about the workflow changed — the passphrase
+gate, AES256, the `shred` and the round-trip proof are as they were. No
+passphrase, old or new, is recorded in this repository.
+
 ## The community layer becomes fourteen files, the Actions bill halves, and the scheduled jobs watch themselves — 2026-09-19
 
 Three branches merged after the last consolidation (#15, #17, #14). None of
