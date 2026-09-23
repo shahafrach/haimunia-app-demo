@@ -141,9 +141,11 @@ npm run check:immutable
    is. `1940 pass, 0 fail` is a result; "tests pass" is not.
 5. **Merge**, then `git checkout main && git pull`.
 6. **`npm run push:prod`**, read the plan, type `apply`.
-7. **Record it** — the PR description and the next consolidation entry. What
-   was applied, when, and by whom is the only audit trail this project has
-   while the push is manual.
+7. **Record it** — add a line to [the push log](#the-push-log) below, and to
+   the next consolidation entry. What was applied, when, and by whom is the
+   only audit trail this project has while the push is manual, and a PR
+   description alone is not one: nobody can read the history of production
+   out of thirty PR bodies.
 
 ---
 
@@ -167,3 +169,48 @@ The shape to build, and the reason for each part:
 Keep `push:prod` working after that. It is how you apply a migration when the
 runner is down, the quota is out, or you need to watch it happen — and it is
 the only version of this gate that has actually been exercised.
+
+---
+
+## The push log
+
+Append-only. One line per `push:prod` run, newest last. Add yours in the same
+commit as the work, or immediately after the push — a log written from memory
+a week later is the thing this exists to replace.
+
+The columns are what you cannot reconstruct afterwards: `check:drift` can tell
+you a migration IS applied, never **when**, by **whom**, or on **whose
+approval**. Two sessions have pushed to this project on one day; without the
+last column there is no way to tell an approved push from an assumed one.
+
+| Applied (UTC) | Versions | Pushed by | Approved by | How |
+|---|---|---|---|---|
+| 2026-09-23 ~05:0x | `202609220006`, `202609220007` | session A | session A's user, per-push | `supabase db push` |
+| 2026-09-23 ~05:5x | `202609220008` | session A | session A's user, per-push | `supabase db push` |
+| 2026-09-23 ~06:1x | `202609230001`, `202609230002` | session A | session A's user, per-push | `supabase db push` |
+| 2026-09-23 (unrecorded) | `202609230003` | **not recorded** | **not recorded** | — |
+| 2026-09-23 (before 10:00) | `202609230004`, `202609230005` | session B | session B's user — but `…04` was session A's migration and session A's user had not approved it (see below) | `npm run push:prod` |
+| 2026-09-23 11:2x | `202609230006`, `202609230007` | session A | session A's user, after reading the `--dry-run` plan | `npm run push:prod --yes` |
+
+Pending, committed and **not** applied: `202609230008`.
+
+### Two things this log exists because of
+
+**`202609230003` has no entry.** It is applied to production and nobody
+recorded who pushed it or on whose approval. It was reconstructed from
+`supabase migration list --linked`, which is why the row says so rather than
+guessing. That gap is the whole argument for the table.
+
+**A migration was pushed on the wrong user's approval.** `202609230004` was
+written by session A and pushed by session B, bundled with session B's own
+`…05`, on session B's user's approval. The migration was sound and its pgTAP
+was green, and no harm came of it — but `push:prod` applies **everything
+pending**, not just the migration you came to push, so bundling somebody
+else's work is the default behaviour rather than a mistake you have to make.
+Read the plan: it lists every version it is about to apply, and anything in
+that list that is not yours needs its author's user to have said yes.
+
+*(Sessions are named A and B here because they are transient; what matters is
+that they were different operators with different approvals, not which was
+which.)*
+
