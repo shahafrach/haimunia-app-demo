@@ -87,6 +87,26 @@ await page.waitForTimeout(300);
 const celebratedOnShorterHold = await dismissCelebrationIfOpen(page);
 check("a shorter hold than the existing best does not celebrate a PR", !celebratedOnShorterHold);
 
+// THREE DAYS, because the chart needs three points to be a chart. Both saves
+// above landed on today and the series is bestPerDay(), so this exercise had
+// one point - and below the trend threshold renderChart() now draws a compact
+// readout rather than a 174px plot area with a single dot in it (a real-phone
+// report; see renderCompactChart in app.js). Without these two extra days
+// "there is no SVG" would be true of a duration exercise and of a barbell one
+// alike, and the duration-vs-reps distinction this file exists to pin would
+// pass vacuously. Both are SHORTER than the 40" best, so neither celebrates.
+for (const [daysBack, seconds] of [[2, 30], [4, 20]]) {
+  const d = new Date();
+  d.setDate(d.getDate() - daysBack);
+  await page.fill("#logDateInput", d.toISOString().slice(0, 10));
+  await page.dispatchEvent("#logDateInput", "change");
+  await page.fill("[data-field='durationSeconds'].stepper-val", String(seconds));
+  await page.dispatchEvent("[data-field='durationSeconds'].stepper-val", "change");
+  await page.click("[data-action='save-set']");
+  await page.waitForTimeout(300);
+  await dismissCelebrationIfOpen(page);
+}
+
 // History tab: duration-mode chart renders (an SVG, not the reps rep-table).
 await switchTab(page, "tabHistoryBtn");
 await page.waitForTimeout(200);

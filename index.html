@@ -1213,7 +1213,19 @@
      rule still exists above for the old tabbar's own accessibility-floor
      test, so cancel its tabbar-specific look here with a same-source,
      higher-specificity compound selector rather than editing that rule. */
-  .navrow.tabbtn{ flex:none; min-width:0; padding:12px 10px; border-radius:14px; font-size:15px; color:inherit; border:none; box-shadow:none; white-space:normal; }
+  /* flex-direction/justify-content ADDED (real-phone report: "the main menu
+     mixes two styles - centered large icons for the two management items and
+     chevron rows for the rest"). .tabbtn above declares
+     `flex-direction:column; justify-content:center` and .navrow declares
+     neither, so the cancel list here - written to undo .tabbtn's "tabbar
+     look" - silently left both standing: the hamburger's own rows
+     (ניהול מערכת / ניהול המועדון, the only non-main destinations on a phone)
+     rendered as centred icon-over-label cards while every row around them,
+     which does NOT carry .tabbtn, rendered as an icon-label-chevron row.
+     Same specificity as .tabbtn (0,1,0 each) and .navrow comes later in this
+     file, which is why every OTHER property in that rule did get cancelled
+     and these two were the exact pair left over. */
+  .navrow.tabbtn{ flex:none; min-width:0; flex-direction:row; justify-content:flex-start; padding:12px 10px; border-radius:14px; font-size:15px; color:inherit; border:none; box-shadow:none; white-space:normal; }
   /* COMM-350: same tint percentage and shadow as .tabbtn.active (bottom tab
      bar) now that COMM-327 settled the nav IA - both are the same "which
      section am I in" idiom, just rendered as a row instead of a bar
@@ -1493,7 +1505,21 @@
      left to give without overflowing the panel horizontally. min-height
      takes the one axis that is free up to the 44px floor (aspect-ratio
      still sets the width; min-height wins over it for the height). */
-  .cal-cell{ aspect-ratio:1; min-height:44px; min-width:0; display:flex; flex-direction:column; align-items:center; justify-content:center; border-radius:10px; background:var(--surface); border:1px solid var(--border); position:relative; gap:2px; }
+  /* A GRID, NOT A CENTRED COLUMN, and that is the whole of the "days with a
+     dot shift up" report. As a flex column with justify-content:center, a
+     cell containing [number] centres one box and a cell containing
+     [number][dot] centres two - so every day with training sat
+     (dot + gap)/2 = 3.5px higher than every day without, and a calendar
+     month read as two interleaved rows of numbers. Measured in Chromium at
+     390x844 before and after.
+     Two explicit rows fix it by construction rather than by tuning: row 1
+     holds the number and is the same height in every cell in the grid, row 2
+     is the dot lane and is reserved whether or not a dot is placed in it.
+     Auto-placement puts the number in row 1 and the dot in row 2 with no
+     markup change (renderCalendarGrid emits exactly those two children, in
+     that order). The number therefore cannot move, which is what was asked
+     for; the dot moves down into space that was always there. */
+  .cal-cell{ aspect-ratio:1; min-height:44px; min-width:0; display:grid; grid-template-rows:1fr 7px; justify-items:center; align-items:center; border-radius:10px; background:var(--surface); border:1px solid var(--border); position:relative; }
   .cal-cell.empty{ background:transparent; border-color:transparent; }
   .cal-cell.today{ border-color:var(--chalk); }
   .cal-cell.selected{ background:var(--surface2); border-color:var(--brass); }
@@ -1509,15 +1535,36 @@
      markup, same data-action, same today/selected/hasData booleans) - only
      the immersive History screen gets the circle treatment; nothing else
      in the app that might reuse these classes is touched. */
-  body[data-scene] .cal-cell{ aspect-ratio:1; min-height:44px; min-width:0; display:flex; flex-direction:column; align-items:center; justify-content:center; border-radius:0; background:transparent; border:none; position:relative; gap:3px; }
-  body[data-scene] .cal-daynum{ display:flex; align-items:center; justify-content:center; width:38px; height:38px; border-radius:999px; font-size:14px; font-weight:600; color:var(--chalk); }
+  /* The same two-row grid as the base cell above, for the same reported
+     defect - this is the rule the Calendar screen actually hits, and the
+     base one is its twin. The circle drops 38px -> 34px because row 1 is now
+     the cell height minus the 7px dot lane (44 - 7 = 37px at this screen's
+     own `height:44px`), and a 38px circle in a 37px row is an overflow, not
+     a layout. 34px keeps the 44px cell itself as the tap target, which is
+     what the accessibility floor measures. */
+  body[data-scene] .cal-cell{ aspect-ratio:1; min-height:44px; min-width:0; display:grid; grid-template-rows:1fr 7px; justify-items:center; align-items:center; border-radius:0; background:transparent; border:none; position:relative; }
+  body[data-scene] .cal-daynum{ display:flex; align-items:center; justify-content:center; width:34px; height:34px; border-radius:999px; font-size:14px; font-weight:600; color:var(--chalk); }
   /* Today: a subtle ring, not a filled shape - distinguishable from
      "selected" without relying on color alone (SCREEN_ACCEPTANCE.md:
      "selected date, workout date and today remain distinguishable without
      color alone"). */
   body[data-scene] .cal-cell.today .cal-daynum{ box-shadow:inset 0 0 0 1.5px var(--steel); }
-  body[data-scene] .cal-cell.selected .cal-daynum{ background:var(--club-coral); color:#fff; box-shadow:none; }
+  /* color:var(--avatar-ink), not #fff - see the twin of this rule further
+     down the file (the one that used to hard-code #d92f2b) for the measured
+     contrast numbers. Both are corrected, not just the one that wins. */
+  body[data-scene] .cal-cell.selected .cal-daynum{ background:var(--energy); color:var(--avatar-ink); box-shadow:none; }
   body[data-scene] .cal-dot{ width:4px; height:4px; }
+  /* The compact stand-in for a chart with too few points to be a trend
+     (renderCompactChart, app.js). Built from tokens only - --surface2,
+     --border, --chalk, --brass, --steel - so it themes itself and needs no
+     duplicate in either dark block, which is also why it has no colour of
+     its own to get wrong. One row per point, the value in the same mono/brass
+     treatment the plot's own PR dots and the card's headline use. */
+  .chart-compact{ display:flex; flex-direction:column; gap:6px; padding:10px 0 2px; }
+  .chart-compact-row{ display:flex; align-items:center; justify-content:space-between; gap:12px; background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:8px 12px; }
+  .chart-compact-value{ font-weight:700; font-size:15px; color:var(--chalk); }
+  .chart-compact-value.pr{ color:var(--brass); }
+  .chart-compact-date{ font-size:12px; color:var(--steel); font-weight:600; }
   .report-row{ display:flex; align-items:center; justify-content:space-between; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:10px 12px; margin-bottom:8px; box-shadow:var(--shadow-card); }
   .report-flag{ font-size:12px; font-weight:700; padding:2px 8px; border-radius:999px; }
   .subtabbar{ display:flex; background:var(--surface2); border-radius:12px; padding:3px; margin-bottom:16px; border:1px solid var(--border); }
@@ -1781,7 +1828,17 @@
      already wraps to three lines at this width. A genuine 14px floor for
      this string needs the badge grid itself to become wider cells or list
      rows - a markup change in app.js, not a font-size here. */
-  .medal-rule{ font-size:11px; color:var(--steel); margin-top:2px; line-height:1.3; opacity:.85; }
+  /* overflow-wrap:anywhere - real-phone report: "the medal description for
+     אתלט שלם is clipped at the screen edge". That medal's caption ends in
+     "(סקוואט/דדליפט/לחיצה/אולימפי/משיכה)", which contains no space at all:
+     38 characters the line breaker cannot split, inside an .ach-grid cell
+     that is minmax(72px,1fr). Nothing here was wrong about WHERE it broke -
+     there was no break available, so the word simply ran past the cell, past
+     the sheet and off the viewport. anywhere, not break-word: break-word
+     still refuses to break a word when it would fit on a line of its own,
+     which is exactly this case at this width. Property only, no colour, so
+     it needs no dark-theme twin. */
+  .medal-rule{ font-size:11px; color:var(--steel); margin-top:2px; line-height:1.3; opacity:.85; overflow-wrap:anywhere; }
   .medal-badge.locked .medal-shape{ filter:grayscale(1) brightness(.55); opacity:.4; }
   /* :not(.medal-shape-plate) - a plate's glow is box-shadow on .medal-plate
      now (see that rule above); the shield/circle SVG shapes below keep
@@ -2440,9 +2497,33 @@
   }
   /* Approved immersive composition — shared by the existing render paths. */
   :root{ --club-coral:#f0443e; --club-blue:#1455b8; }
+  /* THE SAME REDUCTION THE ADD SCREEN ALREADY HAD, on the three screens that
+     were left out of it. Real-phone report: "the scene photo still takes
+     almost half the screen on the workouts library, progress and calendar
+     tabs". Measured at 390x844, before: Library 370.5px (43.9% of the
+     viewport), Calendar 353.6px (41.9%), Progress 336.7px (39.9%) - and Add,
+     after its own fix, 388px, which is why Add was the one that stopped
+     being reported.
+     The method is Add's, not a new one: keep the composition, take the
+     percentage down one step, and leave everything that is positioned off
+     --scene-photo-height (the title block, the sheet's own min-height, the
+     media crop) to follow it, which they all already do. Add's fix took
+     56svh -> 46svh, a factor of 0.82; the same factor on these three is
+     34svh/33svh/31svh, which lands them at 303/287/278px - a third of the
+     viewport rather than a half, with the photo still the first thing on the
+     screen and the sheet still meeting it at a rounded edge.
+     Add is deliberately still the tallest scene (it is the screen whose own
+     mockup pass set that height) and is untouched here. */
   .scene-page{ min-height:100svh; --scene-photo-height:calc(42svh + 16px); }
-  .scene-page--history{ --scene-photo-height:calc(40svh + 16px); }
-  .scene-page--progress{ --scene-photo-height:calc(38svh + 16px); }
+  /* PER-SCREEN, NOT ON THE BASE, even though all three values move together:
+     .scene-page's own 42svh is also what Community, the Medals overlay and
+     the first-run welcome scene inherit, and none of those was reported or
+     re-measured here. Library gets an explicit rule of its own for the same
+     reason - it used to be the one screen with no override at all, i.e. the
+     base value by accident rather than by decision. */
+  .scene-page--library{ --scene-photo-height:calc(34svh + 16px); }
+  .scene-page--history{ --scene-photo-height:calc(33svh + 16px); }
+  .scene-page--progress{ --scene-photo-height:calc(31svh + 16px); }
   .scene-page__media{ background-size:cover; background-color:var(--club-navy); }
   .scene-page__media::after{ content:""; position:absolute; inset:0; background:inherit; background-size:auto max(450px, 54svh); background-position:center top; background-repeat:no-repeat; }
   .scene-page__intro{ inset-block-start:auto; top:calc(var(--scene-photo-height) - 100px); }
@@ -2457,7 +2538,27 @@
   body[data-scene] .header #navMenuBtn, body[data-scene] .header #medalsBtn, body[data-scene] .header #notificationsBellBtn{ background:rgba(8,21,35,.72); border-radius:50%; }
   body[data-scene] #bottomTabBar{ background:rgba(8,21,35,.96); }
   body[data-scene] #bottomBar .save-btn{ background:#d92f2b; color:#fff; border-radius:16px; }
-  body[data-scene] .cal-cell.selected .cal-daynum{ background:#d92f2b; }
+  /* THE APP'S PRIMARY ACCENT, NOT A SECOND RED. Real-phone report: "today in
+     the calendar uses a red circle - use the primary accent instead". Today
+     is the selected day whenever the screen is opened, so this rule is what
+     paints it. #d92f2b is --club-coral-strong, a literal that predates the
+     token and is a different red from --energy, the coral this app uses for
+     every other active/primary state; two reds a few pixels from the coral
+     bottom-bar tint read as two systems.
+     var(--energy) BY NAME, and deliberately not var(--club-coral), which
+     would have looked like the same thing and is not: the token block
+     declares `--club-coral: var(--energy)` with a comment explaining that it
+     is an alias precisely so there is one coral - and then a later
+     `:root{ --club-coral:#f0443e; }` in the immersive-composition block
+     overrides it back to a literal. Measured, not read: an earlier draft of
+     this rule used --club-coral and painted rgb(240,68,62) where --energy
+     resolves to rgb(232,93,61). Naming --energy is the only form that cannot
+     be quietly redefined out from under this rule.
+     The number goes to --avatar-ink, this file's own existing answer for
+     text on an --energy fill (see the Add screen's save button): measured
+     6.72:1 in light and 5.38:1 in dark against the real token values, where
+     white-on-energy is 2.83:1 and would have failed AA outright. */
+  body[data-scene] .cal-cell.selected .cal-daynum{ background:var(--energy); color:var(--avatar-ink); }
   @media(min-width:900px){ .scene-page{margin-inline:-16px;} }
   .scene-summary-meta{ display:flex; align-items:center; justify-content:space-between; gap:12px; font-size:12px; font-weight:700; margin-bottom:12px; }
   .scene-page--add .pick-hero{ background:var(--surface); border-color:var(--border); margin-top:16px; }
@@ -2575,6 +2676,37 @@
   .scene-page--add .log-list{gap:4px;}
 
   .scene-page--achievements .ach-summary-level{color:var(--energy-text);}
+  /* THE MEDALS SHEET STOPS BEING TRANSLUCENT. Real-phone report: "the medals
+     screen uses a dark mustard background with grey text that is hard to
+     read". Neither half is a colour choice anybody made - the "mustard" is
+     assets/club-photos/achievements-plates.jpg (a wall of bronze and gold
+     plates) showing through, because the medals overlay renders a
+     .scene-page inside the modal while body[data-scene] is still set by
+     whichever tab is behind it, so it picks up
+     `body[data-scene] .scene-page > .scene-sheet{background:rgba(255,253,248,.88)}`
+     - a translucency tuned for a sheet sitting over a scrimmed photo band,
+     not over a full-bleed photo of metal. And the "grey text" is
+     .medal-rule's own var(--steel), which is a perfectly good 6.1:1 on the
+     opaque surface it was measured against and something far less than that
+     over a photo, where the effective background is whatever pixel is under
+     each glyph and no ratio can be computed at all.
+     var(--surface) is the app's ordinary card surface and is defined ON
+     .scene-sheet itself (white in light, #1F3057 in dark - see that rule's
+     token block), so this is the normal surface by name, opaque, in both
+     themes, with no new literal and no dark-theme twin needed. Contrast on
+     it is then a number again: 6.12:1 light, 6.15:1 dark, measured off the
+     real tokens and asserted from rendered pixels in
+     scripts/browser-check/training-log-polish.mjs.
+     backdrop-filter goes with it: blurring what is behind an opaque surface
+     is pure cost.
+     One selector, and an ID one: the overlay is a child of <body>, so no
+     `#achievementsOverlay body[...]` form can ever match. (1,2,1) beats both
+     the light (0,3,1) and the dark (0,5,1) translucency rules on specificity
+     rather than on source order, so it cannot be lost by something being
+     inserted after it. */
+  #achievementsOverlay .scene-page > .scene-sheet{
+    background:var(--surface); backdrop-filter:none; -webkit-backdrop-filter:none;
+  }
   .scene-page--achievements .medal-rule{opacity:1; color:var(--steel);}
   .cal-view-btn{min-height:44px; min-width:44px; padding:4px; color:var(--steel); font-size:12px; font-weight:700;}
   .cal-panel[data-calendar-view="list"] .cal-grid,.cal-panel[data-calendar-view="list"] .cal-weekdays,.cal-panel[data-calendar-view="list"] .cal-legend{display:none;}

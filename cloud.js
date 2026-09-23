@@ -1877,6 +1877,28 @@
   // turned into buttons.
   var bidiText = window.BoxLogSafe.bidiText;
   const bidiHtml = window.BoxLogSafe.bidiHtml;
+  // bidiUnit is the third: a MEASUREMENT (a number plus a Hebrew unit or a
+  // Hebrew count word) whose base direction is stated RTL rather than
+  // inferred. Every `.mono` readout in this file and in src/community/*.js
+  // that puts a Hebrew word next to a number needs it - `.mono` declares
+  // `direction:ltr`, which is right for a bare number and wrong the moment a
+  // Hebrew word joins it (a challenge's "5 / 3 שבועות", a post's
+  // "40% מהיעד הושלמו"). See the "CONTAINER level" section in
+  // safe-helpers.js.
+  //
+  // The example that used to stand here was the feed's own streak chip, and
+  // it is no longer an example of anything: streakDaysHtml() puts only the
+  // digits inside `.mono`, so that row needs no isolation at all.
+  // test/community-feed-polish.test.mjs scans this whole file for the old
+  // phrasing and fails on it, comment or code - correctly, because a stale
+  // example in a comment is how the old shape gets copied back in.
+  // `var`, like bidiText directly above and for the identical reason: app.js
+  // binds the same helper at ITS top level, and these two classic scripts
+  // share one global lexical environment. `var` + `var` binding the identical
+  // frozen function is legal; a `const` on either side is a redeclaration
+  // SyntaxError that takes the whole app down at parse time.
+  var bidiUnit = window.BoxLogSafe.bidiUnit;
+  var bidiUnitHtml = window.BoxLogSafe.bidiUnitHtml;
 
   // ==========================================================================
   // JARGON DISCLOSURE (design spec section 3)
@@ -2916,6 +2938,13 @@
   window.renderShareControl = function (type, id) {
     if (!window.isCommunitySignedIn || !window.isCommunitySignedIn()) return "";
     const key = shareKey(type, id);
+    // MERGE NOTE. Two branches replaced this emoji at once, for the same
+    // reported reason ("replace the share emoji on the progress card with a
+    // stroke share icon"), and main's is the one that survives: a local
+    // SHARE_ICON const here would have been a second drawing of an action
+    // that already has one, which is the drift the shared set exists to stop.
+    // The behaviour both sides wanted - no emoji, a stroked glyph inheriting
+    // the button's own --steel - is what SHARE_ICONS.club already gives.
     // The glyph is SHARE_ICONS.club (src/community/outward.js), the same one
     // the "ההישגים שלי" rows now draw for "share this to the club" - it was
     // an outbox-tray emoji here and an arrow emoji there, two different
@@ -3865,7 +3894,7 @@
         <div style="padding:18px 18px calc(env(safe-area-inset-bottom,0px) + 16px);">
           <div class="flex" style="justify-content:space-between;align-items:center;margin-bottom:12px;">
             <h2 id="recapViewTitle" style="margin-top:0;font-weight:800;font-size:17px;margin-bottom:0;">${weekLabel ? "סיכום השבוע · " + esc(weekLabel) : "סיכום שבועי"}</h2>
-            <button class="chip-btn" data-community-action="close-recap-view" aria-label="סגירה">✕</button>
+            ${sheetCloseBtnHtml("close-recap-view")}
           </div>
           ${nav}
           ${bodyHtml}
@@ -4109,6 +4138,30 @@
       + renderOutwardShareSheet()
       + renderConfirmSheet();
   }
+  // THE CLOSE BUTTON EVERY SHEET IN THIS APP USES, defined once.
+  //
+  // Real-phone report: "the terms sheet has a large boxed close button unlike
+  // every other sheet". Both halves are right. .chip-btn is a pill - a 44px
+  // min-height, a real border, a filled background, sized for "RSVP" or
+  // "לעוקבים" - and a bare "✕" glyph inside it reads as a button that does
+  // something, not as the dismiss affordance. Every app.js dialog
+  // (#notificationsOverlay, #achievementsOverlay, #supportOverlay, the
+  // exercise picker) closes with .icon-btn and the 20x20 stroked X below,
+  // and that is what a member arriving at the glossary from the workouts
+  // library has just been looking at.
+  //
+  // WHICH WAY THE DRIFT GOES, because it is a real question here. This file
+  // and src/community/*.js had SIX copies of the chip-btn form and zero of
+  // the standard one, so the term sheet was not the odd one out within
+  // cloud.js - it was consistent with five siblings and all six were
+  // inconsistent with the app around them. Fixing only the reported one
+  // would have left five, so all six call this, and this is the only
+  // definition. Listed in the PR.
+  function sheetCloseBtnHtml(action) {
+    return `<button class="icon-btn" data-community-action="${esc(action)}" aria-label="סגירה" style="color:var(--steel);">`
+      + `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>`
+      + `</button>`;
+  }
   // ==========================================================================
   // Design spec section 3, TIER 3 — the term sheet.
   //
@@ -4162,7 +4215,7 @@
       <div class="modal-sheet" data-term-sheet style="max-height:none;">
         <div class="modal-head">
           <span class="modal-title" style="font-size:13px;color:var(--steel);">${state.ui.termGlossaryOpen ? "מונחים" : "מה זה?"}</span>
-          <button class="chip-btn" data-community-action="term-close" aria-label="סגירה">✕</button>
+          ${sheetCloseBtnHtml("term-close")}
         </div>
         <div style="padding:4px 18px calc(env(safe-area-inset-bottom,0px) + 22px);">${page}</div>
       </div>
@@ -4533,6 +4586,16 @@
       if (state.feed.scope !== "for_you") {
         return emptyStateHtml({ key: "feed-empty", icon: "people", headline: "עדיין אין כאן פעילות", body: scopeEmpty });
       }
+      // MERGE NOTE (streakDaysHtml, below). Two branches fixed the same
+      // paint-order defect on this row at once. This branch wrapped the whole
+      // string in bidiUnit(), to stop `.mono`'s own `direction:ltr` painting
+      // the Hebrew count word on the far side of its number. main's
+      // streakDaysHtml() fixes it one level deeper: only the DIGITS go inside
+      // `.mono`, so the LTR box has no Hebrew in it left to reorder. That is
+      // strictly the better shape and is what survives - the wrapper is not
+      // redundant here, it is unnecessary. The rendered-`.mono` audit in
+      // test/bidi-isolation.test.mjs passes it for that exact reason: no
+      // Hebrew in the box, nothing to isolate.
       const active = (state.club.streaks || []).slice(0, ACTIVE_MEMBERS_SHOWN);
       const activeHtml = active.length ? `<div class="chart-card" data-feed-active-members="ready" style="margin-top:10px;">
         <h3 class="field-label" style="margin:0 0 8px;">החברים הפעילים במועדון</h3>
@@ -4800,7 +4863,7 @@
     // separate one, who is on it yet.
     const runningChallenge = activeWeeklyChallenge();
     const weeklyLeaderboardList = state.club.weeklyChallenge
-      ? renderRankedList(state.club.weeklyLeaderboard, (it) => it.author_id, (it) => esc(it.result_text))
+      ? renderRankedList(state.club.weeklyLeaderboard, (it) => it.author_id, (it) => bidiUnit(it.result_text))
       : runningChallenge
         ? `<div class="empty">האתגר פתוח ועדיין אין תוצאות. תוצאה שתשתפו מהאימון תיכנס לטבלה מעצמה.</div>`
         : `<div class="empty">אין אתגר פעיל כרגע</div>`;
