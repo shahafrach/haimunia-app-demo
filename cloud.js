@@ -1492,7 +1492,12 @@
   // modules are on, same as permissions itself.
   async function loadClubFeatures() {
     if (!state.user) { state.club.features = {}; state.club.featuresLoaded = false; return; }
-    const { data, error } = await client.from("club_features").select("module_key,enabled,config");
+    // N2 (202609230007). SELECT (config) is revoked from authenticated, so this
+    // reads through club_features_for_caller() rather than the table. The RPC
+    // returns the same three fields and masks config to {} unless the caller is
+    // staff - which is why the admin panel still edits thresholds and a member
+    // no longer receives them.
+    const { data, error } = await client.rpc("club_features_for_caller");
     if (error) { state.club.features = {}; state.club.featuresLoaded = false; return; }
     const next = {};
     for (const row of (data || [])) next[row.module_key] = { enabled: row.enabled, config: row.config || {} };

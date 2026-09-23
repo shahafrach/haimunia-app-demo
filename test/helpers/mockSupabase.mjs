@@ -400,6 +400,27 @@ export function createMockSupabase(seedTables = {}) {
         // shortcut masking it.
         const handler = rpcHandlers[name];
         if (handler) return Promise.resolve(handler(args, { db, currentUser }));
+        // N2 (202609230007). The client reads club features through
+        // club_features_for_caller() now, because SELECT (config) is revoked
+        // from authenticated. Served from the SAME club_features fixture the 27
+        // files that seed it already use, so none of them had to change: a test
+        // seeds rows and the client sees them, exactly as before.
+        //
+        // The staff mask is modelled too, using the same rank table as
+        // is_management_account above - is_staff() is rank >= coach. A test that
+        // seeds a coach-task threshold and then asserts an ordinary member
+        // cannot read it should be able to say that here rather than only in
+        // pgTAP.
+        if (name === "club_features_for_caller") {
+          const callerIsStaff = rankOf(currentUser && currentUser.id) >= MOCK_ROLE_RANK.coach;
+          const out = rows("club_features").map((r) => ({
+            module_key: r.module_key,
+            enabled: r.enabled,
+            config: callerIsStaff ? (r.config || {}) : {},
+          }));
+          out.sort((a, b) => String(a.module_key).localeCompare(String(b.module_key)));
+          return Promise.resolve({ data: out, error: null });
+        }
         // COMM-110..113. A stand-in for public.feed_page() that is honest
         // about what it is: it serves fixture rows in the order the fixture
         // Post-Phase-3 fix. loadMemberRoles() used to read invite_redemptions
