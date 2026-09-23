@@ -245,7 +245,7 @@
     // "dashboard" until the operator-depth rework, which retired that tab
     // (see MANAGE_TAB_ALIASES). manageScrollTo is a one-shot section id
     // consumed by afterRenderManage() - see setManageTab().
-    ui: { tab: "feed", manageTab: "invites", manageScrollTo: "", loading: false, message: "", fieldErrors: {}, confirmDialog: null,
+    ui: { tab: "feed", manageTab: "invites", manageScrollTo: "", loading: false, message: "", fieldErrors: {}, confirmDialog: null, backupDeleteConfirm: false,
       // What was last copied to the clipboard, so the control that was
       // pressed can confirm on itself - see markCopied().
       copiedToken: "",
@@ -2934,10 +2934,24 @@
     state.posts.comparisonForPostId = postId;
     setMessage(error ? "השוואת התוצאות נכשלה" : "");
   }
+  // The one account-deletion path, reached from the Community account tab
+  // and from the backup panel (launch-readiness audit B5: a backup-only
+  // member has no profile, so no account tab, and had no way to ask).
+  // Backup is switched off on this device before signing out: the deleted
+  // account takes its private_records with it at the purge, and without the
+  // opt-out the very next saved set would quietly open a NEW anonymous
+  // account and start uploading again - a deletion the member asked for,
+  // undone by the app the next time they train.
   async function requestDeletion() {
     if (!state.user) return;
     const { error } = await client.rpc("request_account_deletion");
     if (error) return setMessage(failText("בקשת המחיקה נכשלה", error));
+    localStorage.setItem(BACKUP_OPTOUT_KEY, "1");
+    if (state.syncEnabled) { state.syncEnabled = false; localStorage.setItem("haimunia-demo:cloudSyncEnabled", "0"); }
+    state.ui.backupDeleteConfirm = false;
+    // Before signOut(): its auth event is what repaints, and showToast()
+    // only paints on the next render.
+    if (typeof window.showToast === "function") window.showToast("בקשת המחיקה התקבלה. החשבון ומה שגובה לענן יימחקו לצמיתות בתוך 30 יום. האימונים במכשיר הזה נשארים.");
     await client.auth.signOut();
   }
   // COMM-014. Every realtime channel is scoped to the sub-tab that
@@ -5661,10 +5675,33 @@
   // surface they can re-read, rather than a toast that is gone in five
   // seconds.
   const BACKUP_OPTOUT_TRUTHS = `<div class="footer-note" style="margin-bottom:8px;">הכיבוי עוצר העלאות מכאן והלאה בלבד: הוא לא מוחק מהענן את מה שכבר הועלה, ולא סוגר את החשבון שנפתח לגיבוי. למחיקת מה שכבר בענן צריך לבקש מחיקת חשבון.</div>`;
+  // Launch-readiness audit B5. PRIVACY.md tells a backup-only member that
+  // removing what was backed up means requesting account deletion, and the
+  // only button for that lived in the Community account tab - which a member
+  // with no profile never sees. This is the same request, from the card the
+  // backup lives on. Confirmed inline rather than through the community
+  // confirm sheet: that sheet is painted by the Community view, and this card
+  // is in Settings. Two steps, the destructive one on a red-bordered panel
+  // that says what goes, what stays, and when.
+  function backupDeleteHtml() {
+    if (!state.user) return "";
+    if (!state.ui.backupDeleteConfirm) {
+      return `<button class="link-btn" data-community-action="backup-delete" style="display:block;margin-top:10px;color:var(--red-text);">מחיקת הגיבוי מהענן</button>`;
+    }
+    const alsoProfile = state.profile ? " גם הפרופיל והשיתופים בקהילה יוסרו מיד." : "";
+    return `<div class="footer-note" role="group" aria-labelledby="backupDeleteTitle" style="margin-top:12px;padding:10px;border-radius:8px;border:1px solid var(--red-text);">
+      <div id="backupDeleteTitle" style="font-weight:800;color:var(--red-text);margin-bottom:4px;">מחיקת הגיבוי מהענן</div>
+      <div style="margin-bottom:10px;">כל מה שגובה לענן, יחד עם החשבון שנפתח לגיבוי, יימחק לצמיתות בתוך 30 יום.${esc(alsoProfile)} האימונים שבמכשיר הזה נשארים, והגיבוי האוטומטי ייכבה כדי שהשמירה הבאה לא תפתח גיבוי חדש.</div>
+      <div class="chip-row" style="margin-top:0;">
+        <button class="chip-btn" data-community-action="backup-delete-cancel">ביטול</button>
+        <button class="chip-btn primary danger" data-community-action="backup-delete-confirm">מחיקה</button>
+      </div>
+    </div>`;
+  }
   window.renderBackupSettingsPanel = function () {
     if (!configured) return "";
     if (backupOptedOut()) {
-      return `${BACKUP_PANEL_TITLE}<div class="footer-note" style="margin-bottom:8px;">כבוי. מהשמירה הבאה האימונים נשמרים במכשיר הזה בלבד.</div>${BACKUP_OPTOUT_TRUTHS}<button class="link-btn" data-community-action="backup-enable">הפעלת גיבוי אוטומטי</button>`;
+      return `${BACKUP_PANEL_TITLE}<div class="footer-note" style="margin-bottom:8px;">כבוי. מהשמירה הבאה האימונים נשמרים במכשיר הזה בלבד.</div>${BACKUP_OPTOUT_TRUTHS}<button class="link-btn" data-community-action="backup-enable">הפעלת גיבוי אוטומטי</button>${backupDeleteHtml()}${state.ui.message ? `<div class="footer-note" role="status" style="margin-top:10px;color:var(--brass);">${esc(state.ui.message)}</div>` : ""}`;
     }
     if (!state.user) {
       return `${BACKUP_PANEL_TITLE}<div class="footer-note" style="margin-bottom:8px;">מהשמירה הראשונה האימונים שלכם מתחילים להיות מגובים לענן ברקע, אוטומטית ופרטית — רק אתם רואים אותם. הסנכרון קורה מעצמו ואין כאן קובץ להוריד; „קובץ גיבוי להורדה" הוא דבר נפרד במסך הזה. אפשר לכבות בכל שלב.</div><button class="link-btn" data-community-action="backup-optout">כיבוי גיבוי אוטומטי</button>`;
@@ -5696,7 +5733,7 @@
     const credentialsCta = state.user.is_anonymous
       ? `<div style="margin-top:12px;">${unreachableWarning}<div class="footer-note" style="margin-bottom:6px;">${backupRisk.level === "urgent" ? "הפתרון הקבוע: שם לכניסה וסיסמה. אחריהם אפשר להיכנס לאותם נתונים מכל מכשיר." : "גישה לאותם נתונים ממכשיר אחר דורשת שם לכניסה וסיסמה."}</div><form id="backupCredentials">${field("backupCredentials", "username", LOGIN_NAME_LABEL, `<input class="text-input" name="username" dir="ltr" autocapitalize="off" autocomplete="username" placeholder="${esc(USERNAME_RULE_TEXT)}" data-live-validate="username" data-live-validate-form="backupCredentials" required/>`)}${field("backupCredentials", "password", "סיסמה", `<input class="text-input" name="password" type="password" dir="ltr" autocomplete="new-password" placeholder="${esc(PASSWORD_RULE_TEXT)}" data-live-validate="password" data-live-validate-form="backupCredentials" required/>`)}${field("backupCredentials", "passwordConfirm", "אימות סיסמה", `<input class="text-input" name="passwordConfirm" type="password" dir="ltr" autocomplete="new-password" placeholder="הקלידו שוב" data-live-validate="passwordConfirm" data-live-validate-form="backupCredentials" required/>`)}<button class="chip-btn primary" type="submit" style="margin-top:6px;">שמירת גישה ממכשיר אחר</button></form></div>`
       : "";
-    return `${BACKUP_PANEL_TITLE}<div class="footer-note" style="margin-bottom:8px;">${esc(state.syncEnabled ? "פעיל. האימונים שלכם מגובים לענן ברקע, אוטומטית ופרטית — רק אתם רואים אותם. הסנכרון קורה מעצמו ואין כאן קובץ להוריד; „קובץ גיבוי להורדה\" הוא דבר נפרד במסך הזה." : "מוגדר אך טרם הופעל.")}</div><button class="link-btn" data-community-action="backup-optout">כיבוי גיבוי אוטומטי</button>${credentialsCta}${state.ui.message ? `<div class="footer-note" role="status" style="margin-top:10px;color:var(--brass);">${esc(state.ui.message)}</div>` : ""}`;
+    return `${BACKUP_PANEL_TITLE}<div class="footer-note" style="margin-bottom:8px;">${esc(state.syncEnabled ? "פעיל. האימונים שלכם מגובים לענן ברקע, אוטומטית ופרטית — רק אתם רואים אותם. הסנכרון קורה מעצמו ואין כאן קובץ להוריד; „קובץ גיבוי להורדה\" הוא דבר נפרד במסך הזה." : "מוגדר אך טרם הופעל.")}</div><button class="link-btn" data-community-action="backup-optout">כיבוי גיבוי אוטומטי</button>${credentialsCta}${backupDeleteHtml()}${state.ui.message ? `<div class="footer-note" role="status" style="margin-top:10px;color:var(--brass);">${esc(state.ui.message)}</div>` : ""}`;
   };
   // ---- Shared Phase 1 dialog focus + keyboard management (COMM-190) -----
   // Every Phase 1 overlay dialog behaves the same way: focus moves in on
@@ -6615,6 +6652,9 @@
       if (typeof window.showToast === "function") window.showToast("גיבוי אוטומטי לענן הופעל. האימונים יגובו מהשמירה הבאה.");
       rerender();
     }
+    else if (action === "backup-delete") { state.ui.backupDeleteConfirm = true; rerender(); }
+    else if (action === "backup-delete-cancel") { state.ui.backupDeleteConfirm = false; rerender(); }
+    else if (action === "backup-delete-confirm") { state.ui.backupDeleteConfirm = false; requestDeletion(); }
     else if (action === "backup-download-copy") {
       // The one action a member can take right now that survives losing this
       // browser. app.js owns the file, so this only reports the outcome -
@@ -6699,7 +6739,7 @@
     else if (action === "unblock") unblock(el.dataset.id);
     else if (action === "delete-post") askConfirm({ title: "הסרת שיתוף", message: "להסיר את השיתוף מהפיד? אפשר יהיה לבטל למשך כמה שניות.", confirmLabel: "הסרה", destructive: true, action: "delete-post", payload: { postId: el.dataset.id } });
     else if (action === "compare") compare(el.dataset.key, el.dataset.id);
-    else if (action === "delete-account") askConfirm({ title: "מחיקת חשבון", message: "הפרופיל והשיתופים יוסרו מיד. המחיקה הסופית תתבצע לאחר 30 יום. להמשיך?", confirmLabel: "מחיקה", destructive: true, action: "delete-account" });
+    else if (action === "delete-account") askConfirm({ title: "מחיקת חשבון", message: "הפרופיל והשיתופים יוסרו מיד, והגיבוי האוטומטי לענן ייכבה במכשיר הזה. המחיקה הסופית, כולל הגיבוי שבענן, תתבצע לאחר 30 יום. להמשיך?", confirmLabel: "מחיקה", destructive: true, action: "delete-account" });
     else if (action === "share-achievement") publishAchievement(el.dataset.id, el.dataset.title, el.dataset.rule);
     else if (action === "toggle-comments") toggleComments(el.dataset.id);
     else if (action === "delete-comment") askConfirm({ title: "מחיקת תגובה", message: "למחוק את התגובה? אפשר יהיה לבטל למשך כמה שניות.", confirmLabel: "מחיקה", destructive: true, action: "delete-comment", payload: { commentId: el.dataset.id, postId: el.dataset.post } });
