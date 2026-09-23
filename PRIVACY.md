@@ -159,7 +159,7 @@ the Hebrew governs for members.
 - **התראות.** התראות דחיפה מופעלות מאז 17 בספטמבר 2026. אם הפעלתם
   אותן בדפדפן מסוים ואישרתם את בקשת ההרשאה שלו, נשמר מזהה ההתראות של
   אותו דפדפן. בלי ההפעלה הזו לא נשמר שום מזהה; כיבוי ההתראות מבטל את
-  המנוי ומסמן את המזהה כמבוטל.
+  המנוי ומסמן את המזהה כמבוטל. מזהה שבוטל נמחק לגמרי לאחר 90 יום.
 - **דיווח על תקלה.** אם שלחתם דיווח ממסך הדיווח על תקלה בכפתור "שליחה
   לצוות המועדון" (אפשרי לחברי קהילה בלבד), נשמרים הטקסט שכתבתם (עד 4,000
   תווים), הפרטים הטכניים שמוצגים לכם באותו מסך לפני השליחה (גרסת
@@ -640,7 +640,8 @@ time.
   2026-09-17. If you turn them on in a given browser and grant its
   permission prompt, that browser's push identifier is stored. Without
   that opt-in no such identifier is stored; turning them off unsubscribes
-  that browser and marks the identifier revoked.
+  that browser and marks the identifier revoked. A revoked identifier is
+  deleted outright after 90 days.
 - **Bug reports.** If you send a report from the report-a-problem screen
   with "send to the club staff" (available to community members only),
   we store the text you wrote (up to 4,000 characters), the technical
