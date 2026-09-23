@@ -44,8 +44,8 @@ select results_eq(
 select results_eq(
   $$ select title, body from public.onboarding_step_content where step = 'welcome' $$,
   $$ values ('ברוכים הבאים לקהילה!'::text,
-             'כאן רואים מה קורה במועדון, ואפשר לשתף אימונים ושיאים ולהגיב לחברים אחרים. השורה "מה קורה היום?" בראש הפיד פותחת את השיתוף הראשון שלכם.'::text) $$,
-  'the welcome card is seeded with renderOnboardingWelcomeStep()''s exact live copy - first deploy changes nothing a member sees');
+             'כאן רואים מה קורה במועדון, ואפשר לשתף אימונים ושיאים ולהגיב לחברים אחרים. השורה "מה עשית היום?" בראש הפיד פותחת את השיתוף הראשון שלכם.'::text) $$,
+  'the welcome card carries renderOnboardingWelcomeStep()''s exact live copy - a member is never told to tap a button that is not there');
 select results_eq(
   $$ select title, body from public.onboarding_step_content where step = 'first_class' $$,
   $$ values ('הגעתם לאימון הראשון!'::text,
