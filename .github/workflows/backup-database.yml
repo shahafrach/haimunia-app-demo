@@ -116,6 +116,8 @@ jobs:
     env:
       SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
       BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -137,6 +139,22 @@ jobs:
             echo "member's data."
             missing=1
           fi
+          # Added 2026-09-23. The database half alone is NOT a backup of this
+          # app: the 2026-09-23 restore drill established that `supabase db
+          # dump` captures storage.objects ROWS and not the files, so a
+          # database-only archive restores perfectly and leaves every member
+          # photo pointing at bytes that no longer exist. Refusing is
+          # deliberate, and follows this file's own rule: a backup job that
+          # reports green while backing up half of the data is worse than no
+          # job, because it converts "we have no photo backup" into "we think
+          # we do".
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ] || [ -z "$SUPABASE_PROJECT_REF" ]; then
+            echo "SUPABASE_ACCESS_TOKEN or SUPABASE_PROJECT_REF is not set."
+            echo "Both are needed to download the photo buckets. Without them"
+            echo "this job would back up the database only, which the restore"
+            echo "drill showed is not a recoverable backup of this app."
+            missing=1
+          fi
           exit $missing
 
       - uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520 # v3.0.0
@@ -154,6 +172,17 @@ jobs:
           supabase db dump --db-url "$SUPABASE_DB_URL" -f backup/schema.sql
           supabase db dump --db-url "$SUPABASE_DB_URL" -f backup/data.sql --data-only
           supabase db dump --db-url "$SUPABASE_DB_URL" -f backup/roles.sql --role-only
+
+      # THE OTHER HALF OF THE BACKUP (2026-09-23). Downloads every object in
+      # post-photos and avatar-photos into backup/storage/, with a manifest
+      # carrying a sha256 per file so a restore can be checked rather than
+      # hoped at. Photos do not compress - measured at a ratio of 1.000 on
+      # real JPEGs - so the archive grows by very close to the raw byte total.
+      - name: photos and avatars
+        run: |
+          set -euo pipefail
+          supabase link --project-ref "$SUPABASE_PROJECT_REF"
+          node scripts/backup-storage.mjs backup backup
 
       # A DUMP THAT SUCCEEDED IS NOT A DUMP THAT CONTAINS ANYTHING. pg_dump
       # exits 0 on an empty result, so size is checked before anything is
