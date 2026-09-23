@@ -76,6 +76,28 @@ test("the schema, the audits, the runbooks and the tests are not public", async 
   }
 });
 
+test("/photos/ and the npm manifest are not public (launch-readiness S11)", async () => {
+  for (const p of ["/photos/club-rig-wide.jpeg", "/Photos/club-rings-portrait.jpeg",
+                   "/package.json", "/package-lock.json", "/PACKAGE.JSON"]) {
+    const { status, passedThrough } = await serve(p);
+    assert.equal(status, 404, `${p} must not be public`);
+    assert.equal(passedThrough, false, `${p} must never reach the asset`);
+  }
+});
+
+test("blocking /photos/ and package.json does not take the app's own photos or manifest with it", async () => {
+  // The app's photos live under /assets/, and /manifest.json is the PWA
+  // manifest - the reason package.json is an exact path, not a .json rule.
+  const sw = readFileSync(new URL("sw.js", root), "utf8");
+  const photos = [...sw.matchAll(/"\.(\/assets\/(?:club-)?photos\/[^"]+)"/g)].map((m) => m[1]);
+  assert.ok(photos.length >= 8, `sw.js precaches few photos (${photos.length}) - did the regex stop matching?`);
+  for (const p of [...photos, "/manifest.json", "/src/shared/safe-helpers.js"]) {
+    assert.equal((await serve(p)).status, 200, `${p} must still be served`);
+  }
+  // Only the top-level manifest is blocked: a path merely ending in it is not.
+  assert.equal((await serve("/src/shared/package.json")).status, 200);
+});
+
 test("the block is case-insensitive - a capitalised path is the same path", async () => {
   for (const p of ["/Docs/audit/RISK_REGISTER.md", "/SUPABASE/migrations/x.sql", "/Changes.MD"]) {
     const { status } = await serve(p);
