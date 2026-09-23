@@ -1216,11 +1216,23 @@
   // here is a real, server-enforced RLS gate. renderClubModulesPanel() reads
   // this flag to avoid making a blanket "enforced on the server" claim about
   // a row where that would be false.
+  //
+  // serverPartial (202609230001) is the third answer, and it is on the four
+  // rows below it applies to because it is TRUE of them, not as a softer
+  // "enforced". That migration put the switch inside the definer functions
+  // that bypassed the read policies (feed_page, post_create, event_rsvp,
+  // chal_progress, ach_claim), but other server paths into these modules
+  // still run with the switch off - pr_share/ach_share, post edits and
+  // comments, chal_record_progress, notif_on_achievement,
+  // notif_on_event_cancelled, chal_notify_ending_soon. Until each is gated
+  // the row says "נאכף בשרת חלקית"; the branch that gates the last of them
+  // takes the flag off. announcements and leaderboards are fully gated now
+  // and keep the plain claim.
   const CLUB_MODULE_TOGGLES = [
     { key: "announcements", label: "הודעות מועדון" },
-    { key: "events", label: "אירועים" },
-    { key: "challenges", label: "אתגרים" },
-    { key: "achievements", label: "הישגים ומדליות" },
+    { key: "events", label: "אירועים", serverPartial: true },
+    { key: "challenges", label: "אתגרים", serverPartial: true },
+    { key: "achievements", label: "הישגים ומדליות", serverPartial: true },
     // 202609220003. The feed row is the first switch with a CHOICE behind it
     // rather than a threshold: not "how many", but "which of two". The two
     // orders are two different promises - a dated stream a member can trust,
@@ -1232,7 +1244,7 @@
     // agree. Pinned posts, coach posts and announcements and today's club WOD
     // stay above the stream in the chronological order - that is not a
     // separate setting and is not switchable.
-    { key: "feed", label: "פיד (כולל תגובות חיזוק)",
+    { key: "feed", label: "פיד (כולל תגובות חיזוק)", serverPartial: true,
       settings: [
         { id: "order", label: "סדר הפיד", def: "chronological", choices: [
           { value: "chronological", label: "כרונולוגי - החדש למעלה" },
