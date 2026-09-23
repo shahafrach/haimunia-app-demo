@@ -1,5 +1,17 @@
 ## 2026-09-10 addendum — re-verified against current tree, not a new pass
 
+> **SUPERSEDED IN PART (2026-09-23): this document describes GitHub Pages as
+> the host. It is not.** The site moved to Cloudflare Pages on 2026-09-16, so
+> every statement below about the host, about response headers being
+> impossible, or about `github.io` as the origin, describes the situation when
+> this was written and not the situation now. See
+> [`docs/ops/MONITORING.md`](../ops/MONITORING.md) and
+> [`docs/PROJECT_STATUS.md`](../PROJECT_STATUS.md) for what is true today.
+>
+> The body is left verbatim on purpose: it is a dated record of an audit, and
+> editing its findings to match a later world would destroy the thing that
+> makes it worth keeping.
+
 Rows 1–14 (everything checkable from this repository) re-run fresh against
 the current working tree (which, partway through this pass, gained a
 commit — `9735838`, made by another actor sharing this working tree, not
