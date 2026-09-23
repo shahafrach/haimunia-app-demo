@@ -5,7 +5,7 @@ holds the state, and it is the one a session should distrust first: if a
 number here disagrees with the repository, the repository is right and this
 file is stale. Say so in your PR.
 
-**Last reconciled: 2026-09-19, against `main` at `8ce9e5c`.**
+**Last reconciled: 2026-09-23, against `main` at `926326c`.**
 
 ---
 
@@ -13,34 +13,25 @@ file is stale. Say so in your PR.
 
 | | |
 |---|---|
-| App version | **4.77.0** (`APP_VERSION` in app.js, mirrored to `SW_VERSION` in sw.js) |
-| Migrations | **175** files in `supabase/migrations/` |
-| pgTAP suites | **116** files in `supabase/tests/` (117 with `rls_helpers.sql`) — assertion total **not measured here** (`supabase test db` needs Docker) |
-| JS tests | **1970 passing, 0 failing** (`npm test`, run 2026-09-19 on this branch) |
-| Browser scenarios | **47**, all passing (`scripts/browser-check/run-all.mjs`, real Chromium, run 2026-09-19) |
-| Community layer | `cloud.js` **6,756** lines plus **14** files in `src/community/` |
-| Tables in `public` | **63**, every one with RLS enabled |
-| RLS policies | **137** |
-| Functions in `public` | **235 measured**, of which **182** are SECURITY DEFINER — plus **five** declared by `202609190001` and never counted in a container |
+| App version | **4.78.0** (`APP_VERSION` in app.js, mirrored to `SW_VERSION` in sw.js) |
+| Migrations | **185** files in `supabase/migrations/` |
+| pgTAP suites | **125** test files in `supabase/tests/` (126 with `rls_helpers.sql`) — **3955 assertions, 0 failing** (`supabase test db`, Docker, 2026-09-23) |
+| JS tests | **2322 passing, 0 failing** (`npm test`, 2026-09-23 on the #56 merge result) |
+| Browser scenarios | **60** files in `scripts/browser-check/` — `run-all.mjs` green 2026-09-23 on the #45 merge result (#56 adds no scenario) |
+| Community layer | `cloud.js` **7,855** lines plus **15** files in `src/community/`; `app.js` **9,173** lines |
+| Tables in `public` | **67**, every one with RLS enabled (67 of 67 measured) |
+| RLS policies | **142** |
+| Functions in `public` | **273**, of which **215** are SECURITY DEFINER |
 
-The schema figures were read from a Postgres 16 instance built by applying
-all 173 migrations in filename order, in PR #10. Five of them could not
-apply in that container — `202609050005`, `202609060016`, `202609060018`, `202609080003`
-(all pg_cron) and `202609120008` (needs PG17's `MAINTAIN` privilege). None of
-the five creates a table or a policy, so the table and policy counts are
-complete; the function count may be short by the handful those five declare.
-
-**Those rows have still not been re-measured in a container, and two of them
-have since been adjusted by hand.** Two migrations have landed and applied
-since that read. `202609180001` drops and recreates `admin_member_roster` at
-the same argument list, so it adds no table, no policy and no function.
-`202609190001` adds **`job_health_state`** — hence 63 tables, and it has RLS
-enabled with **no policy at all**, so the policy count is genuinely unchanged
-at 137 — and declares five functions (`job_health_check()`,
-`job_health_status()`, `cron_cadence_window()`, `admin_alert_recipients()`,
-and a re-declared `scheduled_job_health()`). The table row is arithmetic on a
-measurement; the function row is not a measurement at all. The next session to
-stand up a container should re-read all four rather than trust any of this.
+**The schema rows above are a real measurement again.** They were read on
+2026-09-23 out of the local Supabase container after `supabase db reset --local`
+applied all 185 migrations cleanly — `pg_tables`, `pg_policies`, `pg_proc` and
+`pg_class.relrowsecurity` in the `public` schema. That closes the caveat this
+table carried since 2026-09-19, when the figures came from a Postgres 16
+instance in which five migrations could not apply and the function count was
+known to be short. Nothing is estimated or carried forward by arithmetic now,
+and "every table has RLS enabled" is counted rather than asserted: 67 tables,
+67 with `relrowsecurity`.
 
 ---
 
@@ -90,109 +81,47 @@ stand up a container should re-read all four rather than trust any of this.
 
 ## What shipped most recently
 
-**Three branches merged 2026-09-19, after the consolidation in #16 (PRs #15,
-#17, #14).** None of them changes what a member sees:
+**Thirty-three branches merged between 2026-09-19 and 2026-09-23**, consolidated
+in CHANGES.md under *"The community becomes a feed, the switches reach the
+server, and the phone gets a real pass"*. The short version:
 
-- **The community layer is fourteen files.** `cloud.js` went from 22,370 lines
-  in one IIFE to 6,756 plus fourteen per-feature modules under
-  `src/community/` — auth, feed, comments, boards, challenges, events,
-  notifications, directory, coach tools, club management, admin, posts,
-  outward sharing, achievements. Classic `<script>` files sharing one global
-  scope, so **no call site moved**; all fourteen are in `sw.js`'s
-  `OPTIONAL_ASSETS`, and the app was confirmed to still boot offline in real
-  Chromium with the server stopped. Giving up the IIFE exposed five names that
-  collided with `app.js`/`src/constants.js`; four are now declared compatibly,
-  and `isIOSDevice` is two *visibly* drifted copies instead of one silently
-  winning. Read `docs/community/CLOUD_JS_MAP.md` before the next module moves
-  — its §5 lists the 139 duplicated lines and five near-duplicate function
-  pairs the split exposed and deliberately did not merge (PR #15).
-- **The Actions bill, roughly halved.** `test.yml` was running the whole
-  37-minute suite twice per push — once as `push`, once as `pull_request` — in
-  two concurrency groups that could not cancel each other. `push` is now
-  `main` only, the group is keyed on `head_ref`, docs-only changes skip the
-  workflow, and `claude-review` runs on `opened` and on `@claude` rather than
-  on every push. The `paths-ignore` list names **only paths no test reads**;
-  `test/workflow-minutes.test.mjs` derives the read set by scanning `test/*.mjs`
-  for `.md` reads and fails if one of those six files ever lands inside the
-  ignore list (PR #17).
-- **The pg_cron jobs are watched without a service-role key in GitHub.**
-  `job_health_check()` runs hourly, flags any job that failed, stalled or never
-  ran, and notifies admins in-app as `job_health_alert` (rate-limited to the
-  first problem, any change in the failing set, then at most every six hours).
-  `job_health_status()` returns only `ok`, `failing_count` and
-  `last_checked_at` and is **the one function in `public` deliberately granted
-  to `anon`** — `supabase/tests/0113` now pins the anon-executable set to
-  exactly that one, zero-argument function. `SUPABASE_SERVICE_ROLE_KEY` and
-  `SUPABASE_URL` are no longer read by anything and **should be deleted from
-  Settings → Secrets → Actions**. Migration `202609190001` (PR #14).
-
-**Earlier on 2026-09-19 (PRs #8, #11, #12, #13)**, plus **PR #10**,
-which merged late on 2026-09-18 — after the reconcile this file last carried —
-and so appears here for the first time. Two of the five changed what a member
-experiences:
-
-- **The admin roster reaches its end.** `admin_member_roster` now returns the
-  coalesced `sort_key` it orders and pages on, so a member with no
-  `invite_redemptions` row no longer carries an invisible cursor that stopped
-  paging at the club's pre-invite-gate tail. Migration `202609180001`, applied
-  to production the same day.
-- **The first set of a new movement is sanity-checked.** The 3×-your-own-best
-  guard was dead on a movement with no history, so a 400-for-40 typo founded
-  the record in silence. A per-category ceiling now covers exactly that case,
-  and `saveWod()`'s identical twin was fixed in the same commit through one
-  shared predicate.
-- **The served privacy policy names the right sub-processor.** `PRIVACY.md`
-  and `privacy.html` both named GitHub Pages, in Hebrew and English, in a
-  document members read. Corrected in both — they are twins and must not
-  drift (PR #10).
-
-Three changed what the next session knows:
-
-- **`.github/workflows/claude-review.yml`** reviews every PR against CLAUDE.md's
-  seven rules. Advisory — it comments, it never gates, and it runs with
-  `contents: read` so it cannot push. **Dormant until the
-  `CLAUDE_CODE_OAUTH_TOKEN` repository secret is set**, which it is not; every
-  run skips with a notice until then.
-- **`docs/audit/usage-queries.sql`** — ten read-only blocks answering which
-  modules members actually use, with all 28 analytics events mapped to a
-  module. Its two findings are under *Open, deliberately* below.
-- **`docs/audit/AUTHORIZATION_MATRIX.md`** section 1 caught up with the 72
-  migrations that had landed since it was written, the largest correction being
-  `202609060011`'s re-gating of sixteen policies on `is_community_member()`.
-  `/CLAUDE.md` and this file were themselves added in PR #10, so that the rules
-  and the numbers stopped being maintained in one document.
-
-**Merging #11 and #13 together turned `main` red, and this consolidation fixed
-it.** #13's new `test/workflow-action-pinning.test.mjs` walks every file in
-`.github/workflows/`; #11 added one. Both branches were green against
-`18c9172`, there was no textual conflict, and the second merge broke the
-build — `anthropics/claude-code-action` was not in the test's runtime map.
-It is a **composite** action (`runs.using: "composite"`, read from `action.yml`
-at the pinned SHA `4036a180`, not from a changelog), so it joins
-`supabase/setup-cli` in `NO_NODE_RUNTIME`. The general hazard is written up in
-`docs/handover/SHARED_CONTEXT.md`; `CLAUDE.md`'s *Parallel work* section
-currently names only migrations, and could reasonably name the other
-enumerated directories too — left as the owner's call rather than taken here.
-
-**Before that (2026-09-18, PR #9):** the desktop staff shell. Three columns for
-staff at ≥1024px with a fine pointer, gated on `is_staff()`, adding no table,
-column, policy, RPC or migration. Members at a laptop are byte-identical to
-before — enforced by a stylesheet in which no rule is keyed on `data-layout`
-alone. See `docs/DESIGN_HANDOFF.md`.
-
-**Before that (2026-09-17):** web push built, deployed and scheduled, with an
-admin switch; `npm run check:drift` added after a security migration sat
-committed-but-unapplied for a day; the anon `EXECUTE` grant class closed;
-Turnstile captcha turned on for anonymous sign-ins; the deploy workflow fixed
-after it turned out never to have run on a merge.
-
-**Before that (2026-09-16):** Cloudflare Pages became the host; a weekly
-restore drill that proved the backups restorable; the head coach gained
-member removal with an audit trail; two rounds of live bug hunting.
+- **The community feed became a feed** (#33, #35, #36, #37, #49/#54) — one card
+  layout for every post type, chronological by default with the ranked order a
+  switch away, a post-workout share prompt, training-partner tagging, and
+  announcements that actually reach the feed.
+- **Five of 202609190002's seven pre-seeded switches grew their features**
+  (#24, #30, #31, #38) — strength percentages and Rx+, benchmark tracking,
+  coach tasks and the onboarding challenge, and the monthly owner report. Two
+  remain <span dir="rtl">בפיתוח</span>: `gym_display` and `arbox_attendance`.
+- **Module switches reach the server** (#53) — six modules now refuse the
+  matching server calls rather than only hiding the control. Four of them are
+  marked <span dir="rtl">נאכף בשרת חלקית</span> until the rest of their paths
+  are gated.
+- **The first real-phone pass at 390px** (#39, #40, #41, #43, #44, #45) — the
+  save toast no longer covers the save button, never-logged stopped wearing
+  overdue's red, `.mono` stopped reversing every number beside a Hebrew unit,
+  the ⋯ menu opens inside the card, deletes are undoable, and the hero photo
+  came down from half the screen to a third.
+- **Security** (#52, #55, #56) — management login hardened, five more paths off
+  the public surface, and `admin_reset_password` redeployed without the retired
+  github.io origin.
+- **The launch-readiness audit landed** (#46): 6 blockers, 20 should-fix, 15
+  nice-to-have. Working it off is the current thread.
 
 ---
 
 ## Open, deliberately
+
+**The backup passphrase was lost and rotated on 2026-09-23.** A new
+`BACKUP_PASSPHRASE` repository secret is set; the old one is gone. Every
+database backup artifact produced before that date is encrypted under the old
+passphrase and **cannot be decrypted** — treat them as lost, not as a restore
+path. The first backup taken under the new passphrase is the oldest restorable
+one, and the restore drill in `docs/audit/ROUND_10_AND_KNOWN_LIMITATIONS.md`
+has not yet been re-run against it. Nothing about
+`.github/workflows/backup-database.yml` changed, and no passphrase is recorded
+in this repository.
+
 
 - **Leaked-password protection** shows as a permanent WARN in Supabase's
   security advisor. It is Pro-plan only, confirmed by trying it. Generated
