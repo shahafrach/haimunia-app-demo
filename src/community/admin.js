@@ -3230,7 +3230,7 @@
   // nothing until the feature lands.
   function clubModuleMarkersHtml(m) {
     const chip = (text, color) => `<span style="font-size:10px;line-height:1.6;color:${color};border:1px solid ${color};border-radius:999px;padding:0 6px;white-space:nowrap;">${esc(text)}</span>`;
-    return `${m.planned ? chip("בפיתוח", "var(--brass)") : ""}${chip(m.clientOnly ? "בתצוגה בלבד" : "נאכף בשרת", "var(--steel)")}`;
+    return `${m.planned ? chip("בפיתוח", "var(--brass)") : ""}${chip(m.clientOnly ? "בתצוגה בלבד" : m.serverPartial ? "נאכף בשרת חלקית" : "נאכף בשרת", "var(--steel)")}`;
   }
   // 202609220002. THE FIRST TWO MODULES WITH NUMBERS BEHIND THE SWITCH.
   //
@@ -3331,7 +3331,7 @@
     const coachRows = COACH_MODULE_TOGGLES.map((m) => clubModuleRow(m, anyBusy)).join("");
     return `<div class="ach-section" style="margin-top:18px;" data-club-modules-panel="1">${sectionHead("var(--green)", "מודולים למועדון", true)}
       <div style="font-weight:800;font-size:13px;margin:4px 0 6px;">תכני קהילה</div>
-      <div style="color:var(--steel);font-size:12px;line-height:1.6;margin-bottom:8px;">כיבוי מודול מסתיר אותו לגמרי מכל חברי המועדון - אין טאב, כרטיס, כפתור או התראה. כל שורה מסומנת: "נאכף בשרת" - גם מי שיעקוף את המסך לא יקבל את המידע; "בתצוגה בלבד" - ההסתרה היא במסך, וההרשאות בשרת נשארות כשהיו. שורה מסומנת "בפיתוח" היא מתג לפיצ'ר שעוד לא נבנה: אפשר להחליט עליו כבר עכשיו, והוא ייכנס לתוקף ביום שהפיצ'ר יעלה.</div>
+      <div style="color:var(--steel);font-size:12px;line-height:1.6;margin-bottom:8px;">כיבוי מודול מסתיר אותו לגמרי מכל חברי המועדון - אין טאב, כרטיס, כפתור או התראה. כל שורה מסומנת: "נאכף בשרת" - גם מי שיעקוף את המסך לא יקבל את המידע; "בתצוגה בלבד" - ההסתרה היא במסך, וההרשאות בשרת נשארות כשהיו. "נאכף בשרת חלקית" - הקריאה והפעולות העיקריות נחסמות בשרת, אבל לא כל פעולה ולא כל התראה. שורה מסומנת "בפיתוח" היא מתג לפיצ'ר שעוד לא נבנה: אפשר להחליט עליו כבר עכשיו, והוא ייכנס לתוקף ביום שהפיצ'ר יעלה.</div>
       <div class="log-list">${communityRows}</div>
       <div style="font-weight:800;font-size:13px;margin:16px 0 6px;">כלי מאמנים</div>
       <div style="color:var(--steel);font-size:12px;line-height:1.6;margin-bottom:8px;">שולט אילו חלקים מלוח המאמנים גלויים לצוות. "לוח מאמנים (הכל)" מכבה את כל הטאב. גם כאן הסימון על כל שורה הוא הקובע: "בתצוגה בלבד" הוא נוחות ארגונית ולא הרשאה - הפעולות עצמן שמורות למי שמורשה/ית לבצע אותן בכל מקרה - ואילו "נאכף בשרת" עוצר את הפעולה עצמה, גם כשאיש אינו צופה במסך.</div>
