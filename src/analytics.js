@@ -129,6 +129,28 @@
     OUTWARD_SHARE_COMPLETED: "outward_share_completed",
     STREAK_NUDGE_OPENED: "streak_nudge_opened",
     ENGAGEMENT_FLAG_ACTIONED: "engagement_flag_actioned",
+
+    // ---- The five built after their switches ----------------------------
+    // 202609190002 added seven club_features keys ahead of their features,
+    // and docs/audit/usage-queries.sql rightly reported "no telemetry" for
+    // them while there was nothing behind them. Five have been built since
+    // (202609220002, 202609220004, 202609220005, and the client-only
+    // benchmark tracker) and shipped without an event, which turned that
+    // honest answer into a gap. One each, at the surface that is the
+    // module's own point.
+    //
+    // A coach closed a task: made contact, or marked it not relevant.
+    COACH_TASK_CLOSED: "coach_task_closed",
+    // A new member answered the onboarding challenge offer, either way. The
+    // decline is the half no other row records: onboarding_challenge_respond
+    // enrols nobody on a no.
+    ONBOARDING_CHALLENGE_RESPONDED: "onboarding_challenge_responded",
+    // A club leader opened the monthly owner report and it loaded.
+    OWNER_REPORT_VIEWED: "owner_report_viewed",
+    // A member opened one benchmark's history on the progress screen.
+    BENCHMARK_OPENED: "benchmark_opened",
+    // A workout post's author saved who trained with them.
+    TRAINING_PARTNERS_TAGGED: "training_partners_tagged",
   });
   const KNOWN = new Set(Object.values(EVENTS));
 
@@ -216,6 +238,30 @@
   // - app_opened, push_permission and push_self_test do not. Opening the app
   //   is not participation, and a permission or a device test is account
   //   configuration - push_opt_in's own reasoning, unchanged.
+  //
+  // The five built-after-their-switches names, reviewed the same way. NONE
+  // of them counts, each for its own reason:
+  // - coach_task_closed does not. It is a work queue being cleared, the same
+  //   staff triage engagement_flag_actioned is; the coach becomes active
+  //   through the congratulation, welcome or post the contact produces.
+  // - onboarding_challenge_responded does not, although an ACCEPT enrols the
+  //   member in a challenge and challenge_joined counts. WCAM is decided by
+  //   name, and this one name carries the decline too - counting it would
+  //   make "no thanks" a week of community activity. The accept path emits
+  //   no CHALLENGE_JOINED bus event today (onboarding_challenge_respond is a
+  //   direct RPC), so an accepted onboarding challenge is not yet counted as
+  //   a join: raised, not changed here, because fixing it is a bus emission
+  //   in challenges.js and a decision about the challenge module's numbers,
+  //   not an analytics allow-list edit.
+  // - owner_report_viewed does not. A view, and a leader reading the club's
+  //   figures is administration - leaderboard_viewed's reasoning twice over.
+  // - benchmark_opened does not. It is a member reading their own private
+  //   training log; the training itself is already counted, once, as
+  //   attendance_recorded.
+  // - training_partners_tagged does not. It happens on a post that already
+  //   counted its author through post_created, and the members it names are
+  //   never made active by it - the same "somebody else's action" line
+  //   member_of_week_published draws.
   const ACTIVE_MEMBER_EVENTS = Object.freeze([
     EVENTS.POST_CREATED,
     EVENTS.WORKOUT_SHARED,
@@ -352,6 +398,18 @@
     [EVENTS.OUTWARD_SHARE_COMPLETED]: ["kind", "result"],
     [EVENTS.STREAK_NUDGE_OPENED]: ["was_unread"],
     [EVENTS.ENGAGEMENT_FLAG_ACTIONED]: ["action", "level"],
+    // The five. Never the member the task, report row or tag is ABOUT: a
+    // coach task is a named member the club thinks needs a call, and a tag
+    // is who trained beside whom - both are rows about other people, in a
+    // table community.analytics.view can read. The owner report's figures
+    // stay out too; months is how far back it goes, not what it says. And
+    // benchmark_opened carries no score, no benchmark name and no exercise
+    // id - a custom lift's id is per-device and would fingerprint a member.
+    [EVENTS.COACH_TASK_CLOSED]: ["action", "rule", "overdue"],
+    [EVENTS.ONBOARDING_CHALLENGE_RESPONDED]: ["accepted"],
+    [EVENTS.OWNER_REPORT_VIEWED]: ["months"],
+    [EVENTS.BENCHMARK_OPENED]: ["kind", "retest_due", "has_best"],
+    [EVENTS.TRAINING_PARTNERS_TAGGED]: ["count"],
   });
 
   function projectHandProps(eventName, props) {

@@ -4467,6 +4467,10 @@
     state.ownerReport.error = !!error;
     if (!error) {
       state.ownerReport.months = data || [];
+      // Once per load, which is once per visit to the tab (the tab only
+      // loads while !loaded). A failed read is not a view. months is how far
+      // back the report reaches - never a figure from it.
+      track(A.OWNER_REPORT_VIEWED, { months: state.ownerReport.months.length });
       const months = state.ownerReport.months;
       const still = state.ownerReport.month && months.some((r) => r.month_start === state.ownerReport.month);
       if (!still) state.ownerReport.month = months.length ? months[0].month_start : null;

@@ -5,7 +5,9 @@ means, and where it fires from. COMM-013 shipped the helper, COMM-170 wired
 the Phase 1 surfaces, COMM-233 wired the Phase 2 ones. The eleven-module pass
 added fourteen more names: one each for the eleven `club_features` keys that
 had a switch, a surface and no event at all, plus `app_opened`,
-`push_permission` and `push_self_test`. `EVENTS` holds 42 names.
+`push_permission` and `push_self_test`. The five modules built after their
+switches (`coach_tasks`, `onboarding_challenge`, `owner_report`, `benchmarks`,
+`trained_together`) added one each. `EVENTS` holds 47 names.
 
 Owner: platform. A feature agent that adds a surface adds a row to the table
 below in the same change.
@@ -197,6 +199,27 @@ Everything else the pass added does **not** count, each for a stated reason:
   is not participation, and a permission or a device test is account
   configuration — `push_opt_in`'s own reasoning, unchanged.
 
+The five modules built after their switches (`coach_tasks`,
+`onboarding_challenge`, `owner_report`, `benchmarks`, `trained_together`)
+each got one event, and **none of the five counts**:
+
+- `coach_task_closed` does not. Clearing a work queue is staff triage, the
+  same call as `engagement_flag_actioned`; the coach becomes active through
+  whatever the contact produces.
+- `onboarding_challenge_responded` does not, even though an accept enrols the
+  member in a challenge. WCAM is decided by name and this name also carries
+  the decline, so counting it would make "no thanks" a week of activity.
+  **Known gap, raised rather than changed:** `onboarding_challenge_respond` is
+  a direct RPC and emits no `CHALLENGE_JOINED` bus event, so an accepted
+  onboarding challenge is not counted as a `challenge_joined` today.
+- `owner_report_viewed` does not. A view, and reading the club's figures is
+  administration.
+- `benchmark_opened` does not. A member reading their own training log;
+  the training itself already counts once, as `attendance_recorded`.
+- `training_partners_tagged` does not. The post it is on already counted its
+  author through `post_created`, and the members it names are never made
+  active by somebody else's action.
+
 **One clause in the definition above still has no producer.** "Opened an
 announcement" is listed as qualifying activity and nothing in this app opens
 an announcement: the archive renders every notice inline, and the feed card is
@@ -278,6 +301,11 @@ WCAM marks the events that make a member active for the week.
 | `outward_share_completed` | `outwardShareNow()` and `outwardCopyText()`, once the sheet settles | `kind` (`pr`, `achievement`, `workout`), `result` (`shared_image`, `shared_text`, `copied`, `cancelled`, `failed`) | no |
 | `streak_nudge_opened` | `openNotif()`, when the opened row's type is `streak_at_risk` | `was_unread` | no |
 | `engagement_flag_actioned` | `coachEngageReachOut()` after the outreach post writes, and `coachEngageResolveFlag()` after the status update | `action` (`reach_out`, `reviewed`, `dismissed`), `level` | no |
+| `coach_task_closed` | `coachTaskContact()` after the `member_contact_log` insert succeeds, and `coachTaskDismiss()` after the `coach_tasks` update succeeds | `action` (`contacted`, `dismissed`), `rule` (the task's `rule_key`), `overdue` | no |
+| `onboarding_challenge_responded` | `onboardingChallengeRespond()` after `onboarding_challenge_respond` succeeds, for either answer | `accepted` | no |
+| `owner_report_viewed` | `loadOwnerReport()` after the `owner_reports` read succeeds, once per visit to the owner-report tab | `months` (how many monthly rows loaded) | no |
+| `benchmark_opened` | `trackBenchmarkOpened()` in app.js, when a benchmark row on the progress screen is expanded (not collapsed) | `kind` (`wod`, `lift`), `retest_due`, `has_best` | no |
+| `training_partners_tagged` | `saveTrainingPartners()` after `post_tag_training_partners` succeeds and the tags are re-read | `count` (tags that landed, after the server skipped anyone) | no |
 
 ### Events that come from the bus
 
@@ -398,6 +426,18 @@ grain the `attendance_log` table stores.
   `granted`) is two rows and a re-render of the settings panel is none.
 - `app_opened` is once per page load, not per sign-in: `configure()` is
   idempotent and so is the event beside it.
+- `coach_task_closed` is once per task per close. A contact closes every
+  open task for that member server-side, but the row is written for the task
+  the coach acted on, so a count is of coach actions, not of tasks closed.
+  Both actions sit behind the in-flight `busy` guard.
+- `onboarding_challenge_responded` is once per answer; the server refuses a
+  second answer and a refused call writes no row.
+- `owner_report_viewed` is once per load, and the tab only loads while its
+  report is not yet `loaded`: a re-render or a month switch is none.
+- `benchmark_opened` counts opens, not renders: expanding a row writes one,
+  collapsing it writes none.
+- `training_partners_tagged` is once per successful save, including a save
+  that clears every tag (`count` 0).
 
 ## How the app asks for notification permission
 

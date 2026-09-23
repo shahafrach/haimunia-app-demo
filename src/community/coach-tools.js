@@ -1547,6 +1547,9 @@
     state.coach.tasks.busy = null;
     if (error) { setMessage(failText("לא ניתן היה לבצע את הפעולה. נסו שוב.", error)); return rerender(); }
     delete state.coach.tasks.contactDrafts[task.user_id];
+    // The rule and whether it was late, never the member: a coach task is a
+    // named person the club thinks needs a call.
+    track(A.COACH_TASK_CLOSED, { action: "contacted", rule: task.rule_key || null, overdue: !!task.overdue });
     setMessage("סומן כנוצר קשר");
     // Re-read rather than splice: one contact closes every open task for that
     // member, and guessing which ones from here would be a second copy of the
@@ -1558,11 +1561,13 @@
   // closed_by and refuses anything that is not open -> closed.
   async function coachTaskDismiss(taskId) {
     if (!taskId || state.coach.tasks.busy) return;
+    const task = (state.coach.tasks.items || []).find((t) => t.id === taskId);
     state.coach.tasks.busy = taskId;
     rerender();
     const { error } = await client.from("coach_tasks").update({ closed_at: new Date().toISOString() }).eq("id", taskId);
     state.coach.tasks.busy = null;
     if (error) { setMessage(failText("לא ניתן היה לבצע את הפעולה. נסו שוב.", error)); return rerender(); }
+    track(A.COACH_TASK_CLOSED, { action: "dismissed", rule: (task && task.rule_key) || null, overdue: !!(task && task.overdue) });
     state.coach.tasks.items = state.coach.tasks.items.filter((t) => t.id !== taskId);
     setMessage("המשימה נסגרה");
     rerender();
