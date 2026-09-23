@@ -214,21 +214,28 @@
     // only decides what to render. Session-scoped, not admin-scoped - a
     // member with no permissions at all still has this pair.
     permissions: [], permissionsLoaded: false,
-    // COMM-226 built the coach-engage section flag-gated and hidden, default
-    // off, with no producer. COMM-304 is that producer
-    // (coach_detect_engagement_decline(), the scheduled job in 202608310008)
-    // and this is the ticket that flips the flag: default ON now (`!== "0"`,
-    // not `=== "1"`), so a test that wants the pre-304 hidden state has to opt
-    // into it explicitly the same localStorage-backed way a test always has.
-    // featureFlags.coachEngage is still read once, synchronously, at this
-    // module-level literal - before cloud.js's own module-load, not after - so
-    // a test flips it via bootCommunity's localStorage hook, never by mutating
-    // state post-boot.
-    // COMM-229. Same localStorage-backed pattern as coachEngage above, so a
-    // test can flip it before boot the same way. Stays default off in
-    // production until VAPID keys are provisioned server-side (per the
-    // plan's operator checklist) - this ticket does not flip that default.
-    featureFlags: { coachEngage: localStorage.getItem("haimunia-demo:coachEngageFlag") !== "0", notifPush: localStorage.getItem("haimunia-demo:notifPushFlag") !== "0" },
+    // COACHENGAGE IS GONE (N3). COMM-226 shipped the coach-engage section behind
+    // a per-device localStorage flag, default off; COMM-304 built the producer
+    // and flipped it on. What was left was a switch every coach carried their
+    // own copy of: an admin could not turn the section off for the club, two
+    // coaches could disagree about whether it existed, and clearing site data
+    // turned it back on. The section now reads isModuleEnabled("engagement_alerts"),
+    // the club switch that 202609100002 already uses to gate
+    // coach_notify_engagement_flags(), so the alert and the dashboard it belongs
+    // to answer to one control. The default does not move: that key ships
+    // enabled and the device flag defaulted on.
+    //
+    // NOTIFPUSH STAYS, AND ITS COMMENT WAS WRONG. It used to say push "stays
+    // default off in production until VAPID keys are provisioned", while the
+    // code reads `!== "0"` - default ON. Both halves were true of different
+    // things, which is how it survived: this device flag defaults ON, and push
+    // is nevertheless off in production because notifPushEnabled()
+    // (notifications.js) ANDs it with the push_notifications CLUB module, which
+    // ships disabled and is enforced server-side in notif_push_pending. The
+    // club switch is what keeps push off; this flag is only a per-device escape
+    // hatch, and a test flips it via bootCommunity's localStorage hook before
+    // module load rather than by mutating state afterwards.
+    featureFlags: { notifPush: localStorage.getItem("haimunia-demo:notifPushFlag") !== "0" },
     // COMM-318. { status: "idle"|"processing", error }, drives the avatar
     // control on the account profile form only.
     avatarUpload: { status: "idle", error: "" },
@@ -488,7 +495,7 @@
     // row, and this only stops the client from drawing it. The real,
     // server-enforced opt-out is the in_leaderboards toggle in the Privacy
     // panel (COMM-018). Stored the same localStorage-backed way as
-    // syncEnabled/coachEngage are, read once at module init, defaulting to
+    // syncEnabled/notifPush are, read once at module init, defaulting to
     // showing the row.
     leaderboard: {
       scope: "club", rows: [], loading: false, loaded: false, error: false,
@@ -924,7 +931,8 @@
       // note fields, keyed by member id, read only at click time (no rerender
       // on input, so typing never loses focus).
       welcome: { members: [], loading: false, loaded: false, error: false, contactedIds: {}, assignDrafts: {}, contactDrafts: {}, busy: {}, welcomed: {} },
-      // COMM-226/304. Gated on featureFlags.coachEngage (see the root).
+      // COMM-226/304. Gated on the engagement_alerts club module (N3; was the
+      // per-device coachEngage feature flag - see the root).
       // profiles is a batched user_id -> {display_name,handle,avatar_url} map
       // for the open flags in .items, read the same way welcome.contactedIds
       // is: a second, separate query rather than an embedded `profiles(...)`
@@ -6289,7 +6297,7 @@
       // drafts keep accruing month after month whether or not any club
       // chose to show the preview section.
       if (!state.coach.monthlyRecap.loaded && !state.coach.monthlyRecap.loading) loadCoachMonthlyRecap();
-      if (state.featureFlags.coachEngage && !state.coach.engage.loaded && !state.coach.engage.loading) loadCoachEngageFlags();
+      if (isModuleEnabled("engagement_alerts") && !state.coach.engage.loaded && !state.coach.engage.loading) loadCoachEngageFlags();
     }
     // COMM-224. The assign-by-handle and mark-contacted note fields are
     // read only at click time (coachAssignByHandle/coachMarkContacted), so
@@ -6687,7 +6695,7 @@
       // this screen allowed to be a to-do list, and this is the only section
       // in it that literally is one.
       renderCoachTasksSection(),
-      state.featureFlags.coachEngage ? renderCoachEngageSection() : "",
+      isModuleEnabled("engagement_alerts") ? renderCoachEngageSection() : "",
       renderCoachCelebrateSection(),
       renderCoachWelcomeSection(),
     ].filter(Boolean).join("");
@@ -6703,7 +6711,7 @@
     if (!state.coach.tasks.loaded && !state.coach.tasks.loading) loadCoachTasks();
     if (!state.coach.celebrate.loaded && !state.coach.celebrate.loading) loadCoachCelebrate();
     if (!state.coach.welcome.loaded && !state.coach.welcome.loading) loadCoachWelcome();
-    if (state.featureFlags.coachEngage && !state.coach.engage.loaded && !state.coach.engage.loading) loadCoachEngageFlags();
+    if (isModuleEnabled("engagement_alerts") && !state.coach.engage.loaded && !state.coach.engage.loading) loadCoachEngageFlags();
     if (!state.club.weekBoardsLoaded && !state.club.weekBoardsLoading) loadStaffWeekBoards();
     if (!state.members.directory.loaded && !state.members.directory.loading) loadDirectory(true);
   };

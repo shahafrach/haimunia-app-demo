@@ -172,7 +172,7 @@ export async function bootCommunity(mock, opts = {}) {
   window.__mockClientCount = 0;
   window.supabase = { createClient: () => (window.__mockClientCount++ === 0 ? mock.client : mock.secondaryClient()) };
   // Redesign, Phase 3: default every test to "already saw the first-run
-  // intro carousel" - unlike syncEnabled/coachEngage below, cloud.js reads
+  // intro carousel" - unlike syncEnabled/notifPush below, cloud.js reads
   // this on every render (hasSeenIntroCarousel()), not just at module init,
   // so the vast majority of existing tests boot a member straight to
   // whatever screen they actually mean to test (the profile-completion
@@ -184,7 +184,7 @@ export async function bootCommunity(mock, opts = {}) {
   // cloud.js reads this synchronously at module init (state.syncEnabled),
   // so it has to be set before cloud.js is eval'd below, not after.
   if (opts.syncEnabled) window.localStorage.setItem("haimunia-demo:cloudSyncEnabled", "1");
-  // COMM-226. featureFlags.coachEngage is read the same way, once, at the
+  // COMM-229. featureFlags.notifPush is read the same way, once, at the
   // same module-init literal - any other localStorage-backed flag added
   // later can go through this same generic hook instead of a new
   // one-off opts.* special case each time.

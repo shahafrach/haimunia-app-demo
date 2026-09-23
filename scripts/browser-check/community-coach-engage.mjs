@@ -6,7 +6,7 @@
 // COMM-226 built this section as a flag-gated, hidden-unless-on shell
 // reading coach_engagement_flags under existing staff RLS, with nothing to
 // show it — the table shipped empty. COMM-304 is the ticket that flips
-// state.featureFlags.coachEngage default-on and gives coach_detect_engagement_
+// the engagement_alerts club module default-on (N3; was state.featureFlags.coachEngage) and gives coach_detect_engagement_
 // decline() its first real writes. This is the first browser-level coverage
 // of the section with actual rows in it: two open flags at different
 // levels, the "reach out" one-tap action (post_create + a POST_COACH

@@ -1,6 +1,7 @@
 // COMM-229, the client half of web push: subscription storage and the
 // sw.js handlers, behind state.featureFlags.notifPush (localStorage-backed,
-// same pattern as featureFlags.coachEngage - see community-coach-tools.test.mjs).
+// the one remaining device-level feature flag; coachEngage was the other until
+// N3 moved the Engage section onto the engagement_alerts club module).
 //
 // WHAT THIS FILE VERIFIES
 // - The flag stays off by default: the push option does not render on the
