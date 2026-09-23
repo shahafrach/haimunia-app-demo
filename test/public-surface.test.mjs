@@ -76,6 +76,17 @@ test("the schema, the audits, the runbooks and the tests are not public", async 
   }
 });
 
+test("the Worker source is not public (MONITORING.md §6)", async () => {
+  // The repository root is the website. wrangler.toml holds no secret, but
+  // tooling the app never fetches is not served - the same reason /scripts/
+  // and /test/ are blocked.
+  for (const p of ["/workers/keepalive/wrangler.toml", "/workers/keepalive/src/index.js", "/Workers/keepalive/wrangler.toml"]) {
+    const { status, passedThrough } = await serve(p);
+    assert.equal(status, 404, `${p} must not be public`);
+    assert.equal(passedThrough, false, `${p} must never reach the asset`);
+  }
+});
+
 test("/photos/ and the npm manifest are not public (launch-readiness S11)", async () => {
   for (const p of ["/photos/club-rig-wide.jpeg", "/Photos/club-rings-portrait.jpeg",
                    "/package.json", "/package-lock.json", "/PACKAGE.JSON"]) {

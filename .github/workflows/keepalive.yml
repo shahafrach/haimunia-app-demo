@@ -1,0 +1,67 @@
+name: keepalive
+# A SECOND PATH TO THE SAME HEARTBEAT, DELIBERATELY NOT RUNNING YET.
+#
+# The primary heartbeat is a Cloudflare Worker (workers/keepalive/), because
+# Actions minutes ran out on 2026-09-19 and reset on 2026-10-01. This file is
+# the fallback for after that date, and it exists now so the decision is
+# recorded and the enabling step is one uncomment rather than a design.
+#
+# WHY A SECOND PATH AT ALL. The Worker and this workflow fail for different
+# reasons - a Cloudflare account problem, a deleted Worker, an expired
+# Cloudflare login on one side; an exhausted Actions budget or a disabled
+# workflow on the other. Two paths that fail independently is the point, and
+# running both costs one REST call each.
+#
+# TO ENABLE, AFTER 2026-10-01:
+#   1. uncomment the `schedule:` block below
+#   2. confirm in Settings -> Actions that this workflow is enabled
+#   3. run it once from the Actions tab (workflow_dispatch) and read the log
+#
+# Leave the Worker running when you do. Two heartbeats two days apart is one
+# REST call every day or so against a seven-day pause threshold, which is the
+# margin you want, not waste.
+on:
+  # schedule:
+  #   # 07:44 UTC every two days - half a day offset from the Worker's 07:14,
+  #   # so the two paths do not both depend on the same half-hour being fine.
+  #   - cron: "44 7 */2 * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: keepalive
+  cancel-in-progress: false
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      # Needed only so this job reads its configuration from the repository
+      # rather than repeating the project URL in a second place that can drift
+      # from cloud-config.js.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: ping the project with the publishable key
+        run: |
+          set -euo pipefail
+          # Both values are public and already ship to every browser, so they
+          # are read from the committed config rather than from secrets. A
+          # service-role key must never be used here: the call is one function
+          # anon is allowed to execute and needs no privilege.
+          URL=$(grep -oE 'supabaseUrl: *"[^"]+"' cloud-config.js | cut -d'"' -f2)
+          KEY=$(grep -oE 'supabasePublishableKey: *"[^"]+"' cloud-config.js | cut -d'"' -f2)
+          if [ -z "$URL" ] || [ -z "$KEY" ]; then
+            echo "could not read supabaseUrl / supabasePublishableKey from cloud-config.js"; exit 1
+          fi
+          case "$KEY" in
+            sb_secret_*) echo "refusing to run: that is a secret key, not a publishable one"; exit 1 ;;
+          esac
+
+          # -f so a non-2xx is a failed step. A heartbeat that reports green
+          # while the project is unreachable is worse than no heartbeat.
+          code=$(curl -sS -o /tmp/ping.json -w '%{http_code}' \
+                   -X POST "$URL/rest/v1/rpc/job_health_status" \
+                   -H "apikey: $KEY" -H "Authorization: Bearer $KEY" \
+                   -H "Content-Type: application/json" -d '{}' --max-time 30)
+          echo "http=$code"
+          head -c 300 /tmp/ping.json; echo
+          [ "$code" = "200" ] || { echo "keepalive FAILED"; exit 1; }
