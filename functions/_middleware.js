@@ -39,6 +39,10 @@ const BLOCKED_PREFIXES = [
   "/scripts/",
   "/.github/",
   "/.githooks/",
+  // Launch-readiness S11: agent definitions and local tool settings, and the
+  // design mockups. Nothing in index.html references either.
+  "/.claude/",
+  "/mockups/",
 ];
 
 // Top-level notes and runbooks. Matched by extension rather than by name so a

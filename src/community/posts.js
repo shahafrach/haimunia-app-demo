@@ -60,16 +60,35 @@
   function signedCachePut(cache, key, url) {
     cache[key] = { url, expiresAt: Date.now() + SIGNED_URL_TTL_S * 1000 };
   }
-  // Called from an <img onerror>: a signature that expired between render
-  // and load (or an object that vanished) evicts its entry so the next
-  // render re-signs instead of showing a permanently broken image.
+  // A signature that expired between render and load (or an object that
+  // vanished) evicts its entry so the next render re-signs instead of
+  // showing a permanently broken image.
+  // An avatar re-signs on the next render by itself (resolveAvatarUrl is
+  // asked from the renderer). A feed photo is only signed when the feed
+  // page loads, so it is re-signed here - once per path per session, so an
+  // image that fails even freshly signed (offline, a bad object) cannot
+  // loop error -> sign -> error.
+  const resignedPhotoPaths = new Set();
   function evictSignedUrl(kind, key) {
     if (!key) return;
     const cache = kind === "avatar" ? avatarUrlCache : photoUrlCache;
     delete cache[key];
     rerender();
+    if (kind === "photo" && !resignedPhotoPaths.has(key)) {
+      resignedPhotoPaths.add(key);
+      resolvePhotoUrl(key);
+    }
   }
-  window.__haimuniaEvictSignedUrl = evictSignedUrl;
+  // Launch-readiness S1. This used to be an inline onerror="" attribute, and
+  // the CSP (script-src 'self', no 'unsafe-inline') blocks every inline
+  // handler, so it never ran and an expired photo stayed broken for good.
+  // One delegated listener instead: an <img data-evict="photo|avatar"
+  // data-k="<storage path>"> opts in. `error` does not bubble, hence capture.
+  document.addEventListener("error", (event) => {
+    const img = event.target;
+    if (!img || img.tagName !== "IMG" || !img.dataset || !img.dataset.evict) return;
+    evictSignedUrl(img.dataset.evict, img.dataset.k);
+  }, true);
   // Fire-and-forget, exactly like resolvePhotoUrl. A failure (a member who
   // hid from the club, a block edge, an object that was removed) is left
   // uncached on purpose: the initials badge is a correct answer for "you may
