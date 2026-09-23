@@ -2383,16 +2383,36 @@
     const u = state.admin.panelUnlockedUntil;
     if (now >= (Number(u.admin) || 0) && now >= (Number(u.club) || 0)) mgmtTeardown();
   }
+  // Launch-readiness S5, the half of it that is safe to take unilaterally.
+  //
+  // These two screens are reachable by EVERY member - the sidebar offers both
+  // management rows to everyone on purpose (desktop-layout.mjs:344, a decision
+  // recorded there as revised three times), and this gate is what stops them.
+  // So the gate's own copy is member-facing text, and it used to be an
+  // inventory of the staff tooling: bug reports, the action log, permissions,
+  // password resets, moderation, member removal, what new members see. A member
+  // who never gets past this screen still learned exactly what is behind it and
+  // that a separate management account opens it - which is the map you would
+  // want before trying.
+  //
+  // It now says what a member needs (staff-only, staff credentials) and nothing
+  // a member does not. Staff already know what is inside; nobody reads this
+  // screen to find out.
+  //
+  // NOT DONE HERE, deliberately: the audit also asks for ONE neutral
+  // "כניסת צוות" row instead of the two. That contradicts the sidebar decision
+  // recorded in desktop-layout.mjs, which is a product call with its own
+  // history, so it is raised rather than flipped.
   const PANEL_UNLOCK_COPY = Object.freeze({
     admin: {
-      title: "אזור ניהול האפליקציה",
-      body: "כאן נמצאים דיווחי התקלות, יומן הפעולות, ההרשאות ואיפוס הסיסמאות. האזור הזה עובד עם חשבון ניהול נפרד — צריך להזין את שם המשתמש או האימייל שלו, ואת הסיסמה.",
-      cta: "כניסה לאזור הניהול",
+      title: "אזור צוות",
+      body: "האזור הזה מיועד לצוות המועדון ונפתח עם חשבון צוות נפרד — שם משתמש או אימייל, וסיסמה.",
+      cta: "כניסה",
     },
     club: {
-      title: "אזור ניהול המועדון",
-      body: "כאן מוסיפים ומסירים חברים, מנהלים את רשימת המועדון, את המודרציה ואת מה שחברים חדשים רואים. האזור הזה עובד עם חשבון ניהול נפרד — צריך להזין את שם המשתמש או האימייל שלו, ואת הסיסמה.",
-      cta: "כניסה לניהול המועדון",
+      title: "אזור צוות",
+      body: "האזור הזה מיועד לצוות המועדון ונפתח עם חשבון צוות נפרד — שם משתמש או אימייל, וסיסמה.",
+      cta: "כניסה",
     },
   });
   // ONE ANSWER FOR EVERY CREDENTIAL FAILURE at the management gate, in words
