@@ -230,6 +230,49 @@ any of those three findings from scratch; do not apply it blind.
 - **Second-person past-tense verbs are homographs.** Never `רשמת/ה`.
 - **Third-person past does differ,** so `נכנס/ה` is correct.
 
+
+## The migration ledger has two blind spots (2026-09-23)
+
+Both were found by walking into them, four days apart, and both cost a
+production migration that everyone believed had shipped.
+
+**A version prefix used twice is invisible.** `202609220007` was taken by two
+different branches — the technical-account migration and the announcement
+feed-card migration. Supabase keys `schema_migrations` on the version, so the
+second file was treated as already applied and **never ran in production**,
+silently, while every local `db reset` that happened to apply one of them
+looked fine. It surfaced only when a branch carrying both hit
+`duplicate key value violates unique constraint "schema_migrations_pkey"`.
+The rename to `202609220008` is #54. The same shape was live again within
+hours: PR #57 added a second `202609230001` while main already had one.
+
+**A deleted or renamed migration is invisible too.** `check-migration-
+immutability.mjs` iterates the files *present on disk* and diffs each against
+the merge base, so a migration that vanished has nothing to iterate over. That
+is exactly why the #54 rename passed it.
+
+Until the guards for both land, two habits are worth keeping: before writing a
+migration, `ls supabase/migrations/ | cut -c1-12 | sort | uniq -d` on the
+**merge result**, not on your branch — on a branch alone the prefix appears
+once and looks fine; and treat a rename as a delete, because nothing else does.
+
+## The working tree is shared, and it will move under you (2026-09-23)
+
+Several sessions run against this checkout at once, and this cost real work
+twice in one afternoon. One session's `git checkout main` landed another
+session's commit on local `main` instead of its own branch, because HEAD moved
+between its `checkout -b` and its `commit`. A `git worktree` created by one
+session was pruned by another mid-run.
+
+If you are going to run anything long — a suite, a `db reset`, a merge — take
+your own worktree (`git worktree add -f /tmp/... <branch>`), run `npm ci` in it,
+and re-read `git rev-parse --abbrev-ref HEAD` immediately before you trust a
+result. The local Supabase stack cannot be isolated this way: there is one, and
+`supabase db reset --local` from any session invalidates every other session's
+pgTAP run. Say so in the other session before you reset it — `ListAgents` and
+`SendMessage` reach the other local sessions directly, and that is faster than
+routing it through a human.
+
 ## How to verify anything
 
 ```
