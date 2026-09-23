@@ -54,17 +54,48 @@ test("announcements: the insert refuses and the fan-out sends nothing while off"
     /if not public\.club_feature_enabled\('announcements'\) then return; end if;/);
 });
 
-test("the panel does not claim full enforcement where other paths still bypass the switch", () => {
-  for (const key of ["feed", "events", "challenges", "achievements"]) {
+test("all six gated modules now claim full enforcement, and none is marked partial", () => {
+  // 202609230003 closed the list 202609230001 left open, so every row that
+  // carries a server gate carries the plain claim. A row reappearing with
+  // serverPartial is fine - see the registry comment - but it must be because
+  // that module really does have an ungated path, not left over from here.
+  for (const key of ["feed", "events", "challenges", "achievements", "announcements", "leaderboards"]) {
     const at = cloudJs.indexOf(`{ key: "${key}", label:`);
     assert.ok(at > -1, `${key} row exists`);
     const row = cloudJs.slice(at, cloudJs.indexOf("\n", at));
-    assert.match(row, /serverPartial: true/, `${key} is marked partially enforced`);
-  }
-  for (const key of ["announcements", "leaderboards"]) {
-    const at = cloudJs.indexOf(`{ key: "${key}", label:`);
-    const row = cloudJs.slice(at, cloudJs.indexOf("\n", at));
     assert.ok(!/serverPartial|clientOnly/.test(row), `${key} is fully gated and keeps the plain claim`);
   }
-  assert.match(adminJs, /m\.serverPartial \? "נאכף בשרת חלקית"/, "the marker renders");
+  // The marker itself stays, for the next module that needs the honest third
+  // answer before all of its paths are gated.
+  assert.match(adminJs, /m\.serverPartial \? "נאכף בשרת חלקית"/, "the marker still renders");
+});
+
+test("202609230003 gates the rest of the server paths 202609230001 listed", () => {
+  const later = readFileSync(new URL("../supabase/migrations/202609230003_the_rest_of_the_server_paths.sql", import.meta.url), "utf8");
+  const expected = {
+    feed: ["pr_share", "ach_share", "post_edit_caption", "post_set_visibility",
+           "add_post_comment", "toggle_reaction", "coach_congratulate",
+           "club_wod_session_publish", "community_profile"],
+    challenges: ["chal_record_progress", "chal_reassign_team", "chal_set_captain",
+                 "club_summary", "coach_celebrate_feed", "chal_notify_ending_soon"],
+    achievements: ["ach_share", "notif_on_achievement"],
+    events: ["notif_on_event_cancelled"],
+  };
+  for (const [, fns] of Object.entries(expected)) {
+    for (const fn of fns) {
+      assert.match(later, new RegExp(`CREATE OR REPLACE FUNCTION public\\.${fn}\\(`),
+        `${fn} is re-declared with its gate`);
+    }
+  }
+  // The three notification paths must SKIP, not raise: a trigger that raises
+  // aborts the write it hangs off, so a switched-off module would stop the
+  // achievement being recorded rather than merely not announced.
+  assert.match(later, /club_feature_enabled\('achievements'\) then return null; end if;/);
+  assert.match(later, /club_feature_enabled\('events'\) then return new; end if;/);
+  assert.match(later, /club_feature_enabled\('challenges'\) then return 0; end if;/);
+  // ach_share is two things at once and carries both gates.
+  const achShare = later.slice(later.indexOf("FUNCTION public.ach_share("));
+  const achBody = achShare.slice(0, achShare.indexOf("$function$;"));
+  assert.match(achBody, /club_feature_enabled\('achievements'\)/);
+  assert.match(achBody, /club_feature_enabled\('feed'\)/);
 });
