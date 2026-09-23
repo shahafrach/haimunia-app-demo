@@ -182,6 +182,18 @@ the Hebrew governs for members.
   "חשבון" בקהילה, כל עוד ההגבלה לא הוסרה — אבל לא מי הגביל. אנשי צוות עם
   הרשאת ניהול תוכן רואים את כל ההגבלות, והסיבה נרשמת גם ביומן הפעולות של
   הצוות.
+- **סיבה להסרת הגבלה.** כשאיש/ת צוות מסירים הגבלה לפני מועד הסיום שלה,
+  נשמרת סיבה נוספת בטקסט חופשי (עד 500 תווים): מי הסיר/ה, מתי, ולמה. גם כאן
+  האפליקציה לא בודקת מה נכתב מעבר לאורך שלו. את הסיבה הזו אתם לא רואים
+  באפליקציה — הסיבה שמוצגת לכם היא זו של ההגבלה עצמה, ורק כל עוד ההגבלה
+  בתוקף. סיבת ההסרה נרשמת גם ביומן הפעולות של הצוות.
+- **יומן הפעולות של הצוות.** כל פעולת ניהול נרשמת ביומן פנימי: מי עשה, מה,
+  על מי או על מה, ומתי. הפעולות שנרשמות הן מחיקת תוכן, הסתרה, הצמדה וביטול
+  הצמדה, הגבלת פרסום והסרתה, שינוי תפקיד, טיפול בדיווח, ועריכת אתגרים,
+  הישגים והגדרות פרטיות. לצד כל פעולה נשמר צילום מצב של מה שהשתנה (לפני
+  ואחרי, עד 8KB כל אחד), ובפעולות שיש בהן טקסט חופשי — סיבת ההגבלה, סיבת
+  ההסרה, והערה שאיש/ת הצוות כותבים בטיפול בדיווח — נשמר גם הטקסט עצמו.
+  היומן נקרא רק בידי אנשי צוות עם הרשאה מתאימה ואינו מוצג לכם באפליקציה.
 
 **מה לא נאסף:** אין תעודת זהות, אין מיקום, אין פרטי אשראי או חשבון בנק,
 אין מידע ביומטרי, אין תאריך לידה, אין נתוני נוכחות או רישום לשיעורים
@@ -392,8 +404,10 @@ the Hebrew governs for members.
   מוחקים אותן, ונמחקות יחד עם החשבון שלכם (או עם החשבון של מי שכתב/ה
   אותן).
 - **הגבלת פרסום והסיבה שלה** נשארות גם אחרי שההגבלה הסתיימה או הוסרה,
-  ונמחקות יחד עם החשבון שלכם. העותק של הסיבה ביומן הפעולות של הצוות לא
-  נמחק, גם לא עם החשבון.
+  ונמחקות יחד עם החשבון שלכם. שורת היומן על הפעולה נשארת — מה נעשה, מתי
+  ובידי מי — אבל הטקסט החופשי שנכתב עליכם בה (סיבת ההגבלה, סיבת ההסרה,
+  והערת הטיפול בדיווח) מוחלף בסימון "[הנימוק נמחק יחד עם החשבון]" כשהחשבון
+  נמחק. טקסט שאתם כתבתם על חבר/ה אחר/ת נשאר, כי הוא נוגע לחשבון שעדיין קיים.
 - **גיבויים ולוגים ברמת התשתית** נשמרים לפי חלונות הגיבוי והלוגים
   הרגילים של ספק האחסון שלנו. אנחנו לא מאריכים אותם ולא משתמשים בהם
   לשום דבר מלבד שחזור שירות או בדיקת שימוש לרעה.
@@ -650,6 +664,24 @@ time.
   lifted — but not who imposed it. Staff with a moderation permission
   can see every restriction, and the reason is also written to the staff
   action log.
+- **The reason a restriction is lifted.** When a staff member lifts a
+  restriction before it expires, a second free-text reason (up to 500
+  characters) is stored: who lifted it, when, and why. The app does not
+  check what is written beyond its length. You do not see this one in the
+  app — the reason shown to you is the restriction's own, and only for as
+  long as the restriction is in force. The lifting reason is also written
+  to the staff action log.
+- **The staff action log.** Every management action is recorded in an
+  internal log: who did it, what, to whom or to what, and when. The actions
+  recorded are deleting content, hiding it, pinning and unpinning,
+  restricting posting and lifting that restriction, changing a role,
+  reviewing a report, and editing challenges, achievements and privacy
+  settings. Each entry also stores a snapshot of what changed (before and
+  after, up to 8KB each), and for the actions that carry free text — the
+  restriction reason, the lifting reason, and the note a staff member
+  writes when reviewing a report — the text itself. The log is readable
+  only by staff with the relevant permission and is not shown to you in
+  the app.
 
 **What we do not collect:** no government ID, no location, no card or
 bank details, no biometric data, no date of birth, no class attendance or
@@ -902,8 +934,12 @@ anyone who installed since.
   with the account of the staff member who wrote them).
 - **A posting restriction and its reason** are kept after the
   restriction ends or is lifted, and are deleted with your account. The
-  copy of the reason in the staff action log is not deleted, not even
-  with the account.
+  action log entry itself stays — what was done, when, and by whom — but
+  the free text written about you in it (the restriction reason, the
+  lifting reason, and the report-review note) is replaced with the marker
+  "[הנימוק נמחק יחד עם החשבון]" when the account is deleted. Text you
+  wrote about another member stays, because it concerns an account that
+  still exists.
 - **Infrastructure-level backups and logs** follow our hosting provider's
   own standard backup-rotation and log-retention windows. We do not
   extend them and do not use them for anything beyond restoring service

@@ -281,3 +281,85 @@ test("privacy.html and terms.html load theme-init.js and stay RTL/Hebrew-shelled
     assert.match(html, /<script src="\.\/theme-init\.js"><\/script>/);
   }
 });
+
+// ---------------------------------------------------------------------------
+// The two staff free-text fields the policy used to omit, and the retention
+// claim that 202609230002 made false.
+//
+// mod_lift_restriction() writes a SECOND free-text reason (posting_restrictions
+// .lift_reason, 500 chars) and mirrors it into admin_actions.note. Neither the
+// lifting reason nor the action log itself was described anywhere in the
+// policy, while the imposition reason was described in detail.
+//
+// And 202609230002 added admin_actions_redact_on_user_delete(), which replaces
+// that free text when the account goes. Both files said the opposite - that the
+// audit copy is never deleted - which is the worse of the two errors: a policy
+// understating what it keeps is a nuisance, one overstating it is a promise
+// broken in the member's favour that a reader cannot rely on either way.
+const redactionMarker = "[הנימוק נמחק יחד עם החשבון]";
+
+// Both documents are hard-wrapped prose, so a fixed-width line break lands in
+// the middle of most sentences worth asserting on. flat() (line 57) collapses
+// runs of whitespace; match against that, not the raw text.
+const flatMd = flat(privacyMd);
+const flatHtml = flat(privacyHtml);
+
+test("both files disclose the reason recorded when a restriction is LIFTED", () => {
+  assert.match(privacyMd, /סיבה להסרת הגבלה/, "Hebrew, PRIVACY.md");
+  assert.match(privacyMd, /reason a restriction is lifted/i, "English, PRIVACY.md");
+  assert.match(privacyHtml, /סיבה להסרת הגבלה/, "Hebrew, privacy.html");
+  assert.match(privacyHtml, /reason a restriction is lifted/i, "English, privacy.html");
+});
+
+test("the lifting reason is described as one the member does NOT see", () => {
+  // The imposition reason IS shown, in the account tab, while the restriction
+  // is live. The lifting reason never is, and a policy that blurred the two
+  // would describe a transparency the app does not offer.
+  assert.match(flatMd, /את הסיבה הזו אתם לא רואים באפליקציה/);
+  assert.match(flatMd, /You do not see this one in the app/);
+});
+
+test("both files describe the staff action log itself, not just the reason in it", () => {
+  assert.match(flatMd, /\*\*יומן הפעולות של הצוות\.\*\*/, "Hebrew heading, PRIVACY.md");
+  assert.match(flatMd, /\*\*The staff action log\.\*\*/, "English heading, PRIVACY.md");
+  assert.match(flatHtml, /<strong>יומן הפעולות של הצוות\.<\/strong>/, "Hebrew heading, privacy.html");
+  assert.match(flatHtml, /<strong>The staff action log\.<\/strong>/, "English heading, privacy.html");
+  // The 8KB before/after snapshot is the part a reader cannot guess.
+  for (const [name, doc] of [["PRIVACY.md", flatMd], ["privacy.html", flatHtml]]) {
+    assert.match(doc, /8KB/, `${name} states the snapshot size`);
+  }
+});
+
+test("no file still claims the audit copy outlives the account", () => {
+  // The exact sentences 202609230002 falsified.
+  assert.doesNotMatch(flatMd, /לא נמחק, גם לא עם החשבון/,
+    "PRIVACY.md Hebrew still says the action-log copy is never deleted");
+  assert.doesNotMatch(flatMd, /is not deleted, not even with the account/,
+    "PRIVACY.md English still says the action-log copy is never deleted");
+  assert.doesNotMatch(flatHtml, /לא נמחק, גם לא עם החשבון/);
+  assert.doesNotMatch(flatHtml, /is not deleted, not even with the account/);
+});
+
+test("both files name the redaction marker the migration actually writes", () => {
+  // SIBLING DRIFT: the marker is a string literal in
+  // 202609230002_deletion_reaches_photos_telemetry_and_the_audit_note.sql.
+  // If someone changes it there, the policy quotes a marker that never appears.
+  const migration = fs.readFileSync(
+    new URL("../supabase/migrations/202609230002_deletion_reaches_photos_telemetry_and_the_audit_note.sql",
+      import.meta.url), "utf8");
+  assert.ok(migration.includes(redactionMarker),
+    "the migration no longer writes the marker the policy quotes");
+  assert.ok(privacyMd.includes(redactionMarker), "PRIVACY.md quotes the marker");
+  assert.ok(privacyHtml.includes(redactionMarker), "privacy.html quotes the marker");
+});
+
+test("the three redacted action types are the three the trigger covers", () => {
+  // member_restrict, member_unrestrict, report_review. The policy lists them in
+  // prose; if the trigger ever covers a fourth, this fails and the prose moves.
+  const migration = fs.readFileSync(
+    new URL("../supabase/migrations/202609230002_deletion_reaches_photos_telemetry_and_the_audit_note.sql",
+      import.meta.url), "utf8");
+  for (const t of ["member_restrict", "member_unrestrict", "report_review"]) {
+    assert.ok(migration.includes(t), `trigger still covers ${t}`);
+  }
+});
