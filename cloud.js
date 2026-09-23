@@ -726,6 +726,11 @@
       // is refused here the same way COMM-310/311 already refuse one). data
       // is the raw jsonb registration_funnel() returned, rendered as-is.
       registrationFunnel: { loading: false, loaded: false, error: false, errorText: "", data: null },
+      // 202609230013. The training-log edition's anonymous usage report
+      // (training_log_usage_report()), rendered inside the same populated
+      // branch and loaded by the same completion as the funnel above - but not
+      // period-scoped: it always reads the last twelve weeks.
+      trainingLogUsage: { loading: false, loaded: false, error: false, errorText: "", data: null },
     },
 
     // ---- challenges (COMM-201..207) ----
@@ -6993,6 +6998,7 @@
     else if (action === "mgmt-password-cancel") { state.admin.mgmtPasswordOpen = false; state.admin.mgmtPasswordError = ""; setFieldErrors("mgmtPassword", {}); }
     // COMM-379 registration funnel analytics.
     else if (action === "registration-funnel-retry") loadRegistrationFunnel();
+    else if (action === "training-log-usage-retry") loadTrainingLogUsage();
     // COMM-378 onboarding step content editor.
     else if (action === "onboarding-content-retry") loadOnboardingStepContent().then(rerender);
     else if (action === "onboarding-content-save") saveOnboardingContent(el.dataset.step);
