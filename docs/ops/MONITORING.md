@@ -156,9 +156,9 @@ why the false positive had to be fixed there.
 
 | Job | Cadence | If it stops |
 |---|---|---|
-| `purge-due-accounts` | daily 03:29 (03:59 before 202609230001) | **The 30-day deletion promise stops being kept.** Highest-severity of the set — it is a privacy commitment, not a feature. |
-| `purge-abandoned-profiles` | daily 03:31 | Abandoned anonymous accounts accumulate, **and deleted members' photos stay in Storage** — this run also drains `storage_erasure_queue` (202609230001). Rows older than a day in that queue mean `storage.remove()` is failing: `select count(*), max(attempts) from public.storage_erasure_queue;` |
-| `telemetry-retention-purge` | daily 03:47 | The 90-day community-activity retention promise stops being kept (feed impressions, feed interactions, analytics events and app-open days since 202609230001) |
+| `purge-due-accounts` | daily 03:29 (03:59 before 202609230002) | **The 30-day deletion promise stops being kept.** Highest-severity of the set — it is a privacy commitment, not a feature. |
+| `purge-abandoned-profiles` | daily 03:31 | Abandoned anonymous accounts accumulate, **and deleted members' photos stay in Storage** — this run also drains `storage_erasure_queue` (202609230002). Rows older than a day in that queue mean `storage.remove()` is failing: `select count(*), max(attempts) from public.storage_erasure_queue;` |
+| `telemetry-retention-purge` | daily 03:47 | The 90-day community-activity retention promise stops being kept (feed impressions, feed interactions, analytics events and app-open days since 202609230002) |
 | `idempotency-purge` | daily 03:19 | `request_idempotency` grows without bound |
 | `notif-batch-flush` | every 15 min | Batched notifications are never delivered |
 | `chal-notify-ending-soon` | hourly | "Challenge ending soon" never fires |

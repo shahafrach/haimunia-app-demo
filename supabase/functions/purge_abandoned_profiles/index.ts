@@ -47,7 +47,7 @@
 // counts it reports. Same shape `recap_weekly` already uses for
 // `recap_weekly_classmates()`.
 //
-// STORAGE ERASURE (202609230001). This function also drains
+// STORAGE ERASURE (202609230002). This function also drains
 // public.storage_erasure_queue: the photos of every account deleted since the
 // last run, queued by a BEFORE DELETE trigger on auth.users. It lives here
 // rather than in a function of its own because this is the account-purge job

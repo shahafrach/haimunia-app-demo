@@ -61,7 +61,7 @@ alter table public.storage_erasure_queue enable row level security;
 revoke all on public.storage_erasure_queue from public, anon, authenticated;
 
 comment on table public.storage_erasure_queue is
-  'Storage objects belonging to a deleted account, waiting for the Storage API to remove them (202609230001). Filled by storage_queue_erasure_on_user_delete() BEFORE DELETE ON auth.users; drained by the purge_abandoned_profiles Edge Function through storage_erasure_pending() / storage_erasure_done(). Holds a bucket and a path, never the file and never a user id: the path''s first segment is the deleted account''s uuid, which no longer resolves to anyone. A row that stays here past a night is a remove the API refused; attempts counts the drains that saw it. No client role can read or write it.';
+  'Storage objects belonging to a deleted account, waiting for the Storage API to remove them (202609230002). Filled by storage_queue_erasure_on_user_delete() BEFORE DELETE ON auth.users; drained by the purge_abandoned_profiles Edge Function through storage_erasure_pending() / storage_erasure_done(). Holds a bucket and a path, never the file and never a user id: the path''s first segment is the deleted account''s uuid, which no longer resolves to anyone. A row that stays here past a night is a remove the API refused; attempts counts the drains that saw it. No client role can read or write it.';
 
 create or replace function public.storage_queue_erasure_on_user_delete()
 returns trigger
@@ -84,7 +84,7 @@ create trigger storage_queue_erasure_before_user_delete
   execute function public.storage_queue_erasure_on_user_delete();
 
 comment on function public.storage_queue_erasure_on_user_delete() is
-  'BEFORE DELETE trigger on auth.users (202609230001). Queues every storage.objects row in ANY bucket whose first path segment is the deleted account''s uuid, or whose owner is that account, into public.storage_erasure_queue for the Storage API to remove. Covers every account-removal path at once: purge_due_accounts(), purge_abandoned_profiles() and a dashboard delete. Does not delete from storage.objects itself - that would orphan the file in the backing store. Idempotent on (bucket_id, object_name).';
+  'BEFORE DELETE trigger on auth.users (202609230002). Queues every storage.objects row in ANY bucket whose first path segment is the deleted account''s uuid, or whose owner is that account, into public.storage_erasure_queue for the Storage API to remove. Covers every account-removal path at once: purge_due_accounts(), purge_abandoned_profiles() and a dashboard delete. Does not delete from storage.objects itself - that would orphan the file in the backing store. Idempotent on (bucket_id, object_name).';
 
 create or replace function public.storage_erasure_pending(p_limit integer default 500)
 returns table (bucket_id text, object_name text)
@@ -111,7 +111,7 @@ end $$;
 revoke all on function public.storage_erasure_pending(integer) from public, anon, authenticated;
 grant execute on function public.storage_erasure_pending(integer) to service_role;
 comment on function public.storage_erasure_pending(integer) is
-  'service_role only (202609230001). Returns up to p_limit (default 500, clamped 1..5000) queued storage objects, oldest first, and bumps each one''s attempts. Read by the purge_abandoned_profiles Edge Function, which removes them through the Storage API and then calls storage_erasure_done() for the ones the API confirmed. Deletes nothing itself.';
+  'service_role only (202609230002). Returns up to p_limit (default 500, clamped 1..5000) queued storage objects, oldest first, and bumps each one''s attempts. Read by the purge_abandoned_profiles Edge Function, which removes them through the Storage API and then calls storage_erasure_done() for the ones the API confirmed. Deletes nothing itself.';
 
 create or replace function public.storage_erasure_done(p_bucket text, p_names text[])
 returns integer
@@ -127,7 +127,7 @@ end $$;
 revoke all on function public.storage_erasure_done(text, text[]) from public, anon, authenticated;
 grant execute on function public.storage_erasure_done(text, text[]) to service_role;
 comment on function public.storage_erasure_done(text, text[]) is
-  'service_role only (202609230001). Clears the named objects in p_bucket from public.storage_erasure_queue once the Storage API has removed them, and returns how many rows it cleared. Called by the purge_abandoned_profiles Edge Function only after storage.remove() returned no error for that batch.';
+  'service_role only (202609230002). Clears the named objects in p_bucket from public.storage_erasure_queue once the Storage API has removed them, and returns how many rows it cleared. Called by the purge_abandoned_profiles Edge Function only after storage.remove() returned no error for that batch.';
 
 -- The drain runs inside the 03:31 purge_abandoned_profiles run. The 30-day
 -- purge ran at 03:59, so a member purged tonight kept their photos until
@@ -196,7 +196,7 @@ begin
 end $$;
 revoke all on function public.retention_purge_telemetry(integer) from public, anon, authenticated;
 comment on function public.retention_purge_telemetry(integer) is
-  'COMM-P retention, widened by 202609230001. Deletes rows older than p_days from the four community-activity tables PRIVACY.md promises to delete after 90 days: public.feed_impressions (shown_at), public.analytics_events (created_at), public.feed_interactions (created_at) and public.activity_pings (activity_date, or created_at, whichever is older than the window). Returns the TOTAL number of rows removed across all four - the same "rows written" integer convention notif_batch_flush_due() and recompute_feed_weights() return. p_days defaults to 90 and is clamped to 1..3650; null is treated as 90. IRREVERSIBLE: there is no soft-delete and no archive; an app-open streak is visible for at most p_days, and last_activity_on is null for a member absent longer than that. SECURITY DEFINER with the grant as the only gate and NO auth.uid() check, the documented exception every scheduled job in this schema carries (notif_batch_flush_due, recompute_feed_weights, seed_onboarding_progress): a cron job has no session to check. GRANTED TO NO ROLE - it runs as the job owner, and nothing a client can reach may call it. Scheduled daily as ''telemetry-retention-purge''.';
+  'COMM-P retention, widened by 202609230002. Deletes rows older than p_days from the four community-activity tables PRIVACY.md promises to delete after 90 days: public.feed_impressions (shown_at), public.analytics_events (created_at), public.feed_interactions (created_at) and public.activity_pings (activity_date, or created_at, whichever is older than the window). Returns the TOTAL number of rows removed across all four - the same "rows written" integer convention notif_batch_flush_due() and recompute_feed_weights() return. p_days defaults to 90 and is clamped to 1..3650; null is treated as 90. IRREVERSIBLE: there is no soft-delete and no archive; an app-open streak is visible for at most p_days, and last_activity_on is null for a member absent longer than that. SECURITY DEFINER with the grant as the only gate and NO auth.uid() check, the documented exception every scheduled job in this schema carries (notif_batch_flush_due, recompute_feed_weights, seed_onboarding_progress): a cron job has no session to check. GRANTED TO NO ROLE - it runs as the job owner, and nothing a client can reach may call it. Scheduled daily as ''telemetry-retention-purge''.';
 
 -- =====================================================================
 -- 3. The restriction reason in the audit log goes with the account
@@ -261,6 +261,6 @@ create trigger admin_actions_redact_before_user_delete
   execute function public.admin_actions_redact_on_user_delete();
 
 comment on function public.admin_actions_redact_on_user_delete() is
-  'BEFORE DELETE trigger on auth.users (202609230001). On every admin_actions row about the deleted member (target_user_id, or target_type member + target_id) whose action_type is member_restrict, member_unrestrict or report_review, replaces the free-text note and any non-empty after_data reason / lift_reason / note with ''[הנימוק נמחק יחד עם החשבון]''. Everything else on the row - who acted, what, when, restriction type, expiry - is kept, so the log still reads as the sequence of decisions it was. Same pattern as bug_reports_anonymize_on_user_delete().';
+  'BEFORE DELETE trigger on auth.users (202609230002). On every admin_actions row about the deleted member (target_user_id, or target_type member + target_id) whose action_type is member_restrict, member_unrestrict or report_review, replaces the free-text note and any non-empty after_data reason / lift_reason / note with ''[הנימוק נמחק יחד עם החשבון]''. Everything else on the row - who acted, what, when, restriction type, expiry - is kept, so the log still reads as the sequence of decisions it was. Same pattern as bug_reports_anonymize_on_user_delete().';
 
 commit;

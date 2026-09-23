@@ -1,4 +1,4 @@
--- Account deletion reaches what it used to miss (202609230001).
+-- Account deletion reaches what it used to miss (202609230002).
 --
 -- Four gaps from docs/audit/launch-readiness.md, three of them in the
 -- database and tested here:
