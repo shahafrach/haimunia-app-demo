@@ -112,6 +112,23 @@ server, and the phone gets a real pass"*. The short version:
 
 ## Open, deliberately
 
+**The restore drill has been run — 2026-09-23.** Launch-readiness **S19** is
+closed for the database and open for Storage. `haimunia-db-backup-20260923T045538Z`
+was decrypted with the current passphrase and restored into a scratch database:
+schema 0 errors, all 30 `public` and all 5 `auth` inserts loaded, and **all 138
+foreign keys in `public` checked individually for orphan rows — 0 violations**.
+The procedure is `docs/ops/MONITORING.md` §7.
+
+Two things it found. **The backup is not self-contained**: it restores into a
+Supabase project, never a bare Postgres, because `schema.sql` carries no `auth`
+or `storage` schema while `data.sql` writes into both and 17 `public` foreign
+keys point at `auth.users`. And **uploaded photos are not backed up at all** —
+`storage.objects` rows are metadata; the bytes live in the Storage backend and
+are in no archive. A project loss would lose every member photo permanently,
+which is a promise `PRIVACY.md` makes. That is now the largest unhandled
+recovery risk and it has no owner yet.
+
+
 **The backup passphrase was lost and rotated on 2026-09-23.** A new
 `BACKUP_PASSPHRASE` repository secret is set; the old one is gone. Every
 database backup artifact produced before that date is encrypted under the old
