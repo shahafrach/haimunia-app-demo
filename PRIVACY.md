@@ -38,7 +38,9 @@ the Hebrew governs for members.
   נוכחות בשיעור ולא פרסום בפיד.
 - **שיתוף לקהילה קורה רק כשאתם בוחרים לשתף.** שום דבר שאתם רושמים
   ביומן לא מתפרסם מעצמו.
-- **אין פרסומות, אין מכירת מידע, אין כתובת מייל, אין מיקום.**
+- **אין פרסומות, אין מכירת מידע, אין מיקום, ואין כתובת מייל** — אלא אם
+  תבחרו לשלוח דיווח על תקלה במייל: אז ההודעה יוצאת מכתובת המייל שלכם
+  לתיבת ה־Gmail של המועדון (ראו "ספקי תשתית").
 
 ## מי מפעיל את האפליקציה
 
@@ -50,8 +52,9 @@ the Hebrew governs for members.
 כמו כל שאלה אחרת שקשורה למועדון.
 
 לכל שאלה, בקשה או תלונה בנושא פרטיות — פנו למאמן/ת שלכם ישירות, בדיוק
-כמו בכל נושא אחר במועדון. אין כתובת תמיכה נפרדת; הצוות הוא כל התמיכה
-שיש לאפליקציה.
+כמו בכל נושא אחר במועדון. הכתובת היחידה באפליקציה היא תיבת ה־Gmail של
+המועדון, שמוצעת במסך הדיווח על תקלה לשליחת דיווח במייל (ראו "ספקי
+תשתית"); גם אותה קורא הצוות, שהוא כל התמיכה שיש לאפליקציה.
 
 ## מה נשמר במכשיר ומה יוצא ממנו
 
@@ -120,10 +123,12 @@ the Hebrew governs for members.
 ## איזה מידע נאסף
 
 - **חשבון והתחברות.** חשבון נפתח אנונימית (בלי שום פרט אישי), ואפשר
-  לחבר אליו שם משתמש וסיסמה. אנחנו לא אוספים כתובת אימייל ולא שום פרט
-  ליצירת קשר. במקומות שבהם המנגנון הטכני של ההתחברות דורש פורמט של
-  אימייל, האפליקציה מייצרת כתובת מתוך שם המשתמש; היא אינה כתובת אמיתית,
-  אי אפשר לשלוח אליה דואר ואף אחד לא ישתמש בה כדי ליצור אתכם קשר.
+  לחבר אליו שם משתמש וסיסמה. ההתחברות לא משתמשת בכתובת אימייל, ואנחנו לא
+  מבקשים אותה ולא שום פרט ליצירת קשר (החריג היחיד: דיווח על תקלה שתבחרו
+  לשלוח במייל — ראו "ספקי תשתית"). במקומות שבהם המנגנון הטכני של
+  ההתחברות דורש פורמט של אימייל, האפליקציה מייצרת כתובת מתוך שם המשתמש;
+  היא אינה כתובת אמיתית, אי אפשר לשלוח אליה דואר ואף אחד לא ישתמש בה
+  כדי ליצור אתכם קשר.
 - **הזמנה והצטרפות.** אם הצטרפתם עם קוד הזמנה, נשמר איזה קוד מומש, על
   ידי איזה חשבון ומתי, כדי לאכוף קוד חד־פעמי ומגבלת ניסיונות.
 - **מזהה מכשיר למגבלת ניסיונות.** בניסיון מימוש קוד הזמנה נשלח מזהה
@@ -169,6 +174,14 @@ the Hebrew governs for members.
   בהערה מעבר לאורך שלה. כל אנשי הצוות יכולים לקרוא את כל ההערות האלה;
   אתם לא רואים אותן באפליקציה, ואתם רשאים לבקש לדעת מה רשום לגביכם — פנו
   למאמן/ת.
+- **סיבה להגבלת פרסום.** אם איש/ת צוות עם הרשאת ניהול תוכן מגבילים את
+  הפרסום שלכם (לזמן מוגבל או לצמיתות), נשמרים סוג ההגבלה, מועד הסיום, מי
+  הגביל ומתי, דיווח התוכן שהוביל להגבלה אם היה כזה, וסיבה בטקסט חופשי
+  (עד 500 תווים) שאיש/ת הצוות כותבים. האפליקציה לא בודקת מה נכתב בסיבה
+  מעבר לאורך שלה. בניגוד להערות על פניות, את הסיבה אתם כן רואים — בטאב
+  "חשבון" בקהילה, כל עוד ההגבלה לא הוסרה — אבל לא מי הגביל. אנשי צוות עם
+  הרשאת ניהול תוכן רואים את כל ההגבלות, והסיבה נרשמת גם ביומן הפעולות של
+  הצוות.
 
 **מה לא נאסף:** אין תעודת זהות, אין מיקום, אין פרטי אשראי או חשבון בנק,
 אין מידע ביומטרי, אין תאריך לידה, אין נתוני נוכחות או רישום לשיעורים
@@ -378,6 +391,9 @@ the Hebrew governs for members.
 - **הערות הצוות על פניות אליכם** נשמרות עד שאיש/ת הצוות שכתבו אותן
   מוחקים אותן, ונמחקות יחד עם החשבון שלכם (או עם החשבון של מי שכתב/ה
   אותן).
+- **הגבלת פרסום והסיבה שלה** נשארות גם אחרי שההגבלה הסתיימה או הוסרה,
+  ונמחקות יחד עם החשבון שלכם. העותק של הסיבה ביומן הפעולות של הצוות לא
+  נמחק, גם לא עם החשבון.
 - **גיבויים ולוגים ברמת התשתית** נשמרים לפי חלונות הגיבוי והלוגים
   הרגילים של ספק האחסון שלנו. אנחנו לא מאריכים אותם ולא משתמשים בהם
   לשום דבר מלבד שחזור שירות או בדיקת שימוש לרעה.
@@ -457,7 +473,10 @@ the Hebrew governs for members.
   feed.
 - **Nothing you log is shared with the club unless you choose to share
   it.**
-- **No ads, no sale of data, no email address, no location.**
+- **No ads, no sale of data, no location, and no email address** —
+  unless you choose to send a bug report by email: that message goes
+  from your own email address to the club's Gmail inbox (see
+  "Infrastructure providers").
 
 ## Who runs this
 
@@ -472,8 +491,10 @@ way any other question about the club would be.
 
 For any privacy question, request, or complaint, contact your coach
 directly — the same way you'd reach them about anything else related to
-the club. There is no separate support email; the coaching team is the
-whole of "support" for this app.
+the club. The only email address in the app is the club's Gmail inbox,
+offered on the report-a-problem screen for sending a bug report by email
+(see "Infrastructure providers"); it is read by the same coaching team,
+who are the whole of "support" for this app.
 
 ## What stays on your device, and what leaves it
 
@@ -554,8 +575,10 @@ time.
 
 - **Account and sign-in data.** An account is opened anonymously (no
   personal information at all), and you can attach a username and
-  password to it. We do not collect an email address or any other contact
-  detail. Where the sign-in mechanism technically requires an email
+  password to it. Sign-in does not use an email address, and we never
+  ask for one or for any other contact detail (the one exception is a
+  bug report you choose to send by email — see "Infrastructure
+  providers"). Where the sign-in mechanism technically requires an email
   format, the app generates one from your username; it is not a real
   address, nothing can be delivered to it, and it is never used to
   contact you.
@@ -616,6 +639,17 @@ time.
   written in it beyond its length. Every staff member can read every
   such note; you cannot see them in the app, and you are entitled to ask
   what is recorded about you — ask your coach.
+- **The reason for a posting restriction.** If a staff member with a
+  moderation permission restricts your posting (temporarily or
+  permanently), we record the type of restriction, when it ends, who
+  imposed it and when, the content report that led to it if there was
+  one, and a free-text reason (up to 500 characters) the staff member
+  types. The app does not check what is written in the reason beyond its
+  length. Unlike contact notes, you can see the reason — in the
+  community "account" tab, for as long as the restriction has not been
+  lifted — but not who imposed it. Staff with a moderation permission
+  can see every restriction, and the reason is also written to the staff
+  action log.
 
 **What we do not collect:** no government ID, no location, no card or
 bank details, no biometric data, no date of birth, no class attendance or
@@ -866,6 +900,10 @@ anyone who installed since.
 - **Staff notes about contacting you** are kept until the staff member
   who wrote them deletes them, and are deleted with your account (or
   with the account of the staff member who wrote them).
+- **A posting restriction and its reason** are kept after the
+  restriction ends or is lifted, and are deleted with your account. The
+  copy of the reason in the staff action log is not deleted, not even
+  with the account.
 - **Infrastructure-level backups and logs** follow our hosting provider's
   own standard backup-rotation and log-retention windows. We do not
   extend them and do not use them for anything beyond restoring service
