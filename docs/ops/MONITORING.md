@@ -173,10 +173,38 @@ FEAT-010) because the function it called is an empty stub. Its absence is
 correct; if it reappears without the derivation being built, that is a
 regression.
 
-Two of these (`recap-weekly`, `purge-abandoned-profiles`) reach Edge
-Functions through `cron_invoke_edge_function()` and are **inert until the
-Vault secrets are set**. They will report `succeeded` regardless, because
-the cron job's SQL succeeded — see §4.
+Three of these (`recap-weekly`, `purge-abandoned-profiles`,
+`notif-push-send`) reach Edge Functions through `cron_invoke_edge_function()`
+and are **inert until the Vault secrets are set**. They used to report
+`succeeded` regardless, because the cron job's SQL succeeded — that is
+launch-readiness **S6**, and `202609230008` closed it.
+
+`job_health_check()` now flags two things it could not see before:
+
+- **The secrets are still placeholders.** If any scheduled job exists to
+  invoke an Edge Function while `edge_functions_base_url` or
+  `edge_functions_service_role_key` is unset or still a placeholder, the board
+  reports `edge functions: Vault secrets unset or still placeholders`. Every
+  one of those jobs is a no-op that reports success, and that is now said out
+  loud rather than inferred from a runbook.
+- **The Edge Function answered badly.** `cron_invoke_edge_function()` is
+  fire-and-forget: `net.http_post` queues the request and the response lands
+  in `net._http_response` under a request id that nothing used to remember the
+  purpose of. It now writes that id and the slug into
+  `public.edge_function_invocations`, so a non-2xx, a timeout or a transport
+  error is reported as `edge: <slug>` rather than as an anonymous failure.
+  Only the latest invocation of each slug counts, over a 24-hour window, so a
+  500 that has since recovered stops being reported.
+
+**Expect the board to go red the first time this runs in a project whose
+secrets are unset.** That is the fix working: the jobs were always inert, and
+the only thing that changed is that the monitoring stopped agreeing they were
+fine. Set the two Vault secrets (§4) and it clears on the next hourly run.
+
+Neither addition reaches `job_health_status()`, the one function `anon` may
+call — it still returns only `ok`, `failing_count` and `last_checked_at`.
+Which job is failing, and whether a deployment is configured, stay in
+`failing_jobs`, which is operator-only.
 
 ## 2. Authentication and abuse
 
