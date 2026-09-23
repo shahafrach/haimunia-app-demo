@@ -10,7 +10,9 @@
 -- WHAT A ROW IS. One device, one kind of event, one day:
 --   device_id  a random UUID the app generates on the phone the first time it
 --              counts, and keeps in localStorage. Not derived from anything;
---              clearing site data makes a new one.
+--              clearing site data makes a new one. It is PSEUDONYMOUS, not
+--              anonymous: it links one phone's counts across days, which is
+--              what makes "devices this week" and the weekly trend possible.
 --   event      app_open | workout_logged | screen_open. Nothing else exists.
 --   screen     for screen_open only: add | history | calendar | wod.
 --   day        stamped HERE, in the club's time zone - the client cannot set
@@ -29,17 +31,28 @@
 --                  the publishable key and no session, so this is the role
 --                  its requests arrive as. It cannot read a single row back,
 --                  including its own.
---   authenticated  SELECT, but RLS returns rows only to is_staff().
+--   authenticated  NOTHING on the table. Not even staff can read a row: the
+--                  one way out is training_log_usage_report(), which returns
+--                  totals only and refuses anyone who is not is_staff(). So
+--                  no per-device, per-day row ever leaves the database.
 --   nobody         UPDATE or DELETE through the API.
 --
 -- ABUSE. An anonymous insert grant means anyone holding the publishable key
--- (which is public by design) can add rows. The check constraints bound WHAT
--- they can add, and the one-row-per-day rule bounds how much one device id
--- can add; a script inventing device ids can still inflate "devices seen".
--- That is the honest limit of counting without accounts, and why the report
--- labels these as counts of devices, not people.
---
--- Staff read it through training_log_usage_report(), below.
+-- (which is public by design) can add rows, and one statement can carry
+-- hundreds of thousands of them with a fresh device id each - measured at
+-- 168 bytes a row including indexes, three million rows would fill the free
+-- tier's 500 MB and put the WHOLE project, community app included, into
+-- read-only mode. So:
+--   * the check constraints bound WHAT can be added;
+--   * the trigger drops a repeat of the same fact the same day;
+--   * the trigger drops EVERY row past 1,000 in one day (the club's real use
+--     is about 600). The cost, accepted: whoever reaches the cap first - an
+--     attacker - wipes out the rest of that day's counts;
+--   * a nightly job deletes every row older than 180 days.
+-- Together they bound the table at about 1,000 x 180 x 168 bytes, ~30 MB.
+-- A script inventing device ids can still inflate "devices seen" up to the
+-- cap; that is the honest limit of counting without accounts, and why the
+-- report labels these as counts of devices, not people.
 
 create table public.training_log_usage (
   day       date not null default ((now() at time zone 'Asia/Jerusalem')::date),
@@ -56,14 +69,16 @@ create table public.training_log_usage (
 );
 
 comment on table public.training_log_usage is
-  'Anonymous per-device, per-day usage counts from the training-log edition (haimuniya.github.io/haimunia-app). Insert-only for anon (device_id, event, screen); readable by staff only; see 202609230013 for what a row can and cannot hold.';
+  'Pseudonymous per-device, per-day usage counts from the training-log edition (haimuniya.github.io/haimunia-app). Insert-only for anon (device_id, event, screen); no role can select a row - staff get totals through training_log_usage_report(); capped at 1,000 rows a day and purged after 180 days. See 202609230013.';
 
 create index training_log_usage_device_idx on public.training_log_usage (device_id);
 
 -- The day is always the server's, and a repeat of the same fact is not an
 -- error - the app fires and forgets, and a 409 for "already counted today"
--- would only be noise in a member's browser console. SECURITY DEFINER so the
--- existence check can read the table that anon cannot.
+-- would only be noise in a member's browser console. Past the daily cap every
+-- row is dropped the same silent way. SECURITY DEFINER so the checks can read
+-- the table that anon cannot. The count runs on the primary key, which
+-- leads with `day`.
 create or replace function public.training_log_usage_before_insert()
 returns trigger
 language plpgsql
@@ -72,6 +87,9 @@ set search_path = ''
 as $$
 begin
   new.day := (now() at time zone 'Asia/Jerusalem')::date;
+  if (select count(*) from public.training_log_usage u where u.day = new.day) >= 1000 then
+    return null;
+  end if;
   if exists (
     select 1 from public.training_log_usage u
      where u.day = new.day and u.device_id = new.device_id
@@ -92,15 +110,13 @@ alter table public.training_log_usage enable row level security;
 
 revoke all on table public.training_log_usage from public, anon, authenticated;
 grant insert (device_id, event, screen) on table public.training_log_usage to anon;
-grant select on table public.training_log_usage to authenticated;
 
 -- The check constraints are the validation; this policy only opens the door
 -- to the one role that needs it.
 create policy training_log_usage_insert_anon on public.training_log_usage
   for insert to anon with check (true);
 
-create policy training_log_usage_read_staff on public.training_log_usage
-  for select to authenticated using (public.is_staff());
+-- No select policy, and no select grant to anyone: see WHO CAN DO WHAT.
 
 -- The staff report. One call answers the owner's two questions and the trend:
 --   devices_seen        distinct devices that ever opened the app
@@ -111,14 +127,15 @@ create policy training_log_usage_read_staff on public.training_log_usage
 --                       devices that logged, and devices seen for the first time
 --   screens[]           for the last 28 days, how many devices opened each screen
 --
--- SECURITY INVOKER, so the rows it can see are exactly the rows RLS gives the
--- caller - and it refuses outright for anyone who is not staff, rather than
+-- SECURITY DEFINER, because no caller can read the table itself: this function
+-- is the only way anything leaves it, and what leaves is counts, never a row
+-- or a device id. It refuses outright for anyone who is not staff, rather than
 -- returning a report of zeros that would read as "nobody uses the app".
 create or replace function public.training_log_usage_report(p_weeks integer default 12)
 returns jsonb
 language plpgsql
 stable
-security invoker
+security definer
 set search_path = ''
 as $$
 declare
@@ -170,4 +187,28 @@ revoke all on function public.training_log_usage_report(integer) from public, an
 grant execute on function public.training_log_usage_report(integer) to authenticated;
 
 comment on function public.training_log_usage_report(integer) is
-  'Staff-only summary of training_log_usage: devices seen, devices that logged a workout, both for the last 7 days, a weekly trend (Monday weeks, club time zone) and screen reach over 28 days. Raises "not authorized" for anyone not is_staff().';
+  'Staff-only summary of training_log_usage: devices seen, devices that logged a workout, both for the last 7 days, a weekly trend (Monday weeks, club time zone) and screen reach over 28 days. Totals only - never a row or a device id. SECURITY DEFINER because no role can read the table directly. Raises "not authorized" for anyone not is_staff().';
+
+-- Retention: 180 days, then gone. The report reads twelve weeks, so nothing it
+-- shows depends on older rows; "devices seen" is therefore "in the last 180
+-- days". Callable only by the scheduler (and the owner), not through the API.
+create or replace function public.training_log_usage_purge()
+returns integer
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_deleted integer;
+begin
+  delete from public.training_log_usage
+   where day < (now() at time zone 'Asia/Jerusalem')::date - 180;
+  get diagnostics v_deleted = row_count;
+  return v_deleted;
+end
+$$;
+revoke all on function public.training_log_usage_purge() from public, anon, authenticated;
+
+-- Nightly, clear of the other 03:xx jobs. cron.schedule upserts on the name.
+select cron.schedule('training-log-usage-purge', '47 3 * * *',
+  $$select public.training_log_usage_purge()$$);

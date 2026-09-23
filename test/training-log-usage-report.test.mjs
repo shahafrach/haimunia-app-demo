@@ -62,6 +62,7 @@ test("the dashboard asks for twelve weeks once, and shows totals, the weekly tre
   assert.ok(text.indexOf("30 פעילים") < text.indexOf("22 פעילים"), "newest week at the top");
   assert.ok(text.includes("רישום") && text.includes("29"), "screen reach");
   assert.ok(text.includes("נספרים מכשירים, לא אנשים"), "says what is counted");
+  assert.ok(text.includes("הנתונים נשמרים 180 יום"), "says how long the counts are kept");
 });
 
 test("a refusal is named, and retry asks again", async () => {

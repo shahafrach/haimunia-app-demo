@@ -3853,9 +3853,11 @@
   }
   // ---- The training-log app's own usage (202609230013) -------------------
   // haimuniya.github.io/haimunia-app is the community-free edition members use
-  // without signing in. It reports only anonymous per-device, per-day facts
+  // without signing in. It reports only pseudonymous per-device, per-day facts
   // (opened the app, logged a workout, opened a screen) into
-  // training_log_usage, and training_log_usage_report() is the one reader.
+  // training_log_usage. No role can select a row of it, staff included:
+  // training_log_usage_report() is the one reader and returns totals only.
+  // Rows are purged after 180 days, so "devices seen" means in that window.
   // It is NOT period-scoped like the rest of this dashboard - the question it
   // answers ("how many use it, how many log, which way is it going") reads
   // across weeks - so it carries its own fixed 12-week window and ignores the
@@ -3914,7 +3916,7 @@
       const trend = adminAnalyticsCard("מגמה שבועית (12 שבועות)", `<div class="log-list">${weekRows}</div>`);
       const screenRows = screens.map((s) => adminAnalyticsRow(TRAINING_LOG_SCREEN_LABELS[s.screen] || s.screen, adminAnalyticsCount(s.devices))).join("");
       const screensCard = screenRows ? adminAnalyticsCard("מסכים שנפתחו (28 ימים, לפי מכשירים)", `<div class="log-list">${screenRows}</div>`) : "";
-      body = `<div class="footer-note" style="margin-bottom:8px;">נספרים מכשירים, לא אנשים: מי שמנקה את נתוני הדפדפן או משתמש בשני טלפונים נספר/ת פעמיים, ומי שכיבה את הספירה בהגדרות לא נספר/ת בכלל.</div>`
+      body = `<div class="footer-note" style="margin-bottom:8px;">נספרים מכשירים, לא אנשים: מי שמנקה את נתוני הדפדפן או משתמש בשני טלפונים נספר/ת פעמיים, ומי שכיבה את הספירה בהגדרות לא נספר/ת בכלל. הנתונים נשמרים 180 יום.</div>`
         + totals + trend + screensCard;
     }
     return `<div style="margin-top:14px;" data-training-log-usage-section="1"><h3 class="field-label" style="margin:4px 0 8px;">אפליקציית האימונים (בלי התחברות)</h3>${body}</div>`;
