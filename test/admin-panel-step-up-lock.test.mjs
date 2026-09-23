@@ -35,6 +35,10 @@ const VERIFIED = new Date().toISOString();
 
 const MGMT_EMAIL = "manage@example.test";
 const MEMBER_EMAIL = "shlomi@members.haimuniya.invalid";
+// One answer for every credential failure (launch-readiness S3): a correct
+// password on an account without the role reads exactly like a wrong one.
+// test/mgmt-login-hardening.test.mjs pins that the two are identical.
+const REFUSED = /שם המשתמש או הסיסמה שגויים, או שלחשבון אין הרשאה לאזור הזה/;
 
 const EMPTY = {
   clubs: [{ id: "club-1", name: "חיימוניה" }],
@@ -95,7 +99,7 @@ test("the door is visible to a plain member, and it is only a door", async () =>
 });
 
 test("a username works too - the head coach account has no real email address", async () => {
-  // headcoach signs in as `headcoach`; the app maps that onto a synthetic
+  // The head coach signs in with a bare username; the app maps that onto a synthetic
   // @members.haimuniya.invalid address it has never been shown. Demanding the
   // synthetic form at this gate would lock that account out of its own panel.
   const mock = separateIdentitiesMock({ mgmtRole: "head_coach", mgmtIsAdmin: false });
@@ -122,13 +126,13 @@ test("the gate asks for an account as well as a password - it is not a re-check 
     "the gate does not name the member who is signed in");
 });
 
-test("the member's own credentials are refused - correct password, wrong account", async () => {
+test("the member's own credentials are refused - correct password, wrong account, same answer as a wrong password", async () => {
   const mock = separateIdentitiesMock();
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openPanel(window, "tabManageBtn");
 
   submitGate(window, MEMBER_EMAIL, ADMIN_STEP_UP_PASSWORD);
-  await waitFor(() => /אינו מורשה/.test(window.document.body.textContent), 4000);
+  await waitFor(() => REFUSED.test(window.document.body.textContent), 4000);
   assert.ok(window.document.getElementById("panelUnlock"), "the gate stays up");
   assert.equal(window.document.getElementById("manageArea-bugs"), null, "and nothing behind it rendered");
   // The thing that would matter most if it went wrong: their session.
@@ -178,17 +182,18 @@ test("the management account opens the panel WITHOUT taking over the app's sessi
   assert.equal(mock.getUser().email, MEMBER_EMAIL, "right down to the address");
 });
 
-test("a management account without the role is refused, in plain words", async () => {
-  // Correct password, real management-looking account, wrong job. This is not
-  // a probing signal - it is someone who typed the wrong one of their two
-  // management logins, and telling them so is a five-second fix instead of a
-  // support call.
+test("a management account without the role is refused, with the wrong-password answer", async () => {
+  // Correct password, real management-looking account, wrong job. This used
+  // to be said plainly ("not authorised"), which also told anyone guessing
+  // that the password was right. It now reads exactly like a wrong password,
+  // in wording that still covers someone who typed the wrong one of their
+  // two management logins.
   const mock = separateIdentitiesMock({ mgmtRole: "member", mgmtIsAdmin: false });
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openPanel(window, "tabManageBtn");
 
   submitGate(window, MGMT_EMAIL, ADMIN_STEP_UP_PASSWORD);
-  await waitFor(() => /אינו מורשה לנהל את האפליקציה/.test(window.document.body.textContent), 4000);
+  await waitFor(() => REFUSED.test(window.document.body.textContent), 4000);
   assert.ok(window.document.getElementById("panelUnlock"), "no role, no panel");
   assert.equal(mock.getUser().id, "member-1", "and still no effect on the member");
 });
@@ -201,7 +206,7 @@ test("a head coach opens the club panel but NOT the app panel", async () => {
 
   await openPanel(window, "tabManageBtn");
   submitGate(window, MGMT_EMAIL, ADMIN_STEP_UP_PASSWORD);
-  await waitFor(() => /אינו מורשה לנהל את האפליקציה/.test(window.document.body.textContent), 4000);
+  await waitFor(() => REFUSED.test(window.document.body.textContent), 4000);
   assert.ok(window.document.getElementById("panelUnlock"), "head coach is refused the app panel");
 
   await openPanel(window, "tabClubManageBtn");
@@ -559,7 +564,7 @@ test("both management submit handlers refuse re-entry while busy", () => {
   }
   // And a superseded client is revoked rather than dropped.
   const pu = cloudJs.slice(cloudJs.indexOf("async function panelUnlock(form)"));
-  assert.match(pu.slice(0, 6000), /if \(mgmtClient && mgmtClient !== c\)[\s\S]{0,120}?auth\.signOut\(\)/,
+  assert.match(pu.slice(0, 9000), /if \(mgmtClient && mgmtClient !== c\)[\s\S]{0,120}?auth\.signOut\(\)/,
     "an overwritten management client must be signed out, not stranded");
 });
 

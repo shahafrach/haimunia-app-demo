@@ -4441,7 +4441,7 @@ resolve correctly rather than falling off the `case`.
 
 - Purpose: the **only** writer of `member_of_week`, and the first producer of
   a `POST_ANNOUNCEMENT` row in this schema. (It was the only one until
-  202609220007, which added `announcements_feed_card_insert` - see the section of that name at the end of this file. Its
+  202609220008, which added `announcements_feed_card_insert` - see the section of that name at the end of this file. Its
   cards carry no `announcement_id`, because there is no announcements row
   behind them.)
 - Params: `p_week_start` normalised as above, null meaning the current week;
@@ -8253,7 +8253,7 @@ number" per-row flag (a twelfth toggle would fragment a model members
 already understand — detach is the per-row control), and paging the board
 (one board is one club-day).
 
-## An announcement becomes its feed card (202609220007)
+## An announcement becomes its feed card (202609220008)
 
 ### Trigger announcements_feed_card_insert → announcement_feed_card_insert()
 

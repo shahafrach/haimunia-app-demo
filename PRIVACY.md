@@ -1,6 +1,6 @@
 # מדיניות פרטיות / Privacy Policy
 
-*עודכן לאחרונה: 19 בספטמבר 2026 — Last updated: 2026-09-19*
+*עודכן לאחרונה: 23 בספטמבר 2026 — Last updated: 2026-09-23*
 
 המסמך הזה קיים בשתי שפות: קודם עברית, ואחריה אנגלית. התוכן זהה. אם
 נפלה סתירה בין הנוסחים, הנוסח העברי הוא הקובע מול חברי המועדון.
@@ -38,7 +38,9 @@ the Hebrew governs for members.
   נוכחות בשיעור ולא פרסום בפיד.
 - **שיתוף לקהילה קורה רק כשאתם בוחרים לשתף.** שום דבר שאתם רושמים
   ביומן לא מתפרסם מעצמו.
-- **אין פרסומות, אין מכירת מידע, אין כתובת מייל, אין מיקום.**
+- **אין פרסומות, אין מכירת מידע, אין מיקום, ואין כתובת מייל** — אלא אם
+  תבחרו לשלוח דיווח על תקלה במייל: אז ההודעה יוצאת מכתובת המייל שלכם
+  לתיבת ה־Gmail של המועדון (ראו "ספקי תשתית").
 
 ## מי מפעיל את האפליקציה
 
@@ -50,8 +52,9 @@ the Hebrew governs for members.
 כמו כל שאלה אחרת שקשורה למועדון.
 
 לכל שאלה, בקשה או תלונה בנושא פרטיות — פנו למאמן/ת שלכם ישירות, בדיוק
-כמו בכל נושא אחר במועדון. אין כתובת תמיכה נפרדת; הצוות הוא כל התמיכה
-שיש לאפליקציה.
+כמו בכל נושא אחר במועדון. הכתובת היחידה באפליקציה היא תיבת ה־Gmail של
+המועדון, שמוצעת במסך הדיווח על תקלה לשליחת דיווח במייל (ראו "ספקי
+תשתית"); גם אותה קורא הצוות, שהוא כל התמיכה שיש לאפליקציה.
 
 ## מה נשמר במכשיר ומה יוצא ממנו
 
@@ -120,10 +123,12 @@ the Hebrew governs for members.
 ## איזה מידע נאסף
 
 - **חשבון והתחברות.** חשבון נפתח אנונימית (בלי שום פרט אישי), ואפשר
-  לחבר אליו שם משתמש וסיסמה. אנחנו לא אוספים כתובת אימייל ולא שום פרט
-  ליצירת קשר. במקומות שבהם המנגנון הטכני של ההתחברות דורש פורמט של
-  אימייל, האפליקציה מייצרת כתובת מתוך שם המשתמש; היא אינה כתובת אמיתית,
-  אי אפשר לשלוח אליה דואר ואף אחד לא ישתמש בה כדי ליצור אתכם קשר.
+  לחבר אליו שם משתמש וסיסמה. ההתחברות לא משתמשת בכתובת אימייל, ואנחנו לא
+  מבקשים אותה ולא שום פרט ליצירת קשר (החריג היחיד: דיווח על תקלה שתבחרו
+  לשלוח במייל — ראו "ספקי תשתית"). במקומות שבהם המנגנון הטכני של
+  ההתחברות דורש פורמט של אימייל, האפליקציה מייצרת כתובת מתוך שם המשתמש;
+  היא אינה כתובת אמיתית, אי אפשר לשלוח אליה דואר ואף אחד לא ישתמש בה
+  כדי ליצור אתכם קשר.
 - **הזמנה והצטרפות.** אם הצטרפתם עם קוד הזמנה, נשמר איזה קוד מומש, על
   ידי איזה חשבון ומתי, כדי לאכוף קוד חד־פעמי ומגבלת ניסיונות.
 - **מזהה מכשיר למגבלת ניסיונות.** בניסיון מימוש קוד הזמנה נשלח מזהה
@@ -152,6 +157,31 @@ the Hebrew governs for members.
   אותן בדפדפן מסוים ואישרתם את בקשת ההרשאה שלו, נשמר מזהה ההתראות של
   אותו דפדפן. בלי ההפעלה הזו לא נשמר שום מזהה; כיבוי ההתראות מבטל את
   המנוי ומסמן את המזהה כמבוטל.
+- **דיווח על תקלה.** אם שלחתם דיווח ממסך הדיווח על תקלה בכפתור "שליחה
+  לצוות המועדון" (אפשרי לחברי קהילה בלבד), נשמרים הטקסט שכתבתם (עד 4,000
+  תווים), הפרטים הטכניים שמוצגים לכם באותו מסך לפני השליחה (גרסת
+  האפליקציה, האם היא מותקנת במסך הבית, האם יש חיבור, האם הקהילה פעילה,
+  ומחרוזת הזיהוי של הדפדפן), מאיזה חשבון נשלח הדיווח ומתי. צוות המועדון
+  (מאמנים ומנהלים) קורא את הדיווחים; מנהלים מעדכנים את הסטטוס שלהם
+  ויכולים לצרף הערה פנימית שלא מוצגת לכם. המסך אומר שהפרטים הטכניים אינם
+  אישיים — אבל התיאור שאתם מקלידים נשמר בדיוק כפי שכתבתם אותו, ולכן גם
+  כל פרט אישי שתכתבו בו נשמר. שליחה במייל או העתקת הדיווח לא שומרות שום
+  דבר בבסיס הנתונים של האפליקציה (על שליחה במייל ראו "ספקי תשתית").
+- **תיעוד פניות של הצוות אליכם.** כשמישהו מהצוות מסמן במסכי המאמנים שיצר
+  איתכם קשר, נשמרים מי יצר קשר, מתי, והערה קצרה (עד 500 תווים). ההערה
+  היא טקסט חופשי שאיש/ת הצוות כותבים, או משפט קבוע שהאפליקציה ממלאת
+  כשהפנייה נעשתה בעקבות סימון ירידה בקצב. האפליקציה לא בודקת מה נכתב
+  בהערה מעבר לאורך שלה. כל אנשי הצוות יכולים לקרוא את כל ההערות האלה;
+  אתם לא רואים אותן באפליקציה, ואתם רשאים לבקש לדעת מה רשום לגביכם — פנו
+  למאמן/ת.
+- **סיבה להגבלת פרסום.** אם איש/ת צוות עם הרשאת ניהול תוכן מגבילים את
+  הפרסום שלכם (לזמן מוגבל או לצמיתות), נשמרים סוג ההגבלה, מועד הסיום, מי
+  הגביל ומתי, דיווח התוכן שהוביל להגבלה אם היה כזה, וסיבה בטקסט חופשי
+  (עד 500 תווים) שאיש/ת הצוות כותבים. האפליקציה לא בודקת מה נכתב בסיבה
+  מעבר לאורך שלה. בניגוד להערות על פניות, את הסיבה אתם כן רואים — בטאב
+  "חשבון" בקהילה, כל עוד ההגבלה לא הוסרה — אבל לא מי הגביל. אנשי צוות עם
+  הרשאת ניהול תוכן רואים את כל ההגבלות, והסיבה נרשמת גם ביומן הפעולות של
+  הצוות.
 
 **מה לא נאסף:** אין תעודת זהות, אין מיקום, אין פרטי אשראי או חשבון בנק,
 אין מידע ביומטרי, אין תאריך לידה, אין נתוני נוכחות או רישום לשיעורים
@@ -288,6 +318,21 @@ the Hebrew governs for members.
 - **שירות הגנה מפני בוטים** (Cloudflare Turnstile) **מופעל** מאז
   17 בספטמבר 2026 במסכי פתיחת החשבון והכניסה. Cloudflare מקבלת נתוני
   בקשה ודפדפן לצורך אימות שאתם לא בוט.
+- **שירותי התראות הדחיפה של הדפדפן.** אם הפעלתם התראות דחיפה, כל התראה
+  נמסרת לשירות הדחיפה של יצרן הדפדפן שלכם — Google בכרום וברוב הדפדפנים
+  באנדרואיד, Apple בספארי ובאייפון, Mozilla בפיירפוקס — והוא מעביר אותה
+  למכשיר. את השירות הזה לא אנחנו בוחרים אלא הדפדפן. תוכן ההתראה (הכותרת,
+  הטקסט והקישור בתוך האפליקציה) מוצפן כך שרק הדפדפן שלכם יכול לקרוא
+  אותו; שירות הדחיפה רואה את כתובת ההתראות של הדפדפן ואת המועד והגודל של
+  כל הודעה.
+- **Gmail (דיווח על תקלה במייל).** במסך הדיווח על תקלה אפשר לשלוח את
+  הדיווח גם במייל. הכפתור פותח את אפליקציית המייל שלכם עם הודעה שממוענת
+  לכתובת של המועדון, haimuniya@gmail.com — תיבת Gmail שמופעלת על ידי
+  Google. אם תשלחו אותה, היא יוצאת מהכתובת שלכם כמו כל מייל: המועדון,
+  ו־Google כספקית התיבה, מקבלים את כתובת המייל האמיתית שלכם, את התיאור
+  ואת הפרטים הטכניים. זו הדרך היחידה באפליקציה שבה כתובת מייל אמיתית
+  שלכם מגיעה אלינו, ורק אם בחרתם בה. הודעות כאלה נשמרות בתיבת הדואר של
+  המועדון ואינן נמחקות עם החשבון שלכם באפליקציה.
 
 ## הבסיס לעיבוד המידע
 
@@ -338,6 +383,17 @@ the Hebrew governs for members.
   ביומן; הם נמחקים יחד עם החשבון.
 - **סימון ירידה בקצב** נשמר עד שמאמן/ת מסמנים אותו כמטופל, וגם אחרי כן
   הרשומה נשארת עד מחיקת החשבון.
+- **דיווחים על תקלות** לא נמחקים אוטומטית. כשהחשבון שלכם נמחק סופית,
+  הטקסט שכתבתם מוחלף ב"[הדיווח נמחק יחד עם החשבון]" והקישור לחשבון שלכם
+  מוסר; הפרטים הטכניים, הסטטוס וכל הערה פנימית של הצוות נשארים, בלי קשר
+  אליכם. עד אז — כולל 30 הימים שאחרי בקשת המחיקה — הדיווח נשמר כפי
+  שנכתב.
+- **הערות הצוות על פניות אליכם** נשמרות עד שאיש/ת הצוות שכתבו אותן
+  מוחקים אותן, ונמחקות יחד עם החשבון שלכם (או עם החשבון של מי שכתב/ה
+  אותן).
+- **הגבלת פרסום והסיבה שלה** נשארות גם אחרי שההגבלה הסתיימה או הוסרה,
+  ונמחקות יחד עם החשבון שלכם. העותק של הסיבה ביומן הפעולות של הצוות לא
+  נמחק, גם לא עם החשבון.
 - **גיבויים ולוגים ברמת התשתית** נשמרים לפי חלונות הגיבוי והלוגים
   הרגילים של ספק האחסון שלנו. אנחנו לא מאריכים אותם ולא משתמשים בהם
   לשום דבר מלבד שחזור שירות או בדיקת שימוש לרעה.
@@ -417,7 +473,10 @@ the Hebrew governs for members.
   feed.
 - **Nothing you log is shared with the club unless you choose to share
   it.**
-- **No ads, no sale of data, no email address, no location.**
+- **No ads, no sale of data, no location, and no email address** —
+  unless you choose to send a bug report by email: that message goes
+  from your own email address to the club's Gmail inbox (see
+  "Infrastructure providers").
 
 ## Who runs this
 
@@ -432,8 +491,10 @@ way any other question about the club would be.
 
 For any privacy question, request, or complaint, contact your coach
 directly — the same way you'd reach them about anything else related to
-the club. There is no separate support email; the coaching team is the
-whole of "support" for this app.
+the club. The only email address in the app is the club's Gmail inbox,
+offered on the report-a-problem screen for sending a bug report by email
+(see "Infrastructure providers"); it is read by the same coaching team,
+who are the whole of "support" for this app.
 
 ## What stays on your device, and what leaves it
 
@@ -514,8 +575,10 @@ time.
 
 - **Account and sign-in data.** An account is opened anonymously (no
   personal information at all), and you can attach a username and
-  password to it. We do not collect an email address or any other contact
-  detail. Where the sign-in mechanism technically requires an email
+  password to it. Sign-in does not use an email address, and we never
+  ask for one or for any other contact detail (the one exception is a
+  bug report you choose to send by email — see "Infrastructure
+  providers"). Where the sign-in mechanism technically requires an email
   format, the app generates one from your username; it is not a real
   address, nothing can be delivered to it, and it is never used to
   contact you.
@@ -555,6 +618,38 @@ time.
   permission prompt, that browser's push identifier is stored. Without
   that opt-in no such identifier is stored; turning them off unsubscribes
   that browser and marks the identifier revoked.
+- **Bug reports.** If you send a report from the report-a-problem screen
+  with "send to the club staff" (available to community members only),
+  we store the text you wrote (up to 4,000 characters), the technical
+  details shown to you on that screen before sending (app version,
+  whether it is installed to the home screen, whether you are online,
+  whether community is on, and your browser's identification string),
+  which account sent it, and when. Club staff (coaches and admins) can
+  read reports; admins change a report's status and can attach an
+  internal note you do not see. The screen says the technical details
+  contain nothing personal — but the description you type is stored
+  exactly as you wrote it, so anything personal you put in it is stored
+  too. Sending the report by email or copying it stores nothing in the
+  app's database (for email, see "Infrastructure providers").
+- **Staff notes about contacting you.** When a staff member marks in the
+  coaches' screens that they contacted you, we record who contacted you,
+  when, and a short note (up to 500 characters). The note is free text
+  the staff member types, or a fixed line the app fills in when the
+  contact followed a drop-in-rate flag. The app does not check what is
+  written in it beyond its length. Every staff member can read every
+  such note; you cannot see them in the app, and you are entitled to ask
+  what is recorded about you — ask your coach.
+- **The reason for a posting restriction.** If a staff member with a
+  moderation permission restricts your posting (temporarily or
+  permanently), we record the type of restriction, when it ends, who
+  imposed it and when, the content report that led to it if there was
+  one, and a free-text reason (up to 500 characters) the staff member
+  types. The app does not check what is written in the reason beyond its
+  length. Unlike contact notes, you can see the reason — in the
+  community "account" tab, for as long as the restriction has not been
+  lifted — but not who imposed it. Staff with a moderation permission
+  can see every restriction, and the reason is also written to the staff
+  action log.
 
 **What we do not collect:** no government ID, no location, no card or
 bank details, no biometric data, no date of birth, no class attendance or
@@ -714,6 +809,25 @@ Two points of accuracy about the toggles:
   **enabled** since 2026-09-17 on the sign-in and account-creation
   screens. Cloudflare receives request and browser data in order to
   verify that you are not a bot.
+- **Your browser's web-push service.** If you turned on push
+  notifications, each notification is handed to the push service run by
+  your browser's maker — Google for Chrome and most Android browsers,
+  Apple for Safari and iPhone, Mozilla for Firefox — which delivers it
+  to your device. We do not choose that service; your browser does. The
+  notification's content (its title, text and the link inside the app)
+  is encrypted so that only your browser can read it; the push service
+  sees your browser's push address and the time and size of each
+  message.
+- **Gmail (bug reports by email).** The report-a-problem screen can also
+  send the report by email. That button opens your own mail app with a
+  message addressed to the club's address, haimuniya@gmail.com — a Gmail
+  inbox run by Google. If you send it, it goes out from your own address
+  like any email: the club, and Google as the provider of that inbox,
+  receive your real email address, the description and the technical
+  details. This is the only path in the app by which a real email
+  address of yours reaches us, and only if you choose it. Such messages
+  are kept in the club's mailbox and are not deleted with your app
+  account.
 
 ## Basis for processing
 
@@ -776,6 +890,20 @@ anyone who installed since.
   with the account.
 - **A drop-in-rate flag** is kept until a coach marks it as handled, and
   the row remains after that until the account is deleted.
+- **Bug reports** are not deleted automatically. When your account is
+  finally deleted, the text you wrote is replaced with "[הדיווח נמחק יחד
+  עם החשבון]" ("the report was deleted with the account") and the link
+  to your account is removed; the technical details, the status and any
+  internal staff note remain, with no link to you. Until then —
+  including the 30 days after you ask for deletion — the report is kept
+  as written.
+- **Staff notes about contacting you** are kept until the staff member
+  who wrote them deletes them, and are deleted with your account (or
+  with the account of the staff member who wrote them).
+- **A posting restriction and its reason** are kept after the
+  restriction ends or is lifted, and are deleted with your account. The
+  copy of the reason in the staff action log is not deleted, not even
+  with the account.
 - **Infrastructure-level backups and logs** follow our hosting provider's
   own standard backup-rotation and log-retention windows. We do not
   extend them and do not use them for anything beyond restoring service
