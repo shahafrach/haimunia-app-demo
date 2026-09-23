@@ -89,6 +89,14 @@ insert into public.club_wod_sessions (wod_id, session_date, post_id, published_b
 insert into public.announcements (id, author_id, title, body, expires_at, created_at) values
   ('a1200000-0000-4000-8000-000000000001', tests.uid('coach'), 'live',    'still on', now() + interval '2 days', now() - interval '5 days'),
   ('a1200000-0000-4000-8000-000000000002', tests.uid('coach'), 'expired', 'over',     now() - interval '1 hour', now() - interval '7 days');
+-- Since 202609220008 an announcement mints its own card on insert (the live
+-- one does; the expired one is skipped). This file builds its cards by hand
+-- so it controls every published_at, so the minted one is removed before the
+-- hand-made card takes its announcement_id - one card per announcement is a
+-- unique index now. 0124 tests the minted card itself.
+delete from public.workout_posts
+ where post_type = 'POST_ANNOUNCEMENT'
+   and metadata ->> 'announcement_id' in ('a1200000-0000-4000-8000-000000000001', 'a1200000-0000-4000-8000-000000000002');
 update public.workout_posts
    set metadata = metadata || '{"announcement_id": "a1200000-0000-4000-8000-000000000001"}'::jsonb
  where id = 'c1200000-0000-4000-8000-00000000000e';

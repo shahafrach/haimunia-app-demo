@@ -2388,15 +2388,34 @@
       title: "אזור ניהול האפליקציה",
       body: "כאן נמצאים דיווחי התקלות, יומן הפעולות, ההרשאות ואיפוס הסיסמאות. האזור הזה עובד עם חשבון ניהול נפרד — צריך להזין את שם המשתמש או האימייל שלו, ואת הסיסמה.",
       cta: "כניסה לאזור הניהול",
-      denied: "חשבון הניהול שהוזן אינו מורשה לנהל את האפליקציה.",
     },
     club: {
       title: "אזור ניהול המועדון",
       body: "כאן מוסיפים ומסירים חברים, מנהלים את רשימת המועדון, את המודרציה ואת מה שחברים חדשים רואים. האזור הזה עובד עם חשבון ניהול נפרד — צריך להזין את שם המשתמש או האימייל שלו, ואת הסיסמה.",
       cta: "כניסה לניהול המועדון",
-      denied: "חשבון הניהול שהוזן אינו מורשה לנהל את המועדון.",
     },
   });
+  // ONE ANSWER FOR EVERY CREDENTIAL FAILURE at the management gate, in words
+  // and in time (launch-readiness S3).
+  //
+  // This used to say "that account is not authorised" when the password was
+  // RIGHT but the account held no role, and "wrong username or password"
+  // when it was wrong. The gate is reachable by every member, so the first
+  // message was a free password oracle: type a guess, and a different answer
+  // means the guess was correct. The wording now covers both cases, which
+  // keeps it useful to the head coach who knocked on the app panel with the
+  // club account, without saying which of the two it was.
+  //
+  // Words alone were not enough: a correct password goes on to read three
+  // rows before it is refused, a wrong one is refused at once, and that gap
+  // is measurable. Every failure is therefore held until a fixed time after
+  // the sign-in request was sent, well beyond both paths on a real network.
+  // Read off window so a test can shrink it, as ANON_SIGNIN_TIMEOUT_MS is.
+  const PANEL_UNLOCK_FAILED = "שם המשתמש או הסיסמה שגויים, או שלחשבון אין הרשאה לאזור הזה";
+  function panelUnlockFailureFloorMs() {
+    const v = Number(window.MGMT_UNLOCK_FAILURE_FLOOR_MS);
+    return Number.isFinite(v) && v >= 0 ? v : 1500;
+  }
   // THE GATE. Takes an email as well as a password, because the management
   // account is a separate identity - "no, i want it to be seperate from the
   // regular user". It does NOT name the current user and does not ask them to
@@ -2426,7 +2445,7 @@
       <div style="font-weight:800;font-size:16px;margin-bottom:6px;">${esc(copy.title)}</div>
       <div style="color:var(--steel);font-size:13px;line-height:1.7;margin-bottom:12px;">${bidiText(copy.body)}</div>
       <form id="panelUnlock" data-panel="${esc(panel)}">
-        ${field("panelUnlock", "email", "שם משתמש או אימייל של חשבון הניהול", `<input class="text-input" name="email" type="text" dir="ltr" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="username" placeholder="headcoach" value="${esc(remembered)}" required/>`)}
+        ${field("panelUnlock", "email", "שם משתמש או אימייל של חשבון הניהול", `<input class="text-input" name="email" type="text" dir="ltr" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="username" value="${esc(remembered)}" required/>`)}
         ${field("panelUnlock", "password", "סיסמה", `<input class="text-input" name="password" type="password" dir="ltr" autocomplete="current-password" placeholder="סיסמה" required/>`)}
         <button class="save-btn" type="submit"${busy ? " disabled" : ""} style="margin-top:12px;">${busy ? "בודקים…" : esc(copy.cta)}</button>
       </form>
@@ -2544,8 +2563,8 @@
     if (!typed || !password) { state.admin.panelUnlockError = "יש להזין שם משתמש או אימייל, וסיסמה"; rerender(); return; }
     // A USERNAME IS ACCEPTED TOO, and this is not a convenience - without it
     // the head coach could not get in at all. That account has no real email
-    // address: it signs in as `headcoach`, which the app maps onto a synthetic
-    // @members.haimuniya.invalid address (usernameToEmail), exactly as it does
+    // address: it signs in with a plain username, which the app maps onto a
+    // synthetic @members.haimuniya.invalid address (usernameToEmail), as it does
     // for every member. Demanding the synthetic form here would mean asking
     // someone to type an address that does not exist and that they have never
     // been shown. The admin account is the other case - it has a real mailbox,
@@ -2560,11 +2579,45 @@
     const c = makeMgmtClient();
     if (!c) { state.admin.panelUnlockBusy = ""; state.admin.panelUnlockError = "לא ניתן להתחבר כרגע"; rerender(); return; }
 
-    let uid = null;
+    // CAPTCHA, as at member sign-in (launch-readiness S4). This gate takes a
+    // password from anyone holding the phone, so without it the management
+    // account could be guessed at for free while every member login could not.
+    // The clock for the failure floor starts when the token is in hand, not
+    // at submit: the challenge's own duration does not depend on the
+    // credentials, and counting it would only shorten the padding.
+    let uid = null, captchaFailed = false, sentAt = Date.now();
     try {
-      const { data, error } = await c.auth.signInWithPassword({ email, password });
-      if (!error && data && data.user) uid = data.user.id;
+      const { data, error } = await withCaptcha((captchaToken) => {
+        sentAt = Date.now();
+        return c.auth.signInWithPassword(Object.assign(
+          { email, password },
+          captchaToken ? { options: { captchaToken } } : {},
+        ));
+      });
+      if (error && error.message === "captcha_failed") captchaFailed = true;
+      else if (!error && data && data.user) uid = data.user.id;
     } catch (e) { uid = null; }
+    // Every credential failure below goes through here. The sign-out comes
+    // first so that both paths spend the same work before the wait, and the
+    // wait is what equalises the rest.
+    const refuse = async () => {
+      try { await c.auth.signOut(); } catch (e) {}
+      const wait = sentAt + panelUnlockFailureFloorMs() - Date.now();
+      if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+      state.admin.panelUnlockBusy = "";
+      state.admin.panelUnlockError = PANEL_UNLOCK_FAILED;
+      rerender();
+    };
+    if (captchaFailed) {
+      // A failed challenge happened before any credential was checked, so it
+      // reveals nothing and may say what it is - as the member login does -
+      // rather than send someone to doubt a password that was fine.
+      try { await c.auth.signOut(); } catch (e) {}
+      state.admin.panelUnlockBusy = "";
+      state.admin.panelUnlockError = "אימות האבטחה נכשל, נסו שוב";
+      rerender();
+      return;
+    }
     if (!uid) {
       // One message for wrong credentials and for a failed request alike: an
       // error that told them apart would tell someone probing a borrowed
@@ -2574,10 +2627,7 @@
       // a DIFFERENT client cannot sign anyone out of `client`, which is the
       // structural reason the old same-account step-up had to be careful here
       // and this one does not.
-      try { await c.auth.signOut(); } catch (e) {}
-      state.admin.panelUnlockBusy = "";
-      state.admin.panelUnlockError = "שם המשתמש או הסיסמה שגויים";
-      rerender();
+      await refuse();
       return;
     }
 
@@ -2605,14 +2655,12 @@
     // the member. Admin panel needs admin; club panel needs staff.
     const allowed = panel === "admin" ? acctIsAdmin : acctIsStaff;
     if (!prof || !allowed) {
-      // Correct password, wrong account. Said plainly - this is not a
-      // credential-probing signal, it is a real person who typed the wrong
-      // one of their two management logins, and telling them so is the
-      // difference between a five-second fix and a support call.
-      try { await c.auth.signOut(); } catch (e) {}
-      state.admin.panelUnlockBusy = "";
-      state.admin.panelUnlockError = prof ? PANEL_UNLOCK_COPY[panel].denied : "לא ניתן לאמת את חשבון הניהול";
-      rerender();
+      // Correct password, wrong account - or the role could not be read.
+      // This once said so plainly, on the reasoning that it was only ever a
+      // real person who typed the wrong one of their two logins. It was also
+      // anyone checking whether a guessed password was right, so it now gives
+      // exactly the answer a wrong password gives, at the same moment.
+      await refuse();
       return;
     }
 
@@ -3230,7 +3278,7 @@
   // nothing until the feature lands.
   function clubModuleMarkersHtml(m) {
     const chip = (text, color) => `<span style="font-size:10px;line-height:1.6;color:${color};border:1px solid ${color};border-radius:999px;padding:0 6px;white-space:nowrap;">${esc(text)}</span>`;
-    return `${m.planned ? chip("בפיתוח", "var(--brass)") : ""}${chip(m.clientOnly ? "בתצוגה בלבד" : "נאכף בשרת", "var(--steel)")}`;
+    return `${m.planned ? chip("בפיתוח", "var(--brass)") : ""}${chip(m.clientOnly ? "בתצוגה בלבד" : m.serverPartial ? "נאכף בשרת חלקית" : "נאכף בשרת", "var(--steel)")}`;
   }
   // 202609220002. THE FIRST TWO MODULES WITH NUMBERS BEHIND THE SWITCH.
   //
@@ -3331,7 +3379,7 @@
     const coachRows = COACH_MODULE_TOGGLES.map((m) => clubModuleRow(m, anyBusy)).join("");
     return `<div class="ach-section" style="margin-top:18px;" data-club-modules-panel="1">${sectionHead("var(--green)", "מודולים למועדון", true)}
       <div style="font-weight:800;font-size:13px;margin:4px 0 6px;">תכני קהילה</div>
-      <div style="color:var(--steel);font-size:12px;line-height:1.6;margin-bottom:8px;">כיבוי מודול מסתיר אותו לגמרי מכל חברי המועדון - אין טאב, כרטיס, כפתור או התראה. כל שורה מסומנת: "נאכף בשרת" - גם מי שיעקוף את המסך לא יקבל את המידע; "בתצוגה בלבד" - ההסתרה היא במסך, וההרשאות בשרת נשארות כשהיו. שורה מסומנת "בפיתוח" היא מתג לפיצ'ר שעוד לא נבנה: אפשר להחליט עליו כבר עכשיו, והוא ייכנס לתוקף ביום שהפיצ'ר יעלה.</div>
+      <div style="color:var(--steel);font-size:12px;line-height:1.6;margin-bottom:8px;">כיבוי מודול מסתיר אותו לגמרי מכל חברי המועדון - אין טאב, כרטיס, כפתור או התראה. כל שורה מסומנת: "נאכף בשרת" - גם מי שיעקוף את המסך לא יקבל את המידע; "בתצוגה בלבד" - ההסתרה היא במסך, וההרשאות בשרת נשארות כשהיו. "נאכף בשרת חלקית" - הקריאה והפעולות העיקריות נחסמות בשרת, אבל לא כל פעולה ולא כל התראה. שורה מסומנת "בפיתוח" היא מתג לפיצ'ר שעוד לא נבנה: אפשר להחליט עליו כבר עכשיו, והוא ייכנס לתוקף ביום שהפיצ'ר יעלה.</div>
       <div class="log-list">${communityRows}</div>
       <div style="font-weight:800;font-size:13px;margin:16px 0 6px;">כלי מאמנים</div>
       <div style="color:var(--steel);font-size:12px;line-height:1.6;margin-bottom:8px;">שולט אילו חלקים מלוח המאמנים גלויים לצוות. "לוח מאמנים (הכל)" מכבה את כל הטאב. גם כאן הסימון על כל שורה הוא הקובע: "בתצוגה בלבד" הוא נוחות ארגונית ולא הרשאה - הפעולות עצמן שמורות למי שמורשה/ית לבצע אותן בכל מקרה - ואילו "נאכף בשרת" עוצר את הפעולה עצמה, גם כשאיש אינו צופה במסך.</div>
@@ -4467,6 +4515,10 @@
     state.ownerReport.error = !!error;
     if (!error) {
       state.ownerReport.months = data || [];
+      // Once per load, which is once per visit to the tab (the tab only
+      // loads while !loaded). A failed read is not a view. months is how far
+      // back the report reaches - never a figure from it.
+      track(A.OWNER_REPORT_VIEWED, { months: state.ownerReport.months.length });
       const months = state.ownerReport.months;
       const still = state.ownerReport.month && months.some((r) => r.month_start === state.ownerReport.month);
       if (!still) state.ownerReport.month = months.length ? months[0].month_start : null;

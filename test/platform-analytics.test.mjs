@@ -58,6 +58,11 @@ const SPEC_77_EVENTS = [
   // denial writes no subscription row. push_self_test is the account-settings
   // device test, received or not.
   "app_opened", "push_permission", "push_self_test",
+  // The five modules built after their switches (coach_tasks,
+  // onboarding_challenge, owner_report, benchmarks, trained_together), one
+  // each. None counts toward WCAM - see ACTIVE_MEMBER_EVENTS.
+  "coach_task_closed", "onboarding_challenge_responded", "owner_report_viewed",
+  "benchmark_opened", "training_partners_tagged",
 ];
 
 // An object built inside the jsdom window carries that realm's

@@ -123,6 +123,20 @@
 --   engagement_flag_actioned  | engagement_alerts | a coach reached out to,
 --                             |                   | reviewed or dismissed a
 --                             |                   | flag
+--   coach_task_closed         | coach_tasks       | a task closed by a contact
+--                             |                   | or marked not relevant.
+--                             |                   | Staff-only by construction,
+--                             |                   | like coach_tools
+--   onboarding_challenge_     | onboarding_       | the offer answered, accept
+--     responded               |   challenge       | or decline - props->>
+--                             |                   | 'accepted' splits them
+--   owner_report_viewed       | owner_report      | the report loaded for a
+--                             |                   | club leader, once per visit
+--   benchmark_opened          | benchmarks        | one benchmark's history
+--                             |                   | opened on the progress
+--                             |                   | screen
+--   training_partners_tagged  | trained_together  | a workout post's author
+--                             |                   | saved who trained with them
 --   push_permission           | push_notifications| the browser's own answer,
 --                             |                   | including a denial, which
 --                             |                   | push_opt_in can never see
@@ -140,7 +154,8 @@
 --                             |                   | Health signal, not usage —
 --                             |                   | excluded from queries 2-5
 --
--- 42 event names, which is every entry in `EVENTS`. `write_failed` was not in
+-- 47 event names, which is every entry in `EVENTS` (42 until the five
+-- built-after-their-switches names above were added). `write_failed` was not in
 -- metrics.md's trigger table when this file was written; the row is added in
 -- the same change.
 --
@@ -153,13 +168,25 @@
 -- point, so query 5's "no telemetry" verdict no longer fires for any module
 -- that has a feature behind it.
 --
--- WHAT IS STILL UNMEASURABLE, and why that is correct: the seven keys
+-- WHAT IS STILL UNMEASURABLE. This paragraph used to read: "the seven keys
 -- 202609190002 added (coach_tasks, onboarding_challenge, benchmarks,
 -- strength_percentages, gym_display, owner_report, arbox_attendance) are
--- switches that arrive BEFORE their features. There is nothing behind them to
--- emit anything, so query 5 still reports "no telemetry" for those seven and
--- that is the honest answer, not a gap to close. The branch that builds each
--- feature adds its event and its row here in the same change.
+-- switches that arrive BEFORE their features ... The branch that builds each
+-- feature adds its event and its row here in the same change." Four of those
+-- seven were then built without one, and so was trained_together
+-- (202609220005), so for five modules with a real feature behind them query 5
+-- was reporting "no telemetry" as if nothing existed. Each now has its event:
+-- coach_tasks, onboarding_challenge, owner_report, benchmarks and
+-- trained_together.
+--
+-- Three keys remain with no event:
+--   gym_display, arbox_attendance - still `planned` switches with nothing
+--     behind them. "No telemetry" is the correct answer for those two.
+--   strength_percentages - BUILT (the percentage chips on the log screen,
+--     app.js renderStrengthPctChips) and emitting nothing. This one IS a gap,
+--     the same kind the five above were; it was not in the change that
+--     closed them and is recorded here so query 5's verdict on it is not
+--     mistaken for disuse.
 --
 -- THE TWO PROP-LEVEL SIGNALS in query 7 (post_created.has_media and
 -- comment_created.mention_count) are kept. They are no longer the ONLY thing
@@ -218,6 +245,11 @@ from (values
   ('outward_share_completed', 'outward_share',      true),
   ('streak_nudge_opened',     'streak_risk_nudges', true),
   ('engagement_flag_actioned','engagement_alerts',  true),
+  ('coach_task_closed',       'coach_tasks',        true),
+  ('onboarding_challenge_responded','onboarding_challenge', true),
+  ('owner_report_viewed',     'owner_report',       true),
+  ('benchmark_opened',        'benchmarks',         true),
+  ('training_partners_tagged','trained_together',   true),
   ('push_permission',         'push_notifications', true),
   ('push_self_test',          'push_notifications', true),
   ('club_tab_viewed',         'shell',              false),
@@ -276,6 +308,12 @@ with module_map(event_name, module) as (values
   ('outward_share_completed','outward_share'),
   ('streak_nudge_opened','streak_risk_nudges'),
   ('engagement_flag_actioned','engagement_alerts'),
+  -- The five built after their switches (see the header).
+  ('coach_task_closed','coach_tasks'),
+  ('onboarding_challenge_responded','onboarding_challenge'),
+  ('owner_report_viewed','owner_report'),
+  ('benchmark_opened','benchmarks'),
+  ('training_partners_tagged','trained_together'),
   ('push_permission','push_notifications'),
   ('push_self_test','push_notifications')
 ),
@@ -390,6 +428,12 @@ with module_map(event_name, module) as (values
   ('outward_share_completed','outward_share'),
   ('streak_nudge_opened','streak_risk_nudges'),
   ('engagement_flag_actioned','engagement_alerts'),
+  -- The five built after their switches (see the header).
+  ('coach_task_closed','coach_tasks'),
+  ('onboarding_challenge_responded','onboarding_challenge'),
+  ('owner_report_viewed','owner_report'),
+  ('benchmark_opened','benchmarks'),
+  ('training_partners_tagged','trained_together'),
   ('push_permission','push_notifications'),
   ('push_self_test','push_notifications')
 ),
@@ -438,10 +482,12 @@ order by o.module, w.week_start;
 --    be deleting it on no evidence.
 --
 --    This paragraph used to name eleven such modules. All eleven have an
---    event now. What still returns "no telemetry" is the seven keys
---    202609190002 added ahead of their features - switches with nothing
---    behind them - which is the correct answer for a feature that does not
---    exist, and the one case where "no telemetry" is not a gap to close.
+--    event now, and so do the five modules built after their switches
+--    (coach_tasks, onboarding_challenge, owner_report, benchmarks,
+--    trained_together). What still returns "no telemetry" is gym_display and
+--    arbox_attendance - planned switches with nothing behind them, the one
+--    case where "no telemetry" is not a gap to close - and
+--    strength_percentages, which IS one (see the header).
 --
 --    Edit `near_zero_users` in the params CTE. 2 is a starting point for a
 --    single gym: fewer than three distinct members in a month.
@@ -481,6 +527,12 @@ module_map(event_name, module) as (values
   ('outward_share_completed','outward_share'),
   ('streak_nudge_opened','streak_risk_nudges'),
   ('engagement_flag_actioned','engagement_alerts'),
+  -- The five built after their switches (see the header).
+  ('coach_task_closed','coach_tasks'),
+  ('onboarding_challenge_responded','onboarding_challenge'),
+  ('owner_report_viewed','owner_report'),
+  ('benchmark_opened','benchmarks'),
+  ('training_partners_tagged','trained_together'),
   ('push_permission','push_notifications'),
   ('push_self_test','push_notifications')
 ),

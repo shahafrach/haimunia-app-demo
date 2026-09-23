@@ -996,6 +996,10 @@
     o.busy = false;
     if (error) { setMessage(failText("לא ניתן היה לבצע את הפעולה. נסו שוב.", error)); return rerender(); }
     o.data = data || null;
+    // Both answers. A decline enrols nobody and writes nothing else anywhere,
+    // so without this row "offered and refused" and "never offered" read the
+    // same.
+    track(A.ONBOARDING_CHALLENGE_RESPONDED, { accepted: !!accept });
     setMessage(accept ? "האתגר התחיל. בהצלחה!" : "הבנו, לא הפעם.");
     rerender();
   }
