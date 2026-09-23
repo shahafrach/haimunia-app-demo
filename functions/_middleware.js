@@ -43,6 +43,12 @@ const BLOCKED_PREFIXES = [
   // design mockups. Nothing in index.html references either.
   "/.claude/",
   "/mockups/",
+  // Cloudflare Worker source and its wrangler.toml (the keep-alive heartbeat,
+  // MONITORING.md §6). Nothing in there is secret - the only values are the
+  // project URL and the publishable key, both already in cloud-config.js - but
+  // the repository root is the website, so tooling that the app never fetches
+  // does not get served. Same rule as /scripts/ and /test/.
+  "/workers/",
   // Launch-readiness S11, second half: a stale root copy of the club photos.
   // The app loads its photos from /assets/photos/ and /assets/club-photos/
   // (sw.js precache, index.html); nothing references /photos/.

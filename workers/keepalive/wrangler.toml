@@ -1,0 +1,40 @@
+# Keep-alive heartbeat for the Supabase project, from OUTSIDE the project.
+#
+# WHY A WORKER AND NOT pg_cron. Supabase pauses a Free-plan project that "does
+# not receive sufficient user database activity over the past week"
+# (supabase.com/docs/guides/platform/free-project-pausing). Supabase does NOT
+# document whether a pg_cron job running inside the project counts as that
+# activity - the wording is "user database activity" and "a few user requests
+# to the database each day", and community reports disagree. This project
+# already runs pg_cron jobs every six hours and the question has never been
+# tested here, so the safe reading is the one that does not depend on an
+# undocumented answer: ping from outside, over the same public REST API a
+# member's browser uses.
+#
+# WHY CLOUDFLARE. The app is already on Cloudflare Pages, and GitHub Actions
+# minutes are exhausted until 2026-10-01. Workers' cron triggers are on the
+# free plan and do not touch the Actions budget.
+name = "haimunia-keepalive"
+main = "src/index.js"
+compatibility_date = "2026-09-23"
+
+# Every two days at 07:14 UTC. Off the hour on purpose, the same reasoning
+# backup-database.yml gives: every cron on the hour contends with every other
+# cron on the hour.
+#
+# `*/2` on day-of-month means days 1,3,5…31, so the gap after a 31-day month
+# is one day rather than two. That is fine and deliberate: the pause threshold
+# is seven days, so anything under about five is comfortable, and a shorter
+# gap is the harmless direction to be wrong in.
+[triggers]
+crons = ["14 7 */2 * *"]
+
+# PUBLIC VALUES ONLY. Both of these already ship to every browser in
+# cloud-config.js, which is why they are in plain text here rather than in a
+# secret. A service-role key must NEVER be put here or in `wrangler secret`
+# for this Worker: the heartbeat reads one function that anon is allowed to
+# call, and nothing about it needs more. src/index.js refuses to run if the
+# key it is handed looks like a secret key, so this cannot drift quietly.
+[vars]
+SUPABASE_URL = "https://jajmlyrjlkhclgphbfbb.supabase.co"
+SUPABASE_PUBLISHABLE_KEY = "sb_publishable_DBnlKZMDKGR83DUtk-4VAA_nFlOdDI4"

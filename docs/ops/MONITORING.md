@@ -237,6 +237,134 @@ select count(*) from public.reports where status = 'open';
 Not a system-health metric — a duty-of-care one. A backlog that keeps
 growing means reports are being filed and not reviewed.
 
+## 6. Keeping the project from pausing (pre-launch)
+
+### What Supabase actually says, and what it does not
+
+Supabase pauses a Free-plan project that goes quiet:
+
+> A Free plan project is considered inactive if it does not receive sufficient
+> user database activity over the past week.
+> — [Project Pausing](https://supabase.com/docs/guides/platform/free-project-pausing)
+
+and, on the same page, *"typically a few user requests to the database each day
+over the previous week is enough to keep the project from being paused."*
+[Going into prod](https://supabase.com/docs/guides/platform/going-into-prod)
+adds only *"we may pause applications on the Free Plan that exhibit low
+activity in a 7-day period."*
+
+**Supabase does not document whether a `pg_cron` job running inside the project
+counts.** Checked 2026-09-23 against both pages above: neither distinguishes
+between a request arriving from outside and work the database does to itself,
+and the only qualifier either gives is the word *user* — "user database
+activity", "user requests". Community answers disagree with each other, and
+none of them is Supabase saying so.
+
+This project runs `pg_cron` every six hours already
+([§1a](#1a-the-hourly-check-and-the-in-app-alert)). If internal activity
+counted, nothing more would be needed. **We do not rely on that**, because the
+cost of being wrong is the whole app going dark before launch, and the cost of
+being right anyway is one REST call every two days. The heartbeat therefore
+comes from outside, over the same public REST API a signed-out browser uses.
+
+### What the heartbeat calls, and why that one
+
+`public.job_health_status()` — the **only** thing `anon` may execute in this
+project. `202609170001` revoked anon `EXECUTE` on everything else, and no table
+is anon-selectable. Verified against production 2026-09-23:
+
+```
+POST /rest/v1/rpc/job_health_status   ->  200, 84 bytes, 1.3s
+GET  /rest/v1/profiles?select=id      ->  401
+```
+
+It matters that the call is an **RPC and not a 401**: an RPC runs a real
+function in Postgres, which is the activity being counted. A rejected request
+may never reach the database at all, so a heartbeat that 401s could keep the
+logs busy while the project pauses anyway. If the ping target is ever changed,
+the replacement must be anon-callable for the same reason;
+`test/keepalive-heartbeat.test.mjs` pins it.
+
+**Never a service-role key.** The call needs no privilege, the publishable key
+already ships to every browser in `cloud-config.js`, and the Worker refuses to
+run if the key it is handed looks like a secret one.
+
+### The two paths
+
+| | Primary | Fallback |
+|---|---|---|
+| Where | Cloudflare Worker, `workers/keepalive/` | `.github/workflows/keepalive.yml` |
+| Cadence | `14 7 */2 * *` (every 2 days, 07:14 UTC) | `44 7 */2 * *`, **commented out** |
+| Status | to be deployed | disabled until Actions minutes reset 2026-10-01 |
+
+They fail for different reasons — a Cloudflare account or Worker problem on one
+side, an exhausted Actions budget or a disabled workflow on the other — which
+is the point of having two. Run both once the minutes are back; two heartbeats
+two days apart is about one call a day against a seven-day threshold.
+
+`*/2` on day-of-month means days 1, 3, 5 … 31, so the gap after a 31-day month
+is one day rather than two. That is the harmless direction to be wrong in.
+
+### Deploying the Worker — exactly what to click
+
+You need this once. The Worker is in the repository; nothing here is secret.
+
+1. **Install and sign in** (from the repository root):
+   ```bash
+   npx wrangler login
+   ```
+   A browser tab opens on `dash.cloudflare.com`. Click **Allow** on the
+   "Wrangler is requesting access" screen. If you have more than one account,
+   pick the one that owns **haimunia-app** (Pages).
+
+2. **Check it before deploying anything.** This runs the Worker locally and
+   fires the cron path by hand — it makes one real call to the project:
+   ```bash
+   cd workers/keepalive
+   npx wrangler dev --test-scheduled
+   ```
+   In a second terminal:
+   ```bash
+   curl "http://localhost:8787/__scheduled?cron=14+7+*/2+*+*"
+   ```
+   The first terminal should print `keepalive: ok http=200 in …ms body=[{"ok":true,…`.
+   Press `Ctrl+C` to stop.
+
+3. **Deploy:**
+   ```bash
+   npx wrangler deploy
+   ```
+   It prints the Worker name and the cron trigger it registered.
+
+4. **Confirm the schedule in the dashboard.** In Cloudflare:
+   **Workers & Pages** → **haimunia-keepalive** → **Settings** → **Triggers**.
+   Under **Cron Triggers** you should see `14 7 */2 * *`. If the section is
+   empty, the deploy did not register it — re-run step 3 from inside
+   `workers/keepalive/` so `wrangler.toml` is the one in scope.
+
+5. **Read the first real run.** Same Worker → **Logs** → **Begin log stream**,
+   or:
+   ```bash
+   npx wrangler tail haimunia-keepalive
+   ```
+   A healthy line reads `keepalive: ok http=200 …`. A failure reads
+   `keepalive: FAILED http=… ` and is loud on purpose.
+
+**What to do if it ever fails.** Open the app. If it loads, the heartbeat
+broke, not the project — check the key in `wrangler.toml` still matches
+`cloud-config.js`. If the app does not load, the project may already be paused:
+un-pause it from the Supabase dashboard (**Project Settings** → **General**),
+then fix the heartbeat.
+
+### Enabling the Actions fallback after 2026-10-01
+
+1. Uncomment the `schedule:` block in `.github/workflows/keepalive.yml`.
+2. Update `test/keepalive-heartbeat.test.mjs` — one assertion pins the schedule
+   as commented, and it is meant to be changed in that same commit.
+3. **Actions** tab → **keepalive** → **Run workflow**, and read the log once.
+
+---
+
 ## What is deliberately NOT monitored
 
 No third-party APM, error-tracking SDK, or analytics vendor is wired in, and
