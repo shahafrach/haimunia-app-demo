@@ -15,7 +15,9 @@
     "test": "node --test",
     "check-deploy-readiness": "node scripts/check-deploy-readiness.mjs",
     "check:drift": "node scripts/check-migration-drift.mjs",
-    "check:versions": "node scripts/check-migration-versions.mjs"
+    "check:versions": "node scripts/check-migration-versions.mjs",
+    "push:prod": "node scripts/push-migrations.mjs",
+    "check:immutable": "node scripts/check-migration-immutability.mjs"
   },
   "devDependencies": {
     "fake-indexeddb": "^6.0.0",

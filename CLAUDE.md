@@ -41,6 +41,13 @@ theme's text on the other theme's background. *Prefer existing tokens*
 (`--surface`, `--border`, `--steel`, `--chalk`, `--brass`…) — a rule built
 from tokens themes itself and needs no duplicate at all.
 
+**Migrations reach production through `npm run push:prod`, never by hand.**
+It refuses unless you are on a clean, in-sync `main`, both migration guards
+pass, and production has nothing the repository does not — then shows you every
+schema-changing statement and waits for you to type `apply`. The full
+procedure, and the CI job to build once Actions minutes return on 2026-10-01,
+is **[`docs/ops/MIGRATIONS.md`](docs/ops/MIGRATIONS.md)**.
+
 **Never edit an applied migration. Forward migrations only.** Supabase
 tracks migrations by filename, so editing one that has already run is
 invisible: a local `db reset` replays the edited file and passes while
