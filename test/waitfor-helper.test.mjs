@@ -72,11 +72,18 @@ test("a predicate that throws rejects with ITS error, not a timeout", async () =
 });
 
 test("the timeout message says which kind of red this is", async () => {
+  // The deadline printed is the SCALED one, so this expectation has to scale
+  // too. It did not, in the first version of this file, and the suite run that
+  // caught it was itself run under HAIMUNIA_TEST_TIMEOUT_SCALE=6 to survive a
+  // loaded machine - a test about the load knob that could not be run with the
+  // load knob on. Derived, not hardcoded.
+  const scale = Number(process.env.HAIMUNIA_TEST_TIMEOUT_SCALE) > 0
+    ? Number(process.env.HAIMUNIA_TEST_TIMEOUT_SCALE) : 1;
   const err = await waitFor(() => false, 60, 5, "the panel to open").catch((e) => e);
   const m = err.message;
   assert.match(m, /waiting for the panel to open/, "the label names what was awaited");
   assert.match(m, /after \d+ms/, "elapsed time");
-  assert.match(m, /deadline 60ms/, "the budget it was held to");
+  assert.match(m, new RegExp(`deadline ${60 * scale}ms`), "the budget it was held to");
   assert.match(m, /polled \d+\/\d+ times/, "the starvation signature");
   assert.match(m, /loadavg [\d.]+/, "what the machine was doing");
   assert.match(m, /load sensitive/i, "and it says so in words");

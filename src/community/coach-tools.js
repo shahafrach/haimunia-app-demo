@@ -377,7 +377,7 @@
   }
 
   // ---- Engage (COMM-226 scaffold, COMM-304 real data + actions) ------------
-  // Flag-gated (state.featureFlags.coachEngage, defaults ON as of COMM-304)
+  // Club-gated on engagement_alerts (N3; was the per-device coachEngage flag)
   // on top of the staff gate every other section here already has - COMM-226
   // asked that no code path reach coach_engagement_flags outside the
   // flag-gated staff surface, and that still holds: this is never called
@@ -411,7 +411,7 @@
   // not for an admin) - not fixed here, since fixing it is a policy change
   // this client-only ticket does not own.
   async function loadCoachEngageFlags() {
-    if (!state.user || !isStaff() || !state.featureFlags.coachEngage) return;
+    if (!state.user || !isStaff() || !isModuleEnabled("engagement_alerts")) return;
     state.coach.engage.loading = true;
     state.coach.engage.error = false;
     rerender();
@@ -1403,7 +1403,15 @@
     </div>`;
   }
   function renderCoachEngageSection() {
-    if (!state.featureFlags.coachEngage) return "";
+    // N3. This was a per-device localStorage feature flag (coachEngage):
+    // flag: every coach carried their own copy, an admin could not turn the
+    // section off for the club, and clearing site data silently turned it back
+    // on. engagement_alerts is the CLUB's switch for this exact feature -
+    // 202609100002 already gates coach_notify_engagement_flags() on it - so the
+    // alert and the dashboard it belongs to now answer to one control instead
+    // of two that could disagree. The default is unchanged: the key ships
+    // enabled (202609100002:21) and the device flag defaulted on.
+    if (!isModuleEnabled("engagement_alerts")) return "";
     const e = state.coach.engage;
     const body = (e.loading && !e.loaded)
       ? `<div aria-busy="true"><div class="log-row" style="height:40px;background:var(--border);opacity:.35;"></div></div>`
@@ -1464,7 +1472,7 @@
     report(!isModuleEnabled("coach_tasks"), t.loaded, t.error, (t.items || []).some((x) => x && !isBlockedUser(x.user_id)));
     report(false, c.loaded, c.error, (c.items || []).length > 0);
     report(!isModuleEnabled("welcome_flow"), w.loaded, w.error, (w.members || []).length > 0);
-    report(!state.featureFlags.coachEngage, e.loaded, e.error, (e.items || []).length > 0);
+    report(!isModuleEnabled("engagement_alerts"), e.loaded, e.error, (e.items || []).length > 0);
     // Member of the week is quiet when the week is settled (already
     // published) or when there is nobody computed to publish. An unpublished
     // week WITH candidates is a one-tap action waiting, so it is noisy.

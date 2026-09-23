@@ -14,6 +14,8 @@ import { test } from "node:test";
 import assert from "node:assert";
 import { bootCommunity, waitFor } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
+import { cloudSource } from "./helpers/community-src.mjs";
+import { readFileSync } from "node:fs";
 
 const VERIFIED = new Date().toISOString();
 const NOW = Date.now();
@@ -404,21 +406,29 @@ test("a failed Congratulate shows the standard error and leaves the control enab
 
 // --- COMM-226 / COMM-304: Engage ------------------------------------------
 
-test("Engage is entirely absent from the Coach Dashboard when the feature flag is explicitly turned off", async () => {
-  const mock = seeded({ coach_engagement_flags: [{ id: "f1", user_id: "u9", level: "mild", status: "open", flagged_at: VERIFIED }] }, true);
-  const window = await bootCommunity(mock, { syncEnabled: false, localStorage: { "haimunia-demo:coachEngageFlag": "0" } });
+test("Engage is entirely absent from the Coach Dashboard when the CLUB switches engagement_alerts off", async () => {
+  // N3: this used to turn off a per-device localStorage flag, which was the
+  // defect - every coach carried their own copy and no admin could turn the
+  // section off for the club. The gate is now the engagement_alerts module,
+  // the same switch 202609100002 uses for coach_notify_engagement_flags(), so
+  // this test disables it the way an admin actually would.
+  const mock = seeded({
+    coach_engagement_flags: [{ id: "f1", user_id: "u9", level: "mild", status: "open", flagged_at: VERIFIED }],
+    club_features: [{ club_id: "club-1", module_key: "engagement_alerts", enabled: false, config: {} }],
+  }, true);
+  const window = await bootCommunity(mock, { syncEnabled: false });
   await openCoachTab(window);
   await waitFor(() => window.document.body.textContent.includes("קבלת פנים"), 3000);
-  assert.equal(window.document.body.textContent.includes("מעקב מעורבות"), false, "the Engage section renders nothing at all when the flag is off");
+  assert.equal(window.document.body.textContent.includes("מעקב מעורבות"), false, "the Engage section renders nothing at all when the club module is off");
   assert.equal(mock.callsTo && mock.db.coach_engagement_flags.length, 1, "the table exists and is untouched by this ticket's own read gate");
 });
 
-test("COMM-304: the feature flag now defaults ON with no localStorage override, and an empty coach_engagement_flags table renders the clean empty state", async () => {
-  // state.featureFlags.coachEngage is read once, synchronously, at cloud.js's
-  // module-level state literal - the same moment state.syncEnabled already
-  // reads its own localStorage-backed flag. COMM-304 flips the default from
-  // `=== "1"` to `!== "0"`, so this test - unlike COMM-226's own version of
-  // it - deliberately passes no localStorage override at all.
+test("COMM-304/N3: the section defaults ON with no club_features row, and an empty coach_engagement_flags table renders the clean empty state", async () => {
+  // N3: the gate is now the engagement_alerts club module, which ships ENABLED
+  // (202609100002:21), and isModuleEnabled() also returns true before club
+  // features have loaded at all. So a fixture with no club_features row
+  // exercises the default-on path - the same observable behaviour COMM-304
+  // established with the old device flag, now owned by the club.
   const mock = seeded({}, true);
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openCoachTab(window);
@@ -566,4 +576,26 @@ test("a flagged user_id whose profile row cannot be resolved still renders a row
   await waitFor(() => !!window.document.querySelector('[data-community-action="coach-engage-review"][data-id="f2"]'), 3000);
   const row = window.document.querySelector('[data-community-action="coach-engage-review"][data-id="f2"]').closest(".log-row");
   assert.match(row.textContent, /חבר\/ה/, "the row falls back to the generic label rather than disappearing");
+});
+
+// N3 drift guard. The Engage section was gated on a per-device localStorage
+// flag for long enough that the pattern reads as normal in this file; the two
+// tests above would still pass if someone reintroduced the flag as a SECOND
+// gate alongside the module. This fails if the flag comes back anywhere.
+test("N3: nothing gates a club surface on the per-device coachEngage flag any more", () => {
+  const sources = {
+    "cloud.js": cloudSource(),
+    "src/community/coach-tools.js": readFileSync(
+      new URL("../src/community/coach-tools.js", import.meta.url), "utf8"),
+  };
+  for (const [name, src] of Object.entries(sources)) {
+    assert.doesNotMatch(src, /featureFlags\s*\.\s*coachEngage/,
+      `${name} still reads the per-device coachEngage flag`);
+    assert.doesNotMatch(src, /coachEngageFlag/,
+      `${name} still reads the coachEngageFlag localStorage key`);
+  }
+  // And the replacement is really the club switch, not something weaker.
+  assert.match(sources["src/community/coach-tools.js"],
+    /isModuleEnabled\("engagement_alerts"\)/,
+    "the Engage section must be gated on the engagement_alerts club module");
 });
