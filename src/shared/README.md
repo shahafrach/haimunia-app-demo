@@ -21,6 +21,8 @@ Only helpers that are (a) pure, (b) dependency-free, and (c) genuinely generic
 | `esc(v)` | HTML-escape for any `innerHTML` / template-literal sink |
 | `bidiText(v)` | escape **and** bidi-isolate a plain-text value for an `innerHTML` sink |
 | `bidiHtml(v)` | the same isolation for a value that is already escaped HTML |
+| `bidiUnit(v)` | the same isolation for a MEASUREMENT (number + Hebrew unit), with the base direction **stated** RTL rather than inferred — for a container the stylesheet has declared `direction:ltr` |
+| `bidiUnitHtml(v)` | `bidiUnit` for a value that is already escaped HTML |
 | `cssSel(v)` | escape a value for use inside a CSS attribute selector |
 | `bag()` | prototype-less accumulator object, for maps keyed by untrusted strings |
 | `cleanStr(v, max)` | strip control chars, trim, hard-cap length |

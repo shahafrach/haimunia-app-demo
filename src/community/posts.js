@@ -894,7 +894,7 @@
     const m = post.metadata || {};
     const rows = [];
     if (m.milestone != null) {
-      rows.push(`<div class="mono post-result" style="color:var(--brass);">${esc(m.milestone)}% מהיעד הושלמו</div>`);
+      rows.push(`<div class="mono post-result" style="color:var(--brass);">${bidiUnit(`${m.milestone}% מהיעד הושלמו`)}</div>`);
       if (m.club_total != null && m.target_value != null) rows.push(`<div style="color:var(--steel);font-size:12px;">${esc(m.club_total)} מתוך ${esc(m.target_value)}</div>`);
     } else if (m.my_progress != null) {
       const pct = m.target_value ? Math.min(100, Math.round((Number(m.my_progress) / Number(m.target_value)) * 100)) : null;

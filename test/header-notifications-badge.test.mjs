@@ -69,16 +69,50 @@ test("tapping the header bell with unread community notifications opens the noti
     "the changelog overlay must not open when there is real community unread");
 });
 
-test("no unread community notifications: header bell falls back to the offline release-notes overlay", async () => {
+test("no unread community notifications: the header bell still serves UNSEEN release notes", async () => {
   const mock = createMockSupabase(baseSeed({ notifications: [] }));
   mock.setUser({ id: "u1", is_anonymous: false, email: "dana@members.haimuniya.invalid" });
   const window = await bootCommunity(mock, { syncEnabled: false });
   await waitFor(() => window.isCommunitySignedIn && window.isCommunitySignedIn(), 3000);
   await waitFor(() => typeof window.communityUnreadCount === "function" && window.communityUnreadCount() === 0, 3000);
 
+  // A device that has not caught up. bootCommunity() starts fresh, which the
+  // app bootstraps to "already current", so the catch-up state has to be set
+  // up rather than assumed - and it is the state this test is actually about.
+  await window.dbSetSetting("haimunia-demo:lastSeenVersion", "0.0.0");
+  await window.loadLastSeenVersion();
+  assert.ok(window.unseenReleaseNotes().length > 0, "the fixture must have something unseen to serve");
+
   window.document.getElementById("notificationsBellBtn").click();
   assert.equal(window.document.getElementById("notificationsOverlay").classList.contains("open"), true,
-    "with nothing unread in Community, the header bell still serves release notes");
+    "with nothing unread in Community but release notes unseen, the header bell serves them");
+});
+
+// THIS TEST REPLACES THE SECOND HALF OF THE ONE ABOVE, which used to assert
+// that the bell opens the release-notes overlay with nothing unread FULL
+// STOP - including when there is nothing unseen either. That is the defect
+// reported from a real phone: "the מה חדש sheet opens with only אין עדכונים
+// חדשים". A member whose badge is counting community notifications the
+// centre cannot open (signed out of it, module off, not configured) tapped a
+// badge saying three things were waiting and got a full-screen changelog
+// saying nothing was.
+//
+// The property the old assertion was defending - that the bell is not dead
+// when Community has nothing to say - is kept, and is what the test above
+// now proves. What changed is the empty case.
+test("nothing unread and nothing unseen: the bell answers, and does not open an empty changelog", async () => {
+  const mock = createMockSupabase(baseSeed({ notifications: [] }));
+  mock.setUser({ id: "u1", is_anonymous: false, email: "dana@members.haimuniya.invalid" });
+  const window = await bootCommunity(mock, { syncEnabled: false });
+  await waitFor(() => window.isCommunitySignedIn && window.isCommunitySignedIn(), 3000);
+  await waitFor(() => typeof window.communityUnreadCount === "function" && window.communityUnreadCount() === 0, 3000);
+  assert.equal(window.unseenReleaseNotes().length, 0, "a fresh device is bootstrapped as already caught up");
+
+  window.document.getElementById("notificationsBellBtn").click();
+  assert.equal(window.document.getElementById("notificationsOverlay").classList.contains("open"), false,
+    "an empty changelog is not an answer to a notifications tap");
+  assert.match(window.document.getElementById("appToastDock").textContent, /אין התראות/,
+    "but the tap is answered rather than swallowed");
 });
 
 test("Settings' own 'מה חדש' row always opens release notes, even with unread community notifications pending", async () => {

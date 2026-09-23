@@ -77,6 +77,19 @@ function isBarbellMovement(id) {
 // SAFE is src/constants.js's `const SAFE = window.BoxLogSafe`, and
 // src/constants.js loads immediately before this file (index.html:1592-1596).
 var bidiText = SAFE.bidiText;
+// The measurement-shaped sibling: a number, its Hebrew unit and whatever
+// multiplies them, with the base direction STATED as RTL instead of inferred
+// from the first strong character. Bound here, not re-declared, for exactly
+// the reason the paragraph above gives for bidiText. Every `.mono` readout in
+// this file goes through it - that class declares `direction:ltr` in
+// index.html, which is right for a bare number and wrong the moment a Hebrew
+// unit joins it. See the "CONTAINER level" section in safe-helpers.js.
+// Two statements, not one `var a = …, b = …`: test/community-module-split.js
+// scans for top-level declarations one per line and would only ever see the
+// first name on a comma list - i.e. the second binding would silently miss
+// the cross-file redeclaration check that exists precisely for these.
+var bidiUnit = SAFE.bidiUnit;
+var bidiUnitHtml = SAFE.bidiUnitHtml;
 // ---------- State ----------
 let entries = [];
 // staffhome is a valid id but not a reachable destination on its own:
@@ -315,6 +328,16 @@ function renderNavWho() {
       </div>
     </button>`;
 }
+// The drill-in marker every row in the nav menu and the desktop sidebar ends
+// with. One function, because it was already typed out twice in
+// renderNavSettingsRow() below and is now on renderNavRows' rows too - three
+// copies of the same eight attributes is how the fourth one ends up subtly
+// different. scaleX(-1) because ICONS.chevron points right and "forward" is
+// leftward in an RTL document; see the note above renderWodBenchmarksSection
+// for the same rule stated for the literal "›".
+function navChevronHtml() {
+  return `<span style="transform:scaleX(-1); display:inline-flex; color:var(--steel); flex-shrink:0;" aria-hidden="true">${ICONS.chevron}</span>`;
+}
 // Shared by the mobile nav menu and the desktop sidebar (renderNavMenuList/
 // renderDesktopSidebar below) - one pass over getNavItems(), one place that
 // knows about Community's sub-nav preview. withIds carries the real
@@ -365,6 +388,7 @@ function renderNavRows(withIds, onlyOther, pick) {
       <button class="navrow${tabbtnClass}${isActive ? " active" : ""}"${idAttr} data-action="switch-tab" data-tab="${item.tab}" role="tab" aria-selected="${isActive}" aria-controls="content">
         <span class="icon-chip icon-chip-${item.tint}">${item.icon}</span>
         <span class="nav-label">${esc(item.label)}</span>
+        ${navChevronHtml()}
       </button>${sub}`;
   }).join("");
 }
@@ -426,7 +450,7 @@ function renderNavSettingsRow() {
     <button class="navrow" data-action="open-settings">
       <span class="icon-chip icon-chip-steel">${ICONS.settingsIcon}</span>
       <span class="nav-label">הגדרות</span>
-      <span style="transform:scaleX(-1); display:inline-flex; color:var(--steel);" aria-hidden="true">${ICONS.chevron}</span>
+      ${navChevronHtml()}
     </button>
     <!-- Owner's call, 2026-09-17: "should be in the hamburger, so people will
          have easy access to report". It was one row inside Settings, under
@@ -450,7 +474,7 @@ function renderNavSettingsRow() {
     <button class="navrow" data-action="open-support">
       <span class="icon-chip icon-chip-steel">${ICONS.helpIcon}</span>
       <span class="nav-label">תמיכה ודיווח על תקלה</span>
-      <span style="transform:scaleX(-1); display:inline-flex; color:var(--steel);" aria-hidden="true">${ICONS.chevron}</span>
+      ${navChevronHtml()}
     </button>`;
 }
 function renderNavMenuList() {
@@ -1090,7 +1114,13 @@ const ACHIEVEMENTS = [
   ...ACHIEVEMENT_PR_CATEGORIES.flatMap((cat) => PR_TIERS.map((t) => ({
     id: `pr-${cat}-${t.tier}`, group: "pr", tier: t.tier, cat, glyph: "bar",
     name: `${CATEGORY_LABELS[cat]} — ${TIER_LABELS[t.tier]}`,
-    rule: `${t.need} ${t.need === 1 ? "שיא אישי" : "שיאים אישיים"} בקבוצת ${CATEGORY_LABELS[cat]}`,
+    // The caption is read directly under the medal's own name, so it does
+    // not repeat it: the name already says which group and which tier, and
+    // "Squat — ברונזה / 3 שיאים אישיים בקבוצת Squat" spent its only line of
+    // 11px text saying "Squat" a second time instead of saying what the
+    // three are. Same edit, same reason, on every rule below that restated
+    // its own name.
+    rule: `${t.need} ${t.need === 1 ? "שיא אישי" : "שיאים אישיים"} בקבוצה`,
     earned: () => (categoryPRCounts()[cat] || 0) >= t.need,
     points: TIER_POINTS[t.tier],
     // need/current: fresh-eyes audit, "next up" nudge. Explicit fields
@@ -1103,7 +1133,7 @@ const ACHIEVEMENTS = [
   ...STREAK_TIERS.map((t) => ({
     id: `streak-${t.tier}`, group: "streak", tier: t.tier, glyph: "chevrons",
     name: `רצף — ${TIER_LABELS[t.tier]}`,
-    rule: `רצף של ${t.need} שבועות עם רישום`,
+    rule: `${t.need} שבועות רצופים עם רישום`,
     earned: () => longestWeekStreak() >= t.need,
     points: TIER_POINTS[t.tier],
     need: t.need, current: () => longestWeekStreak(),
@@ -1111,7 +1141,7 @@ const ACHIEVEMENTS = [
   ...SESSION_MILESTONES.map((n) => ({
     id: `sessions-${n}`, group: "milestone", glyph: "home",
     name: `${n} אימונים`,
-    rule: `${n} ימי אימון מתועדים`,
+    rule: "ימים שונים שנרשם בהם אימון",
     earned: () => totalSessions() >= n,
     points: MILESTONE_POINTS,
     need: n, current: () => totalSessions(),
@@ -1119,7 +1149,7 @@ const ACHIEVEMENTS = [
   ...TENURE_MILESTONES.map((m) => ({
     id: `tenure-${m.id}`, group: "milestone", glyph: "flame",
     name: m.label,
-    rule: `${m.label} מתאריך ההתחלה בבוקס`,
+    rule: "נספר לפי תאריך ההתחלה שרשמתם",
     earned: () => tenureMilestoneEarned(m),
     points: MILESTONE_POINTS,
     // Design spec 5.2, tier C. Tenure is a fact about the calendar, not
@@ -1138,7 +1168,7 @@ const ACHIEVEMENTS = [
   ...WOD_LIBRARY.map((w) => ({
     id: `rx-${w.id}`, group: "rx", glyph: "bar",
     name: `Rx — ${w.name}`,
-    rule: `רישום ראשון של ${w.name} כ-Rx`,
+    rule: "רישום ראשון כ-Rx",
     earned: () => earnedRxWodIds().has(w.id),
     points: RX_POINTS,
   })),
@@ -1294,7 +1324,7 @@ function renderAchievementsContent() {
       <div class="scene-sheet">
     <div class="ach-summary">
       <div class="ach-summary-level">${esc(level.name)}</div>
-      <div class="ach-summary-num mono">${score} נקודות</div>
+      <div class="ach-summary-num mono">${bidiUnit(`${score} נקודות`)}</div>
       ${progressToNext}
       <div class="ach-summary-label" style="margin-top:8px;">${earnedCount} / ${ACHIEVEMENTS.length} מדליות</div>
     </div>
@@ -1785,7 +1815,17 @@ function updateNotificationsBadge() {
 function openHeaderNotifications() {
   const social = typeof window.communityUnreadCount === "function" ? window.communityUnreadCount() : 0;
   if (social > 0 && typeof window.openCommunityNotifCenter === "function" && window.openCommunityNotifCenter()) return;
-  openNotifications();
+  // onlyIfUnseen, and a toast when there is nothing: see openNotifications().
+  // The bell is a notifications control, not a changelog link - answering it
+  // with an empty "מה חדש" sheet was the reported defect. The badge is
+  // refreshed first because the commonest way to get here with social > 0 and
+  // no centre to open is a stale count.
+  if (openNotifications({ onlyIfUnseen: true })) return;
+  updateNotificationsBadge();
+  // render(), because showToast() only STORES the pending toast - the same
+  // pairing every other showToast() call site in this file uses.
+  showToast("אין התראות חדשות");
+  render();
 }
 // A real, user-reported bug: on Chrome/Android, "every time I open the app
 // it looks a bit up, then a scroll fixes it" - the bottom tab bar
@@ -1814,13 +1854,35 @@ function nudgeViewportAfterModalClose() {
   });
 }
 let notificationsOpenerEl = null;
-function openNotifications() {
+// `onlyIfUnseen` - NEVER OPEN AN EMPTY CHANGELOG THE MEMBER DID NOT ASK FOR.
+//
+// Reported from a real phone: "the מה חדש sheet opens on the log screen with
+// only אין עדכונים חדשים". Reproduced in Chromium, and the path is the bell,
+// not the boot gate: openHeaderNotifications() below prefers the COMMUNITY
+// notification centre when there is something unread there and falls back to
+// this sheet when window.openCommunityNotifCenter is missing or returns
+// false - which is exactly the state of a device where the badge is counting
+// real community notifications but the centre cannot open (community not
+// configured on this device, signed out, module off). The member taps a
+// badge that says three things are waiting and gets a full-screen changelog
+// that says nothing is.
+//
+// The guard goes INSIDE this function rather than at that one call site, so
+// it also covers the boot gate and any caller added later: a sheet opened on
+// the app's own initiative has to have something to say. The one caller that
+// deliberately passes nothing is Settings' "מה חדש" row, where an empty
+// sheet is the honest answer to a direct question.
+//
+// Returns whether it opened, so a caller can fall through to its own answer.
+function openNotifications(opts) {
+  if (opts && opts.onlyIfUnseen && !unseenReleaseNotes().length) return false;
   notificationsOpenerEl = document.activeElement;
   renderNotificationsList();
   document.body.style.overflow = "hidden";
   document.getElementById("notificationsOverlay").classList.add("open");
   if (unseenReleaseNotes().length) { markNotificationsSeen(); updateNotificationsBadge(); }
   setTimeout(() => focusFirstAppDialogEl("notificationsOverlay"), 50);
+  return true;
 }
 function closeNotifications() {
   document.body.style.overflow = "";
@@ -4956,7 +5018,7 @@ function renderPctTable(est) {
       ${pctTableExpanded ? `<div class="chart-card" style="margin-top:8px;">
         <div class="footer-note" style="margin:0 0 10px;">מחושב מ־1RM משוער (${est} ק״ג) — הערכה מהסטים שרשמתם, לא מקס שנבדק. נקודת פתיחה להתאמה.</div>
         <div class="log-list">
-          ${PCT_STEPS.map((pct) => `<div class="log-row"><span style="color:var(--steel); font-weight:700;">${pct}%</span><span class="mono" style="font-weight:700; color:var(--brass);">${formatPlateKg(roundToPlate(est * pct / 100))} ק״ג</span></div>`).join("")}
+          ${PCT_STEPS.map((pct) => `<div class="log-row"><span style="color:var(--steel); font-weight:700;">${pct}%</span><span class="mono" style="font-weight:700; color:var(--brass);">${bidiUnit(`${formatPlateKg(roundToPlate(est * pct / 100))} ק״ג`)}</span></div>`).join("")}
         </div>
         <div class="footer-note" style="margin:10px 0 0;">מעוגל ל־2.5 ק״ג — הקפיצה הקטנה ביותר שאפשר להעמיס על המוט.</div>
       </div>` : ""}
@@ -5021,6 +5083,42 @@ function renderBarbell(w) {
     </div>`;
 }
 
+// How many points it takes before a line is a TREND rather than a pair of
+// dots. Three, and the number is already the app's own answer: the "עוד N
+// נתונים ותראו כאן מגמה" note below used it before this compact state
+// existed.
+const CHART_MIN_TREND_POINTS = 3;
+// One or two points, drawn as a compact readout instead of a plot.
+//
+// Real-phone report: "a progress chart with one or two points fills a whole
+// empty area". It did, exactly: the plot is a fixed padTop + plotH +
+// padBottom = 174px tall whatever n is, so a member who has logged one set
+// of a movement opened its card onto 174px of blank chart with a single dot
+// in it and a note underneath explaining that it is not a trend yet. The
+// note was the previous pass at this defect and it treated the symptom - it
+// said the right thing, under the wrong thing.
+//
+// The data is genuine and stays, and so does the note: what goes is the
+// EMPTY AREA around them. Each point becomes a row of its own - the value
+// the plot would have drawn, and the date it would have labelled - which at
+// n=1 or 2 is the entire information content of that 174px, in about 60px.
+//
+// role="img" + aria-label, not a table: this replaces a chart, the summary
+// it carries is the same chartLabel() the plot uses, and
+// test/chart-accessible-name.test.mjs asserts a single-point chart still has
+// a real accessible name. It is a <div> rather than an <svg> because there
+// is no longer a drawing - see that test, which was updated with this
+// change rather than worked around.
+function renderCompactChart(data, chartLabel) {
+  const rows = data.slice().reverse().map((d) => `
+    <div class="chart-compact-row">
+      <span class="mono chart-compact-value${d.isPR ? " pr" : ""}">${bidiUnit(String(d.est1RM))}</span>
+      <span class="chart-compact-date">${bidiUnit(d.dateLabel)}</span>
+    </div>`).join("");
+  const missing = CHART_MIN_TREND_POINTS - data.length;
+  return `<div class="chart-compact" role="img" aria-label="${esc(chartLabel)}">${rows}</div>
+    <div style="color:var(--steel); font-size:11.5px; text-align:center; margin-top:6px;">עוד ${missing} ${missing === 1 ? "נתון" : "נתונים"} ותראו כאן מגמה</div>`;
+}
 function renderChart(data) {
   if (!data.length) return `<div class="flex col items-center" style="padding:32px 0; gap:8px;">${ICONS.dumbbell}<span style="color:var(--steel); font-size:13px;">אין עדיין נתונים לתרגיל הזה</span></div>`;
   const n = data.length;
@@ -5067,6 +5165,9 @@ function renderChart(data) {
   const chartLabel = n === 1
     ? `גרף התקדמות: נתון יחיד, ${lastPoint.dateLabel}: ${lastPoint.est1RM}`
     : `גרף התקדמות: ${n} נתונים בין ${first.dateLabel} (${first.est1RM}) ל-${lastPoint.dateLabel} (${lastPoint.est1RM})` + (prCount ? `, כולל ${prCount === 1 ? "שיא אישי אחד" : `${prCount} שיאים אישיים`}` : "");
+  // Before any of the plot is emitted, and after chartLabel: a chart with
+  // fewer than three points is not drawn at all. See renderCompactChart().
+  if (n < CHART_MIN_TREND_POINTS) return renderCompactChart(data, chartLabel);
   const svg = `<svg role="img" aria-label="${esc(chartLabel)}" viewBox="0 0 ${w} ${h}" style="${wide ? `width:${w}px;` : "width:100%;"} height:${h}px; display:block;">
     <polyline points="${polyline}" fill="none" stroke="var(--brass)" stroke-width="2"/>
     ${dots}${labels}
@@ -5074,23 +5175,14 @@ function renderChart(data) {
   // Which way the picture runs is not self-evident from a line alone, and
   // the app's own best habit is telling the member what a number is built
   // from. Only worth saying once there are two points to have a direction.
-  const axisNote = n >= 2 ? `<div style="color:var(--steel); font-size:11px; text-align:center; margin-top:4px;">מימין לשמאל: מהישן לחדש.</div>` : "";
-  // Fresh-eyes audit: one or two dots on the same full-height plot area a
-  // ten-point trend uses read as broken/sparse, not as "you're new here" -
-  // nothing in the chart itself said which. Below the axisNote (n>=2 already
-  // gets that one instead) rather than replacing the real dot(s): the data
-  // is genuine and stays, this only sets the expectation for why the line
-  // isn't a trend yet.
-  // "נתונים" (data points), not "אימונים" (workouts) - this same function
-  // also renders bodyweight and body-measurement charts, neither of which
-  // is a workout.
-  const growNote = n < 3 ? `<div style="color:var(--steel); font-size:11.5px; text-align:center; margin-top:6px;">עוד ${3 - n} ${3 - n === 1 ? "נתון" : "נתונים"} ותראו כאן מגמה</div>` : "";
+  // Unconditional now: nothing below this line runs for n < 3.
+  const axisNote = `<div style="color:var(--steel); font-size:11px; text-align:center; margin-top:4px;">מימין לשמאל: מהישן לחדש.</div>`;
   // dir="ltr" on the scroll box only, never on the SVG: a wide chart in an
   // RTL container opens scrolled to its right edge, which after the mirror
   // above is the OLDEST data. Flipping the scroll container's own direction
   // lands the initial scroll position on the newest end, where the member
   // actually wants to be.
-  return (wide ? `<div dir="ltr" style="overflow-x:auto; -webkit-overflow-scrolling:touch;">${svg}</div>` : svg) + axisNote + growNote;
+  return (wide ? `<div dir="ltr" style="overflow-x:auto; -webkit-overflow-scrolling:touch;">${svg}</div>` : svg) + axisNote;
 }
 
 // One-line summary for an entry regardless of its type — used anywhere a
@@ -5456,7 +5548,7 @@ function renderDetailCard(m) {
       <div class="flex items-center justify-between" style="margin-bottom:12px;">
         <span style="font-weight:800; font-size:15px;">${bidiText(m.name)}</span>
         <div class="flex items-center gap-8">
-          ${trend !== null ? `<span class="flex items-center gap-6" style="font-weight:700; font-size:12px;">${trend > 0 ? ICONS.up : trend < 0 ? ICONS.down : ICONS.flat}<span class="mono">${trend > 0 ? "+" : ""}${trend} ק״ג</span> 1RM משוער</span>` : ""}
+          ${trend !== null ? `<span class="flex items-center gap-6" style="font-weight:700; font-size:12px;">${trend > 0 ? ICONS.up : trend < 0 ? ICONS.down : ICONS.flat}<span class="mono">${bidiUnit(`${trend > 0 ? "+" : ""}${trend} ק״ג`)}</span> 1RM משוער</span>` : ""}
           ${typeof window.renderShareControl === "function" ? window.renderShareControl("strength_entry", hEntries[0].id) : ""}
         </div>
       </div>
@@ -5467,7 +5559,7 @@ function renderDetailCard(m) {
           return `<div class="rep-cell"><div class="rep-cell-label">${r}RM</div><div class="rep-cell-val mono" style="color:${rec ? "var(--chalk)" : "var(--border)"};">${rec ?? "—"}</div></div>`;
         }).join("")}
       </div>
-      ${est1rm ? `<div class="footer-note" style="margin-top:10px; text-align:center;">1RM משוער: <span class="mono">${est1rm} ק״ג</span> — חישוב מהסט הטוב ביותר, לא הרמה שבוצעה</div>` : ""}
+      ${est1rm ? `<div class="footer-note" style="margin-top:10px; text-align:center;">1RM משוער: <span class="mono">${bidiUnit(`${est1rm} ק״ג`)}</span> — חישוב מהסט הטוב ביותר, לא הרמה שבוצעה</div>` : ""}
     </div>`;
 }
 
@@ -5541,8 +5633,8 @@ function renderHistoryListArea() {
           const hold = bestDurationFor(m.id, undefined, byExercise);
           const headline = bestSet ? formatLiftedSet(bestSet) : hold ? formatDuration(hold) : "—";
           return `<span style="text-align:left;">
-          <span class="mono" style="display:block; color:var(--brass); font-weight:700; font-size:14px;">${esc(headline)}</span>
-          ${bestSet && est ? `<span class="mono" style="display:block; color:var(--steel); font-weight:600; font-size:11px;">1RM משוער ${est} ק״ג</span>` : ""}
+          <span class="mono" style="display:block; color:var(--brass); font-weight:700; font-size:14px;">${bidiUnit(headline)}</span>
+          ${bestSet && est ? `<span class="mono" style="display:block; color:var(--steel); font-weight:600; font-size:11px;">${bidiUnit(`1RM משוער ${est} ק״ג`)}</span>` : ""}
         </span>`;
         })()}
       </button>`;
@@ -5790,7 +5882,7 @@ function renderDayEntriesListHtml(dayEntries, dayWods) {
           <div class="flex col gap-6">
             ${group.map((e, i) => `
             <div class="flex items-center justify-between">
-              <span class="mono flex items-center gap-6" style="color:var(--steel); font-size:13px;">${i + 1}. ${esc(ladderRoundSummary(e, isSuperset))}${isFlameworthyEntry(e, celebratableIds) ? ICONS.flame : ""}</span>
+              <span class="mono flex items-center gap-6" style="color:var(--steel); font-size:13px;">${bidiUnit(`${i + 1}. ${ladderRoundSummary(e, isSuperset)}`)}${isFlameworthyEntry(e, celebratableIds) ? ICONS.flame : ""}</span>
               <div class="flex items-center gap-6">
                 <button data-action="edit-entry" data-id="${esc(e.id)}" aria-label="עריכת סט ${i + 1}" class="icon-btn-sm">${ICONS.edit}</button>
                 <button data-action="delete-entry" data-id="${esc(e.id)}" aria-label="מחיקת סט ${i + 1}" class="icon-btn-sm">${ICONS.trash}</button>
@@ -5810,7 +5902,7 @@ function renderDayEntriesListHtml(dayEntries, dayWods) {
               <span style="color:var(--steel); font-size:11px;">${wodEffortLabel(e.rx)}${e.partnerTag ? ` · ${bidiText(e.partnerTag)}` : ""}</span>
             </div>
             <div class="flex items-center gap-10">
-              <span class="mono" style="color:var(--steel); font-size:13px;">${formatWodEntry(e)}</span>
+              <span class="mono" style="color:var(--steel); font-size:13px;">${bidiUnit(formatWodEntry(e))}</span>
               ${typeof window.renderShareControl === "function" ? window.renderShareControl("wod_entry", e.id) : ""}
               <button data-action="edit-wod-entry" data-id="${esc(e.id)}" aria-label="עריכת אימון" class="icon-btn-sm">${ICONS.edit}</button>
               <button data-action="delete-wod-entry" data-id="${esc(e.id)}" aria-label="מחיקת אימון" class="icon-btn-sm">${ICONS.trash}</button>
@@ -5858,6 +5950,29 @@ function daysAgoLabel(iso) {
   return `לפני ${diff} ימים`;
 }
 
+// A category is OVERDUE, not merely un-recent, after this many days. See the
+// colour block inside renderVolumeReport() for why it is 30 and not 14, and
+// why the states between a week and a month are deliberately neutral.
+const VOLUME_OVERDUE_DAYS = 30;
+// "סטים 0/1" was the whole label. A slash between two bare numbers says
+// nothing about what either one counts, and it reads worst exactly where it
+// matters: a row showing 0 this week and 1 this month looked like a score, a
+// ratio, or a fraction of some target, and a member reported it as all three.
+// The card's own subtitle already explains the two windows; the row now names
+// them itself so it is legible without reading the subtitle first.
+//
+// Through bidiUnit() at the call site, not interpolated bare: this lands in a
+// `.mono` span, which index.html declares `direction:ltr`, and a Hebrew word
+// next to a number in an LTR box is the defect that whole helper exists for -
+// "3 סטים ב-7 ימים · 11 ב-30 ימים" painted with the counts and their windows
+// swapped. Measured, in Chromium, before and after.
+function volumeCountsLabel(setsWeek, setsMonth) {
+  // "1 סטים" is not Hebrew. The plural is only carried on the first half -
+  // the second is a bare number under the same noun, the way the row reads
+  // out loud ("one set in seven days, two in thirty").
+  const week = setsWeek === 1 ? "סט אחד" : `${setsWeek} סטים`;
+  return `${week} ב-7 ימים · ${setsMonth} ב-30 ימים`;
+}
 function renderVolumeReport() {
   const now = new Date();
   const cutoff7 = new Date(now); cutoff7.setDate(now.getDate() - 6);
@@ -5899,9 +6014,29 @@ function renderVolumeReport() {
     // 7` coerces to 0 <= 7 and is TRUE, so falling through would paint every
     // never-logged category as trained-this-week green, which is worse than
     // the defect being fixed.
+    //
+    // THE THRESHOLD ITSELF, reported from a real phone after that fix: "in
+    // the calendar category volume card, anything not trained for 14 days
+    // turns red, so a weekly trainee sees mostly red". Both halves are true
+    // and they compound. This box programmes strength in blocks, so a member
+    // training four days a week touches each of the six categories on a
+    // rotation - two weeks between Olympic days is an ordinary, healthy
+    // fortnight, not a lapse - and one busy fortnight painted four of six
+    // rows red at once. Red that fires on a normal training rotation stops
+    // being read as a warning within about two visits, which costs exactly
+    // the case it exists for.
+    //
+    // Red now means a full month untouched (VOLUME_OVERDUE_DAYS), which is
+    // no longer a rotation at any sane cadence - it is a category that has
+    // fallen out of the programme. Everything between a week and that is
+    // "not recent", which is a FACT and not a fault, so it takes the same
+    // neutral --steel the never-logged row above already takes: the two are
+    // told apart by their words ("לפני 9 ימים" / "טרם נרשם"), which is the
+    // rule this block settled on last time and is just being applied to one
+    // more state.
     if (diff !== null) {
       if (diff <= 7) { flagColor = "var(--green-text)"; flagBg = "rgba(75,155,95,.10)"; }
-      else if (diff > 14) { flagColor = "var(--red-text)"; flagBg = "rgba(216,69,60,.10)"; }
+      else if (diff > VOLUME_OVERDUE_DAYS) { flagColor = "var(--red-text)"; flagBg = "rgba(216,69,60,.10)"; }
     }
     return `
       <div class="report-row">
@@ -5910,7 +6045,7 @@ function renderVolumeReport() {
           <span style="font-weight:700; font-size:14px;">${esc(catLabel(cat))}</span>
         </div>
         <div class="flex items-center gap-10">
-          <span class="mono" style="color:var(--steel); font-size:12px;">${setsWeek}/${setsMonth} סטים</span>
+          <span class="mono" style="color:var(--steel); font-size:12px;">${bidiUnit(volumeCountsLabel(setsWeek, setsMonth))}</span>
           <span class="report-flag" style="color:${flagColor}; background:${flagBg};">${flagText}</span>
         </div>
       </div>`;
@@ -5919,7 +6054,7 @@ function renderVolumeReport() {
   return `
     <div class="chart-card">
     <h2 class="section-label">נפח ותדירות לפי קטגוריה</h2>
-    <div style="color:var(--steel); font-size:11px; margin-bottom:10px;">סטים ב-7 / 30 הימים האחרונים, וזמן מאז האימון האחרון</div>
+    <div style="color:var(--steel); font-size:11px; margin-bottom:10px;">מספר הסטים ב-7 וב-30 הימים האחרונים, וזמן מאז האימון האחרון</div>
     ${rows}
     </div>
   `;
@@ -5978,7 +6113,7 @@ function renderBodyweightArea() {
         <span style="display:inline-flex; transition:transform .2s; transform:rotate(${bodyweightExpanded ? "90deg" : "180deg"});">${ICONS.chevron}</span>
         <span style="font-weight:700; font-size:14px;">משקל גוף</span>
       </div>
-      ${last ? `<span class="mono" style="color:var(--brass); font-weight:700; font-size:14px;">${last.weight} ק״ג</span>` : `<span style="color:var(--steel); font-size:12px;">אין עדיין מדידות</span>`}
+      ${last ? `<span class="mono" style="color:var(--brass); font-weight:700; font-size:14px;">${bidiUnit(`${last.weight} ק״ג`)}</span>` : `<span style="color:var(--steel); font-size:12px;">אין עדיין מדידות</span>`}
     </button>`;
   const detail = bodyweightExpanded ? `
     <div class="chart-card" style="margin-top:-4px; border-top-left-radius:0; border-top-right-radius:0; border-top:none;">
@@ -6022,7 +6157,7 @@ function renderMeasureArea() {
           <span style="display:inline-flex; transition:transform .2s; transform:rotate(${expanded ? "90deg" : "180deg"});">${ICONS.chevron}</span>
           <span style="font-weight:700; font-size:14px;">${bidiText(t.name)}</span>
         </div>
-        ${last ? `<span class="mono" style="color:var(--brass); font-weight:700; font-size:14px;">${last.value} ס״מ</span>` : `<span style="color:var(--steel); font-size:12px;">אין עדיין מדידות</span>`}
+        ${last ? `<span class="mono" style="color:var(--brass); font-weight:700; font-size:14px;">${bidiUnit(`${last.value} ס״מ`)}</span>` : `<span style="color:var(--steel); font-size:12px;">אין עדיין מדידות</span>`}
       </button>`;
     if (!expanded) return header;
 
@@ -6047,7 +6182,7 @@ function renderMeasureArea() {
             <div class="log-row">
               <span style="color:var(--steel); font-size:12px;">${fmtDate(e.date)}</span>
               <div class="flex items-center gap-10">
-                <span class="mono" style="font-size:13px;">${e.value} ס״מ</span>
+                <span class="mono" style="font-size:13px;">${bidiUnit(`${e.value} ס״מ`)}</span>
                 <button data-action="delete-measurement-entry" data-id="${esc(e.id)}" aria-label="מחיקת מדידה" class="icon-btn-sm">${ICONS.trash}</button>
               </div>
             </div>`).join("")}
@@ -6234,7 +6369,7 @@ function renderBenchmarkAttemptRow(item, attempt) {
     <span style="color:var(--steel); font-size:12px;">${esc(fmtDate(attempt.date))}${item.kind === "wod" ? esc(wodEffortTag(attempt.effort)) : ""}</span>
     <span class="flex items-center gap-6">
       ${isBest ? `<span style="color:var(--brass); font-size:11px; font-weight:700;">שיא</span>` : ""}
-      <span class="mono" style="font-weight:700; font-size:13px; color:${isBest ? "var(--brass)" : "var(--chalk)"};">${esc(attempt.text)}</span>
+      <span class="mono" style="font-weight:700; font-size:13px; color:${isBest ? "var(--brass)" : "var(--chalk)"};">${bidiUnit(attempt.text)}</span>
     </span>
   </div>`;
 }
@@ -6280,7 +6415,7 @@ function renderBenchmarkRow(item) {
       </div>
       <span style="text-align:left;">
         ${best
-          ? `<span class="mono" style="display:block; color:var(--brass); font-weight:700; font-size:14px;">${esc(best)}</span>
+          ? `<span class="mono" style="display:block; color:var(--brass); font-weight:700; font-size:14px;">${bidiUnit(best)}</span>
              ${item.kind === "lift" ? `<span style="display:block; color:var(--steel); font-weight:600; font-size:11px;">1RM משוער</span>` : ""}`
           : `<span style="display:block; color:var(--steel); font-size:12px;">טרם נוסה</span>`}
       </span>
@@ -7119,7 +7254,7 @@ function renderClubWodAttachAffordance(w) {
       : "";
     return `<div style="background:rgba(232,185,138,.12); border:1px solid var(--brass); border-radius:14px; padding:12px 14px; margin-bottom:12px;">
       ${head}
-      <div style="font-size:13px;">התוצאה שלך על הלוח${viewer.result_text ? `: <span class="mono" style="font-weight:800;">${esc(viewer.result_text)}</span>` : ""}</div>
+      <div style="font-size:13px;">התוצאה שלך על הלוח${viewer.result_text ? `: <span class="mono" style="font-weight:800;">${bidiUnit(viewer.result_text)}</span>` : ""}</div>
       ${viewer.can_detach ? `<button class="link-btn" data-action="detach-club-wod-result" data-id="${sid}" style="min-height:44px;">הסרת התוצאה שלי מהלוח</button>` : ""}
       ${openBoard}
       ${hidden}
@@ -7341,11 +7476,11 @@ function renderWodLogSection() {
       <div class="flex items-center justify-between">
         <div>
           <div class="stat-label">שיא</div>
-          <div class="mono" style="color:var(--brass); font-weight:800; font-size:16px;">${best}</div>
+          <div class="mono" style="color:var(--brass); font-weight:800; font-size:16px;">${bidiUnit(best)}</div>
         </div>
         <div style="text-align:left;">
           <div class="stat-label">אחרון (${fmtDate(history[0].date)})</div>
-          <div class="mono" style="font-weight:700; font-size:16px;">${formatWodEntry(history[0])}${wodEffortTag(history[0].rx)}</div>
+          <div class="mono" style="font-weight:700; font-size:16px;">${bidiUnit(formatWodEntry(history[0]) + wodEffortTag(history[0].rx))}</div>
         </div>
       </div>
     </div>` : `
@@ -7361,7 +7496,7 @@ function renderWodLogSection() {
       <div style="margin-bottom:16px;">
         <div style="color:var(--steel); font-size:11px; font-weight:700; letter-spacing:.5px; margin-bottom:6px;">ב-14 הימים האחרונים</div>
         <div class="flex wrap gap-8">
-          ${recent.map((e) => `<span class="mono" style="background:var(--surface2); border-radius:10px; padding:6px 10px; font-size:12.5px; font-weight:700; color:var(--steel);">${esc(fmtDate(e.date))}: <span style="color:var(--chalk);">${esc(formatWodEntry(e))}</span>${wodEffortTag(e.rx)}</span>`).join("")}
+          ${recent.map((e) => `<span class="mono" style="background:var(--surface2); border-radius:10px; padding:6px 10px; font-size:12.5px; font-weight:700; color:var(--steel);">${bidiUnitHtml(`${esc(fmtDate(e.date))}: <span style="color:var(--chalk);">${esc(formatWodEntry(e))}</span>${esc(wodEffortTag(e.rx))}`)}</span>`).join("")}
         </div>
       </div>`;
     })()}
@@ -7461,7 +7596,7 @@ function renderWodDetailCard(w) {
     <div class="chart-card" style="margin-top:-4px; border-top-left-radius:0; border-top-right-radius:0; border-top:none;">
       <div class="flex items-center justify-between" style="margin-bottom:12px;">
         <span style="font-weight:800; font-size:15px;">${bidiText(w.name)}</span>
-        ${isEmom ? "" : `<span class="mono" style="color:var(--brass); font-weight:700; font-size:13px;">שיא: ${formatWodBest(w.id)}</span>`}
+        ${isEmom ? "" : `<span class="mono" style="color:var(--brass); font-weight:700; font-size:13px;">${bidiUnit(`שיא: ${formatWodBest(w.id)}`)}</span>`}
       </div>
       ${chartHtml}
       <div class="log-list" style="margin-top:12px;">
@@ -7474,7 +7609,7 @@ function renderWodDetailCard(w) {
                 <span style="color:var(--steel); font-size:11px;">${wodEffortLabel(e.rx)}${e.partnerTag ? ` · ${bidiText(e.partnerTag)}` : ""}</span>
               </div>
               <span class="flex items-center gap-6">
-                <span class="mono" style="font-size:13px;">${formatWodEntry(e)}</span>
+                <span class="mono" style="font-size:13px;">${bidiUnit(formatWodEntry(e))}</span>
                 ${typeof window.renderShareControl === "function" ? window.renderShareControl("wod_entry", e.id) : ""}
               </span>
             </div>
@@ -7490,7 +7625,17 @@ function renderWodHistoryListArea() {
   const q = wodHistorySearch.trim().toLowerCase();
   const active = activeWods().filter((w) => w.name.toLowerCase().includes(q)).sort((a, b) => a.name.localeCompare(b.name));
   if (activeWods().length === 0) {
-    area.innerHTML = `<div class="flex col items-center" style="padding:40px 0; gap:8px;">${ICONS.dumbbell}<span style="color:var(--steel); font-size:13px;">רשמו אימון כדי להתחיל לראות התקדמות</span></div>`;
+    // This is the WOD tab's היסטוריה sub-tab with nothing in it, and the line
+    // it used to carry - "רשמו אימון כדי להתחיל לראות התקדמות" - was written
+    // for the PROGRESS screen and pasted here. It described a different
+    // screen's job: history is not a trend, it is the record of what you did
+    // and the best you have done at each one. Says what WILL be here instead,
+    // which is also the honest answer to "why is this empty".
+    //
+    // Its twin on the progress tab (renderHistoryListArea, "רשמו סט כדי
+    // להתחיל לראות התקדמות") is deliberately NOT changed: that screen really
+    // is about progress, and there the sentence is correct.
+    area.innerHTML = `<div class="flex col items-center" style="padding:40px 0; gap:8px;">${ICONS.dumbbell}<span style="color:var(--steel); font-size:13px;">עוד לא נרשם כאן אימון — כל אימון שתרשמו יופיע כאן עם השיא שלכם בו</span></div>`;
     return;
   }
   if (active.length === 0) {
@@ -7506,7 +7651,7 @@ function renderWodHistoryListArea() {
           <div class="dot" style="background:${esc(catColor(w.category))}"></div>
           <span style="font-weight:700; font-size:14px;">${bidiText(w.name)}</span>
         </div>
-        <span class="mono" style="color:var(--brass); font-weight:700; font-size:14px;">${formatWodBest(w.id)}</span>
+        <span class="mono" style="color:var(--brass); font-weight:700; font-size:14px;">${bidiUnit(formatWodBest(w.id))}</span>
       </button>`;
     const detail = wodHistoryId === w.id ? renderWodDetailCard(w) + `<div style="height:8px;"></div>` : "";
     return row + detail;
@@ -7534,11 +7679,36 @@ function renderWodHistorySection() {
 // Grouped by Girls/Heroes (the only two categories WOD_LIBRARY actually
 // uses) with the same .cat-group/.cat-head pattern the exercise/strength
 // pickers already use, instead of one flat undifferentiated list. Hebrew
-// labels are local to this grouping, not catLabel()'s CATEGORY_LABELS table
-// - that table is scoped to strength MOVEMENT categories (Squat/Deadlift/…)
-// and mixing WOD-library categories into it would blur two different
-// classification systems that happen to share the word "category".
+// labels are local to the WOD library, not catLabel()'s CATEGORY_LABELS
+// table - that table is scoped to strength MOVEMENT categories
+// (Squat/Deadlift/…) and mixing WOD-library categories into it would blur two
+// different classification systems that happen to share the word "category".
+//
+// ONE TABLE, BOTH SCREENS, which is the part that was missing. Reported from
+// a real phone: "the same benchmark category is called בנות in the library
+// and GIRLS in the workout picker". Both are right about their own screen and
+// the app was wrong overall - the catalogue read this table and the picker
+// read catLabel(), where Girls/Heroes are identity entries, so one group had
+// two names three taps apart.
+//
+// The fix is to give the picker this table too (wodCatLabel below), NOT to
+// put Hebrew into CATEGORY_LABELS. test/community-term-disclosure.test.mjs
+// pins that map as an identity map on an explicit product decision - "Back
+// Squat" and "Fran" are what the coach says on the floor, and translating
+// the movement vocabulary would put the picker, the progress panel, the
+// calendar and the achievement headers into a different language from the
+// whiteboard. A benchmark GROUP heading is not movement vocabulary; the six
+// movement categories are, and they are untouched.
 const WOD_LIBRARY_CATEGORY_LABELS = { Girls: "בנות", Heroes: "גיבורים" };
+// The WOD picker also lists Club and Custom, which are not benchmark groups
+// and have no Hebrew name of their own - they fall through to catLabel(), so
+// this is the library's table where it has an answer and the shared one
+// everywhere else.
+function wodCatLabel(cat) {
+  return Object.prototype.hasOwnProperty.call(WOD_LIBRARY_CATEGORY_LABELS, cat)
+    ? WOD_LIBRARY_CATEGORY_LABELS[cat]
+    : catLabel(cat);
+}
 // Fresh-eyes audit: a trainee-persona review named this exact screen -
 // "Isabel — 30 Snatches", "Diane — 21-15-9 Deadlifts & HSPU" - as pure
 // CrossFit jargon with nothing on it to explain a Thruster, an HSPU or a
@@ -7562,7 +7732,7 @@ function renderWodBenchmarksSection() {
   );
   return renderWodGlossaryLink() + groups.map(([cat, list]) => `
     <div class="cat-group">
-      <div class="cat-head"><h2 class="cat-name">${esc(WOD_LIBRARY_CATEGORY_LABELS[cat] || cat)}</h2></div>
+      <div class="cat-head"><h2 class="cat-name">${esc(wodCatLabel(cat))}</h2></div>
       ${list.map((w) => `<button class="movement-btn" data-action="select-benchmark" data-id="${esc(w.id)}">
         <div><span style="font-weight:700;">${bidiText(w.name)}</span>${w.desc ? `<div class="wod-desc">${bidiText(w.desc)}</div>` : ""}</div>
         <span aria-hidden="true">›</span>
@@ -8071,7 +8241,7 @@ function renderWodPickerList(query) {
   const cats = Object.keys(byCategory).sort((a, b) => order.indexOf(a) - order.indexOf(b));
   list.innerHTML = addRow + `<div style="height:12px;"></div>` + cats.map((cat) => `
     <div class="cat-group">
-      <div class="cat-head"><div class="dot" style="background:${esc(catColor(cat))}"></div><h3 class="cat-name">${esc(catLabel(cat))}</h3></div>
+      <div class="cat-head"><div class="dot" style="background:${esc(catColor(cat))}"></div><h3 class="cat-name">${esc(wodCatLabel(cat))}</h3></div>
       ${byCategory[cat].map((w) => `
         <div class="movement-btn ${selectedWodId === w.id ? "active" : ""}" style="padding:0; overflow:hidden;">
         <button style="flex:1; padding:12px 14px; text-align:right;" data-action="pick-wod" data-id="${esc(w.id)}">
@@ -8917,7 +9087,7 @@ async function init() {
   // a member who joins by invite is never asked their name twice.
   const invitePending = typeof window.communityInviteFlowPending === "function" && window.communityInviteFlowPending();
   if (userName === null && isFreshInstall && !invitePending) openWelcomeModal();
-  else if (unseenReleaseNotes().length) openNotifications();
+  else openNotifications({ onlyIfUnseen: true });
 
   if ("serviceWorker" in navigator) {
     // The SW no longer calls skipWaiting() on install, so a new version parks

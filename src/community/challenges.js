@@ -928,13 +928,13 @@
     if (c.challenge_type === "team") {
       const agg = state.challenges.aggregates[c.id];
       const mine = agg && Array.isArray(agg.team_totals) ? agg.team_totals.find((t) => t.team_id === part.team_id) : null;
-      return mine ? `<div class="mono" style="color:var(--brass);font-size:12px;">${bidiText(mine.name)}: ${esc(mine.total)}</div>` : (part.team_id ? "" : `<div style="color:var(--steel);font-size:12px;">טרם נבחרה קבוצה</div>`);
+      return mine ? `<div class="mono" style="color:var(--brass);font-size:12px;">${bidiUnitHtml(`${bidiText(mine.name)}: ${esc(mine.total)}`)}</div>` : (part.team_id ? "" : `<div style="color:var(--steel);font-size:12px;">טרם נבחרה קבוצה</div>`);
     }
     if (c.challenge_type === "consistency") {
       const weeks = Number((c.config && c.config.weeks) || 0);
       // Live bug hunt (2026-09-11): "0 / 1 שבועות" for a 1-week challenge -
       // missing singular, same class as TIER_LABELS' own "שיא אישי" ternary.
-      return `<div class="mono" style="color:var(--brass);font-size:12px;">${esc(part.progress_value)}${weeks ? ` / ${weeks === 1 ? "שבוע אחד" : `${weeks} שבועות`}` : ""}</div>`;
+      return `<div class="mono" style="color:var(--brass);font-size:12px;">${bidiUnit(`${part.progress_value}${weeks ? ` / ${weeks === 1 ? "שבוע אחד" : `${weeks} שבועות`}` : ""}`)}</div>`;
     }
     const pct = c.target_value ? Math.round((Number(part.progress_value || 0) / c.target_value) * 100) : null;
     return `<div class="mono" style="color:var(--brass);font-size:12px;">${esc(part.progress_value)}${c.target_value != null ? ` / ${esc(c.target_value)}` : ""}</div>${pct != null ? challengeProgressBarHtml(pct) : ""}`;
@@ -1358,7 +1358,7 @@
       limit: b.limit,
       emptyText: "עדיין אין תוצאות לדירוג.",
       retryAction: "challenge-board-retry",
-      formatValue: (r) => esc(r.value),
+      formatValue: (r) => bidiUnit(r.value),
     });
     const canExpand = !b.loading && !b.error && leaderboardRows(b).length && b.limit < CHALLENGE_BOARD_FULL_LIMIT;
     const expand = canExpand ? `<div class="chip-row" style="margin-top:6px;"><button class="chip-btn" data-community-action="challenge-board-full">צפייה בטבלה המלאה</button></div>` : "";
@@ -1506,7 +1506,7 @@
         <div style="padding:18px 18px calc(env(safe-area-inset-bottom,0px) + 16px);">
           <div class="flex" style="justify-content:space-between;align-items:center;margin-bottom:12px;">
             <h2 id="challengeViewTitle" style="margin-top:0;font-weight:800;font-size:17px;margin-bottom:0;">${v.challenge ? bidiText(v.challenge.title) : "אתגר"}</h2>
-            <button class="chip-btn" data-community-action="close-challenge-view" aria-label="סגירה">✕</button>
+            ${sheetCloseBtnHtml("close-challenge-view")}
           </div>
           ${bodyHtml}
         </div>

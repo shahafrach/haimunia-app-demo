@@ -66,14 +66,16 @@ test("no two files in the global lexical scope declare the same top-level name",
   // cloud.js's old wrapper indentation) and zero in app.js and
   // src/constants.js. Matching either everywhere would read a function's own
   // locals as globals, which is how this test first "found" app.js's `cfg`.
-  const declRe = (indent) => new RegExp(`^ {${indent}}(?:(?:async )?function|const|let|var) ([A-Za-z0-9_$]+)\\s*[=(]`);
+  const declRe = (indent) => new RegExp(`^ {${indent}}((?:async )?function|const|let|var) ([A-Za-z0-9_$]+)\\s*[=(]`);
   // app.js and src/constants.js are in the same scope and are NOT part of the
   // community layer; they are where the five real collisions were found when
   // cloud.js gave up its IIFE. esc, cssSel, cleanStr and bidiText are
   // declared `var` on both sides deliberately (var + var is legal, and both
   // bind the identical window.BoxLogSafe function), so they are the one
   // allowed overlap.
-  const SHARED_VAR_ALIASES = new Set(["esc", "cssSel", "cleanStr", "bidiText"]);
+  // bidiUnit/bidiUnitHtml joined them with the container-level bidi fix, for
+  // the identical reason and under the identical constraint.
+  const SHARED_VAR_ALIASES = new Set(["esc", "cssSel", "cleanStr", "bidiText", "bidiUnit", "bidiUnitHtml"]);
   const files = [...COMMUNITY_FILES.map((f) => [f, 2]), ["app.js", 0], ["src/constants.js", 0]];
   const seen = new Map();
   for (const [rel, indent] of files) {
@@ -81,7 +83,17 @@ test("no two files in the global lexical scope declare the same top-level name",
     const names = new Set();
     for (const line of readFileSync(path.join(root, rel), "utf8").split("\n")) {
       const m = line.match(re);
-      if (m) names.add(m[1]);
+      if (!m) continue;
+      names.add(m[2]);
+      // THE ALLOW-LIST IS NOT A BLANKET PASS. What makes the overlap legal is
+      // `var` on BOTH sides, so the keyword is checked rather than assumed: a
+      // `const bidiText` added to either file is a redeclaration SyntaxError
+      // that takes the whole app down at parse time, and the allow-list would
+      // otherwise be exactly what hid it.
+      if (SHARED_VAR_ALIASES.has(m[2])) {
+        assert.equal(m[1], "var",
+          `"${m[2]}" is on the shared-alias allow-list, which only holds for \`var\` on every side - ${rel} declares it as \`${m[1]}\`, which is a redeclaration SyntaxError in a browser.`);
+      }
     }
     for (const n of names) {
       if (SHARED_VAR_ALIASES.has(n)) continue;

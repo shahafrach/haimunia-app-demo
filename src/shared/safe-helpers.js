@@ -36,7 +36,7 @@
 
   // Bumped on every behavior change to any helper below. A consumer repo
   // records the version it vendored so a drift is visible without a diff.
-  const VERSION = "1.2.0";
+  const VERSION = "1.3.0";
 
   // The only limit this module needs. Deliberately owned here rather than
   // read from src/constants.js's LIMITS: cleanId is a security boundary and
@@ -175,8 +175,49 @@
   // Never use either function in an HTML attribute, inside <textarea>,
   // inside <option>, or inside SVG <text> - there the tag lands as literal
   // characters or breaks the element, and those contexts keep bare esc().
-  // .mono runs keep bare esc() too: they already carry CSS isolation and are
-  // LTR by construction.
+  //
+  // 3. CONTAINER level, and the sentence that used to end this comment was
+  //    the bug. It read: ".mono runs keep bare esc() too: they already carry
+  //    CSS isolation and are LTR by construction." The second half is false.
+  //    index.html's own `.mono` rule carries a comment saying the opposite -
+  //    "`.mono` is not digits-only: entrySummary()/ladderRoundSummary()
+  //    render strings like `100 ק״ג × 5` through it" - and the rule sets
+  //    `direction:ltr; unicode-bidi:isolate`, which STATES an LTR base for a
+  //    string whose base is Hebrew. Measured in Chromium at 390x844
+  //    (scripts/browser-check/bidi-measurement-order.mjs), reading the
+  //    painted glyphs right to left:
+  //
+  //      `90 ק״ג × 1`        painted  `ק״ג × 1 90`
+  //      `1RM משוער 90 ק״ג`  painted  `משוער 90 ק״ג 1RM`
+  //      `+12 ק״ג`           painted  `ק״ג 12+`
+  //
+  //    Every one of those is a plausible, valid-looking, DIFFERENT number -
+  //    the same failure mode as the two above, one layer out: the run and
+  //    the line are both right and the BOX they sit in declares the wrong
+  //    base direction.
+  //
+  //    bidiUnit() is the answer for that box, and the reason it is a third
+  //    function rather than a flag on bidiText() is the gate. bidiText()
+  //    INFERS the base from the first strong character, which is exactly
+  //    what must not happen here: `1RM משוער 90 ק״ג` begins with a Latin R,
+  //    so first-strong resolves it LTR and reproduces the middle line above.
+  //    A measurement's base direction is not a property of its first
+  //    character, it is a property of the app: this is a Hebrew training
+  //    log, the unit is a Hebrew word, and the base is RTL whatever the
+  //    number happens to start with. bidiUnit() STATES it, and because it
+  //    is stated, the first-strong gate that bidiText() needs is not needed
+  //    here - isolating an interior Latin run cannot move a base direction
+  //    that was never inferred. The run isolation itself is the same
+  //    bidiWrapRuns() the other two use, so there is no second run finder
+  //    to drift.
+  //
+  //    Measured for the same strings wrapped in bidiUnit(): `90 ק״ג × 1`,
+  //    `1RM משוער 90 ק״ג`, `+12 ק״ג`. And measured for two things it must
+  //    NOT do: `3×5 @ 60` keeps its interior-neutral run isolated (without
+  //    it the same RTL base paints `60 @ 5×3`), and `+12` is NOT isolated
+  //    as a run - forcing the signed number LTR inside the RTL base paints
+  //    `12+ ק״ג`, which is why the run rule's "contiguous anchors are left
+  //    alone" clause is load-bearing here too.
 
   // Strong right-to-left. Hebrew (0590-05FF), Arabic, Syriac, Thaana, NKo,
   // Samaritan and Mandaic run contiguously to 08FF, plus the Hebrew and
@@ -340,6 +381,36 @@
     const s = String(html ?? "");
     const atoms = bidiAtomsFromHtml(s);
     return "<bdi>" + (bidiBaseIsRtl(atoms) ? bidiWrapRuns(atoms, bidiSame) : s) + "</bdi>";
+  }
+
+  // A MEASUREMENT - a number, its Hebrew unit, and whatever multiplies or
+  // compares them - isolated with its base direction STATED rather than
+  // inferred, so the painted order matches the logical order inside ANY
+  // container, including one the stylesheet has declared `direction:ltr`
+  // (`.mono`, every numeric readout in this app). See the "CONTAINER level"
+  // section of the comment above for the measurements this exists for.
+  //
+  // Single-line by design: a measurement is a phrase, not a paragraph, and
+  // every call site hands it one. A value containing "\n" keeps the newline
+  // and the whole thing stays inside one isolate, which is the right answer
+  // for a string that is one quantity either way.
+  function bidiUnit(value) {
+    const atoms = bidiAtomsFromText(String(value ?? ""));
+    return '<bdi dir="rtl">' + bidiWrapRuns(atoms, esc) + "</bdi>";
+  }
+
+  // bidiUnit's already-escaped variant, and the same pair bidiText/bidiHtml
+  // already are. It exists for the handful of readouts that carry markup of
+  // their own inside one `.mono` box - a date in --steel next to a result in
+  // --chalk, a member name already isolated by bidiText() next to their
+  // score. Splitting those into two adjacent isolates would not help: what
+  // is wrong there is the order the BOXES are laid out in, which is decided
+  // by the container's stated direction, so the isolate has to go around
+  // both of them. Run isolation works on the tokenised form, so no isolate
+  // straddles a tag, exactly as in bidiHtml.
+  function bidiUnitHtml(html) {
+    const atoms = bidiAtomsFromHtml(String(html ?? ""));
+    return '<bdi dir="rtl">' + bidiWrapRuns(atoms, bidiSame) + "</bdi>";
   }
 
   // ---------- CSS selector escaping ----------
@@ -511,7 +582,7 @@
     VERSION,
     LIMITS: Object.freeze(LIMITS),
     esc, cssSel, bag,
-    bidiText, bidiHtml,
+    bidiText, bidiHtml, bidiUnit, bidiUnitHtml,
     cleanStr, cleanMultilineStr, cleanNum, cleanId, cleanISODate, cleanTs,
     uid,
     brandName, brandWordmark, brandChampionTitle,
