@@ -198,6 +198,12 @@ jobs:
       # production silently. Runs BEFORE the stack starts: it is a cheap
       # git-only check and there is no point booting Postgres to then fail.
       - run: node scripts/check-migration-immutability.mjs
+      # Two files sharing a version. Supabase records an applied migration
+      # by version alone, so a collision means one of them can never be
+      # applied - loudly on a local reset, SILENTLY against a real project,
+      # where db push simply skips it. Needs no git history, so unlike the
+      # check above it cannot skip itself on a shallow clone.
+      - run: node scripts/check-migration-versions.mjs
       - run: supabase start
         # Applies every file in supabase/migrations/, in order, against a
         # throwaway local Postgres + Auth + Storage stack. Fails the build
