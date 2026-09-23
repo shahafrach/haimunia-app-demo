@@ -30,6 +30,9 @@ const cloudJs = cloudSource();
 const seedSql = fs.readFileSync(new URL("../supabase/migrations/202609030004_onboarding_step_content.sql", import.meta.url), "utf8");
 const introSql = fs.readFileSync(new URL("../supabase/migrations/202609050007_intro_carousel_content.sql", import.meta.url), "utf8");
 const fixSql = fs.readFileSync(new URL("../supabase/migrations/202609150007_first_run_copy_tells_the_truth.sql", import.meta.url), "utf8");
+// The THIRD correction: #33 renamed the composer again, so 202609150007's copy
+// went stale in its turn. 202609230006 is the current one.
+const latestFixSql = fs.readFileSync(new URL("../supabase/migrations/202609230006_the_welcome_card_names_the_button_again.sql", import.meta.url), "utf8");
 
 test("the composer label has exactly one definition, and the welcome card uses it", () => {
   // The coupling that broke. Two screens name this control - the fake-input
@@ -66,15 +69,18 @@ test("the composer label has exactly one definition, and the welcome card uses i
   // was current when that migration was written. A rename that only moved the
   // constant would have recreated the very defect this file exists for, on
   // the first card a new member ever reads.
-  assert.match(line, /withCurrentComposerLabel\(/,
-    "a stored welcome body is corrected to the current label before it renders");
-  const retired = cloudJs.match(/const RETIRED_COMPOSER_LABELS = \[([^\]]*)\]/);
-  assert.ok(retired, "the retired labels are listed in one place");
-  for (const old of ["מה קורה היום?", "כתיבת פוסט"]) {
-    assert.ok(retired[1].includes(old), `"${old}" was a real composer label and must still be corrected away`);
-  }
-  assert.ok(!retired[1].includes("מה עשית היום?"),
-    "the CURRENT label must never be in the retired list - it would be replaced with itself forever");
+  // THE STORED BODY IS CORRECTED IN THE DATABASE, NOT HERE. This used to be
+  // a client-side rewrite (RETIRED_COMPOSER_LABELS + withCurrentComposerLabel),
+  // shipped by #33 as an explicit stopgap because it did not hold the
+  // migration slot. 202609230006 is the real repair, and the stopgap went with
+  // it: a guarded UPDATE skips a row the club has edited, where the client
+  // rewrite silently edited a club's own words on the way to the screen.
+  assert.ok(!/withCurrentComposerLabel/.test(cloudJs),
+    "the client-side rewrite is gone - the database owns the stored copy");
+  // The DECLARATION, not any mention: club.js keeps a comment recording why
+  // the stopgap existed and why it went, and that history is worth keeping.
+  assert.ok(!/const RETIRED_COMPOSER_LABELS\s*=/.test(cloudJs),
+    "and so is its list of retired labels");
 });
 
 test("no seeded first-run copy still names the retired button", () => {
@@ -84,7 +90,20 @@ test("no seeded first-run copy still names the retired button", () => {
   assert.match(seedSql, /כתיבת פוסט/, "the original seed is untouched, as migrations must be");
   assert.match(fixSql, /update public\.onboarding_step_content/, "and a later migration corrects it");
   assert.match(fixSql, /set body = 'כאן רואים מה קורה במועדון[^']*מה קורה היום\?[^']*'/,
-    "to copy naming the control that is actually on screen");
+    "to copy naming the control that was on screen when it was written");
+
+  // AND THEN THE COMPOSER WAS RENAMED A THIRD TIME (#33), so that correction
+  // went stale too. 202609230006 is the current one, and it must name the
+  // label the client actually carries - the two copies of that decision are
+  // checked against each other here.
+  const current = cloudJs.match(/const POST_COMPOSER_PLACEHOLDER = "([^"]+)"/);
+  assert.ok(current, "the composer label has one definition in the client");
+  assert.ok(latestFixSql.includes(current[1]),
+    `the latest correction must name the current label (${current[1]})`);
+  assert.match(latestFixSql, /and updated_by is null/,
+    "guarded, so a club that wrote its own words keeps them");
+  assert.match(latestFixSql, /body like '%/,
+    "and guarded on the stale text too, so it is a true no-op once applied");
 });
 
 test("the first-run corrections never overwrite the club's own words", () => {

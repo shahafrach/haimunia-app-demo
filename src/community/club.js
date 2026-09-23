@@ -395,24 +395,15 @@
   // So a stored body is corrected AT RENDER TIME, and no member reads an
   // instruction naming a control that is not there.
   //
-  // THIS LIST IS A STOPGAP AND SHOULD NOT SURVIVE. The real repair is one
-  // UPDATE on onboarding_step_content, guarded on `updated_by is null`
-  // exactly as 202609150007's own correction is, so a club that has written
-  // its own words keeps them. This branch deliberately adds no migration
-  // (CLAUDE.md, "Parallel work": one open branch adds a migration at a time),
-  // so that UPDATE and the deletion of this list are one follow-up commit.
-  const RETIRED_COMPOSER_LABELS = ["מה קורה היום?", "כתיבת פוסט"];
-  function withCurrentComposerLabel(body) {
-    let out = String(body || "");
-    for (const retired of RETIRED_COMPOSER_LABELS) out = out.split(retired).join(POST_COMPOSER_PLACEHOLDER);
-    return out;
-  }
   function renderOnboardingWelcomeStep() {
-    // Names the composer by the label it ACTUALLY carries - in the fallback
-    // below through POST_COMPOSER_PLACEHOLDER, which is the single definition
-    // of that label, and in a stored body through withCurrentComposerLabel()
-    // above. first-run-copy.test.mjs asserts both.
-    const bodyRaw = withCurrentComposerLabel(onboardingStepBodyRaw("welcome")) || `כאן רואים מה קורה במועדון, ואפשר לשתף אימונים ושיאים ולהגיב לחברים אחרים. השורה "${POST_COMPOSER_PLACEHOLDER}" בראש הפיד פותחת את השיתוף הראשון שלכם.`;
+    // Names the composer by the label it ACTUALLY carries, through
+    // POST_COMPOSER_PLACEHOLDER, which is the single definition of that
+    // label. The STORED body is corrected in the database by
+    // 202609230006, not here: the client-side rewrite this used to do
+    // (RETIRED_COMPOSER_LABELS) also rewrote a body a club had written for
+    // itself, which a guarded UPDATE cannot do. first-run-copy.test.mjs
+    // asserts both halves.
+    const bodyRaw = onboardingStepBodyRaw("welcome") || `כאן רואים מה קורה במועדון, ואפשר לשתף אימונים ושיאים ולהגיב לחברים אחרים. השורה "${POST_COMPOSER_PLACEHOLDER}" בראש הפיד פותחת את השיתוף הראשון שלכם.`;
     return renderOnboardingCard(onboardingStepTitle("welcome", "ברוכים הבאים לקהילה!"), bidiText(bodyRaw), "welcome");
   }
   function renderOnboardingFirstWeekStep() {
