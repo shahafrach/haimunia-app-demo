@@ -5690,7 +5690,7 @@
     }
     const alsoProfile = state.profile ? " גם הפרופיל והשיתופים בקהילה יוסרו מיד." : "";
     return `<div class="footer-note" role="group" aria-labelledby="backupDeleteTitle" style="margin-top:12px;padding:10px;border-radius:8px;border:1px solid var(--red-text);">
-      <div id="backupDeleteTitle" style="font-weight:800;color:var(--red-text);margin-bottom:4px;">מחיקת הגיבוי מהענן</div>
+      <h2 id="backupDeleteTitle" style="margin-top:0;margin-bottom:4px;font-size:13.5px;font-weight:800;color:var(--red-text);">מחיקת הגיבוי מהענן</h2>
       <div style="margin-bottom:10px;">כל מה שגובה לענן, יחד עם החשבון שנפתח לגיבוי, יימחק לצמיתות בתוך 30 יום.${esc(alsoProfile)} האימונים שבמכשיר הזה נשארים, והגיבוי האוטומטי ייכבה כדי שהשמירה הבאה לא תפתח גיבוי חדש.</div>
       <div class="chip-row" style="margin-top:0;">
         <button class="chip-btn" data-community-action="backup-delete-cancel">ביטול</button>
