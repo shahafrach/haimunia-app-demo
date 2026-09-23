@@ -7316,6 +7316,15 @@
   // flushOutbox()'s identity check for why a row that does not know its own
   // owner is dangerous.
   window.communityMemberId = function () { return (state.user && state.user.id) || null; };
+  // The gym display's ONE door into the cloud layer (202609230005). It gets a
+  // function, not the client: a screen on a wall has no business holding
+  // something it could call anything else with. gym_display_board() refuses
+  // unless the caller holds the gym_display role and the club has the module
+  // on, so this is a convenience, never the gate.
+  window.gymDisplayBoard = async function () {
+    if (!client) return { error: { message: "no cloud client" }, data: null };
+    return client.rpc("gym_display_board");
+  };
   // Fresh-eyes audit: the main header's always-visible bell used to be
   // wired to app.js's own offline "what's new" release notes only — a
   // member could have unread reactions/comments/achievement notifications
