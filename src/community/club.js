@@ -687,7 +687,7 @@
     // THE CARD. When this comment was first written it said the card was
     // "produced server-side from this row", and nothing did that: there was
     // no trigger and no RPC, so an announcement reached the archive and the
-    // notification centre and never the feed. Since 202609220007 the
+    // notification centre and never the feed. Since 202609220008 the
     // announcements_feed_card_insert trigger writes it, in the insert's own
     // transaction: an authorless POST_ANNOUNCEMENT carrying
     // metadata.announcement_id, which is what lets the chronological feed
