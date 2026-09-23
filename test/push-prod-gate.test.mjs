@@ -48,9 +48,14 @@ test("it verifies the result instead of trusting the exit code", () => {
   assert.match(afterPush, /still not clean/, "and a dirty result fails");
 });
 
-test("it refuses from anywhere but a clean, in-sync main", () => {
-  assert.match(script, /branch !== "main"/);
-  assert.match(script, /origin\/main/);
+test("it identifies merged code by commit, not by branch name", () => {
+  // Checking for a branch literally named "main" made the gate unrunnable
+  // from a worktree: the shared checkout holds main, so a second worktree
+  // must be detached. The invariant is "exactly the merged commit", which is
+  // about HEAD, not about what a local ref is called.
+  assert.match(script, /head !== remote/, "it compares HEAD to origin/main");
+  assert.ok(!/branch !== "main"/.test(script),
+    "it must not refuse purely because the branch is not named main");
   assert.match(script, /working tree is not clean/);
 });
 

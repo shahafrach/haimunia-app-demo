@@ -18,11 +18,13 @@
 //
 // WHAT IT REFUSES, and why each one:
 //
-//   not on main, or out of sync with origin/main
-//       Production must only ever receive migrations that are merged. A push
-//       from a branch puts SQL in the database that no reviewer saw and that
-//       `check:drift` will then report as "applied but NOT in the repo" for
-//       everyone else, which reads as somebody having run SQL by hand.
+//   HEAD is not exactly origin/main
+//       Production must only ever receive migrations that are merged, exactly
+//       as merged. A push from a branch puts SQL in the database that no
+//       reviewer saw and that `check:drift` will then report as "applied but
+//       NOT in the repo" for everyone else, which reads as somebody having run
+//       SQL by hand. Checked by commit, not by branch name, so a detached
+//       worktree sitting on origin/main is fine - see the note at the check.
 //
 //   check-migration-versions fails
 //       Two files sharing a version prefix. Supabase keys schema_migrations
@@ -139,30 +141,41 @@ async function main() {
   say("");
 
   // ---- 1. the code being pushed must be merged code ----
-  say("Branch:");
-  const branch = await git("rev-parse", "--abbrev-ref", "HEAD");
-  if (branch !== "main") {
-    die(1, `  REFUSED: on "${branch}", not main.`, "",
-           "  Production only ever receives merged migrations. Merge the PR first,",
-           "  then run this from main.");
-  }
+  say("Revision:");
+  // WHAT IS ACTUALLY BEING CHECKED, and why it is not the branch name.
+  //
+  // The invariant production needs is "this is exactly the code that was
+  // merged", which is a statement about a COMMIT, not about what a local ref
+  // happens to be called. Checking for a branch literally named `main` looked
+  // equivalent and is not: the shared checkout holds `main`, so a second
+  // worktree cannot check it out at all, and `git worktree add --detach` is
+  // then the only way to work on merged code. Refusing that turned the gate
+  // into something only one working copy on the machine could ever run -
+  // found by trying to run it from a worktree, which is the house style
+  // precisely because several sessions share this repository.
+  //
+  // So: HEAD must equal origin/main. A branch called main that has drifted is
+  // refused; a detached HEAD sitting exactly on origin/main is fine.
   await run("git", ["fetch", "--quiet", "origin", "main"], { cwd: root }).catch(() => {});
-  const local = await git("rev-parse", "main");
+  const branch = await git("rev-parse", "--abbrev-ref", "HEAD");
+  const head = await git("rev-parse", "HEAD");
   const remote = await git("rev-parse", "origin/main");
-  if (local !== remote) {
-    const ahead = await git("rev-list", "--count", "origin/main..main");
-    const behind = await git("rev-list", "--count", "main..origin/main");
-    die(1, `  REFUSED: main is ${ahead} ahead / ${behind} behind origin/main.`, "",
-           "  Pull (or push) first. A migration pushed from a main that does not match",
-           "  the remote is SQL nobody else's repository contains.");
+  if (head !== remote) {
+    const ahead = await git("rev-list", "--count", `origin/main..HEAD`);
+    const behind = await git("rev-list", "--count", `HEAD..origin/main`);
+    die(1, `  REFUSED: HEAD is ${ahead} ahead / ${behind} behind origin/main.`, "",
+           `  HEAD   ${head.slice(0, 7)}${branch === "HEAD" ? " (detached)" : ` (${branch})`}`,
+           `  origin/main ${remote.slice(0, 7)}`, "",
+           "  Production only ever receives merged migrations, and only exactly as they",
+           "  were merged. Pull, or merge the PR first.");
   }
   const dirty = await git("status", "--porcelain");
   if (dirty) {
     die(1, "  REFUSED: the working tree is not clean.", "",
            dirty.split("\n").map((l) => "    " + l).join("\n"), "",
-           "  Commit or stash first — what is on disk is what gets applied.");
+           "  Commit or stash first - what is on disk is what gets applied.");
   }
-  say(`  main @ ${local.slice(0, 7)}, in sync with origin, clean`);
+  say(`  HEAD ${head.slice(0, 7)} == origin/main${branch === "HEAD" ? " (detached worktree)" : ` (${branch})`}, clean`);
   say("");
 
   // ---- 2. both guards ----
