@@ -4711,7 +4711,7 @@
             read `media`, this row predates it) and the comparison strip,
             which no typed card has. */""}
       ${postHeadHtml(post, {})}
-      ${post.photo_path && signedCacheGet(photoUrlCache, post.photo_path) ? `<img src="${signedCacheGet(photoUrlCache, post.photo_path)}" alt="" class="post-photo" onerror="window.__haimuniaEvictSignedUrl&&window.__haimuniaEvictSignedUrl('photo',this.dataset.k)" data-k="${esc(post.photo_path)}"/>` : ""}
+      ${post.photo_path && signedCacheGet(photoUrlCache, post.photo_path) ? `<img src="${signedCacheGet(photoUrlCache, post.photo_path)}" alt="${esc(post.title || "תמונה מהאימון")}" class="post-photo" data-evict="photo" data-k="${esc(post.photo_path)}"/>` : ""}
       <div class="post-result-block"><div class="post-title">${bidiText(post.title)}</div>
       <div class="mono post-result">${esc(post.result_text)}</div></div>
       ${postActionsHtml(post, { extra: post.comparison_key ? `<button class="chip-btn${state.posts.comparisonForPostId === post.id ? " selected" : ""}" data-community-action="compare" data-key="${esc(post.comparison_key)}" data-id="${esc(post.id)}">השוואה</button>` : "" })}
