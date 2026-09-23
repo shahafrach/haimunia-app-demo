@@ -46,7 +46,18 @@
 // call that function with today's retention window, and log/return the
 // counts it reports. Same shape `recap_weekly` already uses for
 // `recap_weekly_classmates()`.
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.4";
+//
+// STORAGE ERASURE (202609230002). This function also drains
+// public.storage_erasure_queue: the photos of every account deleted since the
+// last run, queued by a BEFORE DELETE trigger on auth.users. It lives here
+// rather than in a function of its own because this is the account-purge job
+// that already runs nightly with the service-role key, and the drain is the
+// second half of the same deletion. The SQL purge (purge-due-accounts) runs
+// at 03:29, two minutes before this, so a member purged tonight loses their
+// photos tonight. A row is cleared only after storage.remove() returns no
+// error for its batch; anything the API refused is retried the next night.
+// See drainStorageErasure() below.
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.57.4";
 
 // "Versioned": a change to the abandonment predicate in
 // public.purge_abandoned_profiles()'s WHERE clause (202609010004) must
@@ -96,6 +107,37 @@ function timingSafeEqualStrings(a: string, b: string): boolean {
     diff |= (aBytes[i] ?? 0) ^ (bBytes[i] ?? 0);
   }
   return diff === 0;
+}
+
+// Storage's remove() takes a list of paths per bucket. 100 per call keeps
+// each request small; STORAGE_BATCH_LIMIT caps one night's work so a very
+// large backlog is drained over several runs rather than timing out in one.
+const STORAGE_REMOVE_CHUNK = 100;
+const STORAGE_BATCH_LIMIT = 2000;
+
+async function drainStorageErasure(supabase: SupabaseClient) {
+  const { data, error } = await supabase.rpc("storage_erasure_pending", { p_limit: STORAGE_BATCH_LIMIT });
+  if (error) throw error;
+  const byBucket = new Map<string, string[]>();
+  for (const row of (data ?? []) as { bucket_id: string; object_name: string }[]) {
+    if (!byBucket.has(row.bucket_id)) byBucket.set(row.bucket_id, []);
+    byBucket.get(row.bucket_id)!.push(row.object_name);
+  }
+  let removed = 0;
+  let failed = 0;
+  for (const [bucket, names] of byBucket) {
+    for (let i = 0; i < names.length; i += STORAGE_REMOVE_CHUNK) {
+      const chunk = names.slice(i, i + STORAGE_REMOVE_CHUNK);
+      // A path that is already gone is not an error to Storage, so a rerun
+      // after a partial failure clears it rather than retrying forever.
+      const { error: removeErr } = await supabase.storage.from(bucket).remove(chunk);
+      if (removeErr) { failed += chunk.length; continue; }
+      const { error: doneErr } = await supabase.rpc("storage_erasure_done", { p_bucket: bucket, p_names: chunk });
+      if (doneErr) { failed += chunk.length; continue; }
+      removed += chunk.length;
+    }
+  }
+  return { queued: (data ?? []).length, removed, failed };
 }
 
 Deno.serve(async (req: Request) => {
@@ -152,13 +194,25 @@ Deno.serve(async (req: Request) => {
       success: data?.success ?? 0,
       failure: data?.failure ?? 0,
       retained_with_data: data?.retained_with_data ?? 0,
+      storage: { queued: 0, removed: 0, failed: 0, error: false },
     };
+
+    // After the purge, so objects queued by THIS run's deletions go tonight
+    // too. Its own try: a Storage outage must not turn a completed account
+    // purge into a reported failure, and must not hide one either.
+    try {
+      result.storage = { ...(await drainStorageErasure(supabase)), error: false };
+    } catch (_err) {
+      result.storage.error = true;
+      console.error(`purge_abandoned_profiles v${PURGE_VERSION}: storage erasure drain failed`);
+    }
     console.log(`purge_abandoned_profiles v${PURGE_VERSION}: run done`, {
       retention_days: result.retention_days,
       checked: result.checked,
       success: result.success,
       failure: result.failure,
       retained_with_data: result.retained_with_data,
+      storage: result.storage,
     });
     return new Response(JSON.stringify(result), { headers: { "Content-Type": "application/json" } });
   } catch (_err) {
