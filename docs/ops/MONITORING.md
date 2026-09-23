@@ -535,10 +535,14 @@ and cannot give you back:
 
 **What you do NOT get back:**
 
-- **Every uploaded photo.** `storage.objects` rows are *metadata*; the file
-  bytes live in the Storage backend and are not in this archive — the tar
-  contains three `.sql` files and nothing else. A project loss loses every
-  member photo and avatar, permanently. Nothing currently backs those up.
+- **Nothing, as of 2026-09-23 — photos are backed up now.** This bullet used
+  to say that every uploaded photo was lost with the project, because the
+  archive held three `.sql` files and nothing else. `scripts/backup-storage.mjs`
+  closed that: the archive now carries `storage/<bucket>/<uid>/<file>` plus a
+  manifest with a sha256 per object. Restore them with
+  `node scripts/backup-storage.mjs restore <extracted-dir>` **after** the
+  database, because the `storage.objects` rows must exist for the app to
+  reference them.
 - **Every live session.** `auth.users` restores, so accounts and passwords
   survive, but a new project has a different JWT secret: restored
   `auth.sessions` and `auth.refresh_tokens` are meaningless and every member
@@ -550,6 +554,64 @@ and cannot give you back:
 The photo gap is the largest unhandled risk in this plan and it is not
 theoretical: `PRIVACY.md` promises members their content, and a project loss
 would break that promise for every photo ever uploaded.
+
+### The photo half, and what it costs
+
+`supabase db dump` captures `storage.objects` **rows**, never the files. Until
+2026-09-23 that meant a perfect database restore left every photo pointing at
+bytes that no longer existed. `scripts/backup-storage.mjs` is the other half.
+
+```bash
+node scripts/backup-storage.mjs backup  <dir>          # download both buckets + manifest
+node scripts/backup-storage.mjs verify  <dir>          # count, size and sha256 per object
+node scripts/backup-storage.mjs restore <dir>          # upload them back
+node scripts/backup-storage.mjs restore <dir> --local  # ...into the LOCAL stack, for a drill
+```
+
+Run `backup` into the same directory as the three `.sql` files, before the tar
+and the encryption, so both halves are in one archive under one passphrase.
+
+**What it costs, measured 2026-09-23:**
+
+| | |
+|---|---|
+| Objects in production | 2 (`post-photos`; `avatar-photos` empty) |
+| Bytes | 2.51 MB |
+| Download time | ~8 s, nearly all CLI startup and two round trips |
+| Compression | **ratio 1.000** — JPEG does not compress |
+| Archive: before → after | 253 KB → **~2.76 MB** |
+
+The archive is now ~11× larger and **that growth is entirely photos**, at
+essentially 1 byte of archive per byte of photo. The bucket caps are 5 MB per
+post photo and 2 MB per avatar, so the arithmetic is simple and worth doing
+before it surprises anyone: 100 photos is roughly 250 MB, 1,000 is ~2.5 GB.
+If it ever outgrows what is practical to keep locally, the next move is
+incremental — the manifest already carries a sha256 per object, so "skip what
+the previous archive already holds" needs no new metadata.
+
+**The drill, run 2026-09-23.** `restore --local` uploads into the local stack's
+Storage rather than production, so a rehearsal is a rehearsal:
+
+1. `backup <dir>` from production
+2. `restore <dir> --local`
+3. `backup <round> --local`, then compare the two manifests by sha256
+
+**Result:** both objects restored and re-downloaded **byte-identical** (sha256
+and size), 0 missing, 0 corrupted.
+
+**That third step is not optional, and here is why.** The first version of the
+restore uploaded to `ss:///<bucket>`, and `supabase storage cp -r` appends the
+source directory's name — so every photo landed at
+`post-photos/post-photos/<uid>/<file>`, a path no database row references. It
+exited **0** and printed *"2 object(s) uploaded"*. A real recovery would have
+reported success and restored nothing usable. Only the round-trip comparison
+caught it.
+
+**Two caveats.** `supabase storage` needs `--experimental` in CLI 2.116.0, so
+this leans on a command that may change; the fallback is the Storage REST API,
+and the manifest format would not change. And `supabase storage rm` reported
+success while deleting nothing during the drill — do not rely on it to clean
+up.
 
 ### How often to back up, until the Actions quota resets 2026-10-01
 

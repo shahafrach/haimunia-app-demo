@@ -122,11 +122,13 @@ The procedure is `docs/ops/MONITORING.md` §7.
 Two things it found. **The backup is not self-contained**: it restores into a
 Supabase project, never a bare Postgres, because `schema.sql` carries no `auth`
 or `storage` schema while `data.sql` writes into both and 17 `public` foreign
-keys point at `auth.users`. And **uploaded photos are not backed up at all** —
-`storage.objects` rows are metadata; the bytes live in the Storage backend and
-are in no archive. A project loss would lose every member photo permanently,
-which is a promise `PRIVACY.md` makes. That is now the largest unhandled
-recovery risk and it has no owner yet.
+keys point at `auth.users`. And uploaded photos were not backed up at all —
+`storage.objects` rows are metadata and the bytes live in the Storage backend.
+**That is closed as of the same day**: `scripts/backup-storage.mjs` downloads
+both photo buckets into the encrypted archive with a sha256 manifest, and its
+own restore drill has been run — both objects restored into the local stack
+and re-downloaded byte-identical. It costs about 2.5 MB today and grows at one
+byte of archive per byte of photo, since JPEG does not compress.
 
 
 **The backup passphrase was lost and rotated on 2026-09-23.** A new
