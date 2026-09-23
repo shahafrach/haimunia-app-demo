@@ -209,13 +209,26 @@ test("S3: a correct password is not refused measurably later than a wrong one", 
 test("S3: the default floor is long enough to matter, and a success is never delayed by it", async () => {
   assert.match(cloudJs, /return Number\.isFinite\(v\) && v >= 0 \? v : 1500;/,
     "failures are held to 1.5s after the sign-in request by default");
+  // THE ONLY WALL-CLOCK UPPER BOUND IN THE SUITE, and it was the tightest
+  // thing in it: floor 3000ms, budget 2500ms, so a machine 1.2x slower than
+  // the author's failed a correct login. The assertion is real - a success
+  // must not serve the failure floor - so it stays; what changes is the
+  // MARGIN. With the floor at 30s and the bound at 10s, a regression that
+  // applies the floor overshoots by 3x and still fails, while a machine four
+  // times slower than this one still passes. The gap between "correct" and
+  // "broken" is now 3x rather than 1.2x, which is what makes it a test rather
+  // than a stopwatch race.
   const window = await bootCommunity(mockWith(), { syncEnabled: false });
-  window.MGMT_UNLOCK_FAILURE_FLOOR_MS = 3000;
+  window.MGMT_UNLOCK_FAILURE_FLOOR_MS = 30000;
   await openPanel(window, "tabManageBtn");
   const t0 = Date.now();
   submitGate(window, MGMT_EMAIL, ADMIN_STEP_UP_PASSWORD);
-  await waitFor(() => !window.document.getElementById("panelUnlock"), 2500);
-  assert.ok(Date.now() - t0 < 2500, "a correct, entitled login opens at once");
+  await waitFor(() => !window.document.getElementById("panelUnlock"), 10000,
+    5, "the management panel to open on a correct password");
+  const elapsed = Date.now() - t0;
+  assert.ok(elapsed < 10000,
+    `a correct, entitled login opens at once (took ${elapsed}ms; the failure floor is 30000ms, `
+    + "so anything near that means the floor is being served on success)");
 });
 
 // ------------------------------------------------ the existing guards still hold

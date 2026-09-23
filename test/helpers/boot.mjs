@@ -9,6 +9,7 @@ import { JSDOM } from "jsdom";
 import FDBFactory from "fake-indexeddb/lib/FDBFactory";
 import FDBKeyRange from "fake-indexeddb/lib/FDBKeyRange";
 import { COMMUNITY_FILES } from "./community-src.mjs";
+import os from "node:os";
 
 const testDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const root = path.dirname(testDir);
@@ -317,14 +318,65 @@ export function pickNotifPref(window, type, channel) {
   return select;
 }
 
-export function waitFor(check, timeoutMs = 2000, intervalMs = 5) {
+// EVERY waitFor DEADLINE IS WALL-CLOCK, AND THAT MAKES IT LOAD SENSITIVE.
+//
+// 1,982 call sites across 103 files poll a predicate against a real timeout.
+// jsdom boots the whole app per test, so the work behind a predicate is real;
+// when this machine is busy - two agent sessions and a Supabase stack is the
+// normal case here - the event loop starves, the deadline passes, and a test
+// whose CODE IS CORRECT fails. Six did exactly that on 2026-09-23, all five
+// files passing in isolation immediately afterwards.
+//
+// A flake is worse than a failure: it teaches whoever sees red to shrug. So
+// two changes, neither of which weakens a real assertion.
+//
+// NOT A CAUSE, checked and ruled out: a condition coming true "between polls"
+// was never lost. The loop evaluates check() BEFORE it tests the deadline, so
+// a predicate that turns true while the machine was starved is seen by the
+// next poll whenever that poll happens, however late. A post-deadline recheck
+// was written here first and removed after a negative test showed removing it
+// changed nothing - it could only ever have covered the microseconds between
+// two adjacent lines. The ordering is the property that matters and it is
+// pinned by waitfor-helper.test.mjs.
+//
+// (a) A SCALE FACTOR, so a loaded or slow machine can buy headroom without
+//     editing 1,982 numbers. HAIMUNIA_TEST_TIMEOUT_SCALE=4 quadruples every
+//     deadline. Default 1, so nothing changes unless someone asks.
+//
+// (b) AN ERROR THAT SAYS WHICH KIND OF RED THIS IS. The old message was
+//     "waitFor timed out" - indistinguishable from a genuine hang. The new
+//     one carries the elapsed time, the deadline, how many times it actually
+//     polled, and the 1-minute load average, plus the sentence that tells a
+//     reader what to do. A poll count far below elapsed/interval IS the
+//     starvation signature: the loop wanted to run every 5ms and could not.
+const TIMEOUT_SCALE = (() => {
+  const raw = Number(process.env.HAIMUNIA_TEST_TIMEOUT_SCALE);
+  return Number.isFinite(raw) && raw > 0 ? raw : 1;
+})();
+
+export function waitFor(check, timeoutMs = 2000, intervalMs = 5, label = "") {
+  const budget = timeoutMs * TIMEOUT_SCALE;
   const start = Date.now();
+  let polls = 0;
   return new Promise((resolve, reject) => {
     (function poll() {
       let result;
+      polls += 1;
       try { result = check(); } catch (e) { return reject(e); }
       if (result) return resolve(result);
-      if (Date.now() - start > timeoutMs) return reject(new Error("waitFor timed out"));
+      if (Date.now() - start > budget) {
+        const elapsed = Date.now() - start;
+        const wanted = Math.max(1, Math.round(elapsed / intervalMs));
+        const load = os.loadavg()[0].toFixed(2);
+        return reject(new Error(
+          `waitFor timed out${label ? ` waiting for ${label}` : ""} after ${elapsed}ms `
+          + `(deadline ${budget}ms${TIMEOUT_SCALE === 1 ? "" : `, scaled x${TIMEOUT_SCALE}`}); `
+          + `polled ${polls}/${wanted} times; loadavg ${load}. `
+          + "This deadline is WALL-CLOCK and therefore load sensitive: a poll count well "
+          + "below the wanted count means the event loop was starved, not that the app is "
+          + "broken. Re-run the file on its own before believing it; if it passes, the "
+          + "machine was busy. HAIMUNIA_TEST_TIMEOUT_SCALE=4 buys headroom everywhere."));
+      }
       setTimeout(poll, intervalMs);
     })();
   });
