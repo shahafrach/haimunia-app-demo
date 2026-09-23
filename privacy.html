@@ -126,8 +126,12 @@
     <h2>בקצרה</h2>
     <ul>
       <li><strong>יומן האימונים עובד על המכשיר שלכם.</strong> כל עוד לא שמרתם
-        אימון ולא נכנסתם לקהילה, שום מידע לא יוצא מהטלפון — לא בגלישה
-        באפליקציה, לא במסך הפתיחה ולא בבחירת תרגילים.</li>
+        אימון ולא נכנסתם לקהילה, שום נתון שלכם לא יוצא מהטלפון — לא בגלישה
+        באפליקציה, לא במסך הפתיחה ולא בבחירת תרגילים. טעינת האפליקציה עצמה כן
+        פונה לשרת שמארח אותה, בדיוק כמו כל אתר: בכל פתיחה הדפדפן מבקש את קבצי
+        האפליקציה ואת קובץ ההגדרות, ולכן Cloudflare רואה כתובת IP וסוג דפדפן.
+        מה שהיא לא מקבלת הוא מה שכתבתם — האימונים, התרגילים והמשקלים נשארים
+        אצלכם.</li>
       <li><strong>הגיבוי לענן מתחיל באימון הראשון שאתם שומרים — ואם נשאלתם
         עליו, רק אחרי שעניתם.</strong> אחרי האימון הראשון מופיע באפליקציה
         כרטיס ששואל "לגבות את האימונים לענן?". מי שראה את הכרטיס: האפליקציה
@@ -495,8 +499,9 @@
       <li><strong>Cloudflare Pages</strong> מגישה את קובצי האפליקציה עצמם (הקוד
         שרץ בדפדפן שלכם). היא לא מקבלת את החשבון או יומן האימונים שלכם.</li>
       <li><strong>שירות הגנה מפני בוטים</strong> (Cloudflare Turnstile)
-        <strong>מופעל</strong> מאז 17 בספטמבר 2026 במסכי פתיחת החשבון והכניסה.
-        Cloudflare מקבלת נתוני בקשה ודפדפן לצורך אימות שאתם לא בוט.</li>
+        <strong>מופעל</strong> מאז 17 בספטמבר 2026 במסכי פתיחת החשבון והכניסה,
+        וגם כשהגיבוי לענן נפתח בפעם הראשונה — אותו חשבון אנונימי נפתח דרך אותה
+        בדיקה. Cloudflare מקבלת נתוני בקשה ודפדפן לצורך אימות שאתם לא בוט.</li>
       <li><strong>שירותי התראות הדחיפה של הדפדפן.</strong> אם הפעלתם התראות
         דחיפה, כל התראה נמסרת לשירות הדחיפה של יצרן הדפדפן שלכם — Google בכרום
         וברוב הדפדפנים באנדרואיד, Apple בספארי ובאייפון, Mozilla בפיירפוקס —
@@ -661,9 +666,14 @@
       <h2>In short</h2>
       <ul>
         <li><strong>The training log runs on your device.</strong> Until you
-          save a workout or start joining the community, nothing leaves your
-          phone — not browsing the app, not the intro screens, not the
-          exercise picker.</li>
+          save a workout or start joining the community, none of your data
+          leaves your phone — not browsing the app, not the intro screens, not
+          the exercise picker. Loading the app itself does contact the server
+          hosting it, exactly like any website: every time you open it the
+          browser asks for the app's files and its configuration file, so
+          Cloudflare sees an IP address and a browser type. What it does not
+          receive is anything you wrote — the workouts, the exercises and the
+          weights stay with you.</li>
         <li><strong>Cloud backup starts at the first workout you save — and
           if you were asked about it, only once you answered.</strong> After
           that first workout the app shows a card asking "back your workouts
@@ -1111,8 +1121,10 @@
           training-log data.</li>
         <li><strong>A bot-protection service</strong> (Cloudflare Turnstile)
           has been <strong>enabled</strong> since 2026-09-17 on the sign-in and
-          account-creation screens. Cloudflare receives request and browser
-          data in order to verify that you are not a bot.</li>
+          account-creation screens, and also when cloud backup first starts —
+          the anonymous account it opens goes through the same check.
+          Cloudflare receives request and browser data in order to verify that
+          you are not a bot.</li>
         <li><strong>Your browser's web-push service.</strong> If you turned on
           push notifications, each notification is handed to the push service
           run by your browser's maker — Google for Chrome and most Android
