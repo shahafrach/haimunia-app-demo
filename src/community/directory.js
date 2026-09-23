@@ -990,7 +990,39 @@
   }
   function closeCommunityProfile() { state.members.profileView = null; rerender(); }
   function setProfileViewTab(tab) { if (state.members.profileView) { state.members.profileView.tab = tab; rerender(); } }
-  const PROFILE_ROLE_LABELS = { owner: "בעלים", admin: "מנהל/ת", staff: "צוות", head_coach: "מאמן/ת ראשי/ת", coach: "מאמן/ת", member: "חבר/ה" };
+  // N4. owner, admin and staff no longer carry a label here.
+  //
+  // 202609220006 settled that coaches, head coaches and owners are CLUBMATES
+  // and stay visible in the directory - hiding them would empty the one group
+  // the roster exists to show first. That is right, and it is a different
+  // question from what their badge says. Labelling a visible profile "בעלים"
+  // or "מנהל/ת" tells every member which account to aim at the management
+  // login, which is the one screen where a guessed username is worth anything.
+  //
+  // So: the people stay, the pointer goes. coach and head_coach keep their
+  // labels because those describe a relationship a member has with them - who
+  // to ask about a lift - rather than what that account can do to the club's
+  // data. An owner who coaches is still shown as a coach through their coach
+  // role; an owner who only owns now reads as an ordinary member, which is
+  // what they look like from the floor anyway.
+  //
+  // member stays mapped and stays unused by the renderer (profileRoleAndSince
+  // drops it as a duplicate of "חבר/ה מאז"); it is kept so the lookup below is
+  // total and an unknown role still falls through to the raw-role branch.
+  const PROFILE_ROLE_LABELS = { head_coach: "מאמן/ת ראשי/ת", coach: "מאמן/ת", member: "חבר/ה" };
+  // DELETING THE KEYS IS NOT ENOUGH, and the first version of this change got
+  // it wrong: both readers fall back to `esc(d.role)` when the map misses, so
+  // an unmapped owner rendered the RAW role string - the English word "owner"
+  // on a Hebrew profile, pointing at the same account even louder than before.
+  // An explicit set, and a lookup that returns "" for it, is what actually
+  // removes the label. Any FUTURE role nobody has mapped still falls through to
+  // the raw-role branch, which is the right default for a label that is merely
+  // missing rather than deliberately withheld.
+  const UNLABELLED_ROLES = new Set(["owner", "admin", "staff"]);
+  function profileRoleLabel(role) {
+    if (!role || UNLABELLED_ROLES.has(role)) return "";
+    return PROFILE_ROLE_LABELS[role] || esc(role);
+  }
   // "חבר/ה · חבר/ה מאז 15.9.2026" - the word twice, back to back.
   //
   // Live bug hunt, fresh round 2 (2026-09-15). The role label and the "member
@@ -1183,7 +1215,7 @@
     // wrap that fallback in <bdi>, and the identical member rendered
     // correctly in a search row, which does use it.
     const name = [d.first_name, d.last_name].filter(Boolean).join(" ") || d.display_name || (d.handle ? "@" + d.handle : "חבר/ה");
-    const roleLabel = PROFILE_ROLE_LABELS[d.role] || (d.role ? esc(d.role) : "");
+    const roleLabel = profileRoleLabel(d.role);
     const profileTabs = [
       { id: "overview", label: "סקירה" },
       { id: "progress", label: "התקדמות" },

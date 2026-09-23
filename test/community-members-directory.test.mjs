@@ -22,6 +22,7 @@ import { test } from "node:test";
 import assert from "node:assert";
 import { bootCommunity, waitFor } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
+import { readFileSync } from "node:fs";
 
 const VERIFIED = new Date().toISOString();
 
@@ -216,4 +217,55 @@ test("the people-you-may-know strip renders on the Directory tab", async () => {
   await openDirectory(window);
   await waitFor(() => !!window.document.querySelector('[data-people-suggestions="ready"]'), 4000);
   assert.match(window.document.querySelector('[data-people-suggestions="ready"]').textContent, /אנשים שאולי תכירו/);
+});
+
+// ---------------------------------------------------------------------------
+// N4 and the safe half of S5: what a member-facing surface says about staff.
+// ---------------------------------------------------------------------------
+test("N4: a visible owner or admin carries no role badge pointing at the account", () => {
+  const src = readFileSync(new URL("../src/community/directory.js", import.meta.url), "utf8");
+
+  // 202609220006 settled that these people STAY in the directory - they are
+  // clubmates. This is about the badge, not the row.
+  assert.match(src, /UNLABELLED_ROLES = new Set\(\["owner", "admin", "staff"\]\)/,
+    "owner, admin and staff must be explicitly unlabelled");
+  assert.doesNotMatch(src, /owner:\s*"בעלים"/, "the owner label must be gone");
+  assert.doesNotMatch(src, /admin:\s*"מנהל\/ת"/, "the admin label must be gone");
+
+  // The relationship labels stay: they tell a member who to ask about a lift,
+  // which is not the same as naming who can reach the club's data.
+  assert.match(src, /head_coach:\s*"מאמן\/ת ראשי\/ת"/, "head coach keeps its label");
+  assert.match(src, /coach:\s*"מאמן\/ת"/, "coach keeps its label");
+});
+
+test("N4: THE FALLTHROUGH - an unlabelled role must not leak the raw role string", () => {
+  // The first version of this change simply deleted the three keys, and both
+  // readers fall back to esc(d.role) on a miss - so an owner rendered the
+  // English word "owner" on a Hebrew profile, pointing at the same account
+  // more loudly than the label it replaced. Deleting keys is not withholding.
+  const src = readFileSync(new URL("../src/community/directory.js", import.meta.url), "utf8");
+  assert.doesNotMatch(src, /PROFILE_ROLE_LABELS\[d\.role\]\s*\|\|\s*\(d\.role/,
+    "the renderer must not fall through to the raw role for a withheld one");
+  assert.match(src, /function profileRoleLabel\(role\)/, "a single lookup owns the decision");
+  assert.match(src, /if \(!role \|\| UNLABELLED_ROLES\.has\(role\)\) return "";/,
+    "and it returns empty for a withheld role rather than falling through");
+  // A role nobody has mapped yet is merely missing, not withheld, so it should
+  // still fall through - that distinction is the point of the explicit set.
+  assert.match(src, /return PROFILE_ROLE_LABELS\[role\] \|\| esc\(role\);/,
+    "an unknown future role still falls through to the raw-role branch");
+});
+
+test("S5: the management gate no longer inventories the staff tooling to members", () => {
+  // Both management rows are offered to every member on purpose
+  // (desktop-layout.mjs:344), so this gate's copy is member-facing text. It
+  // used to list what is behind it: bug reports, the action log, permissions,
+  // password resets, moderation, member removal.
+  const src = readFileSync(new URL("../src/community/admin.js", import.meta.url), "utf8");
+  for (const leak of ["דיווחי התקלות", "יומן הפעולות", "ההרשאות ואיפוס הסיסמאות",
+                      "מוסיפים ומסירים חברים", "המודרציה"]) {
+    assert.ok(!src.includes(`body: "כאן`) || !src.includes(leak),
+      `the unlock copy still names "${leak}" to any member who opens it`);
+  }
+  assert.match(src, /title: "אזור צוות"/, "the gate names itself neutrally");
+  assert.doesNotMatch(src, /title: "אזור ניהול האפליקציה"/, "and no longer by function");
 });
