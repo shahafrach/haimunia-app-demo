@@ -43,7 +43,17 @@ const BLOCKED_PREFIXES = [
   // design mockups. Nothing in index.html references either.
   "/.claude/",
   "/mockups/",
+  // Launch-readiness S11, second half: a stale root copy of the club photos.
+  // The app loads its photos from /assets/photos/ and /assets/club-photos/
+  // (sw.js precache, index.html); nothing references /photos/.
+  "/photos/",
 ];
+
+// Exact top-level files. The npm manifest and its lockfile are tooling for
+// the test suites - the app never fetches them, and they publish the dev
+// dependency tree and script names. Exact paths, not a suffix rule: a .json
+// suffix rule would take /manifest.json with it.
+const BLOCKED_PATHS = new Set(["/package.json", "/package-lock.json"]);
 
 // Top-level notes and runbooks. Matched by extension rather than by name so a
 // new one does not have to be remembered - which is how join-qr.png got
@@ -53,6 +63,7 @@ const BLOCKED_SUFFIXES = [".md", ".sql", ".mjs"];
 function isBlocked(pathname) {
   const p = pathname.toLowerCase();
   if (BLOCKED_PREFIXES.some((prefix) => p.startsWith(prefix))) return true;
+  if (BLOCKED_PATHS.has(p)) return true;
   // Only at the top level: /src/*.mjs is app code and must keep serving.
   if (p.lastIndexOf("/") === 0 && BLOCKED_SUFFIXES.some((s) => p.endsWith(s))) return true;
   return false;
