@@ -20,6 +20,16 @@
 // A file that existed there and differs now is a rewrite of applied
 // history. A file that did not exist there is new, and is fine.
 //
+// AND every file that existed at the merge base must still exist. Comparing
+// only the files present today cannot see a deletion - the file is not in the
+// list to be compared - so a rename passed this check for as long as it had
+// one. Deleting an applied migration is the worse half of the same bug: the
+// schema_migrations row outlives the file that explains it.
+//
+// Two files sharing a version is a third way the ledger breaks, and it is
+// checked separately by scripts/check-migration-versions.mjs, which needs no
+// git history and therefore cannot skip itself.
+//
 // Deliberately compares against the MERGE BASE, not against HEAD~1: a
 // feature branch that legitimately adds several migrations over several
 // commits must not trip this on its own additions.
@@ -33,6 +43,42 @@ const MIGRATIONS = path.join(root, "supabase", "migrations");
 
 function git(args, opts = {}) {
   return execFileSync("git", args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], ...opts }).trim();
+}
+
+// Pure, so node --test can exercise the rule without building a git history.
+// Everything above and below this pair is I/O; this is the actual judgement.
+export function findMissing(namesAtBase, namesNow) {
+  const now = new Set(namesNow);
+  return namesAtBase.filter((n) => !now.has(n));
+}
+
+// When a migration disappears, saying where it went turns "a migration
+// vanished" into the one-line fact the author needs instead of a diff to go
+// and read.
+//
+// ONLY A FILE THAT IS NEW CAN BE THE RENAME TARGET, and that restriction is
+// the whole correctness of this function. Matching on "some other file has
+// this version" is wrong precisely in the case that matters: during a version
+// collision the twin sharing the version is a DIFFERENT, long-standing
+// migration, and pointing at it would tell the author their file was renamed
+// to somebody else's. Filtering to files absent from the merge base removes
+// that class of wrong answer entirely.
+//
+// Suffix first (a renumbering keeps the descriptive name - #54's shape), then
+// version (a re-description keeps the number). Ambiguity yields null: no hint
+// is better than a confident wrong one.
+export function renameHintFor(missingName, namesNow, namesAtBase = []) {
+  const atBase = new Set(namesAtBase);
+  const added = namesNow.filter((n) => n !== missingName && !atBase.has(n));
+  const suffixOf = (s) => s.replace(/^\d+_/, "");
+
+  const bySuffix = added.filter((n) => suffixOf(n) === suffixOf(missingName));
+  if (bySuffix.length === 1) return bySuffix[0];
+
+  const v = /^(\d+)_/.exec(missingName)?.[1];
+  if (!v) return null;
+  const byVersion = added.filter((n) => n.startsWith(`${v}_`));
+  return byVersion.length === 1 ? byVersion[0] : null;
 }
 
 function resolveBase() {
@@ -54,11 +100,17 @@ function resolveBase() {
   return null;
 }
 
-const base = resolveBase();
-if (!base) {
+// node --test imports this file for findMissing/renameHintFor; only walk the
+// repository when it is the entry point. Same convention as
+// check-migration-drift.mjs.
+const isEntryPoint = import.meta.url === `file://${process.argv[1]}`;
+
+const base = isEntryPoint ? resolveBase() : null;
+if (isEntryPoint && !base) {
   console.log("check-migration-immutability: no base branch found (shallow clone or a fresh repo) - skipping.");
   process.exit(0);
 }
+if (isEntryPoint) {
 
 let mergeBase;
 try {
@@ -67,6 +119,15 @@ try {
   console.log(`check-migration-immutability: no merge base with ${base} - skipping.`);
   process.exit(0);
 }
+
+// Everything that was a migration at the merge base. Walking THIS rather than
+// the working tree is what makes a deletion visible - see the block below.
+const namesAtBase = git(["ls-tree", "--name-only", `${mergeBase}`, "supabase/migrations/"])
+  .split("\n")
+  .map((l) => l.trim())
+  .filter((l) => l.endsWith(".sql"))
+  .map((l) => path.basename(l))
+  .sort();
 
 const violations = [];
 for (const name of fs.readdirSync(MIGRATIONS).filter((f) => f.endsWith(".sql")).sort()) {
@@ -81,6 +142,46 @@ for (const name of fs.readdirSync(MIGRATIONS).filter((f) => f.endsWith(".sql")).
   }
   const current = fs.readFileSync(path.join(MIGRATIONS, name), "utf8");
   if (current !== committed) violations.push(rel);
+}
+
+// A MIGRATION THAT VANISHED, which the loop above structurally cannot see.
+//
+// It iterates the files PRESENT in the working tree, so a file that was
+// deleted is not in the list and is never compared to anything. Renaming one
+// is a delete plus an add: the new name is "not present at the merge base:
+// fine", the old name is not iterated at all, and the whole thing passes.
+//
+// That is not hypothetical. #54 renamed 202609220007_an_announcement_... to
+// 202609220008_... and this check printed OK. The rename was correct - that
+// migration had never been applied - but the check had no opinion either way,
+// which is the part worth fixing. Deleting an APPLIED migration is worse than
+// editing one: production keeps the schema_migrations row forever, the file
+// that explains it is gone, and `supabase db reset` rebuilds a local database
+// that no longer matches the project it is meant to mirror.
+const namesNow = new Set(fs.readdirSync(MIGRATIONS).filter((f) => f.endsWith(".sql")));
+const missing = namesAtBase.filter((n) => !namesNow.has(n));
+
+if (missing.length && process.env.ALLOW_MIGRATION_EDITS !== "1") {
+  console.error("check-migration-immutability: FAILED\n");
+  console.error("These migrations existed at the merge base and are now gone:\n");
+  for (const m of missing) {
+    const renamedTo = renameHintFor(m, [...namesNow], namesAtBase);
+    console.error(`  - supabase/migrations/${m}${renamedTo ? `   (renamed to ${renamedTo}?)` : ""}`);
+  }
+  console.error(`
+Supabase records an applied migration by version in
+supabase_migrations.schema_migrations and never looks at the file again.
+Deleting or renaming the file does not undo the migration: production keeps
+the row and the schema it produced, while the repository no longer contains
+the thing that produced it. A local \`supabase db reset\` then builds a
+database that production does not match, and nothing reports a difference.
+
+If the migration has genuinely never been applied anywhere - check with
+\`supabase migration list --linked\` and look for a local version whose
+remote column is empty - then removing or renumbering it is safe and is
+sometimes the only fix, as it was for the duplicate 202609220007. Say so
+explicitly in the PR and re-run with ALLOW_MIGRATION_EDITS=1.`);
+  process.exit(1);
 }
 
 if (violations.length && process.env.ALLOW_MIGRATION_EDITS !== "1") {
@@ -99,4 +200,8 @@ ALLOW_MIGRATION_EDITS=1.`);
   process.exit(1);
 }
 
-console.log(`check-migration-immutability: OK (compared against ${base} at ${mergeBase.slice(0, 8)})`);
+console.log(
+  `check-migration-immutability: OK (${namesAtBase.length} migrations at the merge base, ` +
+  `none edited, none missing; compared against ${base} at ${mergeBase.slice(0, 8)})`,
+);
+}
