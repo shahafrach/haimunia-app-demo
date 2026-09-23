@@ -393,6 +393,196 @@ then fix the heartbeat.
 
 ---
 
+## 7. Backups, and the restore drill
+
+### The backup is NOT self-contained
+
+State this first because everything else depends on it, and because the
+opposite is the natural assumption:
+
+**These backups restore into a Supabase project, not into a bare PostgreSQL
+database.** `schema.sql` creates **no schemas at all** and defines no `auth`
+or `storage` tables — `supabase db dump` deliberately excludes the
+Supabase-managed ones. But `data.sql` writes into all three:
+
+| schema | INSERT statements | comes from |
+|---|---|---|
+| `public` | 30 | `schema.sql` — the irreplaceable part |
+| `auth` | 5 | **must already exist in the target** |
+| `storage` | 2 | **must already exist in the target** |
+
+and **17 foreign keys in `public` reference `auth.users`**. Restore into an
+empty database and it dies on the first statement of the auth block with
+`relation "auth.users" does not exist`, after the whole of `public` has
+loaded — which looks like a corrupt backup and is not one.
+
+### The drill, verified 2026-09-23
+
+Run it against a scratch database inside the local container. It never touches
+the `postgres` database the local stack uses.
+
+```bash
+# 1. Decrypt into a locked-down directory. Nothing is written in the clear
+#    anywhere else, and the directory is shredded at the end.
+D=$(mktemp -d); chmod 700 "$D"
+cd ~/haimunia-backups
+gpg --batch --quiet --decrypt --passphrase-file ~/.haimunia-backup-passphrase \
+    haimunia-db-backup-<STAMP>.tar.gz.gpg | tar -xzf - -C "$D"
+
+PG=supabase_db_haimunia-app-demo
+
+# 2. A scratch database, and the Supabase-managed schemas the backup assumes.
+#    On a real recovery a new project provides these; locally, borrow their
+#    STRUCTURE (not their data) from the running stack.
+docker exec $PG psql -U postgres -d postgres -c "create database haimunia_drill"
+docker exec $PG pg_dump -U postgres -d postgres --schema-only \
+       --schema=auth --schema=storage -f /tmp/managed.sql
+docker exec $PG psql -U postgres -d haimunia_drill -f /tmp/managed.sql
+
+# 3. Restore.
+docker cp "$D/schema.sql" $PG:/tmp/schema.sql
+docker cp "$D/data.sql"   $PG:/tmp/data.sql
+docker exec $PG psql -U postgres -d haimunia_drill -v ON_ERROR_STOP=0 -f /tmp/schema.sql
+docker exec $PG psql -U postgres -d haimunia_drill -v ON_ERROR_STOP=1 \
+  -c "SET session_replication_role = replica;" \
+  -f /tmp/data.sql \
+  -c "SET session_replication_role = DEFAULT;"
+```
+
+**Then verify, and do not accept an exit code as the verification.**
+`session_replication_role = replica` skips the foreign-key trigger at insert
+time *and leaves the constraint marked valid*, so a broken reference is
+present and undetected. The only way to know is to look at every one:
+
+```sql
+do $$
+declare r record; v_sql text; v_bad bigint; v_total int := 0; v_viol int := 0;
+begin
+  for r in
+    select con.conname, con.conrelid::regclass::text as child,
+           con.confrelid::regclass::text as parent,
+           (select string_agg(quote_ident(a.attname), ',' order by x.ord)
+              from unnest(con.conkey) with ordinality x(attnum, ord)
+              join pg_attribute a on a.attrelid=con.conrelid and a.attnum=x.attnum) as ccols,
+           (select string_agg(quote_ident(a.attname), ',' order by x.ord)
+              from unnest(con.confkey) with ordinality x(attnum, ord)
+              join pg_attribute a on a.attrelid=con.confrelid and a.attnum=x.attnum) as pcols
+      from pg_constraint con
+      join pg_class c on c.oid=con.conrelid
+      join pg_namespace n on n.oid=c.relnamespace
+     where con.contype='f' and n.nspname='public'
+  loop
+    v_total := v_total + 1;
+    v_sql := format('select count(*) from %s ch where (%s) is not null and not exists (select 1 from %s pa where (%s) = (%s))',
+      r.child, r.ccols, r.parent,
+      (select string_agg('pa.'||p, ',') from unnest(string_to_array(r.pcols,',')) p),
+      (select string_agg('ch.'||c2, ',') from unnest(string_to_array(r.ccols,',')) c2));
+    begin execute v_sql into v_bad; exception when others then continue; end;
+    if v_bad > 0 then
+      v_viol := v_viol + 1;
+      raise notice 'ORPHANS % in % (% -> %)', v_bad, r.conname, r.child, r.parent;
+    end if;
+  end loop;
+  raise notice '--- checked % foreign keys; % with orphans ---', v_total, v_viol;
+end $$;
+```
+
+Finally, drop it and shred the plaintext:
+
+```bash
+docker exec $PG psql -U postgres -d postgres -c "drop database haimunia_drill"
+docker exec $PG bash -c 'shred -u /tmp/schema.sql /tmp/data.sql /tmp/managed.sql'
+shred -u "$D"/*.sql; rm -rf "$D"
+```
+
+**Result on 2026-09-23**, against `haimunia-db-backup-20260923T045538Z`:
+schema 0 errors, 67 tables; all 30 `public` and all 5 `auth` inserts loaded;
+**138 foreign keys checked, 0 orphans**; `workout_posts` joins `profiles` on
+`author_id` and returns rows. Two things did NOT pass, both recorded below.
+
+### Two known failures in the drill, neither fatal
+
+**`storage` does not restore into the local stack.** The load stops at
+`storage.buckets` with `column "lifecycle_configuration" does not exist` —
+production's Storage version is newer than the local Supabase image. The two
+`storage` statements are the LAST in `data.sql`, so nothing in `public` is
+lost; but a local drill will always end there, and a restore into an older
+project would fail the same way.
+
+**The circular foreign keys were not actually exercised.** The
+`session_replication_role` dance exists for `profiles.assigned_coach_id` and
+`post_comments.parent_comment_id`. In this backup `assigned_coach_id` is set
+on **0 rows** and `post_comments` is **empty**, so that hazard was never hit.
+The machinery is correct; the data did not test it. Re-check this once the
+club has real coaching assignments and comment threads.
+
+### If the project itself is gone
+
+The worst case, and the one the drill does not rehearse. What this backup can
+and cannot give you back:
+
+1. **Create a new Supabase project.** It arrives with `auth` and `storage`
+   already present, which is the prerequisite `schema.sql` does not carry.
+2. **Apply the migrations, not `schema.sql`** — `supabase db push` against the
+   new project. `supabase/migrations/` is the authoritative schema and is in
+   git; `schema.sql` is a snapshot of one moment and has no ordering story.
+3. **Load `data.sql`** with `session_replication_role = replica`, then run the
+   orphan check above before believing it.
+4. **Re-point the app.** `cloud-config.js` carries `supabaseUrl` and the
+   publishable key; both change with the project ref. So does every Vault
+   secret (§4), the `SUPABASE_DB_URL` backup secret, and the
+   `admin_reset_password` CORS allowlist.
+
+**What you do NOT get back:**
+
+- **Every uploaded photo.** `storage.objects` rows are *metadata*; the file
+  bytes live in the Storage backend and are not in this archive — the tar
+  contains three `.sql` files and nothing else. A project loss loses every
+  member photo and avatar, permanently. Nothing currently backs those up.
+- **Every live session.** `auth.users` restores, so accounts and passwords
+  survive, but a new project has a different JWT secret: restored
+  `auth.sessions` and `auth.refresh_tokens` are meaningless and every member
+  signs in again.
+- **Anything since the last backup.** The RPO is the age of the newest
+  artifact, which while backups are manual is however long ago you last ran
+  one.
+
+The photo gap is the largest unhandled risk in this plan and it is not
+theoretical: `PRIVACY.md` promises members their content, and a project loss
+would break that promise for every photo ever uploaded.
+
+### How often to back up, until the Actions quota resets 2026-10-01
+
+The scheduled job (`backup-database.yml`, six days a week plus a Sunday drill)
+has not run since 2026-09-19 and cannot until **2026-10-01**. Until then it is
+`~/haimunia-backups/backup-now.sh`, by hand. It prompts for the passphrase and
+the database URL rather than reading them from the environment, so neither
+reaches your shell history.
+
+**Twice a week — Sunday and Wednesday — plus one immediately before any
+migration push that touches data.**
+
+The reasoning, since a cadence with no reasoning gets abandoned:
+
+- The club is pre-launch and quiet. The newest backup holds 4 profiles, 4
+  posts and 15 private records; a lost day costs little **today** and costs
+  more every week members actually train.
+- The concentrated risk is not time, it is **change**. Eight migrations
+  reached production on 2026-09-23 alone. A backup taken five minutes before a
+  migration that alters or deletes data is worth more than six taken on quiet
+  days — so take one before those, and not before the function-only ones,
+  which are the majority here and carry no data risk.
+- Twice a week caps the worst case at ~3–4 days of training logs, which is
+  recoverable from members' own devices if it ever came to it: the training log
+  is offline-first and lives on the phone.
+
+**Set a reminder for 2026-10-01** to confirm the scheduled job resumed. A
+backup job that silently stopped is exactly the failure §1 exists for — and
+`scheduled-job-alert` will not tell you, because `backup-database.yml` is not
+a pg_cron job.
+
+---
+
 ## What is deliberately NOT monitored
 
 No third-party APM, error-tracking SDK, or analytics vendor is wired in, and
