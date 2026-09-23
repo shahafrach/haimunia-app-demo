@@ -188,18 +188,26 @@ last column there is no way to tell an approved push from an assumed one.
 | 2026-09-23 ~05:0x | `202609220006`, `202609220007` | session A | session A's user, per-push | `supabase db push` |
 | 2026-09-23 ~05:5x | `202609220008` | session A | session A's user, per-push | `supabase db push` |
 | 2026-09-23 ~06:1x | `202609230001`, `202609230002` | session A | session A's user, per-push | `supabase db push` |
-| 2026-09-23 (unrecorded) | `202609230003` | **not recorded** | **not recorded** | — |
+| 2026-09-23 ~07:4x | `202609230003` | session B | session B's user, per-push after reading the statement summary | `supabase db push --linked --yes` |
 | 2026-09-23 (before 10:00) | `202609230004`, `202609230005` | session B | session B's user — but `…04` was session A's migration and session A's user had not approved it (see below) | `npm run push:prod` |
 | 2026-09-23 11:2x | `202609230006`, `202609230007` | session A | session A's user, after reading the `--dry-run` plan | `npm run push:prod --yes` |
+| 2026-09-23 ~11:5x | `202609230008` | session B | session B's user, per-push, having been told the board would go red | `npm run push:prod --yes` |
 
-Pending, committed and **not** applied: `202609230008`.
+Nothing pending: `check:drift` reads **192 migrations, repo and database
+agree**.
 
 ### Two things this log exists because of
 
-**`202609230003` has no entry.** It is applied to production and nobody
-recorded who pushed it or on whose approval. It was reconstructed from
-`supabase migration list --linked`, which is why the row says so rather than
-guessing. That gap is the whole argument for the table.
+**`202609230003` had no entry when this log was written.** It was applied to
+production and nothing recorded who pushed it or on whose approval; the row
+was reconstructed from `supabase migration list --linked`, which can say only
+that it IS applied. It has since been filled in by the session that pushed it
+— session B, on its own user's approval, before `push:prod` existed, with
+`supabase db push --linked --yes` directly.
+
+That it could be filled in at all is luck: the operator was still in the room.
+A day later nobody would have been able to, and the row would have stayed
+`not recorded` forever. That gap is the whole argument for the table.
 
 **A migration was pushed on the wrong user's approval.** `202609230004` was
 written by session A and pushed by session B, bundled with session B's own
