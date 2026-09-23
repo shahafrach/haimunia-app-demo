@@ -112,6 +112,22 @@ server, and the phone gets a real pass"*. The short version:
 
 ## Open, deliberately
 
+**The multi-role smoke test has run against production — one role of five.**
+Launch-readiness **S9**. `npm run smoke-test-multi-role` (the script existed;
+the npm entry did not) checks each real role's boundary over the network
+against the live project. The **anonymous** role passes: a fresh anonymous
+session reads zero `profiles` rows, zero `private_records` rows, and is
+refused `admin_grant_coach`.
+
+The other four — member, coach, admin, and a posting-restricted member — are
+**SKIP, not pass**, and the script says so in as many words. Each needs a
+throwaway account provisioned in whatever project it points at, and the script
+warns "never a real club's real data". Our production *is* the real club, so
+creating four accounts in it is the owner's call, not a step to take quietly.
+Until then those four boundaries have been proven by pgTAP against a local
+database and never against the live project.
+
+
 **The restore drill has been run — 2026-09-23.** Launch-readiness **S19** is
 closed for the database and open for Storage. `haimunia-db-backup-20260923T045538Z`
 was decrypted with the current passphrase and restored into a scratch database:

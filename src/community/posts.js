@@ -847,7 +847,18 @@
 
   function renderPrPostCard(post) {
     const m = post.metadata || {};
-    const movement = m.movement || m.movement_name || post.title || "שיא אישי";
+    // COMM-105 / S17. movement/movement_name resolve only for a CUSTOM lift -
+    // the built-in library lives in the client, so the server records
+    // movement_id (202609230009) and the name is looked up here, out of the
+    // same library every other screen uses. Without this the common case, a
+    // PR on a built-in lift, announced itself as the post-type label: every
+    // squat PR in the feed read "שיא אישי" and nothing else.
+    let movement = m.movement || m.movement_name || post.title || "";
+    if (!movement && m.movement_id && typeof movementById === "function") {
+      const mv = movementById(m.movement_id);
+      if (mv && mv.name) movement = mv.name;
+    }
+    if (!movement) movement = "שיא אישי";
     const rows = [
       ["תוצאה חדשה", m.new_result || m.new_value],
       ["תוצאה קודמת", m.previous_result || m.previous_value],

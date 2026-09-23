@@ -570,6 +570,28 @@
       setMessage("ההעתקה נכשלה, אפשר להעתיק ידנית");
     }
   }
+  // Launch-readiness N5. A per-person invite with no expiry typed never
+  // expires - a link that opens the club, live forever, usually pasted into a
+  // chat the club does not control. Nobody chose that: it is what an optional
+  // field does when it is left blank.
+  //
+  // Thirty days, PRE-FILLED rather than enforced. Staff can clear it or
+  // change it, because a legitimately open-ended invite is a real thing (a
+  // printed card on the wall). What changes is the default: the safe answer
+  // is the one you get by not thinking about it, and the unsafe one now takes
+  // a deliberate edit.
+  //
+  // <input type="date"> wants YYYY-MM-DD in LOCAL time. toISOString() is UTC,
+  // so for a club at UTC+3 it lands on the previous day for three hours every
+  // evening - the kind of off-by-one nobody notices until an invite expires a
+  // day early.
+  function inviteExpiryDefault(daysAhead = 30) {
+    const d = new Date();
+    d.setDate(d.getDate() + daysAhead);
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
+
   const INVITE_STATUS_FILTERS = [
     { id: "all", label: "הכול" }, { id: "pending", label: "ממתין" }, { id: "redeemed", label: "מומש" },
     { id: "revoked", label: "בוטל" }, { id: "expired", label: "פג תוקף" },
@@ -677,7 +699,7 @@
     const form = `<form id="communityInviteCodeCreate" class="chart-card" style="margin-bottom:10px;">
       <h3 class="field-label" style="margin-bottom:6px;">קוד הצטרפות משותף חדש</h3>
       ${field("communityInviteCodeCreate", "maxUses", "מקסימום שימושים", `<input class="text-input" name="maxUses" type="number" min="1" max="1000" placeholder="100"/>`)}
-      ${dateField("communityInviteCodeCreate", "expiresAt", "תפוגה (רשות)", `<input class="text-input" name="expiresAt" type="date"/>`)}
+      ${dateField("communityInviteCodeCreate", "expiresAt", "תפוגה (ברירת מחדל: 30 יום)", `<input class="text-input" name="expiresAt" type="date" value="${inviteExpiryDefault()}"/>`)}
       <button class="chip-btn primary" type="submit" style="margin-top:6px;">יצירת קוד</button>
     </form>`;
     let list;
@@ -747,7 +769,7 @@
         ${admin ? `<label class="flex gap-6" style="align-items:center;"><input type="radio" name="role" value="coach"/> מאמן/ת</label>` : `<span class="footer-note">הזמנת מאמן/ת זמינה רק למנהל/ת</span>`}
       </div>
       ${field("communityInviteCreate", "label", "תווית (רשות)", `<input class="text-input" name="label" maxlength="120" placeholder="למשל: שם המוזמן/ת"/>`)}
-      ${dateField("communityInviteCreate", "expiresAt", "תפוגה (רשות)", `<input class="text-input" name="expiresAt" type="date"/>`)}
+      ${dateField("communityInviteCreate", "expiresAt", "תפוגה (ברירת מחדל: 30 יום)", `<input class="text-input" name="expiresAt" type="date" value="${inviteExpiryDefault()}"/>`)}
       <button class="chip-btn primary" type="submit" style="margin-top:6px;">יצירת הזמנה</button>
     </form>`;
     const filters = `<div class="chip-row" style="margin:0 0 10px;">${INVITE_STATUS_FILTERS.map((s) => `<button class="chip-btn${iv.status === s.id ? " selected" : ""}" data-community-action="invite-status-filter" data-status="${s.id}">${s.label}</button>`).join("")}</div>`;
@@ -4328,7 +4350,12 @@
       <div class="modal-sheet" style="border-radius:22px;max-height:none;">
         <div style="padding:24px 22px calc(env(safe-area-inset-bottom,0px) + 20px);">
           <h2 id="reportSheetTitle" style="margin-top:0;color:var(--chalk);font-weight:800;font-size:17px;margin-bottom:12px;">דיווח על ${s.targetType === "comment" ? "תגובה" : "פוסט"}</h2>
-          <div class="log-list">${reasons}</div>
+          ${/* N14. The radios are native and already arrow-key selectable
+               because they share a name - what was missing is that a screen
+               reader announced five unrelated radios rather than one choice
+               of five. role="radiogroup" plus the heading as its label is the
+               whole fix; the interaction was never broken. */""}
+          <div class="log-list" role="radiogroup" aria-labelledby="reportSheetTitle">${reasons}</div>
           <label class="field" style="margin-top:12px;"><span class="field-label">פרטים נוספים (רשות)</span>
             <textarea class="text-input" data-report-note maxlength="500" placeholder="אפשר להוסיף הקשר">${esc(s.note || "")}</textarea></label>
           ${s.error ? `<div class="footer-note" role="alert" style="color:var(--red-text);">${esc(s.error)}</div>` : ""}

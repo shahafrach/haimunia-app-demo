@@ -1,5 +1,17 @@
 # Threat model — Haimunia community PWA
 
+> **SUPERSEDED IN PART (2026-09-23): this document describes GitHub Pages as
+> the host. It is not.** The site moved to Cloudflare Pages on 2026-09-16, so
+> every statement below about the host, about response headers being
+> impossible, or about `github.io` as the origin, describes the situation when
+> this was written and not the situation now. See
+> [`docs/ops/MONITORING.md`](../ops/MONITORING.md) and
+> [`docs/PROJECT_STATUS.md`](../PROJECT_STATUS.md) for what is true today.
+>
+> The body is left verbatim on purpose: it is a dated record of an audit, and
+> editing its findings to match a later world would destroy the thing that
+> makes it worth keeping.
+
 Security/threat-modeling audit stream. Built from source: 108 migrations,
 3 Edge Functions, `cloud.js`, `app.js`, `index.html`, `sw.js`,
 `cloud-config.js`, `supabase/config.toml`. No live system was touched.

@@ -8,34 +8,14 @@
 > natively, so the file this document calls inert is now live and the gap it
 > describes is closed by the move rather than by any of the options below.
 >
-> **Verify before trusting this line**, since nobody has re-measured the
-> headers since the move: `curl -sI https://haimunia-app.pages.dev | grep -i
-> 'x-frame-options\|content-security-policy'`. Everything from here down is
-> the original decision, left in place as the record of why the app spent ten
-> days without those headers.
->
-> **DECISION (2026-09-06): staying on GitHub Pages. This is not being done.**
->
-> The gap below is real and remains open, deliberately. Two reasons:
->
-> 1. **Option A as originally written does not apply to this project.**
->    Cloudflare cannot be put in front of `haimuniya.github.io` — it has to
->    be authoritative DNS for the zone, and nobody here controls `github.io`.
->    Proxying Pages requires owning a custom domain first. That was an error
->    in this document and is corrected below.
-> 2. **Moving hosts changes the ORIGIN, and this app is offline-first.**
->    The IndexedDB training log (`haimunia-demo-db`), the `haimunia-demo:*`
->    localStorage keys, the Cache Storage entries and the installed PWA are
->    all origin-scoped. Moving to `*.pages.dev` or a new domain means every
->    existing member opens an empty app — their data still on the device,
->    just unreachable. For a training log that is a worse outcome than the
->    P3 it would fix.
->
-> `_headers` is kept in the repo. It is inert on Pages and costs nothing,
-> and it means the day a custom domain does exist this is already done.
->
-> **Revisit if:** a custom domain is acquired (cheapest to migrate *before*
-> members accumulate local data), or the clickjacking surface grows.
+> **Measured 2026-09-23, and the headers are live.** `curl -sI` against
+> production returns `x-frame-options: DENY`,
+> `content-security-policy: frame-ancestors 'none'`,
+> `x-content-type-options: nosniff` and `referrer-policy: no-referrer`, on
+> `/`, `/index.html` and `/manifest.json` alike — so they survive the
+> Functions middleware, which was the open question (launch-readiness S10).
+> The gap this document describes is closed and verified, not merely assumed
+> closed by the move.
 
 Launch-readiness audit, SEC-014 (and the header half of SEC-015's
 mitigation).
