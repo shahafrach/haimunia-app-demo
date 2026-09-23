@@ -14,6 +14,7 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import { bootApp, waitFor } from "./helpers/boot.mjs";
+import { readFileSync } from "node:fs";
 
 // Live bug hunt, round 9 (2026-09-11): exportData() is now async
 // (buildBackupPayload() reads session notes off IndexedDB before
@@ -95,4 +96,24 @@ test("the footer's no-backup-yet warning clears once a real export happens", asy
   window.render();
 
   assert.ok(!window.document.body.textContent.includes("עדיין לא ביצעתם גיבוי"), "exporting should clear the no-backup-yet reminder");
+});
+
+// N9 / SEC-L8. The export note already said the file is plain JSON and to keep
+// it somewhere safe. What it did not say is where the file actually goes and
+// who else can reach it: a browser download lands in the device's Downloads
+// folder and stays there, so on a shared phone - the case this warning exists
+// for - anyone who uses the device afterwards can open a full training log,
+// bodyweight and measurements. "Keep it somewhere safe" is advice about where
+// to PUT it; this is about where it already is.
+test("N9: the export note warns about a shared device and says to clear the download", () => {
+  const appJs = readFileSync(new URL("../app.js", import.meta.url), "utf8");
+  const note = /קובץ הגיבוי הוא טקסט פשוט \(JSON\)[^<]*/.exec(appJs);
+  assert.ok(note, "the export note is still rendered next to the button");
+  const text = note[0];
+  assert.match(text, /תיקיית ההורדות/, "it says where the file lands");
+  assert.match(text, /במכשיר משותף/, "it names the shared-device case explicitly");
+  assert.match(text, /מחקו אותו מההורדות/, "and tells the member what to do about it");
+  // The existing facts must survive: this is an addition, not a rewrite.
+  assert.match(text, /טקסט פשוט \(JSON\)/, "still says the file is plain text");
+  assert.match(text, /בלי השם שלכם/, "still says the name is not in it");
 });
