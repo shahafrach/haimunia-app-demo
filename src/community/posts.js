@@ -309,10 +309,24 @@
     const authorId = !authorless && post && post.author_id;
     // COMM-160. Same coach badge the comments carry, on the post author.
     const roleBadge = authorId ? coachBadgeHtml(memberRole(authorId)) : "";
-    const nameInner = `${esc(name)}${roleBadge ? " " + roleBadge : ""}`;
-    const nameHtml = authorId
-      ? `<button class="post-author link-btn" data-community-action="view-profile" data-id="${esc(authorId)}" style="padding:0;font:inherit;color:inherit;font-weight:800;">${nameInner}</button>`
-      : `<div class="post-author">${nameInner}</div>`;
+    // THE NAME AND THE BADGE ARE SIBLINGS NOW, not a badge nested inside the
+    // name. Measured on a 390px phone: the badge was inside the name's own
+    // <button>, so "מאמן/ת ראשי/ת" wrapped to a second line WITH the name and
+    // picked up .link-btn's underline on the way. As a sibling in a flex row
+    // it is `flex:0 0 auto` - it never shrinks, never wraps - and the name
+    // beside it is free to ellipse on one line (.post-author-row,
+    // index.html). The title attribute is what gives back what the ellipsis
+    // takes away, for a mouse; the full name is in the DOM either way, so a
+    // screen reader was never reading the truncation.
+    //
+    // The inline style block is gone rather than trimmed: `font:inherit`
+    // there was silently overriding .post-author's own font-size, and every
+    // other property it set is now in the class, where the ellipsis rules it
+    // has to cooperate with also live.
+    const nameLink = authorId
+      ? `<button class="post-author link-btn" data-community-action="view-profile" data-id="${esc(authorId)}" title="${esc(name)}">${esc(name)}</button>`
+      : `<div class="post-author" title="${esc(name)}">${esc(name)}</div>`;
+    const nameHtml = `<div class="post-author-row">${nameLink}${roleBadge}</div>`;
     return `<div class="post-head">${avatar}<div class="post-head-text">${nameHtml}<div class="post-time">${esc(relativeTime(postTimestamp(post)))}${postTypeTagHtml(post, opts)}</div></div>${opts.hideMenu ? "" : postMenuHtml(post)}</div>`;
   }
 
@@ -400,9 +414,18 @@
       const pinned = isPinnedTarget("post", post.id);
       items += `<button class="post-menu-item" role="menuitem" data-community-action="${pinned ? "unpin" : "pin"}" data-type="post" data-id="${id}">${pinned ? "ביטול הצמדה" : "הצמדה למעלה"}</button>`;
     }
+    // aria-haspopup="menu", not "true": "true" is the legacy alias for
+    // "menu" and says nothing about WHICH pattern opens, and this one really
+    // is a menu - role="menu" with role="menuitem" children, arrow keys and
+    // Escape (see the keydown handler in cloud.js). aria-controls points the
+    // screen reader at the panel the button owns, and the panel is labelled
+    // by the button, so it is announced as "עוד פעולות, תפריט" rather than
+    // as an unnamed group of buttons.
+    const menuId = `postMenu-${id}`;
+    const btnId = `postMenuBtn-${id}`;
     return `<div class="post-menu-wrap">
-      <button class="chip-btn" data-community-action="toggle-post-menu" data-id="${id}" aria-haspopup="true" aria-expanded="${open ? "true" : "false"}" aria-label="עוד פעולות">⋯</button>
-      ${open ? `<div class="post-menu" role="menu">${items}</div>` : ""}
+      <button class="chip-btn" id="${btnId}" data-community-action="toggle-post-menu" data-id="${id}" aria-haspopup="menu" aria-expanded="${open ? "true" : "false"}" aria-controls="${menuId}" aria-label="עוד פעולות">⋯</button>
+      ${open ? `<div class="post-menu" id="${menuId}" role="menu" aria-labelledby="${btnId}" data-post-menu="${id}">${items}</div>` : ""}
     </div>`;
   }
 
@@ -428,7 +451,7 @@
     return `<div class="chip-row post-actions">
       <button class="chip-btn reaction-pill${mine ? " is-mine" : ""}" data-community-action="cheer" data-id="${id}" aria-pressed="${mine ? "true" : "false"}" aria-label="עידוד, ${reactions} עידודים">${DUMBBELL_ICON}<span class="reaction-count">${reactions}</span></button>
       ${typeof reactionSummaryHtml === "function" ? reactionSummaryHtml(post) : ""}
-      ${isModuleEnabled("comments") ? `<button class="chip-btn" data-community-action="toggle-comments" data-id="${id}" aria-label="תגובות, ${comments}">💬 ${comments}</button>` : ""}
+      ${isModuleEnabled("comments") ? `<button class="chip-btn comment-pill" data-community-action="toggle-comments" data-id="${id}" aria-label="תגובות, ${comments}">${FEED_ICONS.comment}<span class="reaction-count">${comments}</span></button>` : ""}
       ${opts.extra || ""}
     </div>`;
   }
@@ -1414,9 +1437,62 @@
   }
 
   // ---- Per-post action menu (COMM-108) ----------------------------------
+  // FOCUS IS PART OF THE MENU, not an extra.
+  //
+  // rerender() rebuilds the tab with one innerHTML write, so the button that
+  // was just tapped no longer exists by the time this returns - which on a
+  // keyboard left focus on <body> with a menu open and nothing to arrow
+  // through, and left it on <body> again when the menu closed. Opening moves
+  // focus to the first item (what role="menu" promises), closing puts it back
+  // on the button that owns the menu, which is where a keyboard user expects
+  // to be when a popup goes away.
+  //
+  // Both lookups are by id and both are guarded: rerender() is synchronous
+  // here, but a caller that closes a menu from a screen where the card is no
+  // longer rendered must not throw.
+  function focusPostMenuFirstItem(id) {
+    const menu = document.getElementById(`postMenu-${id}`);
+    const first = menu && menu.querySelector(".post-menu-item");
+    if (first) try { first.focus(); } catch (e) { /* not focusable in this engine */ }
+  }
+  function focusPostMenuButton(id) {
+    const btn = document.getElementById(`postMenuBtn-${id}`);
+    if (btn) try { btn.focus(); } catch (e) { /* not focusable in this engine */ }
+  }
   function togglePostMenu(id) {
-    state.posts.openMenu = state.posts.openMenu === id ? null : id;
+    const wasOpen = state.posts.openMenu === id;
+    state.posts.openMenu = wasOpen ? null : id;
     rerender();
+    if (wasOpen) focusPostMenuButton(id);
+    else focusPostMenuFirstItem(id);
+  }
+  // Arrow-key movement inside an open menu, and the close that returns focus.
+  // Called from cloud.js's one document keydown listener - there is no second
+  // listener attached per render, which a rebuilt-on-every-render DOM would
+  // otherwise accumulate.
+  function postMenuKeydown(e) {
+    const id = state.posts.openMenu;
+    if (!id) return false;
+    const menu = document.getElementById(`postMenu-${id}`);
+    if (!menu) return false;
+    if (e.key === "Escape") {
+      state.posts.openMenu = null;
+      rerender();
+      focusPostMenuButton(id);
+      return true;
+    }
+    const items = [...menu.querySelectorAll(".post-menu-item")];
+    if (!items.length) return false;
+    const at = items.indexOf(document.activeElement);
+    let next = -1;
+    if (e.key === "ArrowDown") next = at < 0 ? 0 : (at + 1) % items.length;
+    else if (e.key === "ArrowUp") next = at <= 0 ? items.length - 1 : at - 1;
+    else if (e.key === "Home") next = 0;
+    else if (e.key === "End") next = items.length - 1;
+    if (next < 0) return false;
+    e.preventDefault();
+    try { items[next].focus(); } catch (err) { /* not focusable in this engine */ }
+    return true;
   }
   async function postSaveToggle(postId) {
     if (!state.user) return;

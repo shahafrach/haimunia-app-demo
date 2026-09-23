@@ -79,10 +79,21 @@ file for the split.) None was flipped, and none should be without new work:
 
 | ID | Status | Why it stays |
 |---|---|---|
-| COMM-337 | `todo` | The only genuinely open ticket. Real clickjacking headers need the site off GitHub Pages (which cannot set response headers) or behind an edge layer. Mitigated, not closed: `frame-guard.js` ships a client-side frame-buster and `_headers` is staged for whichever host reads it. A hosting decision, not code. |
+| COMM-337 | `todo` | The hosting decision this waited on was made: the site moved from GitHub Pages to Cloudflare Pages on 2026-09-16, and `_headers` (`X-Frame-Options: DENY`, `frame-ancestors 'none'`) is now read by the host; `index.html`'s CSP comment records SEC-014 as closed. Not flipped here only because the live response headers were not re-measured in this pass (`curl -sI https://haimunia-app.pages.dev/` is the check). |
 | COMM-143 | `partial` | Notification types that depend on attendance stay parked with the attendance decision. |
-| COMM-351, COMM-353, COMM-354 | `partial` | Cross-repo design-token reconciliation against `haimunia-app`, which is outside this workspace. **Unverifiable from here** — not claimed either way rather than guessed. |
-| COMM-368 | `partial` | Same reason: extracting shared safety helpers into a package both repos consume needs the other repo. |
+| COMM-351, COMM-353, COMM-354 | `partial` | Cross-repo design-token reconciliation against the sibling app `crossfit-pwa-Noam`, which is outside this workspace. See the 2026-09-22 re-read below: this repo's half of all three is done. |
+| COMM-368 | `partial` | Same reason: extracting shared safety helpers into a package both repos consume needs the other repo. This repo's half is done. |
+
+**Re-read 2026-09-22 — what is done, and the one line that remains for each.**
+The canonical value of every one of these is chosen and shipped in this repo,
+and each ticket file carries the exact diff for the other side. What is left
+is one change in a repository this workspace does not have (the sibling
+values below are as last read there, 2026-09-04; not re-read in this pass):
+
+- **COMM-351** — done here (`--shadow-card` rim-plus-soft-drop, both themes, `index.html`); remains: apply the ticket's three-line diff to the sibling app's `index.html` so `.card` elevation matches.
+- **COMM-353** — done here (`.page-title` in Anton/400 with tracking); remains: apply the ticket's `.page-title` rule change in the sibling app, which already ships the Anton font.
+- **COMM-354** — done here (`--steel` `#57627A` light / `#A8B3C9` dark, clearing 4.5:1); remains: move the sibling app off `#68748C` / `#8891A6`, which fail AA.
+- **COMM-368** — done here (`src/shared/safe-helpers.js`, `@boxlog/safe-helpers`, now v1.2.0, the only definition in this repo); remains: the sibling app consuming that module instead of its own copies in `app.js`, which also finishes the version-bump propagation path.
 
 COMM-303 was left exactly as it was — its status cell already carries its own
 qualifier ("storage and reader only; the derivation is NOT built"), which is

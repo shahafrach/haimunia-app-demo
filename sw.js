@@ -4,8 +4,9 @@
 // hand: run `npm run sync-version` (see app.js) to copy it here.
 const SW_VERSION = "4.77.0";
 // "haimunia-demo-v..." — deliberately distinct from the production app's
-// own "haimunia-v..." cache prefix. Both service workers are scoped to
-// the same origin (haimuniya.github.io), and the activate handler below
+// own "haimunia-v..." cache prefix. Both service workers were once scoped
+// to one origin (haimuniya.github.io, before the move to Cloudflare Pages
+// on 2026-09-16) and could be again, and the activate handler below
 // deletes any Cache Storage entry that isn't the current CACHE name —
 // with a shared prefix, this demo's own cleanup could delete the real
 // app's cached assets (Cache Storage is origin-wide, not scoped per SW).

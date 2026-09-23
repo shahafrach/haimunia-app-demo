@@ -450,6 +450,10 @@
   function onCommentInput(input) {
     const key = input.dataset.commentKey;
     state.engagement.commentDrafts[key] = input.value;
+    // The send icon appears with the first character and goes away with the
+    // last one. Patched in place, never rendered: see commentComposerHtml().
+    const form = input.form || input.closest("form");
+    if (form) form.setAttribute("data-has-text", input.value.trim() ? "1" : "0");
     const caret = input.selectionStart == null ? input.value.length : input.selectionStart;
     // The "@" picker is switchable from the admin panel (2026-09-15). With
     // mentions off, an @ is just a character: no picker, no lookup request,
@@ -702,10 +706,41 @@
     const err = state.engagement.commentErrors[key];
     const sending = state.engagement.commentSending === key;
     const reply = !!parentId;
+    // ONE SEND AFFORDANCE, INSIDE THE FIELD, AND ONLY ONCE THERE IS TEXT.
+    //
+    // This was a filled orange .chip-btn sitting beside the input in a
+    // flex-wrap row. On a 390px phone the input and the button do not fit on
+    // one line, so the button wrapped underneath - which put a full-width
+    // primary CTA reading "שליחה" under EVERY card in the feed, including the
+    // ones whose comment box was empty and whose button could therefore do
+    // nothing at all. A control that is always shown and usually inert is
+    // not a call to action; it is furniture.
+    //
+    // It is the same <button type="submit"> as before - the submit handler,
+    // Enter in the field, the sending state and the disabled attribute are
+    // all untouched - drawn as an icon inside the field's own trailing edge
+    // and shown only when the draft has something in it.
+    //
+    // The button is positioned against the FORM rather than against a
+    // wrapper of its own: the form's only in-flow child is the input (the
+    // @-picker beside it is absolute), so the form's box IS the field's box
+    // and a wrapper would have been one more element on every card of a
+    // thirty-card feed for nothing - see community-render-cost.mjs, which
+    // holds a frame budget over exactly this.
+    //
+    // WHY data-has-text RATHER THAN RENDERING THE BUTTON CONDITIONALLY:
+    // onCommentInput() deliberately does NOT rerender on every keystroke (a
+    // render rebuilds the tab with one innerHTML write and would take the
+    // caret with it - see the coalesced-rerender comment in cloud.js), so
+    // the button has to be in the DOM already and CSS has to decide whether
+    // it shows. The attribute is set here for the first paint and flipped in
+    // place by onCommentInput() for every keystroke after it.
+    const hasText = !!draft.trim();
+    const sendLabel = reply ? "שליחת תשובה" : "שליחת תגובה";
     return `${err ? `<div class="field-error" role="alert" style="margin:6px 0 4px;">${esc(err)} <button class="link-btn" data-community-action="comment-retry" data-post="${esc(postId)}"${reply ? ` data-parent="${esc(parentId)}"` : ""}>ניסיון חוזר</button></div>` : ""}
-      <form data-comment-post-id="${esc(postId)}"${reply ? ` data-comment-parent-id="${esc(parentId)}"` : ""} class="flex gap-6" style="margin-top:8px;position:relative;flex-wrap:wrap;">
+      <form data-comment-post-id="${esc(postId)}"${reply ? ` data-comment-parent-id="${esc(parentId)}"` : ""} class="comment-form" data-has-text="${hasText ? "1" : "0"}" data-comment-form-key="${esc(key)}">
         <input class="text-input" name="body" data-comment-input data-comment-key="${esc(key)}" autocomplete="off" maxlength="${COMMENT_BODY_MAX}" placeholder="${reply ? "השבה לתגובה" : "הוספת תגובה"}" aria-label="${reply ? "השבה לתגובה" : "הוספת תגובה"}" value="${esc(draft)}"/>
-        <button class="chip-btn primary" type="submit"${sending ? " disabled" : ""}>${sending ? "שולח…" : reply ? "השבה" : "שליחה"}</button>
+        <button class="comment-send" type="submit"${sending ? " disabled" : ""} aria-label="${sending ? "שולח…" : sendLabel}" title="${esc(sending ? "שולח…" : sendLabel)}">${FEED_ICONS.send}</button>
         ${mentionPickerHtml(key)}
       </form>`;
   }

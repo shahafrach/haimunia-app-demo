@@ -180,7 +180,13 @@
     const staff = hasPerm(PERM.EVENT_MANAGE);
     const upcoming = state.events.items.filter((e) => isUpcomingEvent(e) || (staff && e.status === "draft"));
     const past = state.events.items.filter(isPastEvent).slice().sort((a, b) => (a.start_at < b.start_at ? 1 : -1));
-    const createBtn = staff ? `<button class="chip-btn primary" data-community-action="open-event-form" style="margin-bottom:10px;">אירוע חדש</button>` : "";
+    // .secondary, the twin of renderChallengesListSection's own create
+    // button - both sit on the Boards tab, and two solid-orange create
+    // buttons stacked above the member's real controls is exactly the "wall
+    // of orange" .chip-btn.secondary was added for. Read its comment in
+    // index.html before changing either of them; changing one alone is the
+    // drift this repo keeps paying for.
+    const createBtn = staff ? `<button class="chip-btn secondary" data-community-action="open-event-form" style="margin-bottom:10px;">אירוע חדש</button>` : "";
     const list = (state.events.loading && !state.events.loaded)
       ? `<div aria-busy="true">${`<div class="chart-card" style="height:64px;background:var(--border);opacity:.35;margin-bottom:10px;"></div>`.repeat(2)}</div>`
       : state.events.error

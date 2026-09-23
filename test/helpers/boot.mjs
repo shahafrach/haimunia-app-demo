@@ -280,6 +280,43 @@ export function chooseFeedScope(window, scope) {
   return select;
 }
 
+// The notification preference control, since 202609220006's UI pass.
+//
+// Each type used to be a stacked block of two or three .chip-btn buttons
+// carrying data-community-action="notif-pref" + data-channel, and forty-five
+// assertions across five test files reached for one of those buttons by
+// channel and either clicked it or read "selected" off its className. It is
+// now ONE <select> per type with the same three channel values - so these
+// three helpers exist for exactly the reason chooseFeedScope() above does:
+// the next change to this control should have one shape to update, not
+// forty-five.
+//
+// notifPrefControl  - the row's control, or null when that type is not shown
+//                     (the staffOnly rows for a plain member).
+// notifPrefOption   - one channel's <option>, or null when that channel is
+//                     not offered at all (push, while the module flag is off).
+// notifPrefValue    - the channel the control currently reads.
+// pickNotifPref     - choose a channel the way a member does.
+export function notifPrefControl(window, type) {
+  return window.document.querySelector(`[data-notif-pref-select][data-type="${type}"]`);
+}
+export function notifPrefOption(window, type, channel) {
+  const select = notifPrefControl(window, type);
+  if (!select) return null;
+  return [...select.options].find((o) => o.value === channel) || null;
+}
+export function notifPrefValue(window, type) {
+  const select = notifPrefControl(window, type);
+  return select ? select.value : null;
+}
+export function pickNotifPref(window, type, channel) {
+  const select = notifPrefControl(window, type);
+  if (!select) throw new Error(`the ${type} notification preference is not on screen`);
+  select.value = channel;
+  select.dispatchEvent(new window.Event("change", { bubbles: true }));
+  return select;
+}
+
 export function waitFor(check, timeoutMs = 2000, intervalMs = 5) {
   const start = Date.now();
   return new Promise((resolve, reject) => {
@@ -309,7 +346,7 @@ export function waitFor(check, timeoutMs = 2000, intervalMs = 5) {
 export const ADMIN_STEP_UP_PASSWORD = "Aa123456789!";
 // The management account's address. A fixed, obviously-fake value: the real
 // one lives only in Supabase Auth and must never appear in this repo, which
-// GitHub Pages serves in full to anyone who asks.
+// the host serves from its root - every committed file is a URL.
 export const ADMIN_STEP_UP_EMAIL = "manage@example.test";
 export function seedAdminStepUp(mock, userId, email) {
   if (mock && typeof mock.seedCredentials === "function") {

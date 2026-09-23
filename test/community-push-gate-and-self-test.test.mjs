@@ -26,7 +26,7 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import fs from "node:fs";
-import { bootCommunity, waitFor } from "./helpers/boot.mjs";
+import { bootCommunity, waitFor, notifPrefControl, pickNotifPref } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
 
 const VERIFIED = new Date().toISOString();
@@ -87,11 +87,14 @@ async function openAccount(window) {
   window.document.getElementById("tabCommunityBtn").click();
   await waitFor(() => !!window.document.querySelector(".subtabbar"), 4000);
   window.document.querySelector('[data-community-action="set-tab"][data-tab="account"]').click();
-  await waitFor(() => !!window.document.querySelector('[data-community-action="notif-pref"]'), 4000);
+  await waitFor(() => !!notifPrefControl(window, "mentions"), 4000);
 }
 
-const pushBtn = (window, type = "mentions") =>
-  window.document.querySelector(`[data-community-action="notif-pref"][data-type="${type}"][data-channel="push"]`);
+// The push CHOICE, since the preference rows became one <select> each -
+// picking it is what used to be a click on the push button. Both halves of
+// the old control are still reachable: the option's existence (it is omitted
+// entirely while the module flag is off) and choosing it.
+const choosePush = (window, type = "mentions") => pickNotifPref(window, type, "push");
 
 // ===== the gate =======================================================
 
@@ -122,7 +125,7 @@ test("outside the installed app the prompt is refused, with a visible reason ins
   const calls = stubPush(window, { standalone: false });
   await openAccount(window);
 
-  pushBtn(window).click();
+  choosePush(window);
   await waitFor(() => window.document.body.textContent.includes("להוסיף את האפליקציה למסך הבית"), 4000);
   assert.equal(calls.requestPermission, 0, "the one prompt a browser ever gives is not spent in a tab");
   assert.equal(mock.db.push_subscriptions.length, 0);
@@ -158,7 +161,7 @@ test("a member who has joined the community is earned even with an empty trainin
   const calls = stubPush(window, { logged: 0 });
   await openAccount(window);
 
-  pushBtn(window).click();
+  choosePush(window);
   await waitFor(() => mock.db.push_subscriptions.length === 1, 4000);
   assert.equal(calls.requestPermission, 1, "asked exactly once, from the press");
 });
@@ -186,7 +189,7 @@ test("a denial is recorded - the one answer push_opt_in structurally cannot see"
   // prompt row is what carries the answer.
   window.Notification.requestPermission = async () => { window.Notification.permission = "denied"; return "denied"; };
 
-  pushBtn(window).click();
+  choosePush(window);
   await waitFor(() => events(mock, "push_permission").some((r) => r.props.source === "prompt"), 4000);
 
   const prompt = plain(events(mock, "push_permission").find((r) => r.props.source === "prompt").props);
@@ -202,14 +205,14 @@ test("a grant is recorded once per distinct status, so a re-render of the panel 
   await openAccount(window);
   window.Notification.requestPermission = async () => { window.Notification.permission = "granted"; return "granted"; };
 
-  pushBtn(window).click();
+  choosePush(window);
   await waitFor(() => mock.db.push_subscriptions.length === 1, 4000);
   await waitFor(() => events(mock, "push_permission").some((r) => r.props.status === "granted"), 4000);
 
   const before = events(mock, "push_permission").length;
   // A second type routed through the same device re-renders the whole panel
   // and does not re-prompt; it must not re-record either.
-  pushBtn(window, "comment_on_post").click();
+  choosePush(window, "comment_on_post");
   await waitFor(() => mock.db.notification_preferences.some((r) => r.type === "comment_on_post" && r.channel === "push"), 4000);
   assert.equal(events(mock, "push_permission").length, before, "same status, same source, no second row");
 });
@@ -232,7 +235,7 @@ test("app_opened carries display_mode and platform, once per page load, and neve
   window.document.getElementById("tabCommunityBtn").click();
   await waitFor(() => !!window.document.querySelector(".subtabbar"), 4000);
   window.document.querySelector('[data-community-action="set-tab"][data-tab="account"]').click();
-  await waitFor(() => !!window.document.querySelector('[data-community-action="notif-pref"]'), 4000);
+  await waitFor(() => !!notifPrefControl(window, "mentions"), 4000);
   assert.equal(events(mock, "app_opened").length, 1);
 });
 

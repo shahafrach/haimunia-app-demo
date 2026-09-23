@@ -361,6 +361,13 @@
       // other surface a member is shown.
       roles: {},
       blockedIds: [], blocksLoaded: false, profileView: null,
+      // 202609220006. The management accounts THIS caller must not be shown,
+      // as the server answered them - empty for a staff viewer, because
+      // management_user_ids() applies the staff exemption itself rather than
+      // leaving the client to re-derive it. Same load-once-then-filter-at-
+      // render shape as blockedIds above; see isManagementAccount() in
+      // src/community/directory.js for why that is the shape.
+      managementIds: [], managementLoaded: false,
       // Live bug hunt (2026-09-11): blockedIds merges BOTH directions (who I
       // blocked AND who blocked me) into one set, by design, for the
       // comment/reaction-hiding check (isBlockedUser()) - it never needed to
@@ -949,15 +956,29 @@
       // names but does not itself carry a display name for: the published
       // member once published is non-null, and last week's member so the
       // free-selection form can name them in its grey-out note rather than a
-      // coach discovering the rule by hitting it. pickHandle/pickReason are
-      // the free-selection ("coach's pick") form's two inputs, read only at
-      // publish time - no rerender on input, the same no-focus-loss shape
-      // welcome's assignDrafts/contactDrafts already use; the live
-      // character counter under the reason field is DOM-patched directly on
-      // input instead, the same way composerSetBody's own counter is. busy
-      // holds the user_id of whichever candidate publish is in flight, or the
-      // literal "pick" for the free-selection form's own publish.
-      memberOfWeek: { loading: false, loaded: false, error: false, envelope: null, publishedProfile: null, previousProfile: null, pickHandle: "", pickReason: "", busy: null, publishErr: "" },
+      // coach discovering the rule by hitting it.
+      //
+      // THE FREE-SELECTION ("coach's pick") FORM'S OWN FIELDS. pickReason is
+      // the typed reason, read only at publish time - no rerender on input,
+      // the same no-focus-loss shape welcome's assignDrafts/contactDrafts
+      // already use; the live character counter under it is DOM-patched
+      // directly on input instead, the same way composerSetBody's own counter
+      // is. The member half used to be pickHandle, a free-text username a
+      // coach had to already know and spell; it is now a real picker, and
+      // these five fields are what that costs:
+      //   pickQuery     what is typed in the search box (never sent as-is)
+      //   pickResults   community_search's members group for that query, or
+      //                 null when the suggestions come from the roster the
+      //                 Directory tab already loaded
+      //   pickSearching a request is in flight, so "no matches" is not yet
+      //                 an honest thing to say
+      //   pickUserId    the chosen member - the ONLY thing publish reads
+      //   pickChosen    that member's {display_name, handle, avatar_url} for
+      //                 the chosen row, so the choice survives a rerender
+      //                 without a second profiles read
+      // busy holds the user_id of whichever candidate publish is in flight,
+      // or the literal "pick" for the free-selection form's own publish.
+      memberOfWeek: { loading: false, loaded: false, error: false, envelope: null, publishedProfile: null, previousProfile: null, pickQuery: "", pickResults: null, pickSearching: false, pickUserId: null, pickChosen: null, pickReason: "", busy: null, publishErr: "" },
       // COMM-309. Coach Dashboard's sixth section: the monthly club recap
       // staff preview. row is a single monthly_club_recaps row - the newest
       // month, draft or published, exactly as RLS hands it to a staff/
@@ -1848,8 +1869,17 @@
   // Hebrew count word) whose base direction is stated RTL rather than
   // inferred. Every `.mono` readout in this file and in src/community/*.js
   // that puts a Hebrew word next to a number needs it - `.mono` declares
-  // `direction:ltr`, which is right for a bare number and wrong for
-  // "12 ימים ברצף". See the "CONTAINER level" section in safe-helpers.js.
+  // `direction:ltr`, which is right for a bare number and wrong the moment a
+  // Hebrew word joins it (a challenge's "5 / 3 שבועות", a post's
+  // "40% מהיעד הושלמו"). See the "CONTAINER level" section in
+  // safe-helpers.js.
+  //
+  // The example that used to stand here was the feed's own streak chip, and
+  // it is no longer an example of anything: streakDaysHtml() puts only the
+  // digits inside `.mono`, so that row needs no isolation at all.
+  // test/community-feed-polish.test.mjs scans this whole file for the old
+  // phrasing and fails on it, comment or code - correctly, because a stale
+  // example in a comment is how the old shape gets copied back in.
   // `var`, like bidiText directly above and for the identical reason: app.js
   // binds the same helper at ITS top level, and these two classic scripts
   // share one global lexical environment. `var` + `var` binding the identical
@@ -2151,7 +2181,7 @@
       // that at read time now (see weeklyChallengeIsValid), so there is no
       // ordering left to preserve and no reason to serialise a round trip in
       // front of thirteen parallel ones.
-      await Promise.all([loadPermissions(), loadFeed(), loadStreaks(), loadAnnouncements(), loadWeeklyChallenge(), loadClubWods(), loadClubWodBoards(), loadClubSummary(), loadBlockedIds(), loadFollowingIds(), loadMyAchievements(), loadNotifUnread(), loadNotifPrefs(), loadPins(), loadEvents(), loadOnboardingProgress(), loadOnboardingStepContent()]);
+      await Promise.all([loadPermissions(), loadFeed(), loadStreaks(), loadAnnouncements(), loadWeeklyChallenge(), loadClubWods(), loadClubWodBoards(), loadClubSummary(), loadBlockedIds(), loadManagementIds(), loadFollowingIds(), loadMyAchievements(), loadNotifUnread(), loadNotifPrefs(), loadPins(), loadEvents(), loadOnboardingProgress(), loadOnboardingStepContent()]);
       if (isStaff()) await Promise.all([loadInactiveMembers(), loadNewMembers(), loadActivitySignal()]);
       if (hasPerm(PERM.COMMENT_MODERATE) || isAdmin()) await loadModQueue();
       if (hasPerm(PERM.MEMBER_RESTRICT) || hasPerm(PERM.COMMENT_MODERATE) || isAdmin()) await loadRestrictions();
@@ -2893,22 +2923,27 @@
   // These toggles only hide the offer (they are clientOnly by design), so a
   // surface that keeps offering is the whole of the failure: the club said no
   // and one of three places did not listen.
-  // Reported from a real phone: "replace the share emoji on the progress card
-  // with a stroke share icon". 📤 (OUTBOX TRAY) is a colour emoji - it is
-  // painted by the device's own emoji font, at that font's own size and in
-  // its own palette, next to a row of 1.8px-stroke currentColor glyphs, and
-  // it is a filing tray rather than a share affordance on most platforms.
-  // Drawn to EMPTY_STATE_ICONS' conventions below (24-box, 1.8 stroke, round
-  // caps and joins, currentColor) so it inherits the button's own --steel and
-  // themes itself, with no colour of its own in either theme.
-  const SHARE_ICON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3"/><path d="M8 7l4-4 4 4"/><path d="M4 13v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6"/></svg>';
   window.renderShareControl = function (type, id) {
     if (!window.isCommunitySignedIn || !window.isCommunitySignedIn()) return "";
     const key = shareKey(type, id);
-    if (!state.posts.openShare[key]) return `<button data-community-action="toggle-share" data-type="${esc(type)}" data-id="${esc(id)}" aria-label="שיתוף לקהילה" style="color:var(--steel);padding:4px;">${SHARE_ICON}</button>`;
+    // MERGE NOTE. Two branches replaced this emoji at once, for the same
+    // reported reason ("replace the share emoji on the progress card with a
+    // stroke share icon"), and main's is the one that survives: a local
+    // SHARE_ICON const here would have been a second drawing of an action
+    // that already has one, which is the drift the shared set exists to stop.
+    // The behaviour both sides wanted - no emoji, a stroked glyph inheriting
+    // the button's own --steel - is what SHARE_ICONS.club already gives.
+    // The glyph is SHARE_ICONS.club (src/community/outward.js), the same one
+    // the "ההישגים שלי" rows now draw for "share this to the club" - it was
+    // an outbox-tray emoji here and an arrow emoji there, two different
+    // pictures of one action, each rendered by whatever emoji font the phone
+    // happened to ship. See that constant's own comment. (Named rather than
+    // typed, so test/member-surface-polish.test.mjs can assert this function
+    // contains no emoji at all.)
+    if (!state.posts.openShare[key]) return `<button data-community-action="toggle-share" data-type="${esc(type)}" data-id="${esc(id)}" aria-label="שיתוף לקהילה" style="color:var(--steel);padding:4px;line-height:0;">${SHARE_ICONS.club}</button>`;
     return `<div class="flex items-center gap-6" style="flex-wrap:wrap;">
       ${isModuleEnabled("post_photos") ? `<input type="file" id="photo-${esc(id)}" accept="image/jpeg,image/png,image/webp" class="file-input-hidden"/>
-      <label class="chip-btn" for="photo-${esc(id)}" style="cursor:pointer;padding:5px 9px;font-size:11px;">📷</label>` : ""}
+      <label class="chip-btn" for="photo-${esc(id)}" style="cursor:pointer;padding:5px 9px;font-size:11px;">${SHARE_ICONS.camera}<span class="sr-only">הוספת תמונה</span></label>` : ""}
       <button class="chip-btn" data-community-action="publish" data-type="${esc(type)}" data-id="${esc(id)}" data-visibility="followers" style="padding:5px 9px;font-size:11px;">לעוקבים</button>
       <button class="chip-btn primary" data-community-action="publish" data-type="${esc(type)}" data-id="${esc(id)}" data-visibility="public" style="padding:5px 9px;font-size:11px;">לכולם</button>
       <button class="link-btn" data-community-action="toggle-share" data-type="${esc(type)}" data-id="${esc(id)}" aria-label="ביטול שיתוף" style="padding:5px;">✕</button>
@@ -3547,6 +3582,47 @@
     check: '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8.2 12.3l2.6 2.6 5-5.2"/></svg>',
     chart: '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 17V11M12 17V5M20 17v-4"/><path d="M3 20.5h18"/></svg>',
   };
+  // ---- THE FEED'S OWN GLYPHS ------------------------------------------
+  //
+  // The feed shipped with three emoji in it - a 💬 on the comment count, a
+  // 🔔 on the club strip and a 📷 on the composer - and on a real phone they
+  // are the only three marks in the whole module that are not this app's
+  // drawing: a colour font renders them in the vendor's palette, at the
+  // vendor's weight, and they land differently on iOS, Android and a
+  // desktop browser. Beside the reaction pill's own dumbbell they read as
+  // clip-art dropped onto a line-drawn set.
+  //
+  // So they are re-cut in the dumbbell's language, and it is a deliberately
+  // narrow one: a 24-box, `currentColor`, round caps and joins, no fill, and
+  // a stroke chosen so the optical weight matches at the size each is drawn
+  // (2.2 at pill size, 1.9 on the two 40px chips - a thinner line reads the
+  // same at the larger size). currentColor is what makes them theme
+  // themselves: each takes the colour of the control it sits in, in both
+  // themes, with no second declaration anywhere.
+  //
+  // Every one is aria-hidden and focusable="false". None of them is the
+  // accessible name of anything - each control it sits in already carries
+  // its own aria-label (and the comment count carries the NUMBER in that
+  // label, which an emoji never did).
+  //
+  // NOT replaced, and deliberately: the notification CENTRE's per-type icons
+  // (💬, 🏆, 🚩 … in NOTIF_TYPES, src/community/notifications.js). Those are
+  // a 20-odd-glyph taxonomy where each emoji distinguishes one row type from
+  // another inside one list, they are not in the feed, and redrawing them is
+  // its own pass with its own contrast check - not a line to sneak into this
+  // one. renderShareControl()'s 📷/📤 (the log screens' inline share row) is
+  // the same call: same emoji, different surface, and it is not the feed.
+  const FEED_ICONS = {
+    comment: '<svg class="action-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 11.5a7.5 7.5 0 0 1-10.9 6.7L4 19.5l1.4-4.6A7.5 7.5 0 1 1 20 11.5Z"/></svg>',
+    bell: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M18 9a6 6 0 1 0-12 0c0 5-2 6.5-2 6.5h16S18 14 18 9Z"/><path d="M10.4 19a2 2 0 0 0 3.2 0"/></svg>',
+    camera: '<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3.5 8.5h3l1.6-2.3h7.8l1.6 2.3h3v10h-17Z"/><circle cx="12" cy="13" r="3.2"/></svg>',
+    // Drawn pointing LEFT, not mirrored at runtime. This is a directional
+    // glyph in a document that is RTL end to end: "send" travels the way the
+    // text does, and the app has exactly one direction, so the arrow is cut
+    // the right way round once rather than flipped by a transform that would
+    // then be wrong in the one place something renders LTR.
+    send: '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 12 20 4.5l-2.6 7.5L20 19.5Z M17.4 12H4"/></svg>',
+  };
   // `opts.attr` is a raw attribute string and is therefore only ever passed a
   // LITERAL from this file - it exists solely so renderCommunityHealthScore()
   // can keep the data-community-health-empty hook COMM-312's own tests pin.
@@ -3569,6 +3645,42 @@
       </div>
       ${slot4}
     </div>`;
+  }
+  // THE SAME STATE, ONE LINE, for a screen that stacks several of them.
+  //
+  // emptyStateHtml()'s four slots are right for a surface where the empty
+  // state IS the screen - the Boards challenge list a member lands on, an
+  // analytics card that fills a pane. They are wrong for the coach board,
+  // which renders SEVEN sections in one scroll and on a quiet week showed
+  // six of those cards back to back - found in real phone screenshots at
+  // 390px: 32px of padding, a 28px icon, a headline and two paragraphs
+  // each, so a coach with nothing to do scrolled roughly two screens of
+  // illustrated apologies to establish it. Six explanations of what would
+  // fill a list is not six times as informative as one. (The line form
+  // measures 41-62px per section at 390px, all seven inside one screen -
+  // scripts/browser-check/staff-surface-polish-390.mjs pins both numbers.)
+  //
+  // So the coach board's sections say it in one short line, and
+  // renderCoachBoardSummary() carries the single "nothing needs attention"
+  // statement for all of them at the top of the tab. Nothing else changes
+  // hands: same `.empty` class, same data-empty-state key (every existing
+  // selector and test still resolves), plus data-empty-variant="line" so
+  // the four-slot guard in
+  // test/audit-followup-cloud-empty-states-dates.test.mjs can tell the two
+  // apart instead of asserting one contract over both.
+  //
+  // ONE HELPER, not a second near-copy: the eleven drifted empty states are
+  // exactly why emptyStateHtml() was extracted in the first place, and two
+  // sibling builders in one file is how that drift starts again. This sits
+  // directly under its sibling for the same reason.
+  //
+  // Tone rules §2.1 still hold and are unchanged by the shorter form: the
+  // line names what WILL be here rather than what is missing, and never
+  // renders red - absence is not an error. What it drops is the icon and
+  // the second paragraph, neither of which is information.
+  function emptyLineHtml(opts) {
+    const o = opts || {};
+    return `<div class="empty" data-empty-state="${esc(o.key || "")}" data-empty-variant="line" style="padding:10px 2px;text-align:start;font-size:13px;color:var(--steel);line-height:1.6;">${bidiText(o.text)}</div>`;
   }
 
   // ==========================================================================
@@ -4321,7 +4433,7 @@
     // gates above it: this screen is all there is until a profile exists,
     // and the whole screen changing to the real tabbed UI afterward is the
     // confirmation, not just a toast that's easy to miss.
-    if (!state.profile) return `<div class="chart-card">${renderJoinProgress(3)}<div style="font-weight:800;font-size:18px;margin-bottom:6px;">השלמת פרופיל</div><div style="color:var(--steel);font-size:13px;line-height:1.7;margin-bottom:14px;">כמעט סיימתם — עוד רגע אחד ותהיו בפנים. ${CLUB_NAME_HINT_TEXT}</div><form id="communityProfile">${field("communityProfile", "displayName", CLUB_NAME_LABEL, `<input class="text-input" name="displayName" dir="auto" placeholder="למשל דנה כהן" required/>`)}<div class="footer-note" style="margin:-6px 0 12px;">${CLUB_NAME_HINT_TEXT}</div><label class="field"><span class="field-label">קצת עליי</span><textarea class="text-input" name="bio" maxlength="160" placeholder="כמה מילים עליי"></textarea></label><button class="save-btn" type="submit" style="margin-top:12px;">שמירת פרופיל</button></form>${state.ui.message ? `<div class="footer-note" role="status" style="margin-top:10px;color:var(--brass);">${esc(state.ui.message)}</div>` : ""}</div>`;
+    if (!state.profile) return `<div class="chart-card">${renderJoinProgress(3)}<div style="font-weight:800;font-size:18px;margin-bottom:6px;">השלמת פרופיל</div><div style="color:var(--steel);font-size:13px;line-height:1.7;margin-bottom:14px;">כמעט סיימתם — עוד רגע אחד ותהיו בפנים. ${CLUB_NAME_HINT_TEXT}</div><form id="communityProfile">${field("communityProfile", "displayName", CLUB_NAME_LABEL, `<input class="text-input" name="displayName" dir="auto" placeholder="למשל דנה כהן" required/>`)}<div class="footer-note" style="margin:6px 0 12px;">${CLUB_NAME_HINT_TEXT}</div><label class="field"><span class="field-label">קצת עליי</span><textarea class="text-input" name="bio" maxlength="160" placeholder="כמה מילים עליי"></textarea></label><button class="save-btn" type="submit" style="margin-top:12px;">שמירת פרופיל</button></form>${state.ui.message ? `<div class="footer-note" role="status" style="margin-top:10px;color:var(--brass);">${esc(state.ui.message)}</div>` : ""}</div>`;
     // COMM-016. Credentials are set and the profile row exists, but the
     // account has not been stamped recoverable yet, so is_community_member()
     // still blocks every write. Try once automatically (guarded inside
@@ -4428,6 +4540,31 @@
     // streaks - a brand-new club has none, and "החברים הפעילים ביותר"
     // followed by nothing is worse than the welcome card alone.
     const ACTIVE_MEMBERS_SHOWN = 5;
+    // THE NUMBER IS THE FACT, so it is always printed - and it was not.
+    //
+    // Two defects in one line, both visible in a 390px screenshot of
+    // "החברים הפעילים במועדון". The streak of exactly one rendered the bare
+    // words "יום רצוף" with no figure at all, so the one row on the list
+    // that names a starting streak was the one row that did not say what it
+    // was. And the whole phrase was wrapped in .mono, which is
+    // `direction:ltr; unicode-bidi:isolate` (index.html): a mixed
+    // number-and-Hebrew string laid out as an LTR paragraph inside an RTL
+    // row, which puts the digit on the far side of the words it belongs to
+    // with the gap stranded between them.
+    //
+    // Now: the digit alone is monospaced and bdi-isolated - which is what
+    // .mono is for and the only part of the string that wants LTR - and the
+    // words stay in the document's direction, so "3 ימים רצופים" reads in
+    // one piece. The noun and the adjective agree with the number
+    // (יום/ימים, רצוף/רצופים), which is the whole of Hebrew's plural rule
+    // here; the dual "יומיים" is deliberately not used, because it would
+    // drop the digit again at exactly the value below the one that already
+    // lost it.
+    function streakDaysHtml(value) {
+      const days = Math.max(0, Math.floor(Number(value) || 0));
+      const word = days === 1 ? "יום רצוף" : "ימים רצופים";
+      return `<span class="streak-count"><bdi class="mono streak-days">${days}</bdi> ${word}</span>`;
+    }
     function renderFeedEmptyState() {
       const scopeEmpty = feedScopeDef(state.feed.scope).empty || "פעילות המועדון תופיע כאן.";
       // Only the default scope gets the welcome. "אין עדיין פוסטים ממי
@@ -4437,15 +4574,25 @@
       if (state.feed.scope !== "for_you") {
         return emptyStateHtml({ key: "feed-empty", icon: "people", headline: "עדיין אין כאן פעילות", body: scopeEmpty });
       }
+      // MERGE NOTE (streakDaysHtml, below). Two branches fixed the same
+      // paint-order defect on this row at once. This branch wrapped the whole
+      // string in bidiUnit(), to stop `.mono`'s own `direction:ltr` painting
+      // the Hebrew count word on the far side of its number. main's
+      // streakDaysHtml() fixes it one level deeper: only the DIGITS go inside
+      // `.mono`, so the LTR box has no Hebrew in it left to reorder. That is
+      // strictly the better shape and is what survives - the wrapper is not
+      // redundant here, it is unnecessary. The rendered-`.mono` audit in
+      // test/bidi-isolation.test.mjs passes it for that exact reason: no
+      // Hebrew in the box, nothing to isolate.
       const active = (state.club.streaks || []).slice(0, ACTIVE_MEMBERS_SHOWN);
       const activeHtml = active.length ? `<div class="chart-card" data-feed-active-members="ready" style="margin-top:10px;">
         <h3 class="field-label" style="margin:0 0 8px;">החברים הפעילים במועדון</h3>
         <div class="log-list">${active.map((m) => `<div class="log-row">
-          <button class="link-btn" data-community-action="view-profile" data-id="${esc(m.user_id || "")}" style="padding:0;display:flex;gap:10px;align-items:center;color:inherit;text-align:right;">
+          <button class="link-btn member-row-link" data-community-action="view-profile" data-id="${esc(m.user_id || "")}">
             ${/* community_streaks returns user_id, handle, display_name, current_streak and last_activity_on - and no avatar_url, so this is initials by data shape, not by choice. */ avatarHtml(m.display_name || m.handle, 32)}
-            <span style="font-weight:700;">${nameHtml(m.display_name, m.handle)}</span>
+            <span class="member-row-name">${nameHtml(m.display_name, m.handle)}</span>
           </button>
-          <span class="mono" style="color:var(--brass);">${bidiUnit(Number(m.current_streak) === 1 ? "יום רצוף" : Number(m.current_streak) + " ימים ברצף")}</span>
+          ${streakDaysHtml(m.current_streak)}
         </div>`).join("")}</div>
       </div>` : "";
       return `<div class="chart-card" data-feed-welcome="ready">
@@ -4651,7 +4798,7 @@
         ${avatarHtml(selfDisplayName(), 40, state.profile && state.profile.avatar_url)}
         <span class="post-composer-trigger-text">${esc(POST_COMPOSER_PLACEHOLDER)}</span>
       </button>
-      ${isModuleEnabled("post_photos") ? `<button class="composer-photo-btn" data-community-action="open-composer-photo" aria-label="פוסט עם תמונה"><span aria-hidden="true">📷</span></button>` : ""}
+      ${isModuleEnabled("post_photos") ? `<button class="composer-photo-btn" data-community-action="open-composer-photo" aria-label="פוסט עם תמונה">${FEED_ICONS.camera}</button>` : ""}
     </div>`;
     // upcomingEventHtml is no longer concatenated here - it is a rail card.
     // It used to render AFTER ${feed}: the one time-sensitive item on the
@@ -4694,7 +4841,7 @@
     const feedTab = clubTopHtml + railAbove + feedHtml + announcementsHtml;
 
     // ---- Boards tab: weekly challenge + streaks, top-3-plus-your-rank ----
-    const challengeSetter = staff ? `<form id="communityWeeklyChallenge" class="chart-card admin-card" style="margin-top:10px;"><div style="font-weight:800;margin-bottom:10px;">קביעת אתגר שבועי<span class="admin-tag">ניהול</span></div>${field("communityWeeklyChallenge", "title", "שם האתגר", `<input class="text-input" name="title" placeholder="שם האתגר" required/>`)}${field("communityWeeklyChallenge", "comparisonKey", "על מה מתחרים", renderChallengeKeyPicker())}<div style="color:var(--steel);font-size:11px;margin:-6px 0 10px;">רק תרגילים ואימונים שקיימים באפליקציה — כך התוצאות שחברי המועדון משתפים נספרות לאתגר מעצמן.</div><div class="flex gap-16 field">${dateField("communityWeeklyChallenge", "startsOn", "תאריך התחלה", `<input class="text-input" name="startsOn" type="date" required/>`)}${dateField("communityWeeklyChallenge", "endsOn", "תאריך סיום", `<input class="text-input" name="endsOn" type="date" required/>`)}</div><button class="chip-btn primary" type="submit" style="margin-top:10px;">קביעת אתגר</button></form>` : "";
+    const challengeSetter = staff ? `<form id="communityWeeklyChallenge" class="chart-card admin-card" style="margin-top:10px;"><div style="font-weight:800;margin-bottom:10px;">קביעת אתגר שבועי<span class="admin-tag">ניהול</span></div>${field("communityWeeklyChallenge", "title", "שם האתגר", `<input class="text-input" name="title" placeholder="שם האתגר" required/>`)}${field("communityWeeklyChallenge", "comparisonKey", "על מה מתחרים", renderChallengeKeyPicker())}<div style="color:var(--steel);font-size:11px;margin:6px 0 10px;">רק תרגילים ואימונים שקיימים באפליקציה — כך התוצאות שחברי המועדון משתפים נספרות לאתגר מעצמן.</div><div class="flex gap-16 field">${dateField("communityWeeklyChallenge", "startsOn", "תאריך התחלה", `<input class="text-input" name="startsOn" type="date" required/>`)}${dateField("communityWeeklyChallenge", "endsOn", "תאריך סיום", `<input class="text-input" name="endsOn" type="date" required/>`)}</div><button class="chip-btn primary" type="submit" style="margin-top:10px;">קביעת אתגר</button></form>` : "";
     // Three states, not two. state.club.weeklyChallenge comes from the
     // leaderboard VIEW, which is empty until someone posts a matching result,
     // so treating "no rows" as "no challenge" told every member there was
@@ -4762,7 +4909,7 @@
     const account = `<form id="communityProfile" class="chart-card"><div style="font-weight:800;font-size:16px;margin-bottom:12px;">הפרופיל שלי</div>
       ${avatarControl}
       ${field("communityProfile", "displayName", CLUB_NAME_LABEL, `<input class="text-input" name="displayName" dir="auto" value="${esc(p.display_name || "")}" placeholder="למשל דנה כהן" required/>`)}
-      <div class="footer-note" style="margin:-6px 0 12px;">${CLUB_NAME_HINT_TEXT}</div>
+      <div class="footer-note" style="margin:6px 0 12px;">${CLUB_NAME_HINT_TEXT}</div>
       <label class="field"><span class="field-label">קצת עליי</span><textarea class="text-input" name="bio" maxlength="160" placeholder="כמה מילים עליי">${esc(p.bio || "")}</textarea></label>
       <div class="chip-row"><button class="chip-btn primary" type="submit">שמירת פרופיל</button><button class="chip-btn" type="button" data-community-action="migrate">סנכרון היסטוריה פרטית</button></div>
     </form>`;
@@ -4831,24 +4978,66 @@
     // COMM-228. One box, three labeled groups (members, events, challenges).
     const people = renderCommunitySearch();
 
+    // ---- ONE STAFF AREA, not two staff sections loose among the settings ----
+    //
+    // Redesign (Manage tab): moderation, member/role management, invites,
+    // onboarding-content editing, the feature-flag panel, and every
+    // analytics/health surface used to render inline here, one after another
+    // on this one scrolling tab. They now live in their own management
+    // destinations (renderManagePanel) instead - moved verbatim, same
+    // functions, same permission gates, just a different mount point. These
+    // two lists stayed behind (out of that phase's scope), and staff still
+    // sees a pointer to where the rest went.
+    //
+    // What was wrong in the phone screenshots at 390px: the two lists are `.ach-section`s
+    // with their own coloured dots, so "חברים חדשים" and
+    // "לא נכנסו לאפליקציה לאחרונה" read as two more of the member's own
+    // settings, sitting after the club search with nothing to say they are
+    // staff-only or that a member does not see them - and the pointer note
+    // then floated below both, detached from anything. They are one thing: a
+    // staff area. It is now labelled as one, once, with the two lists and the
+    // pointer inside it, and it is the last thing on the tab before sign-out
+    // so it never interrupts a member setting again.
+    //
+    // ONE staff gate, not three. This used to be three separate staff-gated
+    // slices of this function (community-coach-tier.test.mjs counts those, by
+    // matching the ternary literally - which is why this comment describes
+    // the shape rather than spelling it); it is one now, and the count moves
+    // with it.
+    //
     // Post-Phase-3 Hebrew copy fix: "חברים חדשים" - the exact phrase COMM-107's
     // welcome post and the coach-tools "Welcome" section already use for the
     // same concept (מתאמנים was this list's own one-off).
-    const newMembersHtml = staff ? renderCoachNewMembersSection() : "";
-    const inactiveHtml = staff ? renderCoachAppActivitySection() : "";
-
-    // Redesign (Manage tab): moderation, member/role management, invites,
-    // onboarding-content editing, the feature-flag panel, and every
-    // analytics/health surface used to render inline here, one after
-    // another on this one scrolling tab. They now live in their own "ניהול"
-    // bottom-tab (renderManageApp, staff-only) instead - moved verbatim,
-    // same functions, same permission gates, just a different mount point.
-    // newMembersHtml/inactiveHtml stay here on purpose (out of that phase's
-    // scope) and staff still sees a pointer to where the rest went. Both are
-    // now one call each - see renderCoachNewMembersSection() and
-    // renderCoachAppActivitySection() above, which are defined outside this
-    // function so its staff-gate count stays at the asserted 5.
-    const movedToManageNote = staff ? `<div class="footer-note" style="color:var(--steel);text-align:center;margin:16px 0 4px;">כלי ניהול עברו ל"ניהול" בתפריט התחתון</div>` : "";
+    //
+    // THE POINTER NOW POINTS SOMEWHERE THAT EXISTS. It sent a coach to a
+    // "ניהול" item in the bottom tab bar, and there has been no such item
+    // there since 2026-09-15: management split into two
+    // destinations, "ניהול המועדון" and "ניהול מערכת", and both were made
+    // main:false in app.js's getNavItems() - which is exactly what moves a
+    // row OUT of the bottom bar and INTO the header's ☰ menu, handing the
+    // sixth bottom slot back to the five member tabs. A coach following the
+    // old sentence tapped along a bottom bar of five member tabs looking for
+    // a sixth that was deliberately removed. Both names are given because the
+    // split is real: the club's roster, invites, moderation and numbers are
+    // under one, bug reports, the audit log, roles and module toggles under
+    // the other.
+    //
+    // The two lists keep their own `.ach-section` + sectionHead exactly as
+    // they were - renderCoachAppActivitySection()'s dot is red only when
+    // there is genuinely something to act on, which is information and not
+    // decoration. What is new is the rule down the inline-start edge
+    // (border-INLINE-start, so it answers RTL rather than picking a side) and
+    // the reduced top margin on the first of them: the two dotted heads now
+    // read as two items inside one labelled block instead of as two more
+    // sections in the settings list they were sitting in.
+    const staffArea = staff ? `<div class="ach-section" data-account-staff-area="1" style="margin-top:18px;">
+      ${sectionHead("var(--steel)", "אזור צוות המועדון", true)}
+      <div style="color:var(--steel);font-size:12px;line-height:1.6;margin:-2px 0 10px;">${bidiText("החלק הזה מוצג לצוות המועדון בלבד. חברי המועדון לא רואים אותו.")}</div>
+      <div style="border-inline-start:3px solid var(--border);padding-inline-start:12px;">
+        ${renderCoachNewMembersSection()}${renderCoachAppActivitySection()}
+      </div>
+      <div class="footer-note" style="color:var(--steel);margin:12px 0 4px;">${bidiText("שאר כלי הניהול נמצאים בתפריט (☰) שבראש המסך, תחת \"ניהול המועדון\" ו\"ניהול מערכת\".")}</div>
+    </div>` : "";
     // COMM-153's member-facing surface, deliberately FIRST - see
     // renderMyRestrictionPanel() for why it outranks the profile form. It is
     // not staff-gated and adds no sixth staff-conditional slice to this
@@ -4865,7 +5054,7 @@
     // neighbour (privacy), ahead of the glossary/search/staff sections
     // rather than trailing all of them - still a settings-style panel, just
     // no longer the very last thing on the screen.
-    const accountTab = restrictionPanel + account + renderMyAchievements() + recapEntry + monthlyRecapEntry + privacyPanel + renderSharePromptPrefPanel() + blockedMembersPanel + renderNotifPrefsPanel() + termMarkPanel + people + newMembersHtml + inactiveHtml + movedToManageNote
+    const accountTab = restrictionPanel + account + renderMyAchievements() + recapEntry + monthlyRecapEntry + privacyPanel + renderSharePromptPrefPanel() + blockedMembersPanel + renderNotifPrefsPanel() + termMarkPanel + people + staffArea
       + `<button class="link-btn" data-community-action="sign-out" style="display:block;margin:20px auto 0;">התנתקות</button>`
       + `<button class="link-btn" data-community-action="delete-account" style="display:block;margin:10px auto 8px;color:var(--red-text);">בקשת מחיקת חשבון</button>`;
 
@@ -5979,8 +6168,14 @@
     // member is first offered it.
     if (state.ui.tab === "boards" && state.user && !state.challenges.onboarding.loaded && !state.challenges.onboarding.loading) loadOnboardingChallenge();
     // COMM-231. The directory's own paginated roster, fetched the first time
-    // a member lands on the Directory sub-tab.
-    if (state.ui.tab === "directory" && state.user && !state.members.directory.loaded && !state.members.directory.loading) loadDirectory(true);
+    // a member lands on the Directory sub-tab - or on the Coach sub-tab,
+    // whose member-of-the-week picker offers the same roster as its
+    // suggestions (see renderMemberOfWeekPickForm). Same list, same read,
+    // same lazy shape; a coach who opens the board is exactly the caller who
+    // is about to need it, and nobody else pays for it. It stays one load:
+    // `loaded` is shared, so whichever tab is opened first is the only one
+    // that fetches.
+    if ((state.ui.tab === "directory" || state.ui.tab === "coach") && state.user && !state.members.directory.loaded && !state.members.directory.loading) loadDirectory(true);
     // COMM-232. The suggestions strip now renders on the Directory sub-tab -
     // see the PLACEMENT NOTE above renderPeopleSuggestions().
     if (state.ui.tab === "directory" && state.user && !state.members.suggestions.loaded && !state.members.suggestions.loading) loadPeopleSuggestions();
@@ -6063,9 +6258,20 @@
     // counter is - a full rerender here would cost the textarea its focus
     // and caret position on every keystroke, exactly what those two
     // listeners already avoid.
-    document.querySelectorAll("[data-mow-pick-handle]").forEach((el) => {
-      el.addEventListener("input", () => { state.coach.memberOfWeek.pickHandle = el.value; });
+    // The member-of-the-week picker's search box. UNLIKE its four neighbours
+    // this one DOES rerender - the suggestion list under it is the whole
+    // point, and a list that only refreshes when something else happens to
+    // rerender is not a search. Debounced and focus-restored below for
+    // exactly the reasons the two search boxes in afterRenderCommunity()
+    // already are: one request per typed word, and a rerender must not take
+    // the caret out from under the coach mid-word.
+    document.querySelectorAll("[data-mow-pick-search]").forEach((el) => {
+      el.addEventListener("input", () => memberOfWeekPickSearchDebounced(el.value));
     });
+    const mowPickInput = document.querySelector("[data-mow-pick-search]");
+    if (mowPickInput && mowPickInput.value && (!document.activeElement || document.activeElement === document.body)) {
+      try { mowPickInput.focus(); mowPickInput.setSelectionRange(mowPickInput.value.length, mowPickInput.value.length); } catch (e) { /* not a text input in this browser */ }
+    }
     document.querySelectorAll("[data-mow-pick-reason]").forEach((el) => {
       el.addEventListener("input", () => {
         state.coach.memberOfWeek.pickReason = el.value;
@@ -6546,7 +6752,9 @@
     // COMM-231 members directory.
     else if (action === "directory-retry") loadDirectory(true);
     else if (action === "directory-more") loadDirectory(false);
-    else if (action === "block") askConfirm({ title: "חסימת משתמש", message: "לחסום את {subject}? לא תראו זה את זה בקהילה.", subject: subjectNameFor(el.dataset.id), confirmLabel: "חסימה", destructive: true, action: "block", payload: { userId: el.dataset.id } });
+    // Opened from the member card's "⋯" menu as well as from a post's -
+    // either way the menu has served its purpose once the confirm is up.
+    else if (action === "block") { state.posts.openMenu = null; askConfirm({ title: "חסימת משתמש", message: "לחסום את {subject}? לא תראו זה את זה בקהילה.", subject: subjectNameFor(el.dataset.id), confirmLabel: "חסימה", destructive: true, action: "block", payload: { userId: el.dataset.id } }); }
     // Live bug hunt (2026-09-11): unblock()'s dispatch - no confirm sheet,
     // same "no confirm needed for a reversible toggle" shape the club-module
     // toggles already use (block() itself still confirms - it's the one
@@ -6775,6 +6983,10 @@
     else if (action === "composer-remove-photo") composerRemovePhoto(el.dataset.id);
     else if (action === "composer-retry-photo") composerRetryPhoto(el.dataset.id);
     else if (action === "toggle-post-menu") togglePostMenu(el.dataset.id);
+    // The member card's own overflow menu (src/community/directory.js). Same
+    // single state.posts.openMenu slot as the post menu above, so only one
+    // menu is ever open and Escape already closes both.
+    else if (action === "toggle-member-menu") toggleMemberMenu(el.dataset.id);
     else if (action === "post-save") postSaveToggle(el.dataset.id);
     else if (action === "post-hide") postHide(el.dataset.id);
     else if (action === "post-edit-caption") postStartCaptionEdit(el.dataset.id);
@@ -6849,7 +7061,6 @@
     else if (action === "bugs-set-status") setBugReportStatus(el.dataset.id, el.dataset.status);
     else if (action === "notif-open") openNotif(el.dataset.id);
     else if (action === "notif-toggle-group") { const c = state.notif.center; if (c) { c.expanded[el.dataset.key] = !c.expanded[el.dataset.key]; rerender(); } }
-    else if (action === "notif-pref") setNotifPref(el.dataset.type, el.dataset.channel);
     else if (action === "notif-push-disable") disableNotifPush();
     // The self-test is a click and nothing else reaches it, which is half of
     // what makes "never asked on first load" true of the permission prompt
@@ -6983,6 +7194,8 @@
     else if (action === "coach-mow-retry") loadCoachMemberOfWeek();
     else if (action === "coach-mow-publish-candidate") memberOfWeekPublishCandidate(el.dataset.id);
     else if (action === "coach-mow-publish-pick") memberOfWeekPublishPick();
+    else if (action === "coach-mow-pick-select") memberOfWeekPickSelect(el.dataset.id);
+    else if (action === "coach-mow-pick-clear") memberOfWeekPickClear();
     else if (action === "coach-engage-retry") loadCoachEngageFlags();
     else if (action === "coach-engage-reach-out") coachEngageReachOut(el.dataset.id);
     else if (action === "coach-engage-review") coachEngageResolveFlag(el.dataset.id, "reviewed");
@@ -7271,6 +7484,7 @@
         state.engagement.reactorsFor = null;
         state.members.search = ""; state.members.results = []; state.members.profileView = null; state.members.roles = {};
         state.members.blockedIds = []; state.members.blocksLoaded = false;
+        state.members.managementIds = []; state.members.managementLoaded = false;
         state.members.suggestions = { items: [], loading: false, loaded: false, error: false, busy: {} };
         state.members.directory = { items: [], loading: false, loadingMore: false, loaded: false, error: false, end: false, cursor: null, query: "", searchResults: null, searchLoading: false };
         state.members.classmatesToday = { items: [], loading: false, loaded: false, error: false };
@@ -7334,7 +7548,7 @@
         state.coach.celebrate = { items: [], loading: false, loaded: false, error: false, congratulated: {}, busy: null };
         state.coach.welcome = { members: [], loading: false, loaded: false, error: false, contactedIds: {}, assignDrafts: {}, contactDrafts: {}, busy: null, welcomed: {} };
         state.coach.engage = { items: [], loading: false, loaded: false, error: false, profiles: {}, reachedOut: {}, busy: null };
-        state.coach.memberOfWeek = { loading: false, loaded: false, error: false, envelope: null, publishedProfile: null, previousProfile: null, pickHandle: "", pickReason: "", busy: null, publishErr: "" };
+        state.coach.memberOfWeek = { loading: false, loaded: false, error: false, envelope: null, publishedProfile: null, previousProfile: null, pickQuery: "", pickResults: null, pickSearching: false, pickUserId: null, pickChosen: null, pickReason: "", busy: null, publishErr: "" };
         state.coach.monthlyRecap = { loading: false, loaded: false, error: false, row: null, busy: null, publishErr: "" };
         announcementsViewLogged = false; monthlyRecapViewLogged = false; /* Same reason as the classmates guard on the next line: the next member to sign in on this device gets their own first view of each inline surface, never the previous session's already-counted one. */
         classmatesCardViewLogged = false; /* COMM-307: the next member to sign in on this device gets a fresh card and a fresh classmates_card_viewed, never the previous session's rows or its already-counted view. */
@@ -7453,6 +7667,28 @@
     else if ("avatarFile" in t.dataset) { const f = t.files && t.files[0]; if (f) avatarPhotoSelected(f); try { t.value = ""; } catch (err) {} }
     else if ("composerDecorative" in t.dataset) composerToggleDecorative(t.dataset.composerDecorative, t.checked);
     else if ("composerVisibility" in t.dataset) composerSetVisibility(t.value);
+    // COMM-144/229 notification preferences. One <select> per type now (see
+    // rowFor() in src/community/notifications.js), so the channel arrives as
+    // a change event rather than as a [data-community-action="notif-pref"]
+    // click.
+    //
+    // DELEGATED HERE, not bound per element in afterRenderCommunity(), and
+    // that is not a style choice. afterRenderCommunity() runs more than once
+    // against the same nodes, so a per-element addEventListener stacks: one
+    // member action fired setNotifPref() three times, and because the push
+    // branch runs BEFORE the "already this channel" early return, that was
+    // three permission prompts and three pushManager.subscribe() calls for
+    // one tap. Caught by test/community-web-push.test.mjs, which counts both.
+    // This listener is bound once, for the life of the document, exactly
+    // like every [data-community-action] click.
+    //
+    // rerender() afterwards unconditionally, not only on success:
+    // setNotifPref() deliberately returns without touching state when the
+    // push permission prompt is declined, and without this the select would
+    // keep showing "התראת דחיפה" for a preference that was never written.
+    else if ("notifPrefSelect" in t.dataset) {
+      Promise.resolve(setNotifPref(t.dataset.type, t.value)).then(() => rerender());
+    }
     // 202609220005. The tagging sheet's checkboxes. `change`, not `click`, so
     // a keyboard toggle on the label counts the same as a tap.
     else if ("partnerPick" in t.dataset) toggleTrainingPartnerPick(t.dataset.partnerPick);
@@ -7494,6 +7730,20 @@
         if (e.key === "Escape") { e.preventDefault(); const k = state.engagement.mentionPicker.key; state.engagement.mentionPicker = null; rerender(); restoreCommentFocus(k, t.selectionStart); return; }
       }
     }
+    // Feed polish. The ⋯ post menu is a role="menu", so it answers the keys a
+    // menu is supposed to answer: ArrowUp/ArrowDown/Home/End move between the
+    // items and Escape closes it and hands focus back to the button that
+    // opened it. Ahead of the dialog handling below because a post menu is
+    // never open at the same time as a dialog (opening one closes the other),
+    // and ahead of the `e.key !== "Escape"` gate because the arrows have to
+    // reach it at all. Tab is deliberately NOT intercepted: the items sit
+    // immediately after the button in DOM order, so tabbing walks them and
+    // then leaves, which is the behaviour without a trap and the right one
+    // for a menu that is not modal.
+    // `!currentCloudDialog()` because a dialog opened FROM the menu (the
+    // report sheet, the block confirm) may leave state.posts.openMenu set
+    // behind it, and Escape must always close the topmost thing first.
+    if (state.posts.openMenu && !currentCloudDialog() && postMenuKeydown(e)) return;
     // COMM-190. Every Phase 1 overlay dialog traps Tab within itself.
     if (e.key === "Tab") {
       const dk = currentCloudDialog();
@@ -7534,6 +7784,9 @@
     for (const d of CLOUD_DIALOGS) {
       if (d.isOpen()) { e.preventDefault(); d.close(); return; }
     }
+    // Reached only when the menu's own handler above did not take the key -
+    // the card it belongs to is no longer rendered, so there is nothing to
+    // return focus to and the state is simply cleared.
     if (state.posts.openMenu) { state.posts.openMenu = null; rerender(); }
   });
   // COMM-190. A click on the dim backdrop - the overlay element itself, not

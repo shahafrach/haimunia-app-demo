@@ -112,20 +112,29 @@ test("staff preview error state shows COMM-309's own copy with a working retry",
   await waitFor(() => !!window.document.querySelector('[data-empty-state="coach-monthly-recap"]'), 3000);
 });
 
-// Retitled: this state was a bare one-liner ("עדיין לא נוצר תקציר חודשי."),
-// and its old title said "no scheduler is built" - which stopped being true
-// when 202609050005 scheduled the recap_monthly job for 04:41 on the 1st. It
-// is now on the shared four-slot pattern, and its fourth slot is a when-line
-// naming that schedule. See audit-followup-cloud-restriction-datetime.test.mjs
-// for the slot-by-slot assertions.
-test("staff preview shows an honest empty state, on the four-slot pattern, when no month has been generated yet", async () => {
+// Retitled twice. This state was a bare one-liner
+// ("עדיין לא נוצר תקציר חודשי."), and its old title said "no scheduler is
+// built" - which stopped being true when 202609050005 scheduled the
+// recap_monthly job for 04:41 on the 1st. It then went onto the shared
+// four-slot pattern, and is now on the coach board's one-line variant, which
+// keeps the schedule and drops the icon and the second paragraph. See
+// audit-followup-cloud-restriction-datetime.test.mjs for the copy assertions.
+test("staff preview shows an honest empty state, in one line, when no month has been generated yet", async () => {
+  // WAS the four-slot card. This section is one of seven on the coach board,
+  // and six of those cards back to back is what a quiet week looked like at
+  // 390px - see emptyLineHtml() in cloud.js. What the line still has to carry
+  // is both halves of "honest": it opens by naming what WILL be here rather
+  // than what is missing, and it names the real schedule, because a coach who
+  // is not told when the job runs checks back daily.
   const mock = seeded({}, "coach");
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openCoachTab(window);
   await waitFor(() => !!window.document.querySelector('[data-empty-state="coach-monthly-recap"]'), 3000);
   const el = window.document.querySelector('[data-empty-state="coach-monthly-recap"]');
-  assert.match(el.textContent, /התקציר החודשי של המועדון ייבנה מעצמו/, "a forward-looking headline, not a statement of absence");
-  assert.match(el.textContent, /ב-1 בכל חודש/, "and a when-line naming the real schedule the job runs on");
+  assert.equal(el.getAttribute("data-empty-variant"), "line", "the one-line variant, not the four-slot card");
+  assert.match(el.textContent, /^התקציר נבנה לבד/, "opens forward-looking, not with a statement of absence");
+  assert.match(el.textContent, /ב-1 בכל חודש/, "and names the real schedule the job runs on");
+  assert.equal(el.querySelector("svg"), null, "no icon");
 });
 
 // --- the preview/publish permission asymmetry --------------------------------

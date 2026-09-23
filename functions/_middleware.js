@@ -20,7 +20,8 @@
 // the security audits, the deploy runbooks and the tests off the public web.
 // It is NOT a secret store and must never be treated as one - anything that
 // would be damaging to publish still does not belong in this repository at
-// all, because the git history is public whatever this file does. The join QR
+// all, because the git history was public until 2026-09-17 and is readable
+// by everyone with repository access now, whatever this file does. The join QR
 // committed on 2026-09-16 is the case in point: removing it from the repo
 // stopped it being served, and did nothing whatsoever about the code being
 // valid.

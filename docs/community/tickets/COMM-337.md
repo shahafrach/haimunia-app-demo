@@ -17,8 +17,10 @@ honestly rather than shipping an inert meta tag.
 
 ## Acceptance criteria
 
-- [ ] A hosting option that can send custom response headers is chosen (Cloudflare
-  Pages, Netlify, Vercel, or a CDN edge in front of GitHub Pages).
+- [x] A hosting option that can send custom response headers is chosen (Cloudflare
+  Pages, Netlify, Vercel, or a CDN edge in front of GitHub Pages). **Cloudflare
+  Pages, live since 2026-09-16; GitHub Pages is torn down. `_headers` carries
+  both headers below and is read by the host natively.**
 - [ ] `Content-Security-Policy: frame-ancestors 'none'` and `X-Frame-Options: DENY`
   are served as real response headers in production.
 - [ ] Verified via a live response-header check that a page load inside a foreign-

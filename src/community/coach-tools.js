@@ -655,7 +655,7 @@
       rerender();
       return;
     }
-    state.coach.memberOfWeek.pickHandle = "";
+    memberOfWeekPickReset();
     state.coach.memberOfWeek.pickReason = "";
     setMessage("חבר/ת השבוע פורסמ/ה");
     await loadCoachMemberOfWeek();
@@ -683,33 +683,85 @@
   // reason when the resolved category is coachs_pick, which a shortlisted
   // candidate's publish can never resolve to).
   function memberOfWeekPublishCandidate(userId) { publishMemberOfWeek(userId, ""); }
-  // The free-selection ("coach's pick") form. Resolves a typed handle to an
-  // id the same way coachAssignByHandle already does (there is no
-  // staff-readable directory RPC to build a real member picker from - see
-  // coachAssignByHandle's own comment on that gap), and requires a non-empty
-  // reason client-side before ever calling the server, matching COMM-315's
-  // own definition of a coach's pick ("a free staff selection... with a
-  // short reason staff types") - the server enforces the same rule and is
-  // still the real authority; this only saves a round trip for the obvious
-  // case.
+  // ---- the picker's own handlers -------------------------------------------
+  // Back to the box, with the query cleared: "שינוי" means "I picked the
+  // wrong person", and leaving the old name in the search field would make
+  // the coach delete it before they could look for the right one.
+  function memberOfWeekPickReset() {
+    const s = state.coach.memberOfWeek;
+    s.pickUserId = null;
+    s.pickChosen = null;
+    s.pickQuery = "";
+    s.pickResults = null;
+    s.pickSearching = false;
+  }
+  function memberOfWeekPickClear() { memberOfWeekPickReset(); state.coach.memberOfWeek.publishErr = ""; rerender(); }
+  // The whole row is stored, not just the id: the chosen row has to keep
+  // naming the member across every rerender, and re-reading a profile this
+  // client already has in hand would be a round trip to learn nothing.
+  function memberOfWeekPickSelect(userId) {
+    const s = state.coach.memberOfWeek;
+    if (!userId || s.busy) return;
+    const env = s.envelope;
+    if (env && env.previous_week_user_id === userId) return; // the row is disabled; this is the second lock
+    const row = memberOfWeekPickSuggestions().find((m) => m.id === userId);
+    if (!row) return;
+    s.pickUserId = userId;
+    s.pickChosen = { display_name: row.display_name, handle: row.handle, avatar_url: row.avatar_url };
+    s.publishErr = "";
+    rerender();
+  }
+  // Debounced and token-guarded, the same two protections directorySearch()
+  // carries and for the same two reasons: one request per typed word rather
+  // than one per character, and a slower earlier keystroke must never
+  // overwrite a later one's results.
+  let mowPickSearchTimer = null;
+  let mowPickSearchToken = 0;
+  function memberOfWeekPickSearchDebounced(query) {
+    state.coach.memberOfWeek.pickQuery = String(query || "");
+    if (mowPickSearchTimer) clearTimeout(mowPickSearchTimer);
+    mowPickSearchTimer = setTimeout(() => { mowPickSearchTimer = null; memberOfWeekPickSearch(query); }, SEARCH_DEBOUNCE_MS);
+  }
+  async function memberOfWeekPickSearch(query) {
+    const s = state.coach.memberOfWeek;
+    s.pickQuery = String(query || "");
+    const q = sanitizeSearchQuery(query);
+    const token = ++mowPickSearchToken;
+    // Below the threshold community_search answers empty by its own
+    // documented floor, so this asks nothing and falls back to the roster
+    // filter - exactly what directorySearch() does at the same boundary.
+    if (q.length < SEARCH_MIN_CHARS) { s.pickResults = null; s.pickSearching = false; return rerender(); }
+    s.pickSearching = true;
+    rerender();
+    const { data, error } = await client.rpc("community_search", { p_query: q, p_limit: DIRECTORY_PAGE_SIZE });
+    if (token !== mowPickSearchToken) return;
+    s.pickSearching = false;
+    // A failed search is not an empty club. Dropping back to null returns
+    // the list to the roster filter, which is a real (if narrower) answer,
+    // rather than asserting "no matches" off a request that never landed.
+    s.pickResults = (!error && data && Array.isArray(data.members)) ? data.members : null;
+    rerender();
+  }
+  // The free-selection ("coach's pick") form. The member is now an id chosen
+  // from the picker rather than a handle typed from memory, so there is no
+  // profiles lookup left on this path at all - one fewer round trip, and the
+  // "לא נמצא/ה חבר/ה עם שם המשתמש הזה" branch it needed is gone with it (the
+  // server's own "member not found" refusal is still mapped, and is still the
+  // real authority). The non-empty reason is still checked client-side before
+  // ever calling the server, matching COMM-315's own definition of a coach's
+  // pick ("a free staff selection... with a short reason staff types") - the
+  // server enforces the same rule regardless; this only saves a round trip
+  // for the obvious case.
   async function memberOfWeekPublishPick() {
     if (state.coach.memberOfWeek.busy) return;
-    const handle = String(state.coach.memberOfWeek.pickHandle || "").trim().toLowerCase().replace(/^@/, "");
+    const userId = state.coach.memberOfWeek.pickUserId;
     const reason = String(state.coach.memberOfWeek.pickReason || "").trim();
-    if (!handle) { state.coach.memberOfWeek.publishErr = "יש להזין שם משתמש."; setMessage(state.coach.memberOfWeek.publishErr); rerender(); return; }
+    if (!userId) { state.coach.memberOfWeek.publishErr = "יש לבחור חבר/ה מהרשימה."; setMessage(state.coach.memberOfWeek.publishErr); rerender(); return; }
     if (!reason) { state.coach.memberOfWeek.publishErr = "יש להזין סיבה לבחירת המאמן/ת."; setMessage(state.coach.memberOfWeek.publishErr); rerender(); return; }
-    const { data } = await client.from("profiles").select("id").eq("handle", handle).maybeSingle();
-    if (!data || !data.id) {
-      state.coach.memberOfWeek.publishErr = "לא נמצא/ה חבר/ה עם שם המשתמש הזה.";
-      setMessage(state.coach.memberOfWeek.publishErr);
-      rerender();
-      return;
-    }
-    // "pick" rather than data.id: the busy state is set before the resolved
-    // id is known to any renderer, and the whole free-selection form (not
-    // one candidate row) is what should read as busy while this is in
-    // flight - the same literal the state comment above documents.
-    await publishMemberOfWeek(data.id, reason, "pick");
+    // "pick" rather than userId: the whole free-selection form (not one
+    // candidate row) is what should read as busy while this is in flight -
+    // the same literal the state comment in cloud.js documents.
+    await publishMemberOfWeek(userId, reason, "pick");
   }
 
   // ---- Monthly club recap (COMM-309) ---------------------------------------
@@ -858,22 +910,23 @@
       ? `<div aria-busy="true">${`<div class="chart-card" style="height:56px;background:var(--border);opacity:.35;margin-bottom:10px;"></div>`.repeat(2)}</div>`
       : c.error
       ? `<div class="empty">לא ניתן היה לטעון את לוח המאמנים. נסו שוב.<div class="chip-row" style="justify-content:center;"><button class="chip-btn" data-community-action="coach-celebrate-retry">ניסיון חוזר</button></div></div>`
-      : c.items.length ? `<div class="log-list">${c.items.map(renderCoachCelebrateItem).join("")}</div>` : emptyStateHtml({
-        // NO ACTION SLOT. This feed is built entirely out of things MEMBERS
-        // do - a PR logged in the personal training log, a birthday, a club
+      : c.items.length ? `<div class="log-list">${c.items.map(renderCoachCelebrateItem).join("")}</div>` : emptyLineHtml({
+        // NO ACTION. This feed is built entirely out of things MEMBERS do -
+        // a PR logged in the personal training log, a birthday, a club
         // anniversary, a challenge finished. There is no button a coach can
         // press that puts a row here, and per the audit an invented one that
-        // goes nowhere is worse than none, so slot 4 is the `when`.
+        // goes nowhere is worse than none.
         //
-        // The `when` is deliberately specific to THIS feed rather than
-        // generic: the celebrate list is empty because nobody hit a PR this
-        // week, which is a different sentence from the welcome list being
-        // empty because nobody joined, and a coach who reads both in one
-        // scroll should be able to tell them apart.
-        key: "coach-celebrate", icon: "trophy",
-        headline: "כאן יופיעו ההישגים של השבוע",
-        body: "הרשימה נבנית משיאים אישיים, ימי הולדת, ותק ואתגרים שהושלמו.",
-        when: "ברגע שמישהו ירשום שיא, הוא יופיע כאן עם כפתור ברכה.",
+        // ONE LINE, still specific to THIS feed rather than generic - see
+        // emptyLineHtml()'s own header for why the four-slot card is the
+        // wrong shape on a tab that stacks seven sections. The celebrate
+        // list is empty because nobody hit a PR this week, which is a
+        // different sentence from the welcome list being empty because
+        // nobody joined, and a coach who reads both in one scroll should
+        // still be able to tell them apart. What the shorter form drops is
+        // the icon and the paragraph that restated the line.
+        key: "coach-celebrate",
+        text: "שיא אישי, יום הולדת או ותק יופיעו כאן עם כפתור ברכה.",
       });
     return `<div class="ach-section">${sectionHead("var(--energy)", "לחגוג")}${body}</div>`;
   }
@@ -936,8 +989,8 @@
       ? `<div aria-busy="true">${`<div class="chart-card" style="height:56px;background:var(--border);opacity:.35;margin-bottom:10px;"></div>`.repeat(2)}</div>`
       : w.error
       ? `<div class="empty">לא ניתן היה לבצע את הפעולה. נסו שוב.<div class="chip-row" style="justify-content:center;"><button class="chip-btn" data-community-action="coach-welcome-retry">ניסיון חוזר</button></div></div>`
-      : w.members.length ? `<div class="log-list">${w.members.map(renderCoachWelcomeRow).join("")}</div>` : emptyStateHtml({
-        // NO ACTION SLOT, and this is the one of the four where that was a
+      : w.members.length ? `<div class="log-list">${w.members.map(renderCoachWelcomeRow).join("")}</div>` : emptyLineHtml({
+        // NO ACTION, and this is the one of the four where that was a
         // genuinely close call. There IS a causal action a coach can take -
         // PERM.MEMBER_INVITE is held by coach and up, so a coach really can
         // create a per-person invite. But that form lives in the Manage TOP-
@@ -947,11 +1000,9 @@
         // that nav belongs to app.js. A button here would either not
         // navigate at all or would need a cross-file change, and shipping
         // the first of those is exactly the dead-end button the audit
-        // forbids. Left as a `when`; raised as a follow-up instead.
-        key: "coach-welcome", icon: "people",
-        headline: "כאן יופיעו החברים החדשים",
-        body: "הרשימה מציגה את מי שהצטרף למועדון בחודש האחרון.",
-        when: "כשמישהו חדש יצטרף, נציג כאן דרך לקבל אותו בברכה.",
+        // forbids. Raised as a follow-up instead.
+        key: "coach-welcome",
+        text: "כל מי שהצטרף למועדון בחודש האחרון יופיע כאן לקבלת פנים.",
       });
     return `<div class="ach-section" style="margin-top:18px;">${sectionHead("var(--green)", "קבלת פנים")}${body}</div>`;
   }
@@ -997,11 +1048,107 @@
   // when it does not (the ticket's own "staff can fall back to coach's pick"
   // empty state), and alone for the coachs_pick week itself (candidates is
   // always [] there by definition, so there is nothing to show beside it).
-  // previous_week_user_id is named here, not merely disabled, because the
-  // input is a free-text handle rather than a picker with real options to
-  // greyed-out one of - so the greying out COMM-315's schema comments ask
-  // for is expressed as a visible warning naming the ineligible member.
-  function renderMemberOfWeekPickForm(env) {
+  // previous_week_user_id is now BOTH named and disabled. It used to be only
+  // named, and the reason given was that the input was a free-text handle
+  // "rather than a picker with real options to grey out one of" - so the
+  // greying out COMM-315's schema comments ask for was expressed as a
+  // visible warning instead. There is a picker now, so the ineligible member
+  // is greyed out where they appear AND the warning stays: the note explains
+  // why the row is unpressable, which a disabled row on its own does not.
+  //
+  // ---- THE PICKER -----------------------------------------------------------
+  //
+  // WAS: `<input dir="ltr" placeholder="שם משתמש">`. To recognise a member a
+  // coach had to already know their @handle and spell it exactly - a
+  // Latin-script username, typed into an RTL Hebrew form, for a person the
+  // coach knows by their Hebrew first name. A miss produced
+  // "לא נמצא/ה חבר/ה עם שם המשתמש הזה" with no way to find out what the
+  // handle actually was without leaving the tab for the roster.
+  //
+  // The old comment on memberOfWeekPublishPick() said there was "no
+  // staff-readable directory RPC to build a real member picker from". That
+  // was never quite true and is plainly not true now: the Directory tab's
+  // own roster (loadDirectory - a plain profiles select any signed-in member
+  // may run, filtered to visible_to_club) and community_search are both
+  // existing reads, used here unchanged. NO NEW MIGRATION, no new RPC, no
+  // widened policy - the picker sees exactly what the member browsing the
+  // roster already sees, which is also exactly the set
+  // member_of_week_publish() will accept ("member is not visible to the
+  // club" is one of its five refusals).
+  //
+  // TWO SOURCES, one list, in this order:
+  //   1. Typed nothing, or fewer than SEARCH_MIN_CHARS - the roster page
+  //      already in memory, so the field opens with real names in it rather
+  //      than as an empty box that demands a guess.
+  //   2. Typed enough - the same community_search RPC the roster's own box
+  //      debounces, because the roster is PAGINATED (DIRECTORY_PAGE_SIZE) and
+  //      a club with more members than one page would otherwise have members
+  //      the picker could not reach. Until that answers, the local filter
+  //      still renders, so typing is never a blank pause.
+  const MOW_PICK_SUGGESTION_LIMIT = 6;
+  function memberOfWeekPickSuggestions() {
+    const s = state.coach.memberOfWeek;
+    const q = sanitizeSearchQuery(s.pickQuery).toLowerCase();
+    // The server's answer wins once it exists for a real query; below the
+    // threshold no request was made and none is coming, so the roster is the
+    // only honest source.
+    const rows = (q.length >= SEARCH_MIN_CHARS && Array.isArray(s.pickResults))
+      ? s.pickResults
+      : (state.members.directory.items || []).filter((m) => !q
+          || (m.display_name || "").toLowerCase().indexOf(q) >= 0
+          || (m.handle || "").toLowerCase().indexOf(q) >= 0);
+    // The same render-time block filter every other member list in this file
+    // carries (see blockFilteredList()). A coach who has blocked someone
+    // should not be offered them as the club's member of the week.
+    return rows.filter((m) => m && m.id && !isBlockedUser(m.id)).slice(0, MOW_PICK_SUGGESTION_LIMIT);
+  }
+  function memberOfWeekPickSuggestionRow(m, prevId, anyBusy) {
+    const ineligible = !!prevId && m.id === prevId;
+    const meta = `@${esc(m.handle || "")}${ineligible ? " · נבחר/ה בשבוע שעבר" : ""}`;
+    // A `.log-row` that happens to be a button, the same shape the staff
+    // rail's own tappable rows and the Manage attention strip already use -
+    // so a suggestion looks and measures like every other member row in the
+    // app rather than like a bespoke dropdown. No background/border
+    // overrides: `.log-row` beats the bare `button` reset on specificity, and
+    // `button:disabled{opacity:.45}` already greys the ineligible row, so the
+    // only thing this style adds is the full width and the start alignment a
+    // button does not take by default.
+    return `<button type="button" class="log-row" data-community-action="coach-mow-pick-select" data-id="${esc(m.id)}" data-mow-pick-option="1"${(ineligible || anyBusy) ? " disabled" : ""} style="width:100%;text-align:start;">
+      <div class="flex gap-10" style="align-items:center;min-width:0;">
+        ${avatarHtml(m.display_name || m.handle, 32, m.avatar_url)}
+        <div style="min-width:0;">
+          <div style="font-weight:700;">${nameHtml(m.display_name, m.handle)}</div>
+          <div style="color:var(--steel);font-size:12px;"><bdi>${meta}</bdi></div>
+        </div>
+      </div>
+    </button>`;
+  }
+  function memberOfWeekPickSuggestionsHtml(prevId, anyBusy) {
+    const s = state.coach.memberOfWeek;
+    const d = state.members.directory;
+    const q = sanitizeSearchQuery(s.pickQuery);
+    const rows = memberOfWeekPickSuggestions();
+    // The roster load is kicked off by afterRenderCommunity() the first time
+    // this tab renders, the same lazy shape every other sub-tab load uses.
+    // Until it answers there is nothing to filter, and saying "no matches"
+    // about a list that has not loaded is the same class of false statement
+    // renderCoachAppActivitySection() refuses to make about activity data.
+    if (!rows.length && !d.loaded && !Array.isArray(s.pickResults)) {
+      return `<div class="footer-note" role="status" style="margin-top:6px;" data-mow-pick-suggestions="loading">${d.error ? "לא ניתן היה לטעון את רשימת החברים." : "טוען את רשימת החברים…"}</div>`;
+    }
+    if (!rows.length) {
+      return `<div class="footer-note" role="status" style="margin-top:6px;" data-mow-pick-suggestions="none">${s.pickSearching ? "מחפש…" : q ? "לא נמצאו חברים תואמים." : "רשימת החברים ריקה."}</div>`;
+    }
+    return `<div class="log-list" data-mow-pick-suggestions="list" style="margin-top:6px;">${rows.map((m) => memberOfWeekPickSuggestionRow(m, prevId, anyBusy)).join("")}</div>`;
+  }
+  // `primary` decides whether this form's publish button carries the orange
+  // fill, and it is the caller's call rather than this function's because the
+  // answer is about the SCREEN, not the form: one main action per screen. The
+  // form is the only publish control on the empty/free-selection branches, so
+  // there it IS the main action; alongside a computed shortlist, each of whose
+  // rows already carries an orange one-tap "פרסום", it is the second way to do
+  // the same thing and takes .secondary.
+  function renderMemberOfWeekPickForm(env, primary) {
     const s = state.coach.memberOfWeek;
     const busy = s.busy === "pick";
     const anyBusy = !!s.busy;
@@ -1009,14 +1156,27 @@
     const prevProfile = s.previousProfile;
     const prevName = prevProfile ? (prevProfile.display_name || "@" + prevProfile.handle) : "חבר/ה";
     const prevNote = prevId ? `<div class="footer-note" style="margin-top:4px;">לא ניתן לבחור שוב ב${esc(prevName)} — נבחר/ה כבר בשבוע שעבר.</div>` : "";
+    const chosen = s.pickUserId ? (s.pickChosen || {}) : null;
+    const member = chosen
+      ? `<div class="log-row" data-mow-pick-chosen="${esc(s.pickUserId)}" style="align-items:center;">
+          <div class="flex gap-10" style="align-items:center;min-width:0;">
+            ${avatarHtml(chosen.display_name || chosen.handle, 32, chosen.avatar_url)}
+            <div style="min-width:0;">
+              <div style="font-weight:700;">${nameHtml(chosen.display_name, chosen.handle)}</div>
+              <div style="color:var(--steel);font-size:12px;"><bdi>@${esc(chosen.handle || "")}</bdi></div>
+            </div>
+          </div>
+          <button class="chip-btn" data-community-action="coach-mow-pick-clear"${anyBusy ? " disabled" : ""}>שינוי</button>
+        </div>`
+      : `<input class="text-input" data-mow-pick-search placeholder="חיפוש לפי שם או שם משתמש" aria-label="חיפוש חבר/ה לבחירת המאמן/ת" value="${esc(s.pickQuery)}"${anyBusy ? " disabled" : ""}/>${memberOfWeekPickSuggestionsHtml(prevId, anyBusy)}`;
     return `<div class="chart-card" style="margin-top:8px;">
       <h3 class="field-label" style="margin-bottom:6px;">בחירת מאמן/ת</h3>
-      <label class="field"><span class="field-label">שם משתמש</span><input class="text-input" dir="ltr" placeholder="שם משתמש" data-mow-pick-handle value="${esc(s.pickHandle)}"${anyBusy ? " disabled" : ""}/></label>
+      <div class="field"><span class="field-label">חבר/ה</span>${member}</div>
       <label class="field"><span class="field-label">סיבה (חובה)</span><textarea class="text-input" rows="3" maxlength="500" data-mow-pick-reason placeholder="למה החבר/ה הזה/הזאת נבחר/ה השבוע"${anyBusy ? " disabled" : ""}>${esc(s.pickReason)}</textarea></label>
       <div data-mow-pick-counter style="text-align:left;font-size:11px;color:var(--steel);min-height:14px;">${s.pickReason.length}/500</div>
       ${s.publishErr ? `<div class="field-error" role="alert">${esc(s.publishErr)}</div>` : ""}
       ${prevNote}
-      <button class="chip-btn primary" data-community-action="coach-mow-publish-pick"${anyBusy ? " disabled" : ""}>${busy ? "מפרסם/ת…" : "פרסום בחירת המאמן/ת"}</button>
+      <button class="chip-btn ${primary ? "primary" : "secondary"}" data-community-action="coach-mow-publish-pick"${anyBusy ? " disabled" : ""}>${busy ? "מפרסם/ת…" : "פרסום בחירת המאמן/ת"}</button>
     </div>`;
   }
   // Once published is non-null the publish action is spent for the week -
@@ -1055,7 +1215,9 @@
     if (env.published) {
       body = renderMemberOfWeekPublished(env);
     } else if (env.free_selection) {
-      body = renderMemberOfWeekPickForm(env);
+      // free_selection: the coachs_pick week itself. The form is the only
+      // publish control on screen, so it carries the screen's one orange.
+      body = renderMemberOfWeekPickForm(env, true);
     } else if (env.candidates && env.candidates.length) {
       // Same complication the invite flow had: a form that's always fully
       // open competes for attention with the actual suggestions above it.
@@ -1064,21 +1226,18 @@
       // tucked behind a summary when there's already something to publish
       // with one tap. The empty/free_selection/coachs_pick branches below
       // leave it open, since there it's the only action on screen.
-      body = `<div class="log-list">${env.candidates.map((c) => renderMemberOfWeekCandidate(c, env.category)).join("")}</div><details style="margin-top:8px;"><summary class="link-btn" style="cursor:pointer;">בחירה ידנית של חבר/ת השבוע</summary>${renderMemberOfWeekPickForm(env)}</details>`;
+      body = `<div class="log-list">${env.candidates.map((c) => renderMemberOfWeekCandidate(c, env.category)).join("")}</div><details style="margin-top:8px;"><summary class="link-btn" style="cursor:pointer;">בחירה ידנית של חבר/ת השבוע</summary>${renderMemberOfWeekPickForm(env, false)}</details>`;
     } else {
-      // NO BUTTON IN SLOT 4 - because the action already exists, three
-      // elements further down. renderMemberOfWeekPickForm() renders directly
-      // underneath this state and lets a coach pick ANY member by handle, so
-      // a primary button here would be a second door onto a form already on
-      // screen. Slot 4 points at it instead, which is what the spec's own
-      // "must actually fill the state" rule asks for once the thing that
-      // fills it is already rendered.
-      body = emptyStateHtml({
-        key: "coach-member-of-week", icon: "star",
-        headline: "כאן יופיעו המועמדים לחבר/ת השבוע",
-        body: "המועמדים נבנים מרצפי אימונים, שיאים והשלמות אתגר של השבוע.",
-        when: "בקטגוריה הזו אפשר גם לבחור כל חבר/ה ידנית, בטופס שמתחת.",
-      }) + renderMemberOfWeekPickForm(env);
+      // NO BUTTON - because the action already exists, one element further
+      // down. renderMemberOfWeekPickForm() renders directly underneath this
+      // state and lets a coach pick ANY member, so a button here would be a
+      // second door onto a form already on screen. The line points at it
+      // instead, which is what the spec's own "must actually fill the state"
+      // rule asks for once the thing that fills it is already rendered.
+      body = emptyLineHtml({
+        key: "coach-member-of-week",
+        text: "בקטגוריה הזו אפשר לבחור כל חבר/ה ידנית, בטופס שמתחת.",
+      }) + renderMemberOfWeekPickForm(env, true);
     }
     return `<div class="ach-section" style="margin-top:18px;">${head}${body}</div>`;
   }
@@ -1167,21 +1326,18 @@
       // its own without that reason: the very first month of a new club has
       // no completed prior month to summarise, so the newest-row query
       // honestly answers nothing until the job's first run.
-      // Slot 4 is a when-line rather than an action, and here that is forced
-      // rather than chosen: nothing a coach can press generates this row.
-      // recap_monthly_generate() is a scheduled job, so the only honest
-      // fourth slot is the schedule itself. The date is stated because
-      // "בקרוב" would leave a coach checking back daily.
-      return `<div class="ach-section" style="margin-top:18px;">${head}${emptyStateHtml({
+      // NO ACTION, and here that is forced rather than chosen: nothing a
+      // coach can press generates this row. recap_monthly_generate() is a
+      // scheduled job, so the only honest thing to say is the schedule
+      // itself. The date is stated because "בקרוב" would leave a coach
+      // checking back daily. Deliberately does not name who may press
+      // "פרסום": that button is gated on analytics-view-or-admin, narrower
+      // than the coaches who can reach this preview (see this function's own
+      // header), so a promise here would be false for exactly the coach
+      // reading it.
+      return `<div class="ach-section" style="margin-top:18px;">${head}${emptyLineHtml({
         key: "coach-monthly-recap",
-        icon: "chart",
-        headline: "התקציר החודשי של המועדון ייבנה מעצמו",
-        body: "התקציר מסכם חודש שהסתיים — כמה אימונים נרשמו, מי הצטרף, אילו שיאים נשברו — ונבנה מהנתונים שכבר קיימים במועדון, בלי שצריך למלא בו משהו.",
-        // Deliberately does not name who may press "פרסום": that button is
-        // gated on analytics-view-or-admin, narrower than the coaches who can
-        // reach this preview (see this function's own header), so a promise
-        // here would be false for exactly the coach reading it.
-        when: "משימה מתוזמנת מייצרת אותו ב-1 בכל חודש, עבור החודש שהסתיים. הוא יופיע כאן קודם כטיוטה לתצוגה מקדימה, ורק אחר כך מתפרסם לחברי המועדון.",
+        text: "התקציר נבנה לבד ב-1 בכל חודש, עבור החודש שהסתיים, ויופיע כאן קודם כטיוטה.",
       })}</div>`;
     }
     const r = s.row;
@@ -1255,31 +1411,93 @@
       ? `<div class="empty">לא ניתן היה לטעון את הנתונים.<div class="chip-row" style="justify-content:center;"><button class="chip-btn" data-community-action="coach-engage-retry">ניסיון חוזר</button></div></div>`
       : e.items.length
       ? `<div class="log-list">${e.items.map(renderCoachEngageRow).join("")}</div>`
-      : emptyStateHtml({
+      : emptyLineHtml({
         // The GOOD outcome, written like one - the same instinct
         // renderIncompleteSignups() already committed to ("an admin who
         // finds nothing here has learned something, and the screen should
         // say what"). An empty engagement list is not a gap in the data, it
-        // is the club being fine, and under a red section dot a bare
-        // one-liner read like a panel that had failed rather than like the
-        // all-clear it is.
+        // is the club being fine. The four-slot card was introduced here
+        // because a BARE one-liner under a red section dot read like a panel
+        // that had failed; the line below is not bare - it states the
+        // all-clear itself, which is what was actually missing.
         //
-        // NO ACTION SLOT: there is nobody to reach out to. The reach-out,
-        // review and dismiss buttons live on the rows, and a row is what
-        // this state is the absence of.
-        key: "coach-engage", icon: "check",
-        headline: "כל החברים בקצב טוב כרגע",
-        body: "הרשימה מתמלאת כשקצב האימונים של חבר/ה יורד.",
-        when: "אם קצב של מישהו יירד, הוא יופיע כאן עם דרך ליצור קשר.",
+        // NO ACTION: there is nobody to reach out to. The reach-out, review
+        // and dismiss buttons live on the rows, and a row is what this state
+        // is the absence of.
+        key: "coach-engage",
+        text: "כל החברים בקצב טוב כרגע — מי שקצב האימונים שלו יירד יופיע כאן.",
       });
     return `<div class="ach-section" style="margin-top:18px;">${sectionHead("var(--red)", "מעקב מעורבות")}${body}</div>`;
   }
+  // ---- "nothing needs attention", said ONCE ---------------------------------
+  //
+  // The other half of the empty-state fix (see emptyLineHtml() in cloud.js).
+  // Shortening six cards to six lines stops the tab being two screens of
+  // illustrated apologies, but it still makes a coach read six lines and do
+  // the AND themselves to learn the one thing they opened the tab for. This
+  // says it at the top, once, and only when it is true.
+  //
+  // WHAT "QUIET" MEANS, per section, and why each test is shaped the way it
+  // is. A section counts as quiet when it is OFF (nothing to be quiet about),
+  // or LOADED, not errored, and holding no row that wants a coach. It counts
+  // as NOISY the moment it holds one. Crucially it counts as NEITHER while it
+  // is still loading or has failed: an unanswered read is not an all-clear,
+  // and this summary must never be the thing that tells a coach the club is
+  // fine because a query timed out. Anything not-yet-known suppresses the
+  // summary entirely, which is the honest default - the sections below still
+  // say their own piece either way.
+  //
+  // Deliberately NOT a count of empty sections in the rendered HTML. That
+  // would be the same string-scraping shortcut that makes a summary drift
+  // away from the thing it summarises the first time a section changes shape.
+  function coachBoardQuiet() {
+    const known = [];
+    // A section reports [quiet?] or nothing at all when its answer is not in
+    // yet. `push(false)` is a real "something is here"; pushing nothing is
+    // "we do not know", and one of those is enough to withhold the summary.
+    function report(off, loaded, error, hasRows) {
+      if (off) return known.push(true);
+      if (!loaded || error) return; // unknown - not an all-clear
+      known.push(!hasRows);
+    }
+    const t = state.coach.tasks, c = state.coach.celebrate, w = state.coach.welcome, e = state.coach.engage, m = state.coach.memberOfWeek, r = state.coach.monthlyRecap;
+    report(!isModuleEnabled("coach_tasks"), t.loaded, t.error, (t.items || []).some((x) => x && !isBlockedUser(x.user_id)));
+    report(false, c.loaded, c.error, (c.items || []).length > 0);
+    report(!isModuleEnabled("welcome_flow"), w.loaded, w.error, (w.members || []).length > 0);
+    report(!state.featureFlags.coachEngage, e.loaded, e.error, (e.items || []).length > 0);
+    // Member of the week is quiet when the week is settled (already
+    // published) or when there is nobody computed to publish. An unpublished
+    // week WITH candidates is a one-tap action waiting, so it is noisy.
+    report(!isModuleEnabled("member_of_week"), m.loaded, m.error || !m.envelope, !!(m.envelope && !m.envelope.published && m.envelope.candidates && m.envelope.candidates.length));
+    // The monthly recap is quiet unless there is an unpublished draft sitting
+    // in it. No row at all is quiet; a published month is quiet.
+    report(!isModuleEnabled("monthly_recap"), r.loaded, r.error, !!(r.row && !r.row.published_at));
+    // Challenges is read straight off the list the section itself renders,
+    // rather than given a state branch of its own: the module being off makes
+    // challenges_read return nothing, so an empty list already covers it.
+    const ch = state.challenges;
+    if (!isModuleEnabled("challenges")) known.push(true);
+    else if (ch.loaded && !ch.error) known.push(!(ch.items || []).some((x) => x && x.status === "active" && !isOnboardingContainer(x)));
+    // Every section answered, and every answer was "quiet".
+    return known.length === 7 && known.every(Boolean);
+  }
+  function renderCoachBoardSummary() {
+    if (!coachBoardQuiet()) return "";
+    return `<div class="ach-section" data-coach-board-summary="1" style="margin-top:0;">${sectionHead("var(--green)", "אין מה לטפל בו כרגע")}
+      <div class="chart-card" style="color:var(--steel);font-size:13px;line-height:1.7;">${bidiText("אין משימות פתוחות, הישגים לברך עליהם או חברים שהקצב שלהם ירד. הרשימות למטה מתמלאות לבד מהנתונים של המועדון.")}</div></div>`;
+  }
   function renderCoachTab() {
-    // Tasks first, deliberately. Everything else on this tab is something a
-    // coach may want to look at; this is the only part that is a list of
-    // things somebody has to do today, and burying a work queue under three
-    // browsable sections is how it stops being one.
-    return renderCoachTasksSection() + renderCoachCelebrateSection() + renderCoachMemberOfWeekSection() + renderCoachWelcomeSection() + renderChallengesListSection() + renderCoachEngageSection() + renderCoachMonthlyRecapSection();
+    // The summary first and the tasks straight after it, deliberately.
+    // Everything else on this tab is something a coach may want to look at;
+    // tasks is the only part that is a list of things somebody has to do
+    // today, and burying a work queue under three browsable sections is how
+    // it stops being one. The summary renders only when that queue and every
+    // other section is empty, so it never pushes real work down the screen.
+    //
+    // `true` to renderChallengesListSection: the coach-board rendering, whose
+    // empty state is a line rather than the four-slot card the same section
+    // shows a member on Boards. See its own comment.
+    return renderCoachBoardSummary() + renderCoachTasksSection() + renderCoachCelebrateSection() + renderCoachMemberOfWeekSection() + renderCoachWelcomeSection() + renderChallengesListSection(true) + renderCoachEngageSection() + renderCoachMonthlyRecapSection();
   }
 
   // ---- Coach tasks (202609220002) ------------------------------------------
@@ -1391,11 +1609,9 @@
       ? `<div class="empty" role="alert">לא ניתן היה לטעון את המשימות.<div class="chip-row" style="justify-content:center;margin-top:6px;"><button class="chip-btn" data-community-action="coach-tasks-retry">ניסיון חוזר</button></div></div>`
       : rows.length
       ? `<div class="log-list">${rows.map(renderCoachTaskRow).join("")}</div>`
-      : emptyStateHtml({
-        key: "coach-tasks", icon: "check",
-        headline: "אין משימות פתוחות",
-        body: "הרשימה נבנית לבד מתוך מי שהצטרף, מי שהתאמן ומי שכבר דיברו איתו.",
-        when: "כשמישהו חדש יצטרף, יגיע לאימון ראשון או ייעלם לחודש - המשימה תופיע כאן.",
+      : emptyLineHtml({
+        key: "coach-tasks",
+        text: "משימה תיפתח כאן לבד כשמישהו יצטרף, יגיע לאימון ראשון או ייעלם לחודש.",
       });
     const overdue = rows.filter((t) => t.overdue).length;
     const count = rows.length
@@ -1451,7 +1667,18 @@
           </div>`;
         }).join("")}</div>`
       : `<div class="empty">אין חברים חדשים לאחרונה</div>`;
-    return `<div class="ach-section" style="margin-top:18px;">${sectionHead("var(--green)", "חברים חדשים", true)}${body}</div>`;
+    // margin-top:0, unlike every other section in this file: since the
+    // Account tab grouped its staff-only blocks, this is the FIRST child of
+    // that group rather than the next section after a member setting, and an
+    // 18px gap under the group's own label read as a break rather than as
+    // membership. See the staff area in cloud.js.
+    //
+    // NO "ניהול" TAG on this head or on renderCoachAppActivitySection's,
+    // for the same reason: the group they now sit in carries one, and three
+    // identical badges in one block is the badge saying nothing. The tag is
+    // still exactly where it was - on the thing that is staff-only - it is
+    // just on the group rather than on each of its two members.
+    return `<div class="ach-section" style="margin-top:0;">${sectionHead("var(--green)", "חברים חדשים")}${body}</div>`;
   }
 
   function renderCoachAppActivitySection() {
@@ -1466,7 +1693,7 @@
     // list anybody - on an empty signal every member would qualify as
     // "no recent activity", which is exactly the 8-of-8 failure.
     if (sig && Number(sig.members_with_app_activity) === 0) {
-      return `<div class="ach-section" style="margin-top:18px;">${sectionHead("var(--steel)", "לא נכנסו לאפליקציה לאחרונה", true)}${coachAppSignalNote()}<div class="empty">${bidiText("אין עדיין נתוני פעילות")}<div style="color:var(--steel);font-size:12px;line-height:1.6;margin-top:6px;">${bidiText("הנתונים מתחילים להצטבר כשחברים נכנסים לאפליקציה. עד אז אין כאן מה להציג.")}</div></div></div>`;
+      return `<div class="ach-section" style="margin-top:18px;">${sectionHead("var(--steel)", "לא נכנסו לאפליקציה לאחרונה")}${coachAppSignalNote()}<div class="empty">${bidiText("אין עדיין נתוני פעילות")}<div style="color:var(--steel);font-size:12px;line-height:1.6;margin-top:6px;">${bidiText("הנתונים מתחילים להצטבר כשחברים נכנסים לאפליקציה. עד אז אין כאן מה להציג.")}</div></div></div>`;
     }
 
     // Rule 1, first half: the actionable list. Only members we have real
@@ -1502,5 +1729,5 @@
     // are members we know nothing about is not a club in trouble, and
     // colouring it as one is the same overclaim in a different medium.
     const accent = lapsed.length ? "var(--red)" : "var(--steel)";
-    return `<div class="ach-section" style="margin-top:18px;">${sectionHead(accent, "לא נכנסו לאפליקציה לאחרונה", true)}${coachAppSignalNote()}${lapsedHtml}${unknownHtml}</div>`;
+    return `<div class="ach-section" style="margin-top:18px;">${sectionHead(accent, "לא נכנסו לאפליקציה לאחרונה")}${coachAppSignalNote()}${lapsedHtml}${unknownHtml}</div>`;
   }

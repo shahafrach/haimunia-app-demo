@@ -33,7 +33,7 @@
     const unread = state.notif.unreadLoaded
       ? Number(state.notif.unread) || 0
       : Number((club && club.unread_notifications) || 0);
-    return `<button class="chip-btn" data-community-action="feed-notifications" aria-label="התראות${unread ? (unread === 1 ? ", התראה אחת חדשה" : `, ${unread} חדשות`) : ""}" aria-haspopup="dialog" style="position:relative;">🔔${unread ? `<span class="tab-badge" aria-hidden="true">${unread}</span>` : ""}</button>`;
+    return `<button class="chip-btn" data-community-action="feed-notifications" aria-label="התראות${unread ? (unread === 1 ? ", התראה אחת חדשה" : `, ${unread} חדשות`) : ""}" aria-haspopup="dialog" style="position:relative;">${FEED_ICONS.bell}${unread ? `<span class="tab-badge" aria-hidden="true">${unread}</span>` : ""}</button>`;
   }
 
   // ==== COMM-140..144 notifications ====================================
@@ -504,6 +504,13 @@
     }
     rerender();
   }
+  // THE PERMISSION SENTENCE, ONCE. It was typed out at four call sites (two
+  // in enableNotifPush, one in its catch, one in runPushSelfTest) and the
+  // self-test panel now has to RECOGNISE it to know when to offer the
+  // how-to-allow instructions below - a comparison against a string literal
+  // that four other literals have to keep matching is exactly the drift
+  // CLAUDE.md warns about, so there is now one constant.
+  const NOTIF_PERMISSION_DENIED_TEXT = "לא אושרה הרשאת התראות";
   // Triggers the browser permission prompt - the ticket's own "loading
   // state is the prompt itself", no spinner needed. On grant, registers a
   // PushSubscription and writes {endpoint, keys}; only returns true once
@@ -529,7 +536,7 @@
         // Recorded on BOTH branches, before the early return below: a denial
         // is the answer this event exists for.
         notePushPermission("prompt");
-        if (perm !== "granted") { setMessage("לא אושרה הרשאת התראות"); return false; }
+        if (perm !== "granted") { setMessage(NOTIF_PERMISSION_DENIED_TEXT); return false; }
         const pubKey = (window.HAIMUNIA_CONFIG && window.HAIMUNIA_CONFIG.notifPushVapidPublicKey) || "";
         sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: vapidKeyToUint8Array(pubKey) });
       }
@@ -537,7 +544,7 @@
       const { error } = await client.from("push_subscriptions").upsert(
         { user_id: state.user.id, endpoint: json.endpoint, keys: json.keys || {}, revoked_at: null },
         { onConflict: "endpoint" });
-      if (error) { setMessage(failText("לא אושרה הרשאת התראות", error)); return false; }
+      if (error) { setMessage(failText(NOTIF_PERMISSION_DENIED_TEXT, error)); return false; }
       state.notif.pushSub = { endpoint: json.endpoint };
       try { localStorage.setItem(NOTIF_PUSH_ENDPOINT_KEY, json.endpoint); } catch (e) {}
       // COMM-233. Only once the subscription row is actually written -
@@ -549,7 +556,7 @@
       rerender();
       return true;
     } catch (err) {
-      setMessage("לא אושרה הרשאת התראות");
+      setMessage(NOTIF_PERMISSION_DENIED_TEXT);
       return false;
     }
   }
@@ -599,7 +606,7 @@
       let perm = null;
       try { perm = await Notification.requestPermission(); } catch (e) { perm = null; }
       notePushPermission("self_test");
-      if (perm !== "granted") return pushSelfTestSet("failed", "לא אושרה הרשאת התראות");
+      if (perm !== "granted") return pushSelfTestSet("failed", NOTIF_PERMISSION_DENIED_TEXT);
     }
     const id = "st" + Date.now() + Math.random().toString(36).slice(2, 6);
     st.id = id;
@@ -1205,36 +1212,61 @@
     const pushOn = notifPushEnabled();
     const pushReason = pushOn ? notifPushUnsupportedReason() : null;
     const pushDisabled = !!pushReason;
+    // ONE ROW, ONE CONTROL - the same three choices.
+    //
+    // Real phone screenshots at 390px: seventeen preference types, and every
+    // one of them a stacked block with its own 44px-tall chip-row of two or
+    // three buttons. A member scrolled past ~50 identical large buttons to
+    // find the one type they came to change, and because "התראת דחיפה" is
+    // roughly three times the width of "כבוי", the rows did not even line up
+    // with one another.
+    //
+    // A <select> is the compact form of exactly this question - pick one of
+    // three, mutually exclusive - and on both phone platforms it opens the
+    // native picker, which is a better target than a 13px chip either way.
+    // NOTHING ABOUT THE CHOICES CHANGED: the same three channels, the same
+    // NOTIF_CHANNELS values, the same setNotifPref() write, the same
+    // push-permission gate behind picking "push", the same staffOnly
+    // filtering, the same "פעיל" badge and the same browser-unsupported
+    // explanation. Only the control is different.
+    //
+    // The push OPTION is still omitted entirely (not disabled) while the
+    // module flag is off, for the reason the block above this one gives, and
+    // is rendered disabled - present but unpickable - when the flag is on and
+    // this browser cannot do push, so the explanation beside it has something
+    // to explain.
+    //
+    // .text-input, not a new class: the select then carries the app's own
+    // field styling (tokens for surface, border and text, so it themes
+    // itself and adds nothing to either dark block) and only its width and
+    // padding are overridden here, to keep the row one line.
     const rowFor = (t) => {
       const stored = state.notif.prefs[t.key] || "in_app";
       const eff = (stored === "push" && !pushOn) ? "in_app" : stored;
       const saving = !!state.notif.prefSaving[t.key];
-      const btn = (ch, label, disabled, title) =>
-        `<button type="button" class="chip-btn${eff === ch ? " selected" : ""}" data-community-action="notif-pref" data-type="${t.key}" data-channel="${ch}"${(disabled || saving) ? " disabled" : ""}${disabled && title ? ` aria-disabled="true" title="${esc(title)}"` : ""}>${label}</button>`;
-      const noteHtml = t.note ? `<span style="color:var(--steel);font-size:11px;">${esc(t.note)}</span>` : "";
+      const opt = (ch, label, disabled) =>
+        `<option value="${ch}"${eff === ch ? " selected" : ""}${disabled ? " disabled" : ""}>${label}</option>`;
+      const noteHtml = t.note ? `<span style="color:var(--steel);font-size:11px;display:block;line-height:1.5;">${esc(t.note)}</span>` : "";
       // Populated (COMM-229 frontend states): an active subscription on
       // THIS device shows "פעיל" next to the push option, only for a row
       // whose effective channel actually is push. Empty (push never opted
       // into) renders no badge at all - the row looks exactly like any
       // other channel, per the ticket's own wording.
       const pushBadge = (pushOn && eff === "push" && state.notif.pushSub)
-        ? `<span style="color:var(--green);font-size:11px;">פעיל</span>` : "";
+        ? `<span style="color:var(--green);font-size:11px;"> · פעיל</span>` : "";
       // Only reachable once pushOn is true (a browser-unsupported reason
       // cannot exist while the flag itself is off) - the V1-default "בקרוב"
       // case that used to live here has no button to explain any more.
       const explainHtml = pushDisabled
-        ? `<span style="color:var(--steel);font-size:11px;">${esc(pushReason)}</span>` : "";
-      return `<div class="log-row" style="flex-direction:column;align-items:stretch;gap:6px;">
-        <span style="font-size:13px;">${esc(t.label)}</span>
-        ${noteHtml}
-        <div class="chip-row" role="group" aria-label="${esc(t.label)}" style="margin-top:0;">
-          ${pushOn ? btn("push", "התראת דחיפה", pushDisabled, pushDisabled ? pushReason : null) : ""}
-          ${pushBadge}
-          ${btn("in_app", "באפליקציה", false)}
-          ${btn("off", "כבוי", false)}
-        </div>
-        ${explainHtml}
-      </div>`;
+        ? `<span style="color:var(--steel);font-size:11px;display:block;line-height:1.5;">${esc(pushReason)}</span>` : "";
+      return `<label class="log-row" style="justify-content:space-between;gap:10px;align-items:center;cursor:pointer;">
+        <span style="font-size:13px;min-width:0;">${esc(t.label)}${pushBadge}${noteHtml}${explainHtml}</span>
+        <select class="text-input" data-notif-pref-select data-type="${t.key}" aria-label="${esc(t.label)}"${saving ? " disabled" : ""} style="width:auto;flex:0 0 auto;font-size:13px;padding:8px 10px;">
+          ${pushOn ? opt("push", "התראת דחיפה", pushDisabled) : ""}
+          ${opt("in_app", "באפליקציה", false)}
+          ${opt("off", "כבוי", false)}
+        </select>
+      </label>`;
     };
     // `staffOnly` (currently just `new_report`) is hidden from a plain
     // member: that type is never delivered to one (mod_alert_recipients()
@@ -1266,6 +1298,37 @@
     </div>`;
   }
 
+  // WHAT TO DO ABOUT IT. The self-test's own bug report: it answered "לא
+  // אושרה הרשאת התראות" and stopped there, which tells a member what the
+  // browser said and nothing about what they can do - and on a phone the
+  // answer is not in this app at all, it is two screens deep in the OS, in a
+  // different place on each platform. Both platforms are listed rather than
+  // the detected one: communityPlatformBucket() reads a user-agent string,
+  // an iPad reporting as a Mac is a known case, and a member reading two
+  // short lines and picking their own phone cannot be sent to the wrong
+  // settings screen by a sniff that guessed wrong.
+  //
+  // The iPhone line leads with the home-screen step on purpose: Safari on
+  // iOS grants web push ONLY to an installed PWA, so for an iPhone member
+  // reading this in a browser tab there is no permission to allow yet and
+  // the Settings route would simply not list the app.
+  //
+  // The retry is the same runPushSelfTest() the button above it runs; it is
+  // repeated here so the next step and the control that takes it are in one
+  // place, instead of asking the member to scroll back up past the failure.
+  function pushPermissionHelpHtml() {
+    const line = (device, steps) =>
+      `<div style="margin-top:6px;"><b style="color:var(--chalk);">${device}</b><div>${steps}</div></div>`;
+    return `<div data-push-permission-help="1" style="color:var(--steel);font-size:12px;line-height:1.6;margin-top:8px;border-top:1px solid var(--border);padding-top:8px;">
+      <div style="font-weight:700;color:var(--chalk);">איך מאשרים התראות</div>
+      ${line("אייפון", "קודם מוסיפים את האפליקציה למסך הבית: בספארי, כפתור השיתוף ← „הוספה למסך הבית”. אחר כך פותחים אותה משם, ובהגדרות המכשיר: הגדרות ← התראות ← האימוניה ← „אפשר התראות”.")}
+      ${line("אנדרואיד", "הגדרות ← אפליקציות ← האימוניה ← התראות ← מפעילים „הצג התראות”. בכרום אפשר גם: ⋮ ← הגדרות אתר ← התראות.")}
+      <div class="chip-row" style="margin-top:8px;">
+        <button type="button" class="chip-btn" data-community-action="notif-push-self-test">ניסיון חוזר</button>
+      </div>
+    </div>`;
+  }
+
   // Rendered under the preference rows rather than beside the push button on
   // each of them: a PushSubscription is per device, so "does this phone get
   // notifications" is one question asked once, exactly like the
@@ -1286,9 +1349,10 @@
     if (st.status === "received") {
       resultHtml = `<div role="status" style="color:var(--green);font-size:12px;margin-top:6px;">התראה התקבלה במכשיר הזה.</div>`;
     } else if (st.status === "not_received") {
-      resultHtml = `<div role="status" style="color:var(--steel);font-size:12px;margin-top:6px;">לא התקבלה התראה. בדקו שהתראות מהאפליקציה מאושרות בהגדרות המכשיר, ושהאפליקציה פתוחה מהמסך הבית ולא מהדפדפן.</div>`;
+      resultHtml = `<div role="status" style="color:var(--steel);font-size:12px;margin-top:6px;">לא התקבלה התראה. בדקו שהתראות מהאפליקציה מאושרות בהגדרות המכשיר, ושהאפליקציה פתוחה מהמסך הבית ולא מהדפדפן.</div>${pushPermissionHelpHtml()}`;
     } else if (st.status === "failed") {
-      resultHtml = `<div role="alert" style="color:var(--steel);font-size:12px;margin-top:6px;">${esc(st.reason || "לא ניתן היה לשלוח התראת בדיקה.")}</div>`;
+      resultHtml = `<div role="alert" style="color:var(--steel);font-size:12px;margin-top:6px;">${esc(st.reason || "לא ניתן היה לשלוח התראת בדיקה.")}</div>`
+        + (st.reason === NOTIF_PERMISSION_DENIED_TEXT ? pushPermissionHelpHtml() : "");
     } else if (busy) {
       resultHtml = `<div role="status" style="color:var(--steel);font-size:12px;margin-top:6px;">ממתינים להתראה…</div>`;
     }

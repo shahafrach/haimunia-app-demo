@@ -1,6 +1,6 @@
 // ⚠ THIS FILE POINTS AT PRODUCTION, AND IT IS COMMITTED.
 // The URL below is a live Supabase project with real members' data, and this
-// file is what the GitHub Pages build serves. Repointing it at localhost for
+// file is what Cloudflare Pages serves. Repointing it at localhost for
 // testing and committing that aims every installed PWA at a machine that is
 // not there. To test locally, override it at RUNTIME instead - serve a copy,
 // or set window.HAIMUNIA_CONFIG before this script loads - and leave the

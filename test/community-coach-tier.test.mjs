@@ -16,16 +16,42 @@ test("cloud.js's isStaff() matches is_staff()'s server-side rule: admin OR a coa
   assert.match(cloudJs, /return !!\(state\.profile && \(state\.profile\.is_admin \|\| \(state\.redemption && \(state\.redemption\.role === "coach" \|\| state\.redemption\.role === "head_coach"\)\)\)\);/);
 });
 
-test("all five staff-only render gates (announcements composer, challenge setter, new/inactive members, the redesign's moved-to-Manage note) use isStaff(), not a raw is_admin check", () => {
+test("all three staff-only render gates (announcements composer, challenge setter, the Account tab's staff area) use isStaff(), not a raw is_admin check", () => {
   const renderFn = cloudJs.slice(cloudJs.indexOf("window.renderCommunityApp = function"), cloudJs.indexOf("window.cloudStorageStatusText"));
   assert.doesNotMatch(renderFn, /state\.profile\.is_admin/, "the render function must not check is_admin directly anymore, only through isStaff()");
   assert.match(renderFn, /const staff = isStaff\(\);/);
   const staffGates = (renderFn.match(/\bstaff \?/g) || []).length;
-  // Redesign, Phase 1: the Account tab's "כלי ניהול עברו ל'ניהול'..." note
-  // (movedToManageNote) is a 5th `staff ? ... : ""` slice of this same
-  // function, on the same footing as the original four - a fifth genuine
-  // addition, not an oversight to correct.
-  assert.equal(staffGates, 5, "expected exactly 5 staff-gated sections: announcements composer, challenge setter, new members, inactive members, moved-to-Manage note");
+  // WAS FIVE, and is three because three of them became one thing rather than
+  // because any of them was dropped. The Account tab's new-members list, its
+  // not-logged-in-recently list and the pointer to where the rest of the
+  // management tools live were three separate `staff ? ... : ""` slices of
+  // this function, rendering as three unlabelled sections among the member's
+  // own settings; they are now one `staffArea` slice holding all three under
+  // one labelled staff heading. The gate count moves with the grouping - what
+  // this test is really pinning is that every one of them goes through
+  // isStaff(), which is unchanged.
+  assert.equal(staffGates, 3, "expected exactly 3 staff-gated sections: announcements composer, challenge setter, the grouped Account-tab staff area");
+  // And the staff area really is all three: the two lists and the pointer.
+  assert.match(renderFn, /const staffArea = staff \?/);
+  assert.match(renderFn, /renderCoachNewMembersSection\(\)\}\$\{renderCoachAppActivitySection\(\)/);
+});
+
+test("the Account tab's pointer names management destinations that actually exist, and does not send a coach to the bottom bar", () => {
+  // The regression this pins is a live one, found on a phone at 390px: the
+  // note read `כלי ניהול עברו ל"ניהול" בתפריט התחתון` and there has been no
+  // "ניהול" in the bottom bar since the 2026-09-15 split. getNavItems() pushes
+  // "ניהול המועדון" and "ניהול מערכת" with main:false, and main:false is
+  // exactly what keeps a row OUT of the bottom bar (renderBottomTabBar filters
+  // on item.main) and in the header's ☰ menu.
+  const appJs = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
+  const renderFn = cloudJs.slice(cloudJs.indexOf("window.renderCommunityApp = function"), cloudJs.indexOf("window.cloudStorageStatusText"));
+  assert.doesNotMatch(renderFn, /בתפריט התחתון/, "the bottom bar is not where the management tools are");
+  for (const label of ["ניהול המועדון", "ניהול מערכת"]) {
+    assert.ok(renderFn.includes(label), `the pointer names ${label}`);
+    // ...and that name is a real nav row, not a label invented by the note.
+    assert.match(appJs, new RegExp(`label: "${label}", tint: "[a-z]+", icon: ICONS\\.[A-Za-z]+, main: false`), `${label} is a real main:false nav row, i.e. in the ☰ menu`);
+  }
+  assert.match(appJs, /getNavItems\(\)\.filter\(\(item\) => item\.main\)/, "main:false is what keeps a row out of the bottom bar");
 });
 
 test("is_staff() checks the caller's own admin flag or coach redemption only, and is locked away from anon", () => {

@@ -82,6 +82,35 @@ credential that bypasses every RLS policy on real member data — in GitHub
 Actions to answer a yes/no question. **Do not reintroduce it.** The only
 secret left in that workflow is the optional `ALERT_WEBHOOK_URL`.
 
+**Its red run history, read correctly (checked 2026-09-22).** Every run of
+this workflow from its first, on 2026-09-09, to 2026-09-22 is red — but for
+two different reasons, and neither is the current code:
+
+- **2026-09-09 to 2026-09-18: missing secrets.** The old script exited 2 with
+  *"SUPABASE_URL and/or SUPABASE_SERVICE_ROLE_KEY missing"* (read from the
+  log of run 35313987165). That was the fail-closed design working; the
+  secrets were never added. PR #14 (merged 2026-09-19) removed the reason —
+  there is no secret to add any more.
+- **2026-09-19 onward: no runner.** The free Actions allowance ran out on
+  2026-09-19. Every run since finishes in about two seconds with
+  `runner_id: 0`, no steps and `HTTP 404` on the log download — the job never
+  started, so it says nothing about the backend in either direction. This
+  clears when the allowance resets on 2026-10-01.
+
+So nothing in this workflow or its script still fails for a reason a code
+change can fix. Two things to check on the first run after 2026-10-01:
+
+1. **It is the first run of the current script anywhere.** It has never
+   executed in CI; a red on that run is new information, not the old red.
+2. **`202609220001_a_new_job_gets_its_first_window` must be applied to
+   production first.** Without it, `recap_monthly` (first run 2026-10-01
+   04:41 UTC) counts as never-run and failing until it has run, so `ok` is
+   false and the 00:00 UTC run that day goes red for a job doing what it was
+   told (the in-database check would be alerting admins in-app for the
+   same reason meanwhile). At the time of this
+   note the latest migration recorded as applied is `202609190001`; confirm
+   with `npm run check:drift`, not with this line.
+
 ### 1c. The operator view, when you need the names
 
 `public.scheduled_job_health()` (migrations `202609060016` /

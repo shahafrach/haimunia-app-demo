@@ -1049,7 +1049,15 @@
     </div>`;
   }
 
-  function renderChallengesListSection() {
+  // `compact` is passed only by renderCoachTab(): this same section renders
+  // in two places, and the empty state that is right for a member landing on
+  // Boards (where it IS the screen) is the wrong shape stacked sixth on the
+  // coach board. See emptyLineHtml()'s own header in cloud.js. Nothing else
+  // differs between the two renderings - same rows, same create button, same
+  // form - so this is one flag rather than a second near-copy of the
+  // function, which is how the eleven empty states drifted apart the first
+  // time.
+  function renderChallengesListSection(compact) {
     // COMM-321. RLS already makes challenges_read return nothing (including
     // a staff creator's own draft, per the migration's own OR-branch gate)
     // once this module is off - this keeps the shell/create-button from
@@ -1066,12 +1074,24 @@
     const listable = state.challenges.items.filter((c) => !isOnboardingContainer(c));
     const active = listable.filter((c) => c.status === "active" || (staff && c.status === "draft"));
     const past = listable.filter((c) => c.status === "completed" || c.status === "archived");
-    const createBtn = staff ? `<button class="chip-btn primary" data-community-action="open-challenge-form" style="margin-bottom:10px;">אתגר חדש</button>` : "";
+    // .secondary, not .primary. The member's own action on this screen is
+    // "הצטרפות" on a challenge card, and that is what keeps the orange fill;
+    // this is staff-only plumbing sitting above it. See .chip-btn.secondary's
+    // own comment in index.html for the screenshot that prompted the change,
+    // and its twin in renderEventsListSection().
+    const createBtn = staff ? `<button class="chip-btn secondary" data-community-action="open-challenge-form" style="margin-bottom:10px;">אתגר חדש</button>` : "";
     const list = (state.challenges.loading && !state.challenges.loaded)
       ? `<div aria-busy="true">${`<div class="chart-card" style="height:64px;background:var(--border);opacity:.35;margin-bottom:10px;"></div>`.repeat(2)}</div>`
       : state.challenges.error
       ? `<div class="empty">לא ניתן היה לטעון את האתגר. נסו שוב.<div class="chip-row" style="justify-content:center;"><button class="chip-btn" data-community-action="challenges-retry">ניסיון חוזר</button></div></div>`
-      : active.length ? active.map(renderChallengeCard).join("") : emptyStateHtml({
+      : active.length ? active.map(renderChallengeCard).join("") : compact ? emptyLineHtml({
+        // The coach-board rendering. Written at STAFF, unlike the four-slot
+        // state below it: the compact form only ever renders on the coach
+        // dashboard, so the audience fork the full state has to carry in
+        // slot 4 collapses to one audience here.
+        key: "challenges-active",
+        text: "הכפתור \"אתגר חדש\" שלמעלה פותח אתגר למועדון, ומרגע הפרסום הוא יופיע כאן.",
+      }) : emptyStateHtml({
         key: "challenges-active",
         icon: "trophy",
         // AUDIENCE, which is the whole reason this one was left out of the

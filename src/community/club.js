@@ -1713,7 +1713,7 @@
       ${field("communityClubWodSession", "wodId", "אימון מהקטלוג", `<select class="text-input" name="wodId" data-club-wod-field="wodId"><option value="">בחירת אימון</option>${options}</select>`)}
       ${dateField("communityClubWodSession", "sessionDate", "ליום", `<input class="text-input" name="sessionDate" type="date" value="${esc(f.date || today)}" min="${esc(shift(-1))}" max="${esc(shift(1))}" data-club-wod-field="date"/>`)}
       ${field("communityClubWodSession", "note", "מילה מהמאמן/ת (אופציונלי)", `<textarea class="text-input" name="note" maxlength="500" rows="2" data-club-wod-field="note">${esc(f.note || "")}</textarea>`)}
-      <div class="footer-note" style="margin:-4px 0 8px;">אפשר לקבוע לאתמול, להיום או למחר בלבד, ועד ארבעה אימונים ליום — כך הפיד נשאר מה שקורה עכשיו. הטקסט נשמר כפי שהוא ברגע הפרסום; לשינוי שלו צריך לבטל ולקבוע מחדש.</div>
+      <div class="footer-note" style="margin:6px 0 8px;">אפשר לקבוע לאתמול, להיום או למחר בלבד, ועד ארבעה אימונים ליום — כך הפיד נשאר מה שקורה עכשיו. הטקסט נשמר כפי שהוא ברגע הפרסום; לשינוי שלו צריך לבטל ולקבוע מחדש.</div>
       <button class="chip-btn primary" type="submit"${f.saving ? " disabled" : ""}>${f.saving ? "מפרסם…" : "פרסום למועדון"}</button>
     </form>`;
   }

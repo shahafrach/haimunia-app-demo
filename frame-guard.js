@@ -1,8 +1,9 @@
 // Security hunt round 8: defense-in-depth against a live-confirmed
 // clickjacking chain. index.html's meta CSP `frame-ancestors 'none'` is
 // spec-ignored inside a <meta> tag - only a real HTTP response header is
-// honoured, and GitHub Pages serves this app with no way to send one (see
-// the long comment above the CSP meta tag). A live proof-of-concept
+// honoured, and GitHub Pages - the host when this was written - had no way
+// to send one (see the long comment above the CSP meta tag). Cloudflare
+// Pages now sends it from _headers; this stays as defense-in-depth. A live proof-of-concept
 // confirmed that gap is exploitable, not just theoretical: an invisible
 // iframe positioned over pre-measured real coordinates ("leave challenge",
 // confirm-yes) silently executed the action on a signed-in member who only
