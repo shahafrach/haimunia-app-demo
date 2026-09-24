@@ -252,7 +252,7 @@
     // "dashboard" until the operator-depth rework, which retired that tab
     // (see MANAGE_TAB_ALIASES). manageScrollTo is a one-shot section id
     // consumed by afterRenderManage() - see setManageTab().
-    ui: { tab: "feed", manageTab: "invites", manageScrollTo: "", loading: false, message: "", fieldErrors: {}, confirmDialog: null, backupDeleteConfirm: false,
+    ui: { tab: "feed", manageTab: "invites", manageScrollTo: "", loading: false, message: "", fieldErrors: {}, confirmDialog: null, backupDeleteConfirm: false, selfExportBusy: false,
       // What was last copied to the clipboard, so the control that was
       // pressed can confirm on itself - see markCopied().
       copiedToken: "",
@@ -3043,39 +3043,39 @@
   // see is labelled beats no copy at all. No migration: this is read-only.
   const SELF_EXPORT_LIMIT = 20000;
   const SELF_EXPORT_TABLES = Object.freeze([
-    { key: "profile", table: "profiles", owner: "id", cols: "id,handle,display_name,bio,avatar_url,created_at,updated_at,visible_to_club,show_workout_results,show_attendance,show_upcoming_booking,show_prs,show_achievements,in_leaderboards,allow_follows,allow_mentions,allow_messages,show_in_attendee_lists" },
-    { key: "private_records", table: "private_records", owner: "user_id", cols: "record_type,record_id,payload,deleted_at,created_at,updated_at" },
-    { key: "posts", table: "workout_posts", owner: "author_id", cols: "id,post_type,source_type,source_record_id,visibility,title,result_text,body,comparison_key,score_value,score_direction,rx,occurred_on,metadata,photo_path,status,published_at,created_at,updated_at" },
-    { key: "comments", table: "post_comments", owner: "author_id", cols: "id,post_id,parent_comment_id,body,status,created_at,edited_at,deleted_at" },
-    { key: "reactions", table: "reactions", owner: "user_id", cols: "post_id,kind,created_at" },
-    { key: "following", table: "follows", owner: "follower_id", cols: "followed_id,created_at" },
-    { key: "blocked", table: "blocks", owner: "blocker_id", cols: "blocked_id,created_at" },
-    { key: "saved_posts", table: "saved_posts", owner: "user_id", cols: "post_id,created_at" },
-    { key: "hidden_posts", table: "hidden_posts", owner: "user_id", cols: "post_id,created_at" },
-    { key: "notifications", table: "notifications", owner: "user_id", cols: "id,type,category,title,body,source_type,source_id,deep_link,read_at,created_at" },
-    { key: "notification_preferences", table: "notification_preferences", owner: "user_id", cols: "type,channel,updated_at" },
-    { key: "push_subscriptions", table: "push_subscriptions", owner: "user_id", cols: "id,created_at,revoked_at" },
-    { key: "achievements", table: "member_achievements", owner: "user_id", cols: "id,achievement_id,source_id,unlocked_at,shared_at,visibility,repeatable,verified" },
-    { key: "challenges", table: "challenge_participants", owner: "user_id", cols: "challenge_id,team_id,joined_at,status,progress_value,completed_at" },
-    { key: "challenge_progress", table: "challenge_progress", owner: "user_id", cols: "id,challenge_id,team_id,delta,source_type,source_id,created_at" },
-    { key: "event_rsvps", table: "event_attendees", owner: "user_id", cols: "event_id,response,registered_at" },
-    { key: "attendance", table: "attendance_log", owner: "user_id", cols: "id,occurred_on,source_record_type,source_record_id,recorded_at" },
-    { key: "club_wod_results", table: "club_wod_results", owner: "user_id", cols: "session_id,record_id,result_text,score_type,rx,occurred_on,attached_at,updated_at" },
-    { key: "onboarding_progress", table: "onboarding_progress", owner: "user_id", cols: "welcomed_at,first_week_shown_at,first_month_shown_at,first_class_shown_at,third_class_shown_at" },
-    { key: "onboarding_challenge", table: "onboarding_challenge_offers", owner: "user_id", cols: "offered_at,responded_at,response,goal_sessions,window_days,started_at,ends_at,completed_at" },
-    { key: "account_deletion_request", table: "account_deletion_requests", owner: "user_id", cols: "requested_at,purge_after" },
-    { key: "tagged_as_training_partner", table: "post_training_partners", owner: "tagged_user_id", cols: "post_id,created_at" },
-    { key: "mentioned_in_comments", table: "comment_mentions", owner: "mentioned_user_id", cols: "comment_id,created_at" },
-    { key: "feed_impressions", table: "feed_impressions", owner: "user_id", cols: "post_id,position,feed_session_id,shown_at,opened,engaged" },
-    { key: "feed_interactions", table: "feed_interactions", owner: "user_id", cols: "post_id,kind,created_at" },
-    { key: "invite_redemption", table: "invite_redemptions", owner: "user_id", cols: "role,redeemed_at" },
-    { key: "weekly_recaps", table: "weekly_recaps", owner: "user_id", cols: "id,week_start,sessions_completed,streak,prs,achievements,challenge_progress,club_challenge_progress,upcoming_event,generated_at" },
-    { key: "member_of_week", table: "member_of_week", owner: "user_id", cols: "id,week_start,category,reason,post_id,published_at" },
-    { key: "activity_days", table: "activity_pings", owner: "user_id", cols: "activity_date,created_at" },
+    { section: "profile", table: "profiles", owner: "id", cols: "id,handle,display_name,bio,avatar_url,created_at,updated_at,visible_to_club,show_workout_results,show_attendance,show_upcoming_booking,show_prs,show_achievements,in_leaderboards,allow_follows,allow_mentions,allow_messages,show_in_attendee_lists" },
+    { section: "private_records", table: "private_records", owner: "user_id", cols: "record_type,record_id,payload,deleted_at,created_at,updated_at" },
+    { section: "posts", table: "workout_posts", owner: "author_id", cols: "id,post_type,source_type,source_record_id,visibility,title,result_text,body,comparison_key,score_value,score_direction,rx,occurred_on,metadata,photo_path,status,published_at,created_at,updated_at" },
+    { section: "comments", table: "post_comments", owner: "author_id", cols: "id,post_id,parent_comment_id,body,status,created_at,edited_at,deleted_at" },
+    { section: "reactions", table: "reactions", owner: "user_id", cols: "post_id,kind,created_at" },
+    { section: "following", table: "follows", owner: "follower_id", cols: "followed_id,created_at" },
+    { section: "blocked", table: "blocks", owner: "blocker_id", cols: "blocked_id,created_at" },
+    { section: "saved_posts", table: "saved_posts", owner: "user_id", cols: "post_id,created_at" },
+    { section: "hidden_posts", table: "hidden_posts", owner: "user_id", cols: "post_id,created_at" },
+    { section: "notifications", table: "notifications", owner: "user_id", cols: "id,type,category,title,body,source_type,source_id,deep_link,read_at,created_at" },
+    { section: "notification_preferences", table: "notification_preferences", owner: "user_id", cols: "type,channel,updated_at" },
+    { section: "push_subscriptions", table: "push_subscriptions", owner: "user_id", cols: "id,created_at,revoked_at" },
+    { section: "achievements", table: "member_achievements", owner: "user_id", cols: "id,achievement_id,source_id,unlocked_at,shared_at,visibility,repeatable,verified" },
+    { section: "challenges", table: "challenge_participants", owner: "user_id", cols: "challenge_id,team_id,joined_at,status,progress_value,completed_at" },
+    { section: "challenge_progress", table: "challenge_progress", owner: "user_id", cols: "id,challenge_id,team_id,delta,source_type,source_id,created_at" },
+    { section: "event_rsvps", table: "event_attendees", owner: "user_id", cols: "event_id,response,registered_at" },
+    { section: "attendance", table: "attendance_log", owner: "user_id", cols: "id,occurred_on,source_record_type,source_record_id,recorded_at" },
+    { section: "club_wod_results", table: "club_wod_results", owner: "user_id", cols: "session_id,record_id,result_text,score_type,rx,occurred_on,attached_at,updated_at" },
+    { section: "onboarding_progress", table: "onboarding_progress", owner: "user_id", cols: "welcomed_at,first_week_shown_at,first_month_shown_at,first_class_shown_at,third_class_shown_at" },
+    { section: "onboarding_challenge", table: "onboarding_challenge_offers", owner: "user_id", cols: "offered_at,responded_at,response,goal_sessions,window_days,started_at,ends_at,completed_at" },
+    { section: "account_deletion_request", table: "account_deletion_requests", owner: "user_id", cols: "requested_at,purge_after" },
+    { section: "tagged_as_training_partner", table: "post_training_partners", owner: "tagged_user_id", cols: "post_id,created_at" },
+    { section: "mentioned_in_comments", table: "comment_mentions", owner: "mentioned_user_id", cols: "comment_id,created_at" },
+    { section: "feed_impressions", table: "feed_impressions", owner: "user_id", cols: "post_id,position,feed_session_id,shown_at,opened,engaged" },
+    { section: "feed_interactions", table: "feed_interactions", owner: "user_id", cols: "post_id,kind,created_at" },
+    { section: "invite_redemption", table: "invite_redemptions", owner: "user_id", cols: "role,redeemed_at" },
+    { section: "weekly_recaps", table: "weekly_recaps", owner: "user_id", cols: "id,week_start,sessions_completed,streak,prs,achievements,challenge_progress,club_challenge_progress,upcoming_event,generated_at" },
+    { section: "member_of_week", table: "member_of_week", owner: "user_id", cols: "id,week_start,category,reason,post_id,published_at" },
+    { section: "activity_days", table: "activity_pings", owner: "user_id", cols: "activity_date,created_at" },
   ]);
   const SELF_EXPORT_RPCS = Object.freeze([
-    { key: "bug_reports", rpc: "bug_report_list_mine" },
-    { key: "active_posting_restrictions", rpc: "my_posting_restrictions" },
+    { rpc: "bug_report_list_mine", section: "bug_reports" },
+    { rpc: "my_posting_restrictions", section: "active_posting_restrictions" },
   ]);
   // Belt and braces: each row is cut down to the columns its select named,
   // so a server that ever returns more (a "*" regression, a view that grows)
@@ -3096,9 +3096,9 @@
     await Promise.all(SELF_EXPORT_TABLES.map(async (spec) => {
       try {
         const { data, error } = await client.from(spec.table).select(spec.cols).eq(spec.owner, uid).limit(SELF_EXPORT_LIMIT);
-        if (error) { unavailable.push(spec.key); return; }
-        sections[spec.key] = pickCols(data, spec.cols);
-      } catch (e) { unavailable.push(spec.key); }
+        if (error) { unavailable.push(spec.section); return; }
+        sections[spec.section] = pickCols(data, spec.cols);
+      } catch (e) { unavailable.push(spec.section); }
     }));
     // Photo rows hang off the member's own posts, not off a user column.
     const postIds = (sections.posts || []).map((p) => p.id).filter(Boolean);
@@ -3112,9 +3112,9 @@
     await Promise.all(SELF_EXPORT_RPCS.map(async (spec) => {
       try {
         const { data, error } = await client.rpc(spec.rpc);
-        if (error) { unavailable.push(spec.key); return; }
-        sections[spec.key] = data || [];
-      } catch (e) { unavailable.push(spec.key); }
+        if (error) { unavailable.push(spec.section); return; }
+        sections[spec.section] = data || [];
+      } catch (e) { unavailable.push(spec.section); }
     }));
     const ordered = {};
     for (const key of Object.keys(sections).sort()) ordered[key] = sections[key];

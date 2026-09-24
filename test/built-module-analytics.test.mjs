@@ -375,7 +375,8 @@ test("every one of the five modules is mapped in docs/audit/usage-queries.sql, i
   }
   // The stale "switches ahead of their features" finding is corrected, and the
   // one built module that is still silent is named rather than hidden.
-  assert.match(sql, /47 event names/);
+  // 48 since N10 added client_error.
+  assert.match(sql, /48 event names/);
   assert.match(sql, /strength_percentages - BUILT/);
 });
 

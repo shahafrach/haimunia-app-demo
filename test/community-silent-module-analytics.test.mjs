@@ -423,7 +423,8 @@ test("every one of the eleven modules is mapped in docs/audit/usage-queries.sql,
   // app_opened is a session, so it is mapped to shell and excluded from the
   // module queries exactly as club_tab_viewed is.
   assert.match(sql, /\('app_opened',\s*'shell',\s*false\)/);
-  assert.match(sql, /not in \('club_tab_viewed', 'app_opened', 'write_failed'\)/);
+  // client_error (N10) is a health signal, excluded beside write_failed.
+  assert.match(sql, /not in \('club_tab_viewed', 'app_opened', 'write_failed', 'client_error'\)/);
   // The stale finding is corrected rather than deleted: the file still quotes
   // what it used to say, which is how a reader of an old query result learns
   // why the numbers changed. What must not survive is the CLAIM.
