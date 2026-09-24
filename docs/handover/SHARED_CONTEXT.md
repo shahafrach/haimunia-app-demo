@@ -22,22 +22,11 @@ Supabase: `jajmlyrjlkhclgphbfbb` (free tier)
 
 **Standalone app:** `haimunia-app` is at **3.1.1**, carrying the same
 duplicate-lifts fix as #88 (each lift once on the progress screen). Its
-rollback tag is **`rollback-3.1.0`**.
+rollback tag is **`rollback-3.1.0`**. It now has its own `CLAUDE.md`.
 
-The numbers in the paragraph below are the 2026-09-19 reconcile and are kept
-as its record; `docs/PROJECT_STATUS.md` has the current ones.
-
-Reconciled 2026-09-19 against `main` at `8ce9e5c`. Schema: **63 tables**, all
-with RLS on, 137 policies, 235 functions (182 SECURITY DEFINER) — that
-function count was read in PR #10 from a container built at 173 migrations and
-**has not been re-measured since**. Two migrations have landed on top of it:
-`202609180001` changes none of the four counts, and `202609190001` adds
-`job_health_state` (RLS on, no policy — hence 63 tables and still 137
-policies) plus five functions that no container has counted. Treat the table
-row as arithmetic and the function row as stale; re-read all four rather than
-trusting them. The pgTAP ASSERTION total is not restated here because it
-cannot be measured without Docker — count it from `supabase test db` and put
-the number in `docs/PROJECT_STATUS.md` when you have one.
+Schema, measured on `main` at `154dd5e`: **70 tables**, all with RLS on,
+143 policies, 285 functions. The pgTAP ASSERTION total is not restated here;
+`docs/PROJECT_STATUS.md` carries the latest `supabase test db` run.
 
 ## Read these two first
 

@@ -19,17 +19,9 @@ file is stale. Say so in your PR.
 | JS tests | **2443 passing, 0 failing** (`npm test`, 2026-09-24 on `2bf56a3` plus this consolidation) |
 | Browser scenarios | **61** files in `scripts/browser-check/` (#86 added `self-export-download`) — not run at this consolidation; last full run 60 of 61 on #86, against Chromium 1194 via a scratch alias (`community-render-cost` over its trip-wire under load) |
 | Community layer | `cloud.js` **8,104** lines plus **16** files in `src/community/`; `app.js` **9,215** lines |
-| Tables in `public` | **67** measured at 185 migrations, every one with RLS enabled — **not re-measured since** |
-| RLS policies | **142** measured at 185 migrations — not re-measured since |
-| Functions in `public` | **273**, of which **215** SECURITY DEFINER, measured at 185 migrations — not re-measured since |
-
-**The schema rows are a measurement at 185 migrations, and twelve have landed
-since.** At least three add a `public` table — `storage_erasure_queue`
-(`202609230002`), `edge_function_invocations` (`202609230008`) and
-`training_log_usage` (`202609230013`) — and several add functions, so treat
-those three rows as a floor. Re-read them from `pg_tables`, `pg_policies`,
-`pg_proc` and `pg_class.relrowsecurity` after a `supabase db reset --local`,
-and replace this paragraph when you do.
+| Tables in `public` | **70**, every one with RLS enabled — measured on `main` at `154dd5e` |
+| RLS policies | **143** — measured on `main` at `154dd5e` |
+| Functions in `public` | **285** — measured on `main` at `154dd5e` |
 
 ---
 
@@ -87,7 +79,7 @@ No migration.
   Benchmarks is the eight named workouts only; each lift lives in its exercise
   card, which keeps its estimated 1RM. `benchmarkLiftItems()` is gone.
 - **The standalone app (`haimunia-app`) is at 3.1.1** with the same fix. Its
-  rollback tag is **`rollback-3.1.0`**.
+  rollback tag is **`rollback-3.1.0`**. It now has its own `CLAUDE.md`.
 
 Before that, **two branches** (#85, #86) were consolidated at #87 under
 *"Errors get counted, members get their data, and the wall screen ships"*:
@@ -234,10 +226,6 @@ actually run.
   replay cleanly — `cloud.js` has been split since, so its `cloud.js` half
   needs re-targeting at `src/community/`. Read it before re-deriving any of
   those three findings from scratch.
-- **The service-role key is still in the repository's Actions secrets**, and
-  nothing reads it any more (PR #14). Deleting `SUPABASE_SERVICE_ROLE_KEY` and
-  `SUPABASE_URL` is an owner action; leaving a service-role key in a store
-  nothing uses is the worst of both.
 
 ## Stale in the repository, flagged not fixed
 
