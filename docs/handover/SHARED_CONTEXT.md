@@ -18,7 +18,10 @@ Live: https://haimunia-app.pages.dev
 Repo: `haimuniya/haimunia-app-demo` — **private** since 2026-09-17
 Supabase: `jajmlyrjlkhclgphbfbb` (free tier)
 
-**v4.77.0** · 175 migrations · 1970 JS tests · 116 pgTAP suites · 47 browser scenarios
+**v4.79.0** · 197 migrations (all applied, drift clean 2026-09-24) · 2421 JS tests · 134 pgTAP files / 4,137 tests · 60 browser scenarios
+
+The numbers in the paragraph below are the 2026-09-19 reconcile and are kept
+as its record; `docs/PROJECT_STATUS.md` has the current ones.
 
 Reconciled 2026-09-19 against `main` at `8ce9e5c`. Schema: **63 tables**, all
 with RLS on, 137 policies, 235 functions (182 SECURITY DEFINER) — that
@@ -256,6 +259,35 @@ migration, `ls supabase/migrations/ | cut -c1-12 | sort | uniq -d` on the
 **merge result**, not on your branch — on a branch alone the prefix appears
 once and looks fine; and treat a rename as a delete, because nothing else does.
 
+## Production has a gate and a log now (2026-09-24)
+
+**`npm run push:prod` is the only way a migration reaches production**
+(`docs/ops/MIGRATIONS.md`). It applies **everything pending**, not just yours —
+read the plan it prints, and anything in it that is not yours needs its
+author's user to have said yes. Then add a row to the push log in the same
+file, at the time — not reconstructed a day later, when nobody remembers
+who approved what.
+
+The two ledger guards from #58 are in `test.yml` and in `push:prod`, so the
+"until the guards land" habits in the section above are now enforced, not
+just advised.
+
+**Three things that read wrong and are right:**
+
+- The scheduled-job board is **red** until the `edge_functions_*` Vault
+  secrets are set (#74). The jobs were always inert; the board stopped
+  agreeing they were fine.
+- The live smoke test reports four roles as **SKIP** (#81). That is not a
+  pass; those boundaries are proven locally by pgTAP only.
+- `training_log_usage` (#83) is the one table `anon` may insert into. It is
+  deliberate, capped at 1,000 rows a day, and readable by no one — staff get
+  totals through `training_log_usage_report()`.
+
+**Backups:** the database *and* the photos (#78), restorable only into a
+Supabase project, never bare Postgres (#77). A restore under the new
+passphrase was verified 2026-09-24; nothing from before the 2026-09-23
+rotation decrypts. `docs/ops/MONITORING.md` §7 is the drill.
+
 ## The working tree is shared, and it will move under you (2026-09-23)
 
 Several sessions run against this checkout at once, and this cost real work
@@ -279,9 +311,9 @@ routing it through a human.
 npm ci                        # FIRST. See below — the suite lies without it
 node --test                   # 1970 JS tests, jsdom, ~10 min
 supabase start                # docker is on this machine
-supabase db reset --local     # replays all 175 migrations from empty, ~3 min
-supabase test db --local      # 116 pgTAP suites, ~10 s
-node scripts/browser-check/run-all.mjs   # 47 scenarios, real Chromium
+supabase db reset --local     # replays all 197 migrations from empty, ~3 min
+supabase test db --local      # 134 pgTAP files, 4,137 tests
+node scripts/browser-check/run-all.mjs   # 60 scenarios, real Chromium
 ```
 
 **`npm ci` before `node --test`, in any fresh sandbox.** With `node_modules`
