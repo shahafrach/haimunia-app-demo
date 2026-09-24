@@ -63,6 +63,9 @@ const SPEC_77_EVENTS = [
   // each. None counts toward WCAM - see ACTIVE_MEMBER_EVENTS.
   "coach_task_closed", "onboarding_challenge_responded", "owner_report_viewed",
   "benchmark_opened", "training_partners_tagged",
+  // N10. An operational event like write_failed: an uncaught error or an
+  // unhandled rejection, as its class, file, position and a message hash.
+  "client_error",
 ];
 
 // An object built inside the jsdom window carries that realm's

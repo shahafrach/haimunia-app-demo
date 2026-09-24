@@ -252,7 +252,7 @@
     // "dashboard" until the operator-depth rework, which retired that tab
     // (see MANAGE_TAB_ALIASES). manageScrollTo is a one-shot section id
     // consumed by afterRenderManage() - see setManageTab().
-    ui: { tab: "feed", manageTab: "invites", manageScrollTo: "", loading: false, message: "", fieldErrors: {}, confirmDialog: null, backupDeleteConfirm: false,
+    ui: { tab: "feed", manageTab: "invites", manageScrollTo: "", loading: false, message: "", fieldErrors: {}, confirmDialog: null, backupDeleteConfirm: false, selfExportBusy: false,
       // What was last copied to the clipboard, so the control that was
       // pressed can confirm on itself - see markCopied().
       copiedToken: "",
@@ -3019,6 +3019,152 @@
     if (typeof window.showToast === "function") window.showToast("בקשת המחיקה התקבלה. החשבון ומה שגובה לענן יימחקו לצמיתות בתוך 30 יום. האימונים במכשיר הזה נשארים.");
     await client.auth.signOut();
   }
+  // ---- S16: "download my data" ------------------------------------------
+  //
+  // Everything the server holds about the signed-in member, as one JSON
+  // file, read with the member's OWN client - so RLS, not this list, is what
+  // decides what can be read. This list decides only what is LEFT OUT of
+  // what RLS already allows:
+  // - every select names its columns (no "*"), and none of them is a staff
+  //   column: profiles.is_admin/assigned_coach_id, post_comments.deleted_by,
+  //   challenge_progress.entered_by/note, member_of_week.published_by,
+  //   weekly_recaps.classmates, push_subscriptions.keys/endpoint;
+  // - every read is filtered to the member's own id on the column that
+  //   makes the row theirs, because several policies (reactions, follows,
+  //   blocks, challenge_participants, member_of_week...) also return other
+  //   members' rows, and "who blocked you" is one of them;
+  // - tables a member cannot read, or that are staff records about them,
+  //   are not attempted: reports, analytics_events, coach_congratulations,
+  //   coach_tasks, member_contact_log, pins, training_log_usage (no user).
+  //   bug_reports and posting_restrictions go through their existing
+  //   own-data RPCs, which already strip admin_note/moderator_id.
+  // One failed read never sinks the file: the section records the failure
+  // and the rest is still delivered, because a partial copy the member can
+  // see is labelled beats no copy at all. No migration: this is read-only.
+  const SELF_EXPORT_LIMIT = 20000;
+  const SELF_EXPORT_TABLES = Object.freeze([
+    { section: "profile", table: "profiles", owner: "id", cols: "id,handle,display_name,bio,avatar_url,created_at,updated_at,visible_to_club,show_workout_results,show_attendance,show_upcoming_booking,show_prs,show_achievements,in_leaderboards,allow_follows,allow_mentions,allow_messages,show_in_attendee_lists" },
+    { section: "private_records", table: "private_records", owner: "user_id", cols: "record_type,record_id,payload,deleted_at,created_at,updated_at" },
+    { section: "posts", table: "workout_posts", owner: "author_id", cols: "id,post_type,source_type,source_record_id,visibility,title,result_text,body,comparison_key,score_value,score_direction,rx,occurred_on,metadata,photo_path,status,published_at,created_at,updated_at" },
+    { section: "comments", table: "post_comments", owner: "author_id", cols: "id,post_id,parent_comment_id,body,status,created_at,edited_at,deleted_at" },
+    { section: "reactions", table: "reactions", owner: "user_id", cols: "post_id,kind,created_at" },
+    { section: "following", table: "follows", owner: "follower_id", cols: "followed_id,created_at" },
+    { section: "blocked", table: "blocks", owner: "blocker_id", cols: "blocked_id,created_at" },
+    { section: "saved_posts", table: "saved_posts", owner: "user_id", cols: "post_id,created_at" },
+    { section: "hidden_posts", table: "hidden_posts", owner: "user_id", cols: "post_id,created_at" },
+    { section: "notifications", table: "notifications", owner: "user_id", cols: "id,type,category,title,body,source_type,source_id,deep_link,read_at,created_at" },
+    { section: "notification_preferences", table: "notification_preferences", owner: "user_id", cols: "type,channel,updated_at" },
+    { section: "push_subscriptions", table: "push_subscriptions", owner: "user_id", cols: "id,created_at,revoked_at" },
+    { section: "achievements", table: "member_achievements", owner: "user_id", cols: "id,achievement_id,source_id,unlocked_at,shared_at,visibility,repeatable,verified" },
+    { section: "challenges", table: "challenge_participants", owner: "user_id", cols: "challenge_id,team_id,joined_at,status,progress_value,completed_at" },
+    { section: "challenge_progress", table: "challenge_progress", owner: "user_id", cols: "id,challenge_id,team_id,delta,source_type,source_id,created_at" },
+    { section: "event_rsvps", table: "event_attendees", owner: "user_id", cols: "event_id,response,registered_at" },
+    { section: "attendance", table: "attendance_log", owner: "user_id", cols: "id,occurred_on,source_record_type,source_record_id,recorded_at" },
+    { section: "club_wod_results", table: "club_wod_results", owner: "user_id", cols: "session_id,record_id,result_text,score_type,rx,occurred_on,attached_at,updated_at" },
+    { section: "onboarding_progress", table: "onboarding_progress", owner: "user_id", cols: "welcomed_at,first_week_shown_at,first_month_shown_at,first_class_shown_at,third_class_shown_at" },
+    { section: "onboarding_challenge", table: "onboarding_challenge_offers", owner: "user_id", cols: "offered_at,responded_at,response,goal_sessions,window_days,started_at,ends_at,completed_at" },
+    { section: "account_deletion_request", table: "account_deletion_requests", owner: "user_id", cols: "requested_at,purge_after" },
+    { section: "tagged_as_training_partner", table: "post_training_partners", owner: "tagged_user_id", cols: "post_id,created_at" },
+    { section: "mentioned_in_comments", table: "comment_mentions", owner: "mentioned_user_id", cols: "comment_id,created_at" },
+    { section: "feed_impressions", table: "feed_impressions", owner: "user_id", cols: "post_id,position,feed_session_id,shown_at,opened,engaged" },
+    { section: "feed_interactions", table: "feed_interactions", owner: "user_id", cols: "post_id,kind,created_at" },
+    { section: "invite_redemption", table: "invite_redemptions", owner: "user_id", cols: "role,redeemed_at" },
+    { section: "weekly_recaps", table: "weekly_recaps", owner: "user_id", cols: "id,week_start,sessions_completed,streak,prs,achievements,challenge_progress,club_challenge_progress,upcoming_event,generated_at" },
+    { section: "member_of_week", table: "member_of_week", owner: "user_id", cols: "id,week_start,category,reason,post_id,published_at" },
+    { section: "activity_days", table: "activity_pings", owner: "user_id", cols: "activity_date,created_at" },
+  ]);
+  const SELF_EXPORT_RPCS = Object.freeze([
+    { rpc: "bug_report_list_mine", section: "bug_reports" },
+    { rpc: "my_posting_restrictions", section: "active_posting_restrictions" },
+  ]);
+  // Belt and braces: each row is cut down to the columns its select named,
+  // so a server that ever returns more (a "*" regression, a view that grows)
+  // still cannot widen the file.
+  function pickCols(rows, cols) {
+    const keys = String(cols).split(",");
+    return (rows || []).map((row) => {
+      const out = {};
+      for (const k of keys) if (row && row[k] !== undefined) out[k] = row[k];
+      return out;
+    });
+  }
+  async function buildSelfExport() {
+    const uid = state.user && state.user.id;
+    if (!client || !uid) return null;
+    const sections = {};
+    const unavailable = [];
+    await Promise.all(SELF_EXPORT_TABLES.map(async (spec) => {
+      try {
+        const { data, error } = await client.from(spec.table).select(spec.cols).eq(spec.owner, uid).limit(SELF_EXPORT_LIMIT);
+        if (error) { unavailable.push(spec.section); return; }
+        sections[spec.section] = pickCols(data, spec.cols);
+      } catch (e) { unavailable.push(spec.section); }
+    }));
+    // Photo rows hang off the member's own posts, not off a user column.
+    const postIds = (sections.posts || []).map((p) => p.id).filter(Boolean);
+    if (postIds.length) {
+      try {
+        const mediaCols = "post_id,storage_path,alt_text,position,width,height,decorative,created_at";
+        const { data, error } = await client.from("post_media").select(mediaCols).in("post_id", postIds).limit(SELF_EXPORT_LIMIT);
+        if (error) unavailable.push("post_media"); else sections.post_media = pickCols(data, mediaCols);
+      } catch (e) { unavailable.push("post_media"); }
+    } else sections.post_media = [];
+    await Promise.all(SELF_EXPORT_RPCS.map(async (spec) => {
+      try {
+        const { data, error } = await client.rpc(spec.rpc);
+        if (error) { unavailable.push(spec.section); return; }
+        sections[spec.section] = data || [];
+      } catch (e) { unavailable.push(spec.section); }
+    }));
+    const ordered = {};
+    for (const key of Object.keys(sections).sort()) ordered[key] = sections[key];
+    return {
+      kind: "haimuniya-account-export",
+      format_version: 1,
+      exported_at: new Date().toISOString(),
+      user_id: uid,
+      // Honest about its own gaps: a read RLS refused (a module switched
+      // off, a membership gate) is listed rather than silently absent.
+      unavailable: unavailable.sort(),
+      truncated: Object.keys(ordered).filter((k) => Array.isArray(ordered[k]) && ordered[k].length >= SELF_EXPORT_LIMIT),
+      data: ordered,
+    };
+  }
+  function downloadJsonFile(payload, filename) {
+    if (typeof Blob === "undefined" || typeof URL === "undefined" || typeof URL.createObjectURL !== "function") return false;
+    const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+    return true;
+  }
+  async function exportMyServerData() {
+    if (state.ui.selfExportBusy) return false;
+    state.ui.selfExportBusy = true;
+    rerender();
+    let ok = false;
+    try {
+      const payload = await buildSelfExport();
+      ok = !!payload && downloadJsonFile(payload, `haimuniya-my-data-${new Date().toISOString().slice(0, 10)}.json`);
+    } catch (e) { ok = false; }
+    state.ui.selfExportBusy = false;
+    if (typeof window.showToast === "function") window.showToast(ok ? "ההורדה התחילה: כל מה שנשמר עליכם בשרת, בקובץ אחד." : "הורדת הנתונים נכשלה. נסו שוב כשיש חיבור.");
+    rerender();
+    return ok;
+  }
+  window.communityBuildSelfExport = buildSelfExport;
+  // Rendered on the backup card (for a backup-only member, who has no
+  // account tab) and in the account tab - the same two surfaces the
+  // deletion request lives on, and for the same reason.
+  function selfExportButtonHtml(style) {
+    if (!state.user) return "";
+    return `<button class="link-btn" data-community-action="self-export" style="${style || "display:block;margin-top:10px;"}"${state.ui.selfExportBusy ? " disabled aria-busy=\"true\"" : ""}>${state.ui.selfExportBusy ? "מכינים את הקובץ…" : "הורדת הנתונים שלי מהשרת (JSON)"}</button>`;
+  }
   // COMM-014. Every realtime channel is scoped to the sub-tab that
   // opened it, so leaving that sub-tab closes all of them here rather
   // than in each feature. COMM-209 and COMM-227 are the first tickets
@@ -5105,6 +5251,7 @@
     // rather than trailing all of them - still a settings-style panel, just
     // no longer the very last thing on the screen.
     const accountTab = restrictionPanel + account + renderMyAchievements() + recapEntry + monthlyRecapEntry + privacyPanel + renderSharePromptPrefPanel() + blockedMembersPanel + renderNotifPrefsPanel() + termMarkPanel + people + staffArea
+      + selfExportButtonHtml("display:block;margin:20px auto 0;")
       + `<button class="link-btn" data-community-action="sign-out" style="display:block;margin:20px auto 0;">התנתקות</button>`
       + `<button class="link-btn" data-community-action="delete-account" style="display:block;margin:10px auto 8px;color:var(--red-text);">בקשת מחיקת חשבון</button>`;
 
@@ -5821,7 +5968,7 @@
   window.renderBackupSettingsPanel = function () {
     if (!configured) return "";
     if (backupOptedOut()) {
-      return `${BACKUP_PANEL_TITLE}<div class="footer-note" style="margin-bottom:8px;">כבוי. מהשמירה הבאה האימונים נשמרים במכשיר הזה בלבד.</div>${BACKUP_OPTOUT_TRUTHS}<button class="link-btn" data-community-action="backup-enable">הפעלת גיבוי אוטומטי</button>${backupDeleteHtml()}${state.ui.message ? `<div class="footer-note" role="status" style="margin-top:10px;color:var(--brass);">${esc(state.ui.message)}</div>` : ""}`;
+      return `${BACKUP_PANEL_TITLE}<div class="footer-note" style="margin-bottom:8px;">כבוי. מהשמירה הבאה האימונים נשמרים במכשיר הזה בלבד.</div>${BACKUP_OPTOUT_TRUTHS}<button class="link-btn" data-community-action="backup-enable">הפעלת גיבוי אוטומטי</button>${selfExportButtonHtml()}${backupDeleteHtml()}${state.ui.message ? `<div class="footer-note" role="status" style="margin-top:10px;color:var(--brass);">${esc(state.ui.message)}</div>` : ""}`;
     }
     if (!state.user) {
       return `${BACKUP_PANEL_TITLE}<div class="footer-note" style="margin-bottom:8px;">${backupConsentPending() ? "אחרי השמירה הבאה נשאל אתכם אם לגבות את האימונים לענן. עד שתענו הכול נשאר במכשיר הזה בלבד." : "מהשמירה הראשונה האימונים שלכם מתחילים להיות מגובים לענן ברקע, אוטומטית ופרטית — רק אתם רואים אותם."} הסנכרון קורה מעצמו ואין כאן קובץ להוריד; „קובץ גיבוי להורדה" הוא דבר נפרד במסך הזה. אפשר לכבות בכל שלב.</div><button class="link-btn" data-community-action="backup-optout">כיבוי גיבוי אוטומטי</button>`;
@@ -5853,7 +6000,7 @@
     const credentialsCta = state.user.is_anonymous
       ? `<div style="margin-top:12px;">${unreachableWarning}<div class="footer-note" style="margin-bottom:6px;">${backupRisk.level === "urgent" ? "הפתרון הקבוע: שם לכניסה וסיסמה. אחריהם אפשר להיכנס לאותם נתונים מכל מכשיר." : "גישה לאותם נתונים ממכשיר אחר דורשת שם לכניסה וסיסמה."}</div><form id="backupCredentials">${field("backupCredentials", "username", LOGIN_NAME_LABEL, `<input class="text-input" name="username" dir="ltr" autocapitalize="off" autocomplete="username" placeholder="${esc(USERNAME_RULE_TEXT)}" data-live-validate="username" data-live-validate-form="backupCredentials" required/>`)}${field("backupCredentials", "password", "סיסמה", `<input class="text-input" name="password" type="password" dir="ltr" autocomplete="new-password" placeholder="${esc(PASSWORD_RULE_TEXT)}" data-live-validate="password" data-live-validate-form="backupCredentials" required/>`)}${field("backupCredentials", "passwordConfirm", "אימות סיסמה", `<input class="text-input" name="passwordConfirm" type="password" dir="ltr" autocomplete="new-password" placeholder="הקלידו שוב" data-live-validate="passwordConfirm" data-live-validate-form="backupCredentials" required/>`)}<button class="chip-btn primary" type="submit" style="margin-top:6px;">שמירת גישה ממכשיר אחר</button></form></div>`
       : "";
-    return `${BACKUP_PANEL_TITLE}<div class="footer-note" style="margin-bottom:8px;">${esc(state.syncEnabled ? "פעיל. האימונים שלכם מגובים לענן ברקע, אוטומטית ופרטית — רק אתם רואים אותם. הסנכרון קורה מעצמו ואין כאן קובץ להוריד; „קובץ גיבוי להורדה\" הוא דבר נפרד במסך הזה." : "מוגדר אך טרם הופעל.")}</div><button class="link-btn" data-community-action="backup-optout">כיבוי גיבוי אוטומטי</button>${credentialsCta}${backupDeleteHtml()}${state.ui.message ? `<div class="footer-note" role="status" style="margin-top:10px;color:var(--brass);">${esc(state.ui.message)}</div>` : ""}`;
+    return `${BACKUP_PANEL_TITLE}<div class="footer-note" style="margin-bottom:8px;">${esc(state.syncEnabled ? "פעיל. האימונים שלכם מגובים לענן ברקע, אוטומטית ופרטית — רק אתם רואים אותם. הסנכרון קורה מעצמו ואין כאן קובץ להוריד; „קובץ גיבוי להורדה\" הוא דבר נפרד במסך הזה." : "מוגדר אך טרם הופעל.")}</div><button class="link-btn" data-community-action="backup-optout">כיבוי גיבוי אוטומטי</button>${credentialsCta}${selfExportButtonHtml()}${backupDeleteHtml()}${state.ui.message ? `<div class="footer-note" role="status" style="margin-top:10px;color:var(--brass);">${esc(state.ui.message)}</div>` : ""}`;
   };
   // ---- Shared Phase 1 dialog focus + keyboard management (COMM-190) -----
   // Every Phase 1 overlay dialog behaves the same way: focus moves in on
@@ -6772,6 +6919,7 @@
       if (typeof window.showToast === "function") window.showToast("גיבוי אוטומטי לענן הופעל. האימונים יגובו מהשמירה הבאה.");
       rerender();
     }
+    else if (action === "self-export") exportMyServerData();
     else if (action === "backup-delete") { state.ui.backupDeleteConfirm = true; rerender(); }
     else if (action === "backup-delete-cancel") { state.ui.backupDeleteConfirm = false; rerender(); }
     else if (action === "backup-delete-confirm") { state.ui.backupDeleteConfirm = false; requestDeletion(); }

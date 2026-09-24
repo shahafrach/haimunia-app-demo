@@ -153,9 +153,14 @@
 --   write_failed              | platform*         | a failed community write.
 --                             |                   | Health signal, not usage —
 --                             |                   | excluded from queries 2-5
+--   client_error              | platform*         | an uncaught error or an
+--                             |                   | unhandled rejection (N10).
+--                             |                   | Health signal, not usage —
+--                             |                   | excluded like write_failed
 --
--- 47 event names, which is every entry in `EVENTS` (42 until the five
--- built-after-their-switches names above were added). `write_failed` was not in
+-- 48 event names, which is every entry in `EVENTS` (42 until the five
+-- built-after-their-switches names above were added, 47 until N10 added
+-- client_error). `write_failed` was not in
 -- metrics.md's trigger table when this file was written; the row is added in
 -- the same change.
 --
@@ -254,7 +259,8 @@ from (values
   ('push_self_test',          'push_notifications', true),
   ('club_tab_viewed',         'shell',              false),
   ('app_opened',              'shell',              false),
-  ('write_failed',            'platform',           false)
+  ('write_failed',            'platform',           false),
+  ('client_error',            'platform',           false)
 ) as m(event_name, module, is_club_feature)
 order by is_club_feature desc, module, event_name;
 
@@ -294,7 +300,7 @@ with module_map(event_name, module) as (values
   ('attendance_recorded','attendance'),
   ('classmates_card_viewed','classmates_today'),
   -- The eleven modules that used to emit nothing, plus the two push names.
-  -- shell (club_tab_viewed, app_opened) and platform (write_failed) stay out
+  -- shell (club_tab_viewed, app_opened) and platform (write_failed, client_error) stay out
   -- of this map deliberately: navigation, a session and a failure signal are
   -- not module usage.
   ('announcement_viewed','announcements'),
@@ -334,7 +340,7 @@ rows_30d as (
   where e.created_at >= now() - interval '30 days'
     -- app_opened joins the two already here: one row per page load is a
     -- session, not a module being used. Query 9 reads it on its own.
-    and e.event_name not in ('club_tab_viewed', 'app_opened', 'write_failed')
+    and e.event_name not in ('club_tab_viewed', 'app_opened', 'write_failed', 'client_error')
 )
 select r.module,
        count(distinct r.user_id)                                          as unique_users,
@@ -414,7 +420,7 @@ with module_map(event_name, module) as (values
   ('attendance_recorded','attendance'),
   ('classmates_card_viewed','classmates_today'),
   -- The eleven modules that used to emit nothing, plus the two push names.
-  -- shell (club_tab_viewed, app_opened) and platform (write_failed) stay out
+  -- shell (club_tab_viewed, app_opened) and platform (write_failed, client_error) stay out
   -- of this map deliberately: navigation, a session and a failure signal are
   -- not module usage.
   ('announcement_viewed','announcements'),
@@ -513,7 +519,7 @@ module_map(event_name, module) as (values
   ('attendance_recorded','attendance'),
   ('classmates_card_viewed','classmates_today'),
   -- The eleven modules that used to emit nothing, plus the two push names.
-  -- shell (club_tab_viewed, app_opened) and platform (write_failed) stay out
+  -- shell (club_tab_viewed, app_opened) and platform (write_failed, client_error) stay out
   -- of this map deliberately: navigation, a session and a failure signal are
   -- not module usage.
   ('announcement_viewed','announcements'),
@@ -660,6 +666,31 @@ where e.event_name = 'write_failed'
   and e.created_at >= now() - interval '30 days'
 group by action, error_code
 order by failures desc;
+
+
+-- ===========================================================================
+-- 8b. Uncaught client errors, last 30 days (N10).
+--    Answers: is the app throwing somewhere nobody has reported?
+--    client_error carries the error class, which of our own .js files threw
+--    and where, and fp - a hash of the message, never the message. Group by
+--    fp to count one bug once; a new app_version with a new fp is a
+--    regression.
+-- ===========================================================================
+select e.props ->> 'fp'          as fingerprint,
+       e.props ->> 'kind'        as kind,
+       e.props ->> 'name'        as error_class,
+       e.props ->> 'file'        as file,
+       e.props ->> 'line'        as line,
+       min(e.props ->> 'app_version') as first_version,
+       max(e.props ->> 'app_version') as last_version,
+       count(*)                  as occurrences,
+       count(distinct e.user_id) as affected_users,
+       max(e.created_at)         as last_seen
+from public.analytics_events e
+where e.event_name = 'client_error'
+  and e.created_at >= now() - interval '30 days'
+group by fingerprint, kind, error_class, file, line
+order by occurrences desc;
 
 
 -- ===========================================================================

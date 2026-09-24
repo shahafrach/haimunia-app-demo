@@ -151,6 +151,18 @@
     BENCHMARK_OPENED: "benchmark_opened",
     // A workout post's author saved who trained with them.
     TRAINING_PARTNERS_TAGGED: "training_partners_tagged",
+
+    // ---- N10: uncaught errors -------------------------------------------
+    // An exception nobody caught, or a promise rejection nobody handled,
+    // anywhere on the page. write_failed's discipline and its reason: the
+    // app had no way to know it was broken until a member said so. Carries
+    // the error's CLASS, which of our own script files threw and where, and
+    // a short hash of the message - never the message itself, never the
+    // stack. An error message is not code-authored text: a JSON.parse
+    // failure quotes the input, a TypeError can name a value, a rejected
+    // fetch can carry a URL with a query string. The hash still groups
+    // identical errors together; it cannot be read back into the text.
+    CLIENT_ERROR: "client_error",
   });
   const KNOWN = new Set(Object.values(EVENTS));
 
@@ -410,6 +422,9 @@
     [EVENTS.OWNER_REPORT_VIEWED]: ["months"],
     [EVENTS.BENCHMARK_OPENED]: ["kind", "retest_due", "has_best"],
     [EVENTS.TRAINING_PARTNERS_TAGGED]: ["count"],
+    // N10. See installErrorCapture() for how each one is derived. No
+    // message, no stack, no URL beyond the basename of one of our own files.
+    [EVENTS.CLIENT_ERROR]: ["kind", "name", "file", "line", "col", "fp", "app_version"],
   });
 
   function projectHandProps(eventName, props) {
@@ -604,6 +619,133 @@
     if (typeof o.debug === "boolean") debugMode = o.debug;
     if (typeof o.queueRow === "function") queueRow = o.queueRow;
     if (o.attachToBus !== false) attachToBus();
+    flushPendingErrors();
+    return true;
+  }
+
+  // ---- N10: the global error capture ----------------------------------
+  //
+  // window "error" and "unhandledrejection" -> one client_error row each,
+  // through analyticsTrack() above, so it inherits everything that already
+  // has: the props allow-list, the 3 KB budget, the offline queue, and the
+  // never-throws contract. This file is loaded before cloud.js and app.js,
+  // which is what lets it see their boot-time errors at all.
+  //
+  // Member content cannot reach the row by construction, not by care:
+  // - the message is hashed (fnv-1a, 8 hex), never sent;
+  // - `file` is the basename only when it is one of this site's own .js
+  //   files, and "other" for anything else (an extension, a vendor CDN, an
+  //   inline handler) - never a URL, which can carry a query string;
+  // - `name` is the error's class, and only when it looks like one;
+  // - line and column are numbers.
+  //
+  // Bounded per page load: each distinct fingerprint is sent once, and at
+  // most ERROR_CAP rows in total, so a render loop throwing on every frame
+  // is one row and not a flood against the table's rate limits. Errors
+  // raised before configure() are held (up to the same cap) and sent once a
+  // client exists; a member who never turns on the cloud layer sends none.
+  const ERROR_CAP = 5;
+  let errorsSent = 0;
+  const errorSeen = new Set();
+  let errorPending = [];
+  let errorCaptureInstalled = false;
+
+  function fnv1a(text) {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < text.length; i++) {
+      h ^= text.charCodeAt(i);
+      h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    return ("0000000" + h.toString(16)).slice(-8);
+  }
+
+  function ownScriptFile(url) {
+    if (typeof url !== "string" || !url) return "other";
+    let u;
+    try { u = new URL(url, window.location.href); } catch (err) { return "other"; }
+    if (u.origin !== window.location.origin) return "other";
+    const m = /\/((?:src\/(?:[a-z0-9-]+\/)?)?[a-z0-9._-]+\.js)$/i.exec(u.pathname);
+    return m ? m[1] : "other";
+  }
+
+  function errorClassName(err) {
+    let name = "";
+    try { name = err && typeof err === "object" ? String(err.name || (err.constructor && err.constructor.name) || "") : typeof err; } catch (e) { name = ""; }
+    return /^[A-Za-z][A-Za-z0-9_]{0,39}$/.test(name) ? name : "unknown";
+  }
+
+  function errorMessageOf(err, fallback) {
+    try {
+      if (err && typeof err === "object" && typeof err.message === "string") return err.message;
+      if (typeof err === "string") return err;
+    } catch (e) { /* a hostile getter */ }
+    return typeof fallback === "string" ? fallback : "";
+  }
+
+  function toCount(n) { return Number.isFinite(n) && n >= 0 ? Math.floor(n) : null; }
+
+  // Build the props for one uncaught error. Exposed for tests: the whole
+  // privacy argument is this function's output shape.
+  function describeClientError(kind, err, info) {
+    const i = info || {};
+    const name = errorClassName(err);
+    const file = ownScriptFile(i.filename);
+    const line = toCount(i.lineno);
+    const col = toCount(i.colno);
+    const props = {
+      kind: kind === "rejection" ? "rejection" : "error",
+      name,
+      file,
+      fp: fnv1a([kind, name, file, line, errorMessageOf(err, i.message)].join("|")),
+    };
+    if (line !== null) props.line = line;
+    if (col !== null) props.col = col;
+    // app.js's top-level const: classic scripts share one global lexical
+    // scope, so it is readable by name once app.js has run (and absent, not
+    // wrong, for an error thrown before it has).
+    try { if (typeof APP_VERSION === "string") props.app_version = APP_VERSION.slice(0, 20); } catch (e) { /* TDZ */ }
+    return props;
+  }
+
+  function recordClientError(kind, err, info) {
+    try {
+      if (errorsSent >= ERROR_CAP) return false;
+      const props = describeClientError(kind, err, info);
+      if (errorSeen.has(props.fp)) return false;
+      errorSeen.add(props.fp);
+      errorsSent++;
+      if (!getClient() && !isDebug()) {
+        errorPending.push(props);
+        return true;
+      }
+      analyticsTrack(EVENTS.CLIENT_ERROR, props);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function flushPendingErrors() {
+    if (!errorPending.length || !getClient()) return;
+    const rows = errorPending;
+    errorPending = [];
+    for (const props of rows) analyticsTrack(EVENTS.CLIENT_ERROR, props);
+  }
+
+  function installErrorCapture() {
+    if (errorCaptureInstalled || typeof window.addEventListener !== "function") return false;
+    errorCaptureInstalled = true;
+    // Bubble phase on window only: a failed <img>/<script> load fires a
+    // plain Event that does not bubble to window, so it never reaches here
+    // (posts.js already handles broken images in the capture phase).
+    window.addEventListener("error", (event) => {
+      if (!event || typeof event.message !== "string" && !event.error) return;
+      recordClientError("error", event.error, { filename: event.filename, lineno: event.lineno, colno: event.colno, message: event.message });
+    });
+    window.addEventListener("unhandledrejection", (event) => {
+      const reason = event ? event.reason : undefined;
+      recordClientError("rejection", reason, {});
+    });
     return true;
   }
 
@@ -613,6 +755,9 @@
     getUserId = () => null;
     queueRow = null;
     debugMode = false;
+    errorsSent = 0;
+    errorSeen.clear();
+    errorPending = [];
   }
 
   function isActiveMemberEvent(eventName) { return ACTIVE_MEMBER_EVENT_SET.has(eventName); }
@@ -637,7 +782,11 @@
     fitProps,
     projectBusPayload,
     projectHandProps,
+    describeClientError,
+    recordClientError,
+    ERROR_CAP,
   };
   window.analyticsTrack = analyticsTrack;
   window.ANALYTICS_EVENTS = EVENTS;
+  installErrorCapture();
 })();
