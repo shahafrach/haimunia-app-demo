@@ -18,7 +18,7 @@ Live: https://haimunia-app.pages.dev
 Repo: `haimuniya/haimunia-app-demo` — **private** since 2026-09-17
 Supabase: `jajmlyrjlkhclgphbfbb` (free tier)
 
-**v4.79.0** · 197 migrations (all applied, drift clean 2026-09-24) · (recorded when `npm test` finishes) JS tests · 134 pgTAP files / 4,137 tests · 60 browser scenarios
+**v4.79.0** · 197 migrations (all applied, drift clean 2026-09-24) · 2421 JS tests · 134 pgTAP files / 4,137 tests · 60 browser scenarios
 
 The numbers in the paragraph below are the 2026-09-19 reconcile and are kept
 as its record; `docs/PROJECT_STATUS.md` has the current ones.

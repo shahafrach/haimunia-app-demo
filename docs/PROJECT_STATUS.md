@@ -16,7 +16,7 @@ file is stale. Say so in your PR.
 | App version | **4.79.0** (`APP_VERSION` in app.js, mirrored to `SW_VERSION` in sw.js) |
 | Migrations | **197** files in `supabase/migrations/` — all applied to production, `check:drift` clean at 197 (2026-09-24) |
 | pgTAP suites | **134 files, 4,137 tests, PASS** (`supabase test db`, run locally 2026-09-24) |
-| JS tests | **(recorded when `npm test` finishes)** (`npm test`, 2026-09-24 on `a956ef4` plus this consolidation) |
+| JS tests | **2421 passing, 0 failing** (`npm test`, 2026-09-24 on `a956ef4` plus this consolidation) |
 | Browser scenarios | **60** files in `scripts/browser-check/` — not run at this consolidation; last full run 59 of 60 on #83 (`community-render-cost` over its trip-wire under load) |
 | Community layer | `cloud.js` **7,950** lines plus **16** files in `src/community/`; `app.js` **9,234** lines |
 | Tables in `public` | **67** measured at 185 migrations, every one with RLS enabled — **not re-measured since** |
