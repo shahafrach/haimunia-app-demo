@@ -1398,7 +1398,13 @@
     // display hide in app.js, there is no RLS clause behind this key, and the
     // row must not start claiming enforcement it does not have.
     { key: "strength_percentages", label: "אחוזים ממשקל מקסימלי", desc: "חישוב משקלי עבודה לפי אחוז מהמקסימום האישי (1RM) של כל חבר/ה.", clientOnly: true },
-    { key: "gym_display", label: "מסך תצוגה במועדון", desc: "מסך לצפייה בלבד שנתלה בחדר האימון ומציג את אימון היום ואת לוחות המובילים.", clientOnly: true, planned: true },
+    // BUILT 2026-09-23 (202609230005). Both markers come off: the feature is
+    // src/community/gym-display.js, gated by clubFeatureOn("gym_display") so
+    // ?display=1 falls back to the ordinary app while this is off, and
+    // gym_display_board() - the one thing a display account can call - raises
+    // before anything else unless club_feature_enabled('gym_display'). That
+    // definer function is the server gate, so the row may say נאכף בשרת.
+    { key: "gym_display", label: "מסך תצוגה במועדון", desc: "מסך לצפייה בלבד שנתלה בחדר האימון ומציג את אימון היום ואת לוחות המובילים." },
   ];
   const COACH_MODULE_TOGGLES = [
     { key: "coach_tools", label: "לוח מאמנים (הכל)", clientOnly: true },

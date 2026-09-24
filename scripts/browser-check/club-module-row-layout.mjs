@@ -60,20 +60,21 @@ const SEEDED = ["onboarding_challenge", "benchmarks", "strength_percentages", "g
 // always removes בפיתוח, but it only removes בתצוגה בלבד when the gate
 // is a real policy rather than a display hide. Asserting one shape for every
 // built row would force one of these two groups to lie.
-const STILL_PLANNED = ["gym_display", "arbox_attendance"];
+const STILL_PLANNED = ["arbox_attendance"];
 // Built, but the gate is a display hide in app.js over the member's own data:
 // no בפיתוח, and בתצוגה בלבד STAYS.
 const BUILT_CLIENT_ONLY = ["strength_percentages", "benchmarks"];
 // Built with a real RLS clause behind the key - 202609220002 for the first
 // two, 202609220004 for owner_report: no בפיתוח, and the row may claim
 // נאכף בשרת.
-const BUILT_ENFORCED = ["coach_tasks", "onboarding_challenge", "owner_report"];
+// gym_display since 202609230005: gym_display_board() refuses while it is off.
+const BUILT_ENFORCED = ["coach_tasks", "onboarding_challenge", "owner_report", "gym_display"];
 // 202609220002, extended by 202609220004. These rows also render a collapsed
 // threshold disclosure BELOW the label - a second block in the same row whose
 // fields must not overflow either. owner_report has ONE field where
 // coach_tasks has seven, which is the interesting end of the range: a lone
 // number input beside a long Hebrew label is where a too-wide field shows.
-const WITH_SETTINGS = BUILT_ENFORCED;
+const WITH_SETTINGS = ["coach_tasks", "onboarding_challenge", "owner_report"];
 
 const target = await resolveLocalOnlyTarget();
 console.log(`Target: ${target.url} (local static server, mocked backend)`);

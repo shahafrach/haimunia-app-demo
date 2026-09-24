@@ -459,3 +459,22 @@ test("the section writes nothing - opening and browsing it queues no records at 
     "this is a read over records that already exist; a surface that derives a number must not persist it");
   assert.match(rowFor(window, "wod:cindy").textContent, /18\+12/, "an AMRAP prints as rounds+reps");
 });
+
+test("benchmarks sit below the member's exercises, the order haimunia-app shows", async () => {
+  const window = await bootApp();
+  await seedLift(window, "Test Bench Order", daysAgo(window, 3), 80, 5);
+  turnKeyOn(window);
+  openProgress(window);
+  const doc = window.document;
+  const exercises = doc.getElementById("historyListArea");
+  const bench = area(window);
+  assert.ok(bench.firstElementChild, "the section rendered");
+  assert.ok(exercises.children.length > 0, "and so did the exercises");
+  const FOLLOWING = window.Node.DOCUMENT_POSITION_FOLLOWING;
+  assert.ok(exercises.compareDocumentPosition(bench) & FOLLOWING,
+    "benchmarks come after the all-time records list, not before it");
+  const heading = [...doc.querySelectorAll("h2.section-label")].find((h) => h.textContent.includes("שיאים כלל-זמנים"));
+  assert.ok(heading.compareDocumentPosition(bench) & FOLLOWING, "and after its heading and search box");
+  assert.ok(bench.compareDocumentPosition(doc.getElementById("bodyweightArea")) & FOLLOWING,
+    "and still above bodyweight and measurements");
+});
