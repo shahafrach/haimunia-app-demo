@@ -5,7 +5,7 @@ holds the state, and it is the one a session should distrust first: if a
 number here disagrees with the repository, the repository is right and this
 file is stale. Say so in your PR.
 
-**Last reconciled: 2026-09-23, against `main` at `926326c`.**
+**Last reconciled: 2026-09-24, against `main` at `a956ef4` (#83).**
 
 ---
 
@@ -13,25 +13,23 @@ file is stale. Say so in your PR.
 
 | | |
 |---|---|
-| App version | **4.78.0** (`APP_VERSION` in app.js, mirrored to `SW_VERSION` in sw.js) |
-| Migrations | **185** files in `supabase/migrations/` |
-| pgTAP suites | **125** test files in `supabase/tests/` (126 with `rls_helpers.sql`) — **3955 assertions, 0 failing** (`supabase test db`, Docker, 2026-09-23) |
-| JS tests | **2322 passing, 0 failing** (`npm test`, 2026-09-23 on the #56 merge result) |
-| Browser scenarios | **60** files in `scripts/browser-check/` — `run-all.mjs` green 2026-09-23 on the #45 merge result (#56 adds no scenario) |
-| Community layer | `cloud.js` **7,855** lines plus **15** files in `src/community/`; `app.js` **9,173** lines |
-| Tables in `public` | **67**, every one with RLS enabled (67 of 67 measured) |
-| RLS policies | **142** |
-| Functions in `public` | **273**, of which **215** are SECURITY DEFINER |
+| App version | **4.79.0** (`APP_VERSION` in app.js, mirrored to `SW_VERSION` in sw.js) |
+| Migrations | **197** files in `supabase/migrations/` — all applied to production, `check:drift` clean at 197 (2026-09-24) |
+| pgTAP suites | **134 files, 4,137 tests, PASS** (`supabase test db`, run locally 2026-09-24) |
+| JS tests | **(recorded when `npm test` finishes)** (`npm test`, 2026-09-24 on `a956ef4` plus this consolidation) |
+| Browser scenarios | **60** files in `scripts/browser-check/` — not run at this consolidation; last full run 59 of 60 on #83 (`community-render-cost` over its trip-wire under load) |
+| Community layer | `cloud.js` **7,950** lines plus **16** files in `src/community/`; `app.js` **9,234** lines |
+| Tables in `public` | **67** measured at 185 migrations, every one with RLS enabled — **not re-measured since** |
+| RLS policies | **142** measured at 185 migrations — not re-measured since |
+| Functions in `public` | **273**, of which **215** SECURITY DEFINER, measured at 185 migrations — not re-measured since |
 
-**The schema rows above are a real measurement again.** They were read on
-2026-09-23 out of the local Supabase container after `supabase db reset --local`
-applied all 185 migrations cleanly — `pg_tables`, `pg_policies`, `pg_proc` and
-`pg_class.relrowsecurity` in the `public` schema. That closes the caveat this
-table carried since 2026-09-19, when the figures came from a Postgres 16
-instance in which five migrations could not apply and the function count was
-known to be short. Nothing is estimated or carried forward by arithmetic now,
-and "every table has RLS enabled" is counted rather than asserted: 67 tables,
-67 with `relrowsecurity`.
+**The schema rows are a measurement at 185 migrations, and twelve have landed
+since.** At least three add a `public` table — `storage_erasure_queue`
+(`202609230002`), `edge_function_invocations` (`202609230008`) and
+`training_log_usage` (`202609230013`) — and several add functions, so treat
+those three rows as a floor. Re-read them from `pg_tables`, `pg_policies`,
+`pg_proc` and `pg_class.relrowsecurity` after a `supabase db reset --local`,
+and replace this paragraph when you do.
 
 ---
 
@@ -48,10 +46,10 @@ and "every table has RLS enabled" is counted rather than asserted: 67 tables,
   middleware, not a reason to relax either it or the no-secrets rule.
 - **Supabase project `jajmlyrjlkhclgphbfbb`** — production, real member data.
   Latest applied migration:
-  **`202609190001_job_health_without_a_service_key`, applied to production on
-  2026-09-19** by the owner, after the merge of PR #14. It matches the
-  repository — 175 files committed, 175 applied. **No drift**
-  (owner-confirmed, 2026-09-19). Confirm with `npm run check:drift`, never
+  **`202609230013_training_log_usage_counts`, applied to production on
+  2026-09-24.** It matches the repository — 197 files committed, 197 applied.
+  **No drift** (`check:drift`, 2026-09-24). Every push is logged in
+  `docs/ops/MIGRATIONS.md`'s push log. Confirm with `npm run check:drift`, never
   with this line: it is a record of what was true at reconcile time, and the
   command is the measurement.
 
@@ -81,34 +79,25 @@ and "every table has RLS enabled" is counted rather than asserted: 67 tables,
 
 ## What shipped most recently
 
-**Thirty-three branches merged between 2026-09-19 and 2026-09-23**, consolidated
-in CHANGES.md under *"The community becomes a feed, the switches reach the
-server, and the phone gets a real pass"*. The short version:
+**Twenty-five branches merged between 2026-09-23 and 2026-09-24** (#57,
+#60–#83), consolidated in CHANGES.md under *"The audit gets worked off,
+production gets a gate, and the backups get restored"*. The short version:
 
-- **The community feed became a feed** (#33, #35, #36, #37, #49/#54) — one card
-  layout for every post type, chronological by default with the ranked order a
-  switch away, a post-workout share prompt, training-partner tagging, and
-  announcements that actually reach the feed.
-- **Five of 202609190002's seven pre-seeded switches grew their features**
-  (#24, #30, #31, #38) — strength percentages and Rx+, benchmark tracking,
-  coach tasks and the onboarding challenge, and the monthly owner report. Two
-  remain <span dir="rtl">בפיתוח</span>: `gym_display` and `arbox_attendance`.
-- **Module switches reach the server** (#53) — six modules now refuse the
-  matching server calls rather than only hiding the control. Four of them are
-  marked <span dir="rtl">נאכף בשרת חלקית</span> until the rest of their paths
-  are gated.
-- **The first real-phone pass at 390px** (#39, #40, #41, #43, #44, #45) — the
-  save toast no longer covers the save button, never-logged stopped wearing
-  overdue's red, `.mono` stopped reversing every number beside a Hebrew unit,
-  the ⋯ menu opens inside the card, deletes are undoable, and the hero photo
-  came down from half the screen to a third.
-- **Security** (#52, #55, #56) — management login hardened, five more paths off
-  the public surface, and `admin_reset_password` redeployed without the retired
-  github.io origin.
-- **The launch-readiness audit landed** (#46): 6 blockers, 20 should-fix, 15
-  nice-to-have. Working it off is the current thread.
-
----
+- **The launch-readiness audit is mostly closed.** 5 of 6 blockers outright
+  and B6 but for one hint; 16 of 20 should-fix. The per-item table is at the
+  top of `docs/audit/launch-readiness.md`.
+- **Module switches reach the whole server** (#60, #65, #67, #73) — every
+  definer path gated, search and suggestions gated at the slot, Engage on the
+  club switch, and module `config` no longer readable by members.
+- **<span dir="rtl">מסך תצוגה במועדון</span>** (#68) — a read-only wall screen
+  signed in as its own `gym_display` role. Off by default; see below.
+- **Account deletion reaches photos, telemetry and the audit note** (#57).
+- **Operations** — `npm run push:prod` and its push log (#62, #63, #75, #76);
+  the restore drill run (#77) and photos backed up (#78); the keep-awake
+  heartbeat (#61); the anonymous half of the live smoke test (#81); the job
+  board reads HTTP responses (#74).
+- **Standalone training-log edition, server half** (#82, #83) — the old app's
+  EMOM model, and `training_log_usage`, the first table `anon` can write to.
 
 ## Open, deliberately
 
@@ -128,8 +117,8 @@ Until then those four boundaries have been proven by pgTAP against a local
 database and never against the live project.
 
 
-**The restore drill has been run — 2026-09-23.** Launch-readiness **S19** is
-closed for the database and open for Storage. `haimunia-db-backup-20260923T045538Z`
+**The restore drill has been run — 2026-09-23, and a restore verified under the
+new passphrase on 2026-09-24.** Launch-readiness **S19** is closed. `haimunia-db-backup-20260923T045538Z`
 was decrypted with the current passphrase and restored into a scratch database:
 schema 0 errors, all 30 `public` and all 5 `auth` inserts loaded, and **all 138
 foreign keys in `public` checked individually for orphan rows — 0 violations**.
@@ -152,18 +141,38 @@ byte of archive per byte of photo, since JPEG does not compress.
 database backup artifact produced before that date is encrypted under the old
 passphrase and **cannot be decrypted** — treat them as lost, not as a restore
 path. The first backup taken under the new passphrase is the oldest restorable
-one, and the restore drill in `docs/audit/ROUND_10_AND_KNOWN_LIMITATIONS.md`
-has not yet been re-run against it. Nothing about
-`.github/workflows/backup-database.yml` changed, and no passphrase is recorded
-in this repository.
+one, and **a restore under the new passphrase has been verified (2026-09-24)**.
+`backup-database.yml` now also needs `SUPABASE_ACCESS_TOKEN` and
+`SUPABASE_PROJECT_REF` (#78) and will fail, deliberately, without them when
+the minutes return on 2026-10-01. Nothing else about
+the passphrase handling changed, and no passphrase is recorded in this
+repository.
+
+**The gym display is built, server-enforced and off.** `gym_display` was
+seeded `false` by `202609190002` (whose own guard refuses a replay that turns
+it on), and no later migration touches its row. `gym_display_board()` — the
+only thing the display role can call — raises unless
+`club_feature_enabled('gym_display')` *and* `is_gym_display()`. Two things are
+out of step with that: the module panel row in `cloud.js`
+(`CLUB_MODULE_TOGGLES`) still carries `clientOnly: true, planned: true`, so it
+reads <span dir="rtl">בפיתוח</span> and "display only" for a feature that is
+built and enforced on the server; and `?display=1` mounts the full-screen page
+on any device whatever the switch says — harmless, since it gets no data and
+shows <span dir="rtl">אין חיבור כרגע</span>, but it is not gated client-side.
+
+**The job board reads red on purpose** until the two `edge_functions_*`
+Vault secrets are set (#74): the three Edge-Function cron jobs have never
+actually run.
+
 
 
 - **Leaked-password protection** shows as a permanent WARN in Supabase's
   security advisor. It is Pro-plan only, confirmed by trying it. Generated
   passwords achieve the same thing. Not worth looking at again.
-- **Coach "engage" signals** are flag-gated (`featureFlags.coachEngage`) and
-  the decline/attendance half is scaffolded rather than finished — it waits
-  on attendance data the app does not own.
+- **Coach "engage" signals** answer to the `engagement_alerts` club module
+  since #67 (the per-device flag is gone). The decline/attendance half is
+  scaffolded rather than finished — it waits on attendance data the app does
+  not own.
 - **`docs/audit/`** is a launch-era snapshot, not a live description. Several
   files there still describe GitHub Pages and a public repository. They are
   historical records of an audit that happened; treat them as dated. The
@@ -216,6 +225,9 @@ in this repository.
 
 Small, harmless, and left for a pass that is allowed to touch code — listed
 here so they are not rediscovered as findings:
+
+- **`test/settings-backup-export.test.mjs` is an empty file**, added at 0
+  bytes by #71. It runs as a file with no tests; either fill it or delete it.
 
 - **`_headers` carries its own out-of-date comment.** It still explains that
   "GitHub Pages cannot set response headers", that the app therefore has "NO

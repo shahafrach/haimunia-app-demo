@@ -1,3 +1,172 @@
+## The audit gets worked off, production gets a gate, and the backups get restored — 2026-09-24
+
+Twenty-five branches merged since the last consolidation (#59): #57 and #60–#83.
+(#73 landed with `(#72)` in its commit subject; it is #73.) Most of it is the
+launch-readiness audit being closed item by item — five of the six blockers
+are closed outright and the sixth (B6) in all but one hint, and sixteen of the
+twenty should-fix items are done. App version
+**4.78.0 → 4.79.0**. Thirteen migrations, `202609230001`–`202609230013`, are all
+applied to production; `check:drift` reads **197, repo and database agree**.
+
+### Module switches reach the whole server
+
+**Every remaining server path is gated** (#60). `202609230001` gated the
+definer functions that bypassed the read policies; `202609230003` gates the
+rest — shares, post edits, comments, reactions, coach congratulations, club WOD
+sessions, profiles, challenge progress and team changes, the club summary, and
+the three notification paths. The admin panel's four rows go back to
+<span dir="rtl">נאכף בשרת</span> from <span dir="rtl">נאכף בשרת חלקית</span>. A
+switched-off module never blocks the underlying record: an achievement is still
+recorded and an event cancellation still succeeds, they are simply not
+announced.
+
+**Search and suggestions, gated at the slot** (#65). With events or challenges
+off, `community_search` still returned that module's rows and
+`people_suggestions` still ranked members by it. Both now gate the slot rather
+than the function, so a switched-off module contributes nothing and member
+search is never emptied. (`202609230004`)
+
+**The coach Engage section answers to the club** (#67) — gated by the
+`engagement_alerts` module instead of a per-device flag, so an admin can turn
+it off for everyone. The comment claiming web push defaults off now says what
+actually keeps it off: the `push_notifications` club module.
+
+**A module's config is operator detail** (#73). Every member could read each
+module's `config`, including the coach-task thresholds and the owner report's
+strong-start figure. The column is revoked from members and served through a
+reader that returns it only to coaches and above. The first attempt's
+`revoke select (config)` against a table-level grant silently did nothing;
+only the pgTAP `has_column_privilege` assertion showed it. (`202609230007`)
+
+### <span dir="rtl">מסך תצוגה במועדון</span> (#68)
+
+A screen for the wall of the training room. Opened once at `?display=1` and
+left running, it shows today's club WOD and who has posted a result, with no
+navigation of any kind. It signs in as a dedicated read-only `gym_display`
+account rather than as a member: it cannot read the feed, a profile, or
+anything else, because it was never granted them. Only members who have chosen
+to appear in leaderboards are listed, and names are shortened to a first name
+and a surname initial by the database itself, not by the screen. **Off by
+default**; the switch is <span dir="rtl">מסך תצוגה במועדון</span> in the module
+panel. (`202609230005`)
+
+### Account deletion reaches everything it promised (#57)
+
+A deleted account's photos are removed from Storage the same night, feed
+interactions and app-open days are purged after 90 days like the rest of
+community activity, a backup-only member can request deletion from the backup
+card in Settings, and a staff restriction reason recorded in the audit log is
+redacted when the member's account is deleted. Closes **B3, B4, B5**.
+(`202609230002`)
+
+### Launch-readiness items closed in code
+
+- **A personal record names its lift** (#79, S17). A PR on a built-in lift
+  produced a card reading only <span dir="rtl">"שיא אישי"</span>.
+  `pr_share()` now records `metadata.movement_id` and the client resolves the
+  name from its own library. (`202609230009`)
+- **The member of the week is told** (#79, N7). (`202609230010`)
+- **An event image must be `https`** (#79, N8). (`202609230011`)
+- **A revoked push subscription is deleted after 90 days** (#79, N11), and the
+  privacy policy says so in both languages. (`202609230012`)
+- **The scheduled-job board stops reporting green for jobs that did nothing**
+  (#74, S6). The three Edge-Function cron jobs are fire-and-forget; the checker
+  now reads the HTTP response, names the function that failed, and says when
+  the Vault secrets are still placeholders. None of it reaches the anon status
+  endpoint. **Expect the board to read red until the two `edge_functions_*`
+  Vault secrets are set.** (`202609230008`)
+- **The welcome card names the button that is on the screen** (#72) — the
+  stored body corrected for the third rename, guarded so a club's own words are
+  kept, and the client-side patch that rewrote them removed. (`202609230006`)
+- **An invitation expires by default** (#80, N5) — thirty days, pre-filled;
+  staff can still clear it.
+- **Profiles stop labelling owner and admin accounts** (#70, N4), and the staff
+  gate stops listing the tooling behind it (#70, S5, the copy half).
+- **The export note says where the file goes** (#71, N9) — the Downloads
+  folder, and that it stays there on a shared phone.
+- **Report reasons are one `radiogroup`** to a screen reader (#80, part of N14).
+- **Six dated audit documents are bannered**, not rewritten, where they still
+  called GitHub Pages the host (#80, N13); production's clickjacking headers
+  were measured and survive the Functions middleware (S10).
+
+### Privacy policy
+
+- The reason staff record when lifting a restriction, and what the action log
+  stores, are now described; the claim that the log's copy is never deleted was
+  corrected, since deletion now redacts it (#64).
+- "Nothing leaves your phone" was false — the app fetches its own config on
+  every open — and now says none of *your data* leaves it (#69, S13); Turnstile
+  is disclosed for backup start as well as sign-in (#69, S14); the backup status
+  line no longer promises an automatic backup while the consent card waits
+  (#69, S15).
+
+### Operations
+
+- **`npm run push:prod`** (#62, #63, S20) — the only way a migration reaches
+  production. It refuses unless `HEAD` is exactly `origin/main`, the tree is
+  clean, both migration guards pass and production holds nothing the
+  repository does not; then it shows every schema-changing statement and waits
+  for `apply`, and re-checks drift afterwards.
+- **A push log** (#75, #76) in `docs/ops/MIGRATIONS.md` — when, by whom, on
+  whose approval — backfilled for 2026-09-23.
+- **The restore drill, run** (#77, S19). A real archive was decrypted under the
+  current passphrase, loaded into a scratch database, and all 138 `public`
+  foreign keys were checked for orphans: 0. It found that the backup restores
+  into a Supabase project only, never bare Postgres, and that photos were not in
+  it at all.
+- **Photos are backed up** (#78). `scripts/backup-storage.mjs` carries both
+  buckets with a sha256 manifest; its own drill caught a restore that exited 0
+  and put every photo at the wrong path. `backup-database.yml` now refuses
+  without `SUPABASE_ACCESS_TOKEN` and `SUPABASE_PROJECT_REF`.
+- **The project is kept awake from outside** (#61) — a Cloudflare Worker pings
+  `job_health_status()` every two days with the publishable key, and refuses a
+  privileged one; an Actions fallback is written and commented out until
+  2026-10-01. `/workers/` is no longer served.
+- **The live multi-role smoke test has run** (#81, S9) — the anonymous role
+  passes against production; the four signed-in roles are SKIP, not pass,
+  until throwaway accounts are provisioned.
+- **A red test suite means something again** (#66). `waitFor()` scales from
+  `HAIMUNIA_TEST_TIMEOUT_SCALE` and says, on timeout, how many polls it got
+  against how many it wanted and the load average — a starved machine and a
+  real regression now look different.
+
+### The standalone training-log edition, server half
+
+- **Custom EMOM WODs keep their rest minutes, timed stations and weights**
+  (#82). The older app's model — reps, a timed hold or a rest minute per
+  station, with a target duration and weight — is this app's too; before, an
+  imported EMOM lost its holds and weights and editing a result shifted every
+  value after the rest minute onto the wrong station.
+- **Usage counts from the training-log app** (#83). `training_log_usage`
+  receives pseudonymous per-device, per-day counts (app opened, workout logged,
+  screen opened) from haimuniya.github.io/haimunia-app — a random device id and
+  nothing else. `anon` may insert those three fields, at most 1,000 rows a day;
+  no one can read a row; staff see totals only in a new analytics-dashboard
+  section. Rows are deleted after 180 days by a nightly job. **This is the first
+  table in the schema `anon` can write to.** (`202609230013`)
+
+### Verified on 2026-09-24
+
+- **Production:** `202609230009`–`202609230013` applied 2026-09-24;
+  `check:drift` clean at **197**.
+- **pgTAP, locally:** `supabase test db` — **134 files, 4,137 tests, PASS**.
+- **Restore under the new passphrase:** verified. Every artifact from before
+  the 2026-09-23 rotation remains undecryptable; the restorable history starts
+  there.
+
+### Known and not fixed here
+
+- The `gym_display` row in the module panel still carries `clientOnly: true,
+  planned: true`, so it reads <span dir="rtl">בפיתוח</span> and
+  "display only" although the feature is built and server-enforced.
+- Four of five smoke-test roles are unverified against production (S9).
+- The Edge-Function Vault secrets are unset, so the job board reads red (S6
+  working as designed), and `backup-database.yml` needs two new secrets before
+  the minutes return on 2026-10-01.
+- Still open: B6's "no health details" hint on the coach contact note; S5's
+  "one neutral row" half; S16, S18; N1, N6, N10 and the rest of N14. See
+  `docs/audit/launch-readiness.md`.
+
 ## The community becomes a feed, the switches reach the server, and the phone gets a real pass — 2026-09-23
 
 Thirty-three branches merged since the last consolidation (#20, which covered
