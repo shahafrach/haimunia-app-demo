@@ -5,7 +5,7 @@ holds the state, and it is the one a session should distrust first: if a
 number here disagrees with the repository, the repository is right and this
 file is stale. Say so in your PR.
 
-**Last reconciled: 2026-09-24, against `main` at `e7fbdaa` (#86).**
+**Last reconciled: 2026-09-24, against `main` at `2bf56a3` (#88).**
 
 ---
 
@@ -13,12 +13,12 @@ file is stale. Say so in your PR.
 
 | | |
 |---|---|
-| App version | **4.80.0** (`APP_VERSION` in app.js, mirrored to `SW_VERSION` in sw.js) |
+| App version | **4.81.0** (`APP_VERSION` in app.js, mirrored to `SW_VERSION` in sw.js) |
 | Migrations | **197** files in `supabase/migrations/` — all applied to production, `check:drift` clean at 197 (2026-09-24) |
 | pgTAP suites | **134 files, 4,137 tests, PASS** (`supabase test db`, run locally 2026-09-24) |
-| JS tests | **2441 passing, 0 failing** (`npm test`, 2026-09-24 on `e7fbdaa` plus this consolidation) |
+| JS tests | **2443 passing, 0 failing** (`npm test`, 2026-09-24 on `2bf56a3` plus this consolidation) |
 | Browser scenarios | **61** files in `scripts/browser-check/` (#86 added `self-export-download`) — not run at this consolidation; last full run 60 of 61 on #86, against Chromium 1194 via a scratch alias (`community-render-cost` over its trip-wire under load) |
-| Community layer | `cloud.js` **8,104** lines plus **16** files in `src/community/`; `app.js` **9,241** lines |
+| Community layer | `cloud.js` **8,104** lines plus **16** files in `src/community/`; `app.js` **9,215** lines |
 | Tables in `public` | **67** measured at 185 migrations, every one with RLS enabled — **not re-measured since** |
 | RLS policies | **142** measured at 185 migrations — not re-measured since |
 | Functions in `public` | **273**, of which **215** SECURITY DEFINER, measured at 185 migrations — not re-measured since |
@@ -79,9 +79,18 @@ and replace this paragraph when you do.
 
 ## What shipped most recently
 
-**Two branches merged on 2026-09-24 after the #84 consolidation** (#85, #86),
-consolidated in CHANGES.md under *"Errors get counted, members get their data,
-and the wall screen ships"*. No migration.
+**One branch merged on 2026-09-24 after the #87 consolidation** (#88),
+consolidated in CHANGES.md under *"Each lift once on the progress screen"*.
+No migration.
+
+- **Lifts no longer appear twice on <span dir="rtl">התקדמות</span>** (#88) —
+  Benchmarks is the eight named workouts only; each lift lives in its exercise
+  card, which keeps its estimated 1RM. `benchmarkLiftItems()` is gone.
+- **The standalone app (`haimunia-app`) is at 3.1.1** with the same fix. Its
+  rollback tag is **`rollback-3.1.0`**.
+
+Before that, **two branches** (#85, #86) were consolidated at #87 under
+*"Errors get counted, members get their data, and the wall screen ships"*:
 
 - **Global error capture** (#85, N10) — `client_error` analytics rows carry the
   error class, our own file's basename, line and an fnv-1a hash of the
