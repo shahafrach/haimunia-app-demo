@@ -6259,15 +6259,20 @@ function renderMeasureArea() {
 
 // ---------- Benchmark tracking (club_features.benchmarks) ----------
 //
-// WHAT THIS IS. A fixed list of the classic named workouts, plus every lift
-// this member has actually logged a 1RM estimate for, each one showing every
-// attempt over time, the best result, and the same progress chart the rest of
-// this screen draws. Plus a reminder when a benchmark has not been retested
-// for BENCHMARK_RETEST_DAYS.
+// WHAT THIS IS. A fixed list of the classic named workouts, each one showing
+// every attempt over time, the best result, and the same progress chart the
+// rest of this screen draws. Plus a reminder when a benchmark has not been
+// retested for BENCHMARK_RETEST_DAYS.
+//
+// NO LIFTS. This section used to append a row per lift the member had a 1RM
+// estimate for. The all-time records list directly above it already has one
+// card per lift, with its sets, its estimated 1RM and the same per-day chart,
+// so once benchmarks moved below the exercises every lift appeared twice on
+// one screen. Lifts live in that list and only there;
+// test/progress-no-duplicate-lifts.test.mjs fails if a second copy returns.
 //
 // WHAT IT DELIBERATELY IS NOT: a second store. A Fran attempt IS a wod_entry
-// and a 1RM attempt IS a strength_entry - the rows this app has always
-// written, already queued through queueSyncRecord() into private_records,
+// - the rows this app has always written, already queued through queueSyncRecord() into private_records,
 // already covered by buildBackupPayload(), already re-applied by
 // applyRemotePrivateRecord(). So attempts sync exactly like every other
 // record because they ARE every other record, and nothing here writes
@@ -6319,20 +6324,6 @@ function benchmarkWodAttempt(e) {
     effort: e.rx, text: formatWodEntry(e),
   };
 }
-// One attempt at a LIFT. "Attempt" here is a training DAY, not a set: a member
-// logs five sets of back squat in a session and that is one go at the
-// benchmark, so the day's best estimate stands for it - which is also exactly
-// what renderDetailCard() charts a few hundred lines up, so the two pictures
-// of the same movement agree.
-//
-// The value is the ESTIMATE (Epley, off the best set), not a tested single.
-// This app has one firm habit about that number - it says so wherever it
-// prints it - and this surface says so too, on the row and in the card.
-function benchmarkLiftAttempts(list) {
-  return bestPerDay((list || []).filter((e) => e.type !== "duration"), (e) => e.est1RM)
-    .map((e) => ({ id: e.id, date: e.date, ts: e.ts || 0, value: e.est1RM, effort: true, text: `${e.est1RM} ק״ג` }));
-}
-
 // THE FIXED EIGHT. Always all eight, in this order, whether or not the member
 // has ever done one: the list is the club's, not the member's, and a benchmark
 // never attempted is the most useful row on the screen for somebody new.
@@ -6357,22 +6348,7 @@ function benchmarkWodItems() {
     });
   }).filter(Boolean);
 }
-// THE MEMBER'S OWN 1RM LIFTS - every movement they have a rep-based entry for,
-// which is the only definition of "your lifts" this app can give without
-// asking them to curate a list. A movement logged only as holds has no 1RM at
-// all (bestEst1RM returns null, not 0) and is simply not a lift benchmark.
-function benchmarkLiftItems() {
-  const index = entriesByExercise();
-  return activeExercises().map((m) => {
-    const attempts = benchmarkLiftAttempts(index.get(m.id) || []);
-    if (!attempts.length) return null;
-    return benchmarkItem({
-      id: `lift:${m.id}`, kind: "lift", refId: m.id, name: m.name, subtitle: null,
-      scoreType: "load", effort: true, all: attempts, tracked: attempts,
-    });
-  }).filter(Boolean).sort((a, b) => a.name.localeCompare(b.name));
-}
-// The derived half both kinds share, so "best", "how long ago" and "is it due"
+// The derived half, so "best", "how long ago" and "is it due"
 // are computed once rather than per caller.
 function benchmarkItem(base) {
   const best = benchmarkBest(base.tracked, base.scoreType);
@@ -6388,21 +6364,22 @@ function benchmarkItem(base) {
     retestDue: daysSince !== null && daysSince > BENCHMARK_RETEST_DAYS,
   });
 }
-function benchmarkItems() { return benchmarkWodItems().concat(benchmarkLiftItems()); }
+function benchmarkItems() { return benchmarkWodItems(); }
 // The module's one event: a member opened a benchmark's history. Opening, not
 // collapsing. Reached through window.* because src/analytics.js is an
 // OPTIONAL precache asset and this screen must work without it - offline, or
 // with no community session, this is a silent no-op (an unconfigured
 // analyticsTrack() drops the row by contract). kind, whether a retest is due
 // and whether there is a best at all: never the score, never the benchmark's
-// name, never a lift's exercise id (a custom one is minted per device).
+// name. kind is always "wod" now that lifts are not benchmarks; the prop stays
+// so the event's shape (src/analytics.js) does not change under old rows.
 function trackBenchmarkOpened(id) {
   if (typeof window.analyticsTrack !== "function" || !window.ANALYTICS_EVENTS) return;
   const item = benchmarkItems().find((i) => i.id === id);
   if (!item) return;
   try {
     window.analyticsTrack(window.ANALYTICS_EVENTS.BENCHMARK_OPENED, {
-      kind: item.kind === "lift" ? "lift" : "wod", retest_due: !!item.retestDue, has_best: !!item.best,
+      kind: "wod", retest_due: !!item.retestDue, has_best: !!item.best,
     });
   } catch (e) { /* a measurement never breaks the screen it measures */ }
 }
@@ -6415,7 +6392,7 @@ function renderBenchmarkAttemptRow(item, attempt) {
   // those bare - see the bidi binding's own comment. The date and effort tag
   // are this file's own strings with no member input in them at all.
   return `<div data-benchmark-attempt="${esc(attempt.id)}" class="flex items-center justify-between" style="padding:7px 0; border-bottom:1px solid var(--border);">
-    <span style="color:var(--steel); font-size:12px;">${esc(fmtDate(attempt.date))}${item.kind === "wod" ? esc(wodEffortTag(attempt.effort)) : ""}</span>
+    <span style="color:var(--steel); font-size:12px;">${esc(fmtDate(attempt.date))}${esc(wodEffortTag(attempt.effort))}</span>
     <span class="flex items-center gap-6">
       ${isBest ? `<span style="color:var(--brass); font-size:11px; font-weight:700;">שיא</span>` : ""}
       <span class="mono" style="font-weight:700; font-size:13px; color:${isBest ? "var(--brass)" : "var(--chalk)"};">${bidiUnit(attempt.text)}</span>
@@ -6442,12 +6419,10 @@ function renderBenchmarkCard(item) {
       ${item.subtitle ? `<div class="wod-desc" style="margin-bottom:10px;">${bidiText(item.subtitle)}</div>` : ""}
       ${item.retestDue ? `<div class="footer-note" style="margin:0 0 10px; text-align:center;">עברו ${item.daysSince} יום מאז הניסיון האחרון — זה הזמן לבדוק שוב.</div>` : ""}
       ${item.tracked.length ? renderChart(chartData) : `<div style="color:var(--steel); font-size:13px; text-align:center; padding:18px 0;">אין עדיין תוצאה לבנצ'מרק הזה</div>`}
-      ${item.kind === "wod" && item.effort !== null && item.tracked.length < item.all.length
+      ${item.effort !== null && item.tracked.length < item.all.length
         ? `<div class="footer-note" style="margin-top:10px; text-align:center;">הגרף והשיא מציגים את הניסיונות ב${esc(wodEffortLabel(item.effort))} בלבד — תוצאות בדרגות מאמץ שונות אינן ברות השוואה. כל הניסיונות מופיעים ברשימה למטה.</div>` : ""}
       ${attempts.length ? `<h3 class="section-label" style="margin-top:14px;">כל הניסיונות</h3>${attempts.map((a) => renderBenchmarkAttemptRow(item, a)).join("")}` : ""}
-      ${item.kind === "lift"
-        ? `<div class="footer-note" style="margin-top:10px; text-align:center;">1RM משוער — חישוב מהסט הטוב ביותר בכל יום אימון, לא הרמה שבוצעה</div>`
-        : `<button class="link-btn" data-action="log-benchmark" data-id="${esc(item.refId)}" style="display:block; margin:12px auto 0;">רישום ניסיון ב-${esc(item.name)}</button>`}
+      <button class="link-btn" data-action="log-benchmark" data-id="${esc(item.refId)}" style="display:block; margin:12px auto 0;">רישום ניסיון ב-${esc(item.name)}</button>
     </div>
     <div style="height:8px;"></div>`;
 }
@@ -6464,8 +6439,7 @@ function renderBenchmarkRow(item) {
       </div>
       <span style="text-align:left;">
         ${best
-          ? `<span class="mono" style="display:block; color:var(--brass); font-weight:700; font-size:14px;">${bidiUnit(best)}</span>
-             ${item.kind === "lift" ? `<span style="display:block; color:var(--steel); font-weight:600; font-size:11px;">1RM משוער</span>` : ""}`
+          ? `<span class="mono" style="display:block; color:var(--brass); font-weight:700; font-size:14px;">${bidiUnit(best)}</span>`
           : `<span style="display:block; color:var(--steel); font-size:12px;">טרם נוסה</span>`}
       </span>
     </button>`;

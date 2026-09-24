@@ -1,8 +1,7 @@
 // Benchmark tracking on the progress screen, behind club_features.benchmarks.
 //
 // WHAT THIS IS. Eight named workouts (Fran, Grace, Helen, Diane, Cindy, Murph,
-// Isabel, Karen) plus whatever lifts the member has actually logged, each with
-// every attempt, the best result, a chart, and a reminder once an attempt goes
+// Isabel, Karen), each with every attempt, the best result, a chart, and a reminder once an attempt goes
 // stale. It stores nothing: an attempt is the wod_entry or strength_entry the
 // app has always written, which is what makes "it syncs like other records"
 // true rather than something this branch had to build.
@@ -209,49 +208,17 @@ test("an attempt shows up with its best, its history and a chart", async () => {
   assert.match(card.textContent, /שיא/, "and the record row is marked as such");
 });
 
-test("the member's own 1RM lifts are benchmarks too, one attempt per training day", async () => {
+test("a logged lift is not a benchmark row - it already has its card in the exercises list above", async () => {
   const window = await bootApp();
   const mov = await seedLift(window, "Test Bench Squat", daysAgo(window, 20), 100, 5);
-  // Two sets on ONE day: a session is one go at the benchmark, so the day's
-  // best estimate stands for it - the same reduction renderDetailCard() makes.
-  await seedLift(window, "Test Bench Squat", daysAgo(window, 20), 110, 3);
-  await seedLift(window, "Test Bench Squat", daysAgo(window, 5), 120, 3);
   turnKeyOn(window);
   openProgress(window);
 
-  const row = rowFor(window, `lift:${mov.id}`);
-  assert.ok(row, "a logged lift becomes a benchmark without the member curating a list");
-  assert.match(row.textContent, /1RM משוער/, "and it is labelled an estimate, as it is everywhere else in this app");
-  const est = window.bestEst1RM(mov.id);
-  assert.match(row.textContent, new RegExp(String(est).replace(".", "\\.")), "the headline is the best estimate");
-
-  row.click();
-  const card = area(window).querySelector(".chart-card");
-  assert.equal(window.entriesFor(mov.id).length, 3, "three sets were logged, across two days");
-  assert.equal(attemptRows(window).length, 2, "which is two attempts at the benchmark, not three");
-  assert.match(card.textContent, /חישוב מהסט הטוב ביותר בכל יום אימון/,
-    "and the card says so rather than leaving the member to wonder where their third set went");
-  // 110x3 beats 100x5 on the Epley estimate, so the older day is represented
-  // by the heavier of its two sets.
-  assert.equal(window.benchmarkBest(
-    window.benchmarkItems().find((i) => i.id === `lift:${mov.id}`).tracked, "load").value,
-    window.bestEst1RM(mov.id));
-});
-
-test("a movement logged only as holds has no 1RM, so it is not a lift benchmark", async () => {
-  const window = await bootApp();
-  await window.addMovement("Test Bench Plank", "Other");
-  const mov = window.allMovements().find((m) => m.name === "Test Bench Plank");
-  await window.dbPut({
-    id: window.uid("set"), exerciseId: mov.id, date: daysAgo(window, 3), type: "duration",
-    durationSeconds: 90, sets: 1, weight: 0, ts: Date.now(),
-  });
-  await window.reloadFromDb();
-  turnKeyOn(window);
-  openProgress(window);
-
-  assert.equal(window.bestEst1RM(mov.id), null, "a 90-second plank has no estimated single");
-  assert.equal(rowFor(window, `lift:${mov.id}`), undefined, "so it gets no row, rather than a row reading 0");
+  assert.ok(window.bestEst1RM(mov.id) > 0, "the lift has an estimated 1RM to show");
+  assert.equal(rows(window).length, THE_EIGHT.length, "the section is the eight named workouts and nothing else");
+  assert.ok(rows(window).every((b) => b.dataset.id.startsWith("wod:")), "no lift rows");
+  assert.equal(area(window).textContent.includes("Test Bench Squat"), false, "the lift's name is not in the section");
+  assert.equal(window.benchmarkItems().some((i) => i.kind !== "wod"), false);
 });
 
 test("Rx and scaled are not one line - the chart and the best come from one bucket, the list shows both", async () => {
