@@ -9,6 +9,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { bootCommunity, waitFor } from "./helpers/boot.mjs";
+import { createMockSupabase } from "./helpers/mockSupabase.mjs";
 
 const root = new URL("../", import.meta.url);
 const src = readFileSync(new URL("src/community/gym-display.js", root), "utf8");
@@ -25,9 +27,19 @@ test("it only takes over on ?display=1, never by accident", () => {
 });
 
 test("it hides the whole app shell, because there is nothing to tap on a wall", () => {
+  const ids = /for \(const id of (\[[^\]]+\])\)/.exec(src);
+  assert.ok(ids, "the mount walks one list of shell ids");
   for (const id of ["appShell", "bottomNavWrap", "loading"]) {
-    assert.ok(src.includes(`getElementById("${id}")`), `it hides #${id}`);
+    assert.ok(ids[1].includes(`"${id}"`), `it hides #${id}`);
   }
+});
+
+test("the switch wins over the URL: the gate is clubFeatureOn, which defaults off", () => {
+  // isModuleEnabled() defaults ON before the feature map loads - the wrong
+  // direction for a surface that takes the whole page over.
+  assert.match(src, /clubFeatureOn\("gym_display"\)/, "gated through app.js's default-off reader");
+  assert.ok(!src.includes('isModuleEnabled("gym_display")'), "not through the default-on one");
+  assert.match(src, /if \(!gymDisplayOn\(\)\) \{/, "sync() refuses to mount while the switch is off");
 });
 
 test("it never holds the Supabase client, only one published function", () => {
@@ -93,4 +105,76 @@ test("it is precached and stylesheet-clean, per CLAUDE.md", () => {
   assert.ok(!/\brgba?\(/.test(block), "and no literal rgb()/rgba()");
   assert.match(block, /var\(--club-navy\)/);
   assert.match(block, /var\(--chalk\)/);
+});
+
+// ===========================================================================
+// Behaviour, not text: the real app booted at ?display=1
+// ===========================================================================
+
+const VERIFIED = new Date().toISOString();
+function displayMock(enabled, board) {
+  const mock = createMockSupabase({
+    profiles: [{ id: "u1", handle: "tv", display_name: "מסך", recovery_verified_at: VERIFIED, visible_to_club: true }],
+    invite_redemptions: [{ user_id: "u1", invite_id: "inv-1", role: "member", redeemed_at: VERIFIED }],
+    clubs: [{ id: "club-1", name: "חיימוניה" }],
+    club_features: [{ club_id: "club-1", module_key: "gym_display", enabled, config: {} }],
+  });
+  mock.setUser({ id: "u1", is_anonymous: false, email: "tv@members.haimuniya.invalid" });
+  mock.onRpc("gym_display_board", board || (() => ({ data: { wod: null, results: [] }, error: null })));
+  return mock;
+}
+const shown = (w) => !!w.document.querySelector(".gd-root");
+const shellHidden = (w) => w.document.getElementById("appShell").style.display === "none";
+
+test("?display=1 with the switch OFF is the ordinary app", async (t) => {
+  const calls = [];
+  const w = await bootCommunity(displayMock(false, () => { calls.push(1); return { data: null, error: null }; }),
+    { url: "https://example.test/?display=1" });
+  t.after(() => w.close());
+  // Past the point the feature map has answered, so "not mounted" is the
+  // switch's answer and not merely "not yet".
+  await waitFor(() => w.clubFeatureOn && w.document.querySelector("#content")?.children.length > 0, 5000);
+  await new Promise((r) => setTimeout(r, 300));
+  assert.equal(shown(w), false, "no board on the page");
+  assert.equal(shellHidden(w), false, "the app shell is visible");
+  assert.equal(w.document.documentElement.hasAttribute("data-gym-display"), false);
+  assert.equal(calls.length, 0, "and the board is never even asked for");
+});
+
+test("?display=1 with the switch ON takes the page over", async (t) => {
+  const w = await bootCommunity(displayMock(true), { url: "https://example.test/?display=1" });
+  t.after(() => w.close());
+  await waitFor(() => shown(w), 5000, 5, "the board mounts once the switch answers on");
+  assert.equal(shellHidden(w), true, "and the app shell is hidden behind it");
+  assert.equal(w.document.documentElement.getAttribute("data-gym-display"), "1");
+});
+
+test("the switch going off under a running screen hands the page back to the app", async (t) => {
+  const w = await bootCommunity(displayMock(true), { url: "https://example.test/?display=1" });
+  t.after(() => w.close());
+  await waitFor(() => shown(w), 5000);
+  w.setClubFeatureFlags({ gym_display: false });
+  assert.equal(shown(w), false, "the board is gone");
+  assert.equal(shellHidden(w), false, "the shell is back");
+  assert.equal(w.document.documentElement.hasAttribute("data-gym-display"), false);
+});
+
+test("the server refusing the board as disabled also stands the screen down", async (t) => {
+  // A stale cached map can say on after an admin turned it off; the server's
+  // copy of the switch outranks it rather than leaving "no connection" up.
+  const calls = [];
+  const w = await bootCommunity(displayMock(true, () => { calls.push(1); return { data: null, error: { message: "gym_display disabled" } }; }),
+    { url: "https://example.test/?display=1" });
+  t.after(() => w.close());
+  await waitFor(() => calls.length > 0, 5000, 5, "the board mounted and asked for its data");
+  await waitFor(() => !shown(w), 5000, 5, "the board unmounts on the server's refusal");
+  assert.equal(shellHidden(w), false, "the shell is back");
+  assert.equal(w.document.documentElement.hasAttribute("data-gym-display"), false);
+});
+
+test("without ?display=1 the switch being on changes nothing", async (t) => {
+  const w = await bootCommunity(displayMock(true));
+  t.after(() => w.close());
+  await new Promise((r) => setTimeout(r, 300));
+  assert.equal(shown(w), false);
 });

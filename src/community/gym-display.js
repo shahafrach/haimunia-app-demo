@@ -114,14 +114,31 @@
     root.appendChild(gymDisplayEl("div", "gd-foot", "מוצגים רק מי שבחרו להופיע בלוחות"));
   }
 
+  // What the mount hid, so a switch turned off under a running screen can hand
+  // the page back exactly as it found it rather than guessing at defaults.
+  let gymDisplayRoot = null;
+  let gymDisplayTimer = null;
+  let gymDisplayHidden = [];
+
+  // THE SWITCH WINS OVER THE URL. `?display=1` is a request, not a key: with
+  // club_features.gym_display off, the page is the ordinary app, exactly as if
+  // the parameter were absent. Read through app.js's cached map (clubFeatureOn)
+  // rather than isModuleEnabled(), because that one defaults to ON before the
+  // features load and this must default to OFF - an unknown answer, a cold
+  // cache and a device that never signed in all mean "no board".
+  function gymDisplayOn() {
+    return typeof clubFeatureOn === "function" && clubFeatureOn("gym_display");
+  }
+
   function gymDisplayMount() {
     document.documentElement.setAttribute("data-gym-display", "1");
-    const shell = document.getElementById("appShell");
-    if (shell) shell.style.display = "none";
-    const loading = document.getElementById("loading");
-    if (loading) loading.style.display = "none";
-    const nav = document.getElementById("bottomNavWrap");
-    if (nav) nav.style.display = "none";
+    gymDisplayHidden = [];
+    for (const id of ["appShell", "loading", "bottomNavWrap"]) {
+      const node = document.getElementById(id);
+      if (!node) continue;
+      gymDisplayHidden.push([node, node.style.display]);
+      node.style.display = "none";
+    }
 
     const root = gymDisplayEl("div", "gd-root");
     root.setAttribute("dir", "rtl");
@@ -130,6 +147,18 @@
     root.setAttribute("aria-live", "polite");
     document.body.appendChild(root);
     return root;
+  }
+
+  // The switch went off while the screen was up - by the admin panel, or by
+  // the server refusing the board. Give the page back to the app.
+  function gymDisplayUnmount() {
+    if (gymDisplayTimer) window.clearTimeout(gymDisplayTimer);
+    gymDisplayTimer = null;
+    if (gymDisplayRoot) gymDisplayRoot.remove();
+    gymDisplayRoot = null;
+    for (const [node, display] of gymDisplayHidden) node.style.display = display;
+    gymDisplayHidden = [];
+    document.documentElement.removeAttribute("data-gym-display");
   }
 
   async function gymDisplayTick(root) {
@@ -142,6 +171,10 @@
     try {
       const res = await window.gymDisplayBoard();
       if (res && res.error) {
+        // The server's own copy of the switch (gym_display_board() raises
+        // before anything else while the module is off). It outranks a stale
+        // cached map: stand down rather than show "no connection" forever.
+        if (/gym_display disabled/.test(String(res.error.message || ""))) return null;
         gymDisplayRender(root, null, true);
         return GYM_DISPLAY_BACKOFF_MS;
       }
@@ -153,22 +186,36 @@
     }
   }
 
-  function gymDisplayStart() {
+  // Called on load and again by app.js whenever its feature map changes (the
+  // cache read at boot, and every answer from club_features_for_caller), so
+  // the screen follows the switch in both directions without a reload.
+  function gymDisplaySync() {
     if (!gymDisplayWanted()) return;
-    const root = gymDisplayMount();
+    if (!gymDisplayOn()) {
+      if (gymDisplayRoot) gymDisplayUnmount();
+      return;
+    }
+    if (gymDisplayRoot) return;
+    const root = gymDisplayRoot = gymDisplayMount();
     gymDisplayRender(root, null, null);
     const run = () => {
       gymDisplayTick(root).then((next) => {
-        window.setTimeout(run, next || GYM_DISPLAY_REFRESH_MS);
+        if (gymDisplayRoot !== root) return;
+        if (next === null) { gymDisplayUnmount(); return; }
+        gymDisplayTimer = window.setTimeout(run, next || GYM_DISPLAY_REFRESH_MS);
       });
     };
     run();
   }
 
+  // Published on window for app.js, the way cloud.js hands app.js its doors:
+  // a bare function name is not reliably shared across script evaluations.
+  window.gymDisplaySync = gymDisplaySync;
+
   if (typeof document !== "undefined") {
     if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", gymDisplayStart);
+      document.addEventListener("DOMContentLoaded", gymDisplaySync);
     } else {
-      gymDisplayStart();
+      gymDisplaySync();
     }
   }

@@ -43,7 +43,6 @@ const seedSql = fs.readFileSync(new URL("202609190002_seven_switches_before_thei
 // derived, because "it is in one of the two arrays" would pass if a
 // later edit moved a coach tool into the members' content list.
 const PLANNED = [
-  { key: "gym_display", group: "CLUB_MODULE_TOGGLES" },
   { key: "arbox_attendance", group: "COACH_MODULE_TOGGLES" },
 ];
 const PLANNED_KEYS = PLANNED.map((p) => p.key);
@@ -88,6 +87,12 @@ const BUILT = [
   // club_feature_enabled('owner_report'), so clientOnly comes off with
   // planned.
   { key: "owner_report", group: "COACH_MODULE_TOGGLES", clientOnly: false, migration: "202609220004" },
+  // 2026-09-23. The wall screen at ?display=1. Its gate is not a policy but
+  // the one definer function a display account can call: gym_display_board()
+  // raises before anything else unless club_feature_enabled('gym_display').
+  // A display account reads no table directly, so that function IS the
+  // server gate - see the definer half of the test below.
+  { key: "gym_display", group: "CLUB_MODULE_TOGGLES", clientOnly: false, migration: "202609230005" },
 ];
 const BUILT_KEYS = BUILT.map((b) => b.key);
 // Everything 202609190002 seeded, which is what the migration half checks:
@@ -220,8 +225,12 @@ test("a server-enforced key really does have a policy behind it, in the migratio
     const sql = fs.readFileSync(new URL(file, MIGRATIONS_DIR), "utf8");
     const policies = sql.split("create policy").slice(1)
       .filter((chunk) => chunk.slice(0, chunk.indexOf(";")).includes(`club_feature_enabled('${b.key}')`));
-    assert.ok(policies.length > 0,
-      `${b.key} has no clientOnly marker, so some RLS policy in ${b.migration} must gate on club_feature_enabled('${b.key}')`);
+    // Or a definer function that refuses outright while the key is off - the
+    // shape a surface with no table of its own takes (gym_display_board()).
+    // A mention is not enough: it has to be the `if not ... then raise` form.
+    const refuses = new RegExp(`if not public\\.club_feature_enabled\\('${b.key}'\\) then\\s+raise exception`).test(sql);
+    assert.ok(policies.length > 0 || refuses,
+      `${b.key} has no clientOnly marker, so some RLS policy or refusing definer function in ${b.migration} must gate on club_feature_enabled('${b.key}')`);
   }
 });
 
@@ -485,13 +494,13 @@ test("switching a planned module on writes it through the same RPC as every othe
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openModuleSettings(window);
 
-  const box = window.document.querySelector('[data-club-feature="gym_display"]');
+  const box = window.document.querySelector('[data-club-feature="arbox_attendance"]');
   box.checked = true;
   box.dispatchEvent(new window.Event("change", { bubbles: true }));
   await waitFor(() => calls.length === 1, 3000);
 
-  assert.deepEqual(calls[0], { p_module_key: "gym_display", p_enabled: true });
-  assert.equal(window.document.querySelector('[data-club-feature="gym_display"]').checked, true,
+  assert.deepEqual(calls[0], { p_module_key: "arbox_attendance", p_enabled: true });
+  assert.equal(window.document.querySelector('[data-club-feature="arbox_attendance"]').checked, true,
     "and the screen reflects the decision the admin just made");
 });
 

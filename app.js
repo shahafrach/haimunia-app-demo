@@ -4101,12 +4101,16 @@ window.setClubFeatureFlags = function (map) {
   // the chips never appeared without a navigation, which is the whole
   // failure this line exists to prevent.
   if (tab === "add") render();
+  // The wall screen follows the switch too: on shows it, off hands the page
+  // back to the app even with ?display=1 in the URL (src/community/gym-display.js).
+  if (typeof window.gymDisplaySync === "function") window.gymDisplaySync();
 };
 async function loadCachedClubFeatures() {
   try {
     const cached = await dbGetSetting(CLUB_FEATURES_CACHE_KEY);
     if (cached) clubFeatureFlags = sanitizeClubFeatureFlags(cached);
   } catch (e) { /* no cache is a cold start, not an error */ }
+  if (typeof window.gymDisplaySync === "function") window.gymDisplaySync();
 }
 function clubFeatureOn(key) { return clubFeatureFlags[key] === true; }
 // The one call site's name for the one key, so a typo in the string is a
@@ -6524,8 +6528,6 @@ function renderHistoryTab() {
       <div class="stat-card" style="text-align:center;"><div class="stat-value mono" style="font-size:20px;">${totalSetsLogged}</div><div class="stat-label">סטים שנרשמו</div></div>
     </div>
 
-    <div id="benchmarkArea"></div>
-
     ${activeExercises().length > 0 ? `
     <h2 class="section-label">שיאים כלל-זמנים</h2>
     <div class="search-box" style="margin:0 0 12px;">
@@ -6534,6 +6536,11 @@ function renderHistoryTab() {
     </div>` : ""}
 
     <div id="historyListArea" role="region" aria-label="שיאים כלל-זמנים"></div>
+
+    <!-- Below the exercises, not above them: the same order haimunia-app
+         shows. A member opens התקדמות for their own lifts first; the named
+         workouts are the second thing on the page, not the headline. -->
+    <div id="benchmarkArea"></div>
 
     <div id="bodyweightArea" role="region" aria-label="משקל גוף"></div>
 
@@ -7170,8 +7177,8 @@ function render() {
       });
     }
     if (tab === "history") {
-      renderBenchmarkArea();
       renderHistoryListArea();
+      renderBenchmarkArea();
       renderBodyweightArea();
       renderMeasureArea();
       const search = document.getElementById("historySearch");
