@@ -1,3 +1,18 @@
+## Each lift once on the progress screen — 2026-09-24
+
+One branch merged since the last consolidation (#87): #88. App version
+**4.80.0 → 4.81.0**. No migration; `check:drift` still reads 197.
+
+### Duplicate lifts (#88)
+
+- **Progress screen: lifts no longer appear twice.** The Benchmarks section is the eight named workouts. Each lift lives only in its exercise card, which still shows the estimated 1RM.
+
+New `test/progress-no-duplicate-lifts.test.mjs` counts each lift's name across
+the whole progress page, with benchmarks on and off.
+
+**The standalone app carries the same fix.** `haimunia-app` is at **3.1.1**
+with it; its rollback tag is `rollback-3.1.0`.
+
 ## Errors get counted, members get their data, and the wall screen ships — 2026-09-24
 
 Two branches merged since the last consolidation (#84): #85 and #86. App
