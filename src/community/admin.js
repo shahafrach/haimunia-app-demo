@@ -1619,6 +1619,8 @@
     // COMM-379, same precedent, same reasoning: fires the instant a.data
     // becomes truthy, not awaited, no second period selector.
     loadRegistrationFunnel();
+    // The training-log app's usage report rides the same load, same reason.
+    loadTrainingLogUsage();
   }
   function setAdminAnalyticsMode(mode) {
     if (mode !== "week" && mode !== "month") return;
@@ -3849,6 +3851,76 @@
     }
     return `<div style="margin-top:14px;" data-registration-funnel-section="1"><h3 class="field-label" style="margin:4px 0 8px;">משפך הרשמה</h3>${body}</div>`;
   }
+  // ---- The training-log app's own usage (202609230013) -------------------
+  // haimuniya.github.io/haimunia-app is the community-free edition members use
+  // without signing in. It reports only pseudonymous per-device, per-day facts
+  // (opened the app, logged a workout, opened a screen) into
+  // training_log_usage. No role can select a row of it, staff included:
+  // training_log_usage_report() is the one reader and returns totals only.
+  // Rows are purged after 180 days, so "devices seen" means in that window.
+  // It is NOT period-scoped like the rest of this dashboard - the question it
+  // answers ("how many use it, how many log, which way is it going") reads
+  // across weeks - so it carries its own fixed 12-week window and ignores the
+  // period selector above. Fired from loadAdminAnalyticsDashboard() the same
+  // way the funnel is, not awaited. The RPC itself is gated on is_staff(); the
+  // section only ever renders inside this shell, which is narrower.
+  const TRAINING_LOG_USAGE_ERROR_LABELS = {
+    "not authorized": "אין לך הרשאה לצפות בנתוני השימוש.",
+  };
+  async function loadTrainingLogUsage() {
+    if (!state.user || !(hasPerm(PERM.ANALYTICS_VIEW) || isAdmin())) { state.analytics.trainingLogUsage.data = null; return; }
+    const u = state.analytics.trainingLogUsage;
+    u.loading = true; u.error = false; u.errorText = "";
+    rerender();
+    const { data, error } = await mgmtDb().rpc("training_log_usage_report", { p_weeks: 12 });
+    u.loading = false; u.loaded = true;
+    if (error) {
+      u.error = true;
+      u.errorText = (error && TRAINING_LOG_USAGE_ERROR_LABELS[error.message]) || "לא ניתן היה לטעון את נתוני השימוש.";
+      rerender(); return;
+    }
+    u.data = data || null;
+    rerender();
+  }
+  // Devices, never people: a phone that clears its site data, or a member on
+  // two phones, is counted as a new device - the copy says so rather than
+  // letting the owner read these as member counts.
+  const TRAINING_LOG_SCREEN_LABELS = { add: "רישום", history: "התקדמות", calendar: "לוח שנה", wod: "אימונים" };
+  function renderTrainingLogUsage() {
+    const u = state.analytics.trainingLogUsage;
+    let body;
+    if (u.loading && !u.data) {
+      const skRow = `<div class="log-row" aria-hidden="true"><span style="height:12px;width:55%;background:var(--border);border-radius:6px;display:inline-block;"></span></div>`;
+      body = `<div aria-busy="true" data-training-log-usage-skeleton="1"><div class="chart-card" style="margin-bottom:10px;">${skRow.repeat(3)}</div></div>`;
+    } else if (u.error) {
+      body = `<div class="empty">${esc(u.errorText)}<div class="chip-row" style="justify-content:center;"><button class="chip-btn primary" data-community-action="training-log-usage-retry">ניסיון חוזר</button></div></div>`;
+    } else if (!u.data) {
+      body = emptyStateHtml({
+        key: "training-log-usage", icon: "chart",
+        headline: "כאן יופיע השימוש באפליקציית האימונים",
+        body: "ספירה אנונימית של מכשירים, מהאפליקציה שחברים משתמשים בה בלי להתחבר.",
+        action: "training-log-usage-retry", actionLabel: "טעינת הנתונים",
+      });
+    } else {
+      const d = u.data;
+      const weeks = Array.isArray(d.weeks) ? d.weeks : [];
+      const screens = Array.isArray(d.screens) ? d.screens : [];
+      const totals = adminAnalyticsCard("סה״כ",
+        adminAnalyticsRow("מכשירים שפתחו את האפליקציה", adminAnalyticsCount(d.devices_seen))
+        + adminAnalyticsRow("מכשירים שרשמו לפחות אימון אחד", adminAnalyticsCount(d.devices_logged))
+        + adminAnalyticsRow("פתחו בשבעת הימים האחרונים", adminAnalyticsCount(d.devices_seen_7d))
+        + adminAnalyticsRow("רשמו אימון בשבעת הימים האחרונים", adminAnalyticsCount(d.devices_logged_7d)));
+      const weekRows = weeks.slice().reverse().map((w) => adminAnalyticsRow(
+        `שבוע מ-${fmtDate(w.week_start)}`,
+        `${adminAnalyticsCount(w.devices)} פעילים · ${adminAnalyticsCount(w.logging_devices)} רשמו · ${adminAnalyticsCount(w.new_devices)} חדשים`)).join("");
+      const trend = adminAnalyticsCard("מגמה שבועית (12 שבועות)", `<div class="log-list">${weekRows}</div>`);
+      const screenRows = screens.map((s) => adminAnalyticsRow(TRAINING_LOG_SCREEN_LABELS[s.screen] || s.screen, adminAnalyticsCount(s.devices))).join("");
+      const screensCard = screenRows ? adminAnalyticsCard("מסכים שנפתחו (28 ימים, לפי מכשירים)", `<div class="log-list">${screenRows}</div>`) : "";
+      body = `<div class="footer-note" style="margin-bottom:8px;">נספרים מכשירים, לא אנשים: מי שמנקה את נתוני הדפדפן או משתמש בשני טלפונים נספר/ת פעמיים, ומי שכיבה את הספירה בהגדרות לא נספר/ת בכלל. הנתונים נשמרים 180 יום.</div>`
+        + totals + trend + screensCard;
+    }
+    return `<div style="margin-top:14px;" data-training-log-usage-section="1"><h3 class="field-label" style="margin:4px 0 8px;">אפליקציית האימונים (בלי התחברות)</h3>${body}</div>`;
+  }
   // ---- The shell itself ---------------------------------------------------
   // Frontend states (COMM-310's own "Frontend states" list): loading is a
   // skeleton (data-admin-analytics-skeleton, the same aria-busy skeleton
@@ -3902,7 +3974,7 @@
       // independent period selector would have shipped a funnel that never
       // loads for a staff member who visits Onboarding before Analytics.
       // Stays here, byte-identical to before this phase.
-      body = renderAdminAnalyticsCoreGroup(a.data) + renderAdminAnalyticsAdditionalGroup(a.data) + renderMemberSegments() + renderRegistrationFunnel();
+      body = renderAdminAnalyticsCoreGroup(a.data) + renderAdminAnalyticsAdditionalGroup(a.data) + renderMemberSegments() + renderRegistrationFunnel() + renderTrainingLogUsage();
     }
     return `<div class="ach-section" style="margin-top:18px;" data-admin-analytics-dashboard="1">${sectionHead("var(--energy)", "לוח בקרה: אנליטיקת קהילה", true)}${renderAdminAnalyticsPeriodSelector()}${body}</div>`;
   }
