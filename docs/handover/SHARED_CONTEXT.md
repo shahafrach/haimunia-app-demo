@@ -18,7 +18,7 @@ Live: https://haimunia-app.pages.dev
 Repo: `haimuniya/haimunia-app-demo` — **private** since 2026-09-17
 Supabase: `jajmlyrjlkhclgphbfbb` (free tier)
 
-**v4.81.0** · 197 migrations (all applied, drift clean 2026-09-24) · TBD JS tests · 134 pgTAP files / 4,137 tests · 61 browser scenarios
+**v4.81.0** · 197 migrations (all applied, drift clean 2026-09-24) · 2443 JS tests · 134 pgTAP files / 4,137 tests · 61 browser scenarios
 
 **Standalone app:** `haimunia-app` is at **3.1.1**, carrying the same
 duplicate-lifts fix as #88 (each lift once on the progress screen). Its
