@@ -25,8 +25,9 @@ duplicate-lifts fix as #88 (each lift once on the progress screen). Its
 rollback tag is **`rollback-3.1.0`**. It now has its own `CLAUDE.md`.
 
 Schema, measured on `main` at `154dd5e`: **70 tables**, all with RLS on,
-143 policies, 285 functions. The pgTAP ASSERTION total is not restated here;
-`docs/PROJECT_STATUS.md` carries the latest `supabase test db` run.
+143 policies, 285 functions (226 SECURITY DEFINER). The pgTAP ASSERTION total
+is not restated here; `docs/PROJECT_STATUS.md` carries the latest
+`supabase test db` run.
 
 ## Read these two first
 

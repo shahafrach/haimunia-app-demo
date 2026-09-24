@@ -21,7 +21,7 @@ file is stale. Say so in your PR.
 | Community layer | `cloud.js` **8,104** lines plus **16** files in `src/community/`; `app.js` **9,215** lines |
 | Tables in `public` | **70**, every one with RLS enabled — measured on `main` at `154dd5e` |
 | RLS policies | **143** — measured on `main` at `154dd5e` |
-| Functions in `public` | **285** — measured on `main` at `154dd5e` |
+| Functions in `public` | **285**, of which **226** SECURITY DEFINER — measured on `main` at `154dd5e` |
 
 ---
 
