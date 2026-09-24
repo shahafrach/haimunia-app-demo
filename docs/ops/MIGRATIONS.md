@@ -192,20 +192,17 @@ last column there is no way to tell an approved push from an assumed one.
 | 2026-09-23 (before 10:00) | `202609230004`, `202609230005` | session B | session B's user — but `…04` was session A's migration and session A's user had not approved it (see below) | `npm run push:prod` |
 | 2026-09-23 11:2x | `202609230006`, `202609230007` | session A | session A's user, after reading the `--dry-run` plan | `npm run push:prod --yes` |
 | 2026-09-23 ~11:5x | `202609230008` | session B | session B's user, per-push, having been told the board would go red | `npm run push:prod --yes` |
-| 2026-09-24 (time not recorded) | `202609230009`, `202609230010`, `202609230011`, `202609230012`, `202609230013` | not recorded — reported to the 2026-09-24 consolidation session by the owner | the owner (see note) | not recorded |
+| 2026-09-24 | `202609230009`, `202609230010`, `202609230011`, `202609230012`, `202609230013` | the owner, from his own machine | the owner — including `…13` (#83), whose merge and push were his decision | `npm run push:prod`, after a `--dry-run`; `check:drift` clean at 197 afterwards |
 
 Nothing pending: `check:drift` reads **197 migrations, repo and database
 agree** (2026-09-24).
 
-**On the 2026-09-24 row.** It was written by the consolidation session from
-the owner's account of the push — applied 2026-09-24, `check:drift` clean at
-197 — not by the operator at the time of the push, so the hour, the operator
-and the path are left `not recorded` rather than guessed. `…09`–`…12` are #79's;
-`…13` is #83's, whose description asked that it be neither merged nor pushed
-until the owner had decided on it, because `training_log_usage` is the first
-table in the schema `anon` can write to. It was merged and applied, so the
-owner's decision is taken to be that yes; if that is wrong, it wants a
-correction row here, not an edit to this one.
+**On the 2026-09-24 row.** `…09`–`…12` are #79's; `…13` is #83's, whose
+description asked that it be neither merged nor pushed until the owner had
+decided on it, because `training_log_usage` is the first table in the schema
+`anon` can write to. The owner decided: merging #83 and pushing `…13` were his
+call, and this row records them as approved. The row was written by the
+consolidation session on the owner's account the same day.
 
 ### Two things this log exists because of
 

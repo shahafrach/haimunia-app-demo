@@ -265,9 +265,8 @@ once and looks fine; and treat a rename as a delete, because nothing else does.
 (`docs/ops/MIGRATIONS.md`). It applies **everything pending**, not just yours —
 read the plan it prints, and anything in it that is not yours needs its
 author's user to have said yes. Then add a row to the push log in the same
-file, at the time: the 2026-09-24 row had to be written afterwards from the
-owner's account and has three columns reading `not recorded`, which is the
-exact gap the log exists to close.
+file, at the time — not reconstructed a day later, when nobody remembers
+who approved what.
 
 The two ledger guards from #58 are in `test.yml` and in `push:prod`, so the
 "until the guards land" habits in the section above are now enforced, not
