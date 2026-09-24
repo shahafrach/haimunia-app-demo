@@ -63,8 +63,14 @@ await page.fill("#wodBuilderMoveSearch", "Wall Balls");
 await page.waitForTimeout(150);
 await page.click(".movecheck-row[data-name='Wall Balls']");
 await page.waitForTimeout(100);
-const noWeightTypeToggle = await page.evaluate(() => !document.querySelector("[data-action='toggle-builder-movement-type']"));
-check("EMOM movements skip the reps/duration toggle (reps-only by design)", noWeightTypeToggle);
+// The older app's EMOM model (docs/audit/standalone-edition-plan.md §4.1):
+// a station can be reps, a timed hold, or a rest minute, so an EMOM station
+// offers the rest toggle and the same reps/time choice every format has.
+const stationControls = await page.evaluate(() => ({
+  rest: !!document.querySelector("[data-action='toggle-builder-movement-rest'][data-name='Wall Balls']"),
+  type: !!document.querySelector("[data-action='toggle-builder-movement-type'][data-name='Wall Balls']"),
+}));
+check("an EMOM station can be a rest minute, reps or a timed hold", stationControls.rest && stationControls.type, JSON.stringify(stationControls));
 
 await page.fill("[data-action='builder-movement-reps'][data-field='Wall Balls'].stepper-val", "15");
 await page.dispatchEvent("[data-action='builder-movement-reps'][data-field='Wall Balls'].stepper-val", "change");

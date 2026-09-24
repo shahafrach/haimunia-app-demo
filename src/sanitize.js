@@ -76,11 +76,37 @@ function sanitizeWodShape(w, category) {
   // per-movement fields are only ever baked into free text) — the log form
   // needs to know the movement rotation to render one reps field per
   // movement each time this WOD is attempted. See renderWodLogSection.
+  //
+  // Each station has a type ("reps" | "duration" | "rest"), a target reps, a
+  // target duration and a target weight. This is the older app's model
+  // (its 2.28.0/2.29.0), which members already have on disk: dropping the
+  // three extra arrays here made every rest station a reps station and every
+  // duration station lose its seconds - in memory on load, and permanently
+  // on the first re-save or on file import (docs/audit/
+  // standalone-edition-plan.md §4.1). A WOD with none of the extra arrays
+  // (club WODs, anything built before) reads as all-"reps", which is exactly
+  // what it meant.
   if (scoreType === "emom") {
-    const movements = Array.isArray(w.emomMovements) ? w.emomMovements : [];
-    out.emomMovements = movements.slice(0, LIMITS.emomMovements).map((n) => cleanStr(n, LIMITS.nameLen)).filter(Boolean);
-    const targets = Array.isArray(w.emomTargetReps) ? w.emomTargetReps : [];
-    out.emomTargetReps = out.emomMovements.map((_, i) => Math.round(cleanNum(targets[i], 0, LIMITS.reps, 0)));
+    const rawMovements = Array.isArray(w.emomMovements) ? w.emomMovements : [];
+    const rawTypes = Array.isArray(w.emomMovementTypes) ? w.emomMovementTypes : [];
+    const rawReps = Array.isArray(w.emomTargetReps) ? w.emomTargetReps : [];
+    const rawDurations = Array.isArray(w.emomTargetDurations) ? w.emomTargetDurations : [];
+    const rawWeights = Array.isArray(w.emomTargetWeights) ? w.emomTargetWeights : [];
+    // Pair every per-station array to its original index BEFORE dropping
+    // empty names - filtering the names first and then indexing the other
+    // arrays by the new, shifted position would give every station after a
+    // dropped one its neighbour's type and targets.
+    const kept = rawMovements.slice(0, LIMITS.emomMovements)
+      .map((n, i) => ({ i, name: cleanStr(n, LIMITS.nameLen) }))
+      .filter((m) => m.name);
+    out.emomMovements = kept.map((m) => m.name);
+    out.emomMovementTypes = kept.map((m) => {
+      const t = rawTypes[m.i];
+      return t === "duration" || t === "rest" ? t : "reps";
+    });
+    out.emomTargetReps = kept.map((m) => Math.round(cleanNum(rawReps[m.i], 0, LIMITS.reps, 0)));
+    out.emomTargetDurations = kept.map((m) => Math.round(cleanNum(rawDurations[m.i], 0, LIMITS.duration, 0)));
+    out.emomTargetWeights = kept.map((m) => cleanNum(rawWeights[m.i], 0, LIMITS.weight, 0));
     out.emomMinutes = Math.round(cleanNum(w.emomMinutes, 1, LIMITS.minutes, 10));
     if (out.emomMovements.length === 0) return null;
   }
@@ -166,6 +192,9 @@ function sanitizeWodEntry(e) {
     // defines it may not even be loaded yet during import) — just clamp
     // whatever array of rep counts came in; renderWodLogSection resizes it
     // to match the WOD's own movement count whenever it's actually shown.
+    // It holds only the loggable (non-rest) stations, in rotation order, so
+    // it is one shorter than emomMovements for each rest station - see
+    // saveWod() and openWodEntryForEdit() for the compact/expand pair.
     const reps = Array.isArray(e.emomReps) ? e.emomReps : [];
     out.emomReps = reps.slice(0, LIMITS.emomMovements).map((r) => Math.round(cleanNum(r, 0, LIMITS.reps, 0)));
   } else out.weight = cleanNum(e.weight, 0, LIMITS.weight, 0);
