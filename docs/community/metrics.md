@@ -260,6 +260,7 @@ WCAM marks the events that make a member active for the week.
 | Event | Trigger surface | Props | WCAM |
 | --- | --- | --- | --- |
 | `write_failed` | `trackWriteFailure()`, after any failed community write in `cloudWrite()`/the outbox handlers | `action` (the action name, 60 chars), `code` (a coarse error code, 20 chars) | no |
+| `client_error` | `installErrorCapture()` in src/analytics.js: a window `error` (an uncaught exception) or `unhandledrejection`. Once per distinct fingerprint and at most 5 per page load; errors before the cloud client exists are held and sent on `configure()` | `kind` (`error`, `rejection`), `name` (the error class), `file` (basename of one of our own .js files, else `other`), `line`, `col`, `fp` (8-hex hash of the message — never the message or stack), `app_version` | no |
 | `club_tab_viewed` | `afterRenderCommunity()`, once per entry into a club sub-tab | `tab` | no |
 | `feed_viewed` | Entering the Feed sub-tab, and a filter chip change in `setFeedScope()` | `scope`, `source` (`club_tab`, `scope_change`) | no |
 | `post_impression` | `noteFeedImpression()`, a card at least half visible for one second | `post_id`, `position`, `feed_session_id` | no |
