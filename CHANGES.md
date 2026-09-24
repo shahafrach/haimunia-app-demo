@@ -1,3 +1,28 @@
+## Errors get counted, members get their data, and the wall screen ships — 2026-09-24
+
+Two branches merged since the last consolidation (#84): #85 and #86. App
+version **4.79.0 → 4.80.0**. No migration in either; `check:drift` still
+reads 197. Closes launch-readiness **S16** and **N10**.
+
+### Global error capture and member self-export (#85)
+
+- N10: uncaught errors and unhandled promise rejections are now recorded as `client_error` analytics rows. Each row holds the error class, file, line and a message hash, never the message itself.
+- S16: members can download everything the server holds about them as one JSON file, from Settings › backup or from the account tab. It is read under their own RLS and holds no staff data.
+
+**Known follow-up:** `downloadJsonFile()` in cloud.js duplicates
+`downloadBackup()` in app.js (Blob, anchor, revoke). Left on purpose in #85 —
+app.js loads after cloud.js — and worth merging in a later change.
+
+### Small fixes (#86)
+
+- מסך התצוגה במועדון יצא מ„בפיתוח": המתג במסך הניהול מסומן „נאכף בשרת", ו־`?display=1` פותח את המסך רק כשהמתג דלוק. כשהוא כבוי, האפליקציה נפתחת כרגיל.
+- במסך ההתקדמות, הבנצ'מרקים מופיעים מתחת לרשימת התרגילים, כמו באפליקציה הרגילה.
+- בדיקות חדשות לקובץ הגיבוי שבהגדרות, ובדיקת דפדפן להורדת הנתונים מהשרת.
+
+`test/settings-backup-export.test.mjs`, empty since #71, now holds real tests.
+The new browser check is `scripts/browser-check/self-export-download.mjs`,
+which brings the browser suite to **61** scenarios.
+
 ## The audit gets worked off, production gets a gate, and the backups get restored — 2026-09-24
 
 Twenty-five branches merged since the last consolidation (#59): #57 and #60–#83.
