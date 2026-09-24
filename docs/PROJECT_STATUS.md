@@ -5,7 +5,7 @@ holds the state, and it is the one a session should distrust first: if a
 number here disagrees with the repository, the repository is right and this
 file is stale. Say so in your PR.
 
-**Last reconciled: 2026-09-24, against `main` at `a956ef4` (#83).**
+**Last reconciled: 2026-09-24, against `main` at `e7fbdaa` (#86).**
 
 ---
 
@@ -13,12 +13,12 @@ file is stale. Say so in your PR.
 
 | | |
 |---|---|
-| App version | **4.79.0** (`APP_VERSION` in app.js, mirrored to `SW_VERSION` in sw.js) |
+| App version | **4.80.0** (`APP_VERSION` in app.js, mirrored to `SW_VERSION` in sw.js) |
 | Migrations | **197** files in `supabase/migrations/` — all applied to production, `check:drift` clean at 197 (2026-09-24) |
 | pgTAP suites | **134 files, 4,137 tests, PASS** (`supabase test db`, run locally 2026-09-24) |
-| JS tests | **2421 passing, 0 failing** (`npm test`, 2026-09-24 on `a956ef4` plus this consolidation) |
-| Browser scenarios | **60** files in `scripts/browser-check/` — not run at this consolidation; last full run 59 of 60 on #83 (`community-render-cost` over its trip-wire under load) |
-| Community layer | `cloud.js` **7,950** lines plus **16** files in `src/community/`; `app.js` **9,234** lines |
+| JS tests | **2441 passing, 0 failing** (`npm test`, 2026-09-24 on `e7fbdaa` plus this consolidation) |
+| Browser scenarios | **61** files in `scripts/browser-check/` (#86 added `self-export-download`) — not run at this consolidation; last full run 60 of 61 on #86, against Chromium 1194 via a scratch alias (`community-render-cost` over its trip-wire under load) |
+| Community layer | `cloud.js` **8,104** lines plus **16** files in `src/community/`; `app.js` **9,241** lines |
 | Tables in `public` | **67** measured at 185 migrations, every one with RLS enabled — **not re-measured since** |
 | RLS policies | **142** measured at 185 migrations — not re-measured since |
 | Functions in `public` | **273**, of which **215** SECURITY DEFINER, measured at 185 migrations — not re-measured since |
@@ -79,25 +79,27 @@ and replace this paragraph when you do.
 
 ## What shipped most recently
 
-**Twenty-five branches merged between 2026-09-23 and 2026-09-24** (#57,
-#60–#83), consolidated in CHANGES.md under *"The audit gets worked off,
-production gets a gate, and the backups get restored"*. The short version:
+**Two branches merged on 2026-09-24 after the #84 consolidation** (#85, #86),
+consolidated in CHANGES.md under *"Errors get counted, members get their data,
+and the wall screen ships"*. No migration.
 
-- **The launch-readiness audit is mostly closed.** 5 of 6 blockers outright
-  and B6 but for one hint; 16 of 20 should-fix. The per-item table is at the
-  top of `docs/audit/launch-readiness.md`.
-- **Module switches reach the whole server** (#60, #65, #67, #73) — every
-  definer path gated, search and suggestions gated at the slot, Engage on the
-  club switch, and module `config` no longer readable by members.
-- **<span dir="rtl">מסך תצוגה במועדון</span>** (#68) — a read-only wall screen
-  signed in as its own `gym_display` role. Off by default; see below.
-- **Account deletion reaches photos, telemetry and the audit note** (#57).
-- **Operations** — `npm run push:prod` and its push log (#62, #63, #75, #76);
-  the restore drill run (#77) and photos backed up (#78); the keep-awake
-  heartbeat (#61); the anonymous half of the live smoke test (#81); the job
-  board reads HTTP responses (#74).
-- **Standalone training-log edition, server half** (#82, #83) — the old app's
-  EMOM model, and `training_log_usage`, the first table `anon` can write to.
+- **Global error capture** (#85, N10) — `client_error` analytics rows carry the
+  error class, our own file's basename, line and an fnv-1a hash of the
+  message; never the message, stack or URL. At most 5 per page load.
+- **Member self-export** (#85, S16) — one JSON file of everything the server
+  holds about the member, read under their own RLS with named columns and
+  own-id filters, from the backup card and the account tab. No staff fields.
+- **The gym display leaves <span dir="rtl">בפיתוח</span>** (#86) and
+  `?display=1` respects the switch.
+- **Benchmarks below the exercises** on <span dir="rtl">התקדמות</span>, real
+  tests in `settings-backup-export.test.mjs`, and a browser check that opens
+  the downloaded self-export file (#86).
+
+Before that, **twenty-five branches** (#57, #60–#83) were consolidated at #84
+under *"The audit gets worked off, production gets a gate, and the backups get
+restored"* — module switches gated server-wide, account deletion reaching
+photos and telemetry, `npm run push:prod`, the restore drill, and the
+training-log edition's server half.
 
 ## Open, deliberately
 
@@ -152,13 +154,20 @@ repository.
 seeded `false` by `202609190002` (whose own guard refuses a replay that turns
 it on), and no later migration touches its row. `gym_display_board()` — the
 only thing the display role can call — raises unless
-`club_feature_enabled('gym_display')` *and* `is_gym_display()`. Two things are
-out of step with that: the module panel row in `cloud.js`
-(`CLUB_MODULE_TOGGLES`) still carries `clientOnly: true, planned: true`, so it
-reads <span dir="rtl">בפיתוח</span> and "display only" for a feature that is
-built and enforced on the server; and `?display=1` mounts the full-screen page
-on any device whatever the switch says — harmless, since it gets no data and
-shows <span dir="rtl">אין חיבור כרגע</span>, but it is not gated client-side.
+`club_feature_enabled('gym_display')` *and* `is_gym_display()`. Since #86 the
+client agrees: the module panel row reads <span dir="rtl">נאכף בשרת</span>
+rather than <span dir="rtl">בפיתוח</span>, and `?display=1` mounts the screen
+only while the switch is on, handing the page back to the app when it goes
+off or the server refuses the board.
+
+**Browser checks in a cloud session need a scratch alias for Chromium.**
+`scripts/browser-check/` resolves Playwright **1.62.1**, which is pinned to
+Chromium build **1234**; cloud sessions ship only build **1194**. Until the
+image or the pin moves, a session that wants `run-all.mjs` symlinks the
+installed 1194 headless shell to the path 1234 is expected at, for that run
+only, and changes nothing in the repository. Layout numbers measured that way
+come from Chromium 1194 — say so when you report them. (#85 skipped the
+browser checks for this reason; #86 ran them through the alias.)
 
 **The job board reads red on purpose** until the two `edge_functions_*`
 Vault secrets are set (#74): the three Edge-Function cron jobs have never
@@ -226,8 +235,11 @@ actually run.
 Small, harmless, and left for a pass that is allowed to touch code — listed
 here so they are not rediscovered as findings:
 
-- **`test/settings-backup-export.test.mjs` is an empty file**, added at 0
-  bytes by #71. It runs as a file with no tests; either fill it or delete it.
+- **The self-export download helper duplicates the backup download.**
+  `downloadJsonFile()` in cloud.js (#85) and `downloadBackup()` in app.js do
+  the same Blob → anchor → revoke. Left on purpose because app.js loads after
+  cloud.js and a `window.*` export would couple the two files for ten lines;
+  merge them in a change that is allowed to touch both.
 
 - **`_headers` carries its own out-of-date comment.** It still explains that
   "GitHub Pages cannot set response headers", that the app therefore has "NO

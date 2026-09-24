@@ -29,8 +29,8 @@ applied to production — `check:drift` read 197, repo and database agree, on
 2026-09-24.
 
 **Blockers: 5 of 6 closed, B6 closed except one hint.**
-**Should-fix: 16 of 20 closed, 2 partly, 2 open.**
-**Nice-to-have: 9 closed, 2 struck as already done, 4 open or partly.**
+**Should-fix: 17 of 20 closed, 2 partly, 1 open.**
+**Nice-to-have: 10 closed, 2 struck as already done, 3 open or partly.**
 
 | # | Status | Where |
 |---|---|---|
@@ -44,14 +44,14 @@ applied to production — `check:drift` read 197, repo and database agree, on
 | S2, S3, S4 | **Closed** | #52 |
 | S5 | **Partly** | #70 — the gate no longer lists its tooling. **Open, as a product call:** one neutral <span dir="rtl">כניסת צוות</span> row contradicts the sidebar decision in `desktop-layout.mjs`; raised, not flipped |
 | S6 | **Closed** | #74 (`202609230008`). The board reads red until the `edge_functions_*` Vault secrets are set — that is the fix working |
-| S7 | **Closed** | 4.78.0 at #59, 4.79.0 at this consolidation |
+| S7 | **Closed** | 4.78.0 at #59, 4.79.0 at #84, 4.80.0 at the #85–#86 consolidation |
 | S8 | **Closed** | `supabase test db` run locally 2026-09-24: 134 files, 4,137 tests, PASS. `test.yml` on `main` after 2026-10-01 is still owed |
 | S9 | **Partly** | #81 — anonymous role passes against production; member, coach, admin and restricted-member are SKIP until the owner provisions throwaway accounts |
 | S10 | **Closed** | #80 — measured on production: `x-frame-options: DENY`, `frame-ancestors 'none'` survive the middleware |
 | S11 | **Closed** | #55, #56; `/workers/` added in #61 |
 | S12 | **Closed** | #55, deployed 2026-09-23 |
 | S13, S14, S15 | **Closed** | #69 |
-| S16 | **Open** | no server-side export path |
+| S16 | **Closed** | #85 — `buildSelfExport()` in cloud.js, read under the member's own RLS; browser-checked by `self-export-download.mjs` (#86) |
 | S17 | **Closed** | #79 (`202609230009`) |
 | S18 | **Open** | owner action: delete `SUPABASE_SERVICE_ROLE_KEY` from Actions secrets |
 | S19 | **Closed** | #77 (database), #78 (photos). **A restore was verified under the new passphrase** (2026-09-24); artifacts from before the 2026-09-23 rotation remain undecryptable |
@@ -65,7 +65,7 @@ applied to production — `check:drift` read 197, repo and database agree, on
 | N7 | **Closed** | #79 (`202609230010`) |
 | N8 | **Closed** | #79 (`202609230011`) |
 | N9 | **Closed** | #71 |
-| N10 | **Open** | |
+| N10 | **Closed** | #85 — `client_error` events from `src/analytics.js`, no message or stack sent |
 | N11 | **Closed** | #79 (`202609230012`) |
 | N12 | **Struck** | #80 — already done by #48; remaining mentions are dated history |
 | N13 | **Closed** | #80 — bannered, not rewritten |

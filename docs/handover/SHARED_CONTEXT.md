@@ -18,7 +18,7 @@ Live: https://haimunia-app.pages.dev
 Repo: `haimuniya/haimunia-app-demo` — **private** since 2026-09-17
 Supabase: `jajmlyrjlkhclgphbfbb` (free tier)
 
-**v4.79.0** · 197 migrations (all applied, drift clean 2026-09-24) · 2421 JS tests · 134 pgTAP files / 4,137 tests · 60 browser scenarios
+**v4.80.0** · 197 migrations (all applied, drift clean 2026-09-24) · 2441 JS tests · 134 pgTAP files / 4,137 tests · 61 browser scenarios
 
 The numbers in the paragraph below are the 2026-09-19 reconcile and are kept
 as its record; `docs/PROJECT_STATUS.md` has the current ones.
@@ -313,7 +313,7 @@ node --test                   # 1970 JS tests, jsdom, ~10 min
 supabase start                # docker is on this machine
 supabase db reset --local     # replays all 197 migrations from empty, ~3 min
 supabase test db --local      # 134 pgTAP files, 4,137 tests
-node scripts/browser-check/run-all.mjs   # 60 scenarios, real Chromium
+node scripts/browser-check/run-all.mjs   # 61 scenarios, real Chromium
 ```
 
 **`npm ci` before `node --test`, in any fresh sandbox.** With `node_modules`
@@ -345,7 +345,12 @@ node -p "JSON.parse(require('fs').readFileSync('node_modules/playwright-core/bro
 ```
 
 On 2026-09-19 that meant `playwright@1.56.0` → chromium 1194, inside the
-declared `^1.48.0` range, so nothing in the repository needed changing. **Two
+declared `^1.48.0` range, so nothing in the repository needed changing.
+**As of 2026-09-24 the resolved Playwright is pinned to Chromium 1234 and cloud
+sessions still ship only 1194**, so #86 ran the suite by symlinking the
+installed 1194 headless shell to the path 1234 is looked up at — a scratch
+alias for that run, nothing committed. Numbers measured that way are
+Chromium 1194's; say so. `docs/PROJECT_STATUS.md` carries the current state. **Two
 consecutive "47 scenario(s) failed" results on this consolidation were both
 the instrument**, and the tell was the same each time: a suite where
 *everything* fails has usually not run at all. Read the first scenario's
