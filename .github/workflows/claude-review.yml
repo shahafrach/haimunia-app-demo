@@ -142,7 +142,7 @@ jobs:
         # what that test exists to prevent. To take a newer version, re-resolve
         # the tag (`git ls-remote https://github.com/anthropics/claude-code-action refs/tags/v1^{}`)
         # and update both the SHA and the version in this comment.
-        uses: anthropics/claude-code-action@4036a180cf690f49529f5d8c79c998855287f590 # v1.0.230
+        uses: anthropics/claude-code-action@9171db3e57d6a3140a37ddc2ba92788584e0ead6 # v1.0.234
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
@@ -235,7 +235,7 @@ jobs:
         if: github.event_name != 'pull_request' && steps.auth.outputs.present == 'true' && steps.source.outputs.fork != 'true'
         # Same pin, same reason - see the version comment on the step above.
         # These two SHAs are twins: bump them together.
-        uses: anthropics/claude-code-action@4036a180cf690f49529f5d8c79c998855287f590 # v1.0.230
+        uses: anthropics/claude-code-action@9171db3e57d6a3140a37ddc2ba92788584e0ead6 # v1.0.234
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           claude_args: |
