@@ -26,6 +26,6 @@
     "jsdom": "^30.1.0"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.116.0"
+    "@supabase/supabase-js": "^2.117.2"
   }
 }
