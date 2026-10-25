@@ -1587,7 +1587,7 @@
   // see is labelled beats no copy at all. No migration: this is read-only.
   const SELF_EXPORT_LIMIT = 20000;
   const SELF_EXPORT_TABLES = Object.freeze([
-    { section: "profile", table: "profiles", owner: "id", cols: "id,handle,display_name,bio,created_at,updated_at,visible_to_club,show_workout_results,show_attendance,show_upcoming_booking,show_prs,show_achievements,in_leaderboards,allow_follows,allow_mentions,allow_messages,show_in_attendee_lists" },
+    { section: "profile", table: "profiles", owner: "id", cols: "id,handle,display_name,emoji,created_at,updated_at" },
     { section: "private_records", table: "private_records", owner: "user_id", cols: "record_type,record_id,payload,deleted_at,created_at,updated_at" },
     { section: "posts", table: "workout_posts", owner: "author_id", cols: "id,post_type,source_type,source_record_id,visibility,title,result_text,body,comparison_key,score_value,score_direction,rx,occurred_on,metadata,status,published_at,created_at,updated_at" },
     { section: "reactions", table: "reactions", owner: "user_id", cols: "post_id,kind,created_at" },

@@ -113,15 +113,18 @@ select throws_ok(
   'THE FIX: an 11th push subscription for the same member is refused - previously uncapped');
 
 -- =====================================================================
--- 4. SEC-008 - a second clubs row is refused loudly instead of silently
---    becoming a cross-tenant leak
+-- 4. SEC-008 - SUPERSEDED by the circles schema (202610250003): the
+--    single-club trigger is gone because every read policy is now scoped by
+--    circle membership, so a second clubs row is the point, not a leak.
+--    0137 holds the cross-circle tests.
 -- =====================================================================
 select tests.clear_auth();
-select throws_ok(
-  $$ insert into public.clubs (id, name) values (gen_random_uuid(), 'Second Club') $$,
-  'P0001',
-  null,
-  'THE FIX: inserting a second clubs row is refused with an explicit error - before this migration it would have silently made every unfiltered read policy cross-tenant');
+select lives_ok(
+  $$ insert into public.clubs (id, name, type) values (gen_random_uuid(), 'Second Circle', 'friends') $$,
+  'a second clubs row is allowed: isolation is RLS by circle, not a one-row invariant');
+select is_empty(
+  $$ select 1 from pg_trigger where tgrelid = 'public.clubs'::regclass and tgname = 'clubs_guard_single_row_trigger' $$,
+  'and the single-row trigger no longer exists');
 
 select * from finish();
 rollback;

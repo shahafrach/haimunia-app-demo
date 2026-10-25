@@ -114,8 +114,8 @@ values
   (tests.uid('owner'), 'owner_x',      'Owner X',            now())
 on conflict (id) do nothing;
 
-insert into public.profiles (id, handle, display_name, recovery_verified_at, is_admin)
-values (tests.uid('admin'), 'admin_x', 'Admin X', now(), true)
+insert into public.profiles (id, handle, display_name, recovery_verified_at)
+values (tests.uid('admin'), 'admin_x', 'Admin X', now())
 on conflict (id) do nothing;
 
 -- One invite code every redemption points at.
@@ -133,6 +133,34 @@ values
   (tests.uid('admin'), '11111111-2222-4333-8444-555555555555', 'member'),
   (tests.uid('owner'), '11111111-2222-4333-8444-555555555555', 'owner')
 on conflict (user_id) do nothing;
+
+
+-- One fixture circle holding every fixture member, so the tests that predate
+-- circles (posts, reactions, profiles) keep their meaning: "a member" is a
+-- member of this circle. The column default exists ONLY inside the test's own
+-- transaction (it rolls back with it); in the database club_id has no default.
+-- The cross-circle tests (0137) build their own second circle.
+create or replace function tests.circle() returns uuid
+language sql immutable as $$ select 'cccccccc-0000-4000-8000-00000000000a'::uuid $$;
+grant execute on function tests.circle() to anon, authenticated, service_role;
+
+insert into public.clubs (id, name, type, created_by)
+values (tests.circle(), 'Fixture circle', 'friends', tests.uid('owner'))
+on conflict (id) do nothing;
+
+insert into public.circle_members (club_id, user_id, role)
+values
+  (tests.circle(), tests.uid('owner'), 'owner'),
+  (tests.circle(), tests.uid('m1'),    'member'),
+  (tests.circle(), tests.uid('m2'),    'member'),
+  (tests.circle(), tests.uid('m3'),    'member'),
+  (tests.circle(), tests.uid('norec'), 'member'),
+  (tests.circle(), tests.uid('coach'), 'member'),
+  (tests.circle(), tests.uid('admin'), 'member')
+on conflict do nothing;
+
+alter table public.workout_posts alter column club_id set default tests.circle();
+alter table public.post_training_partners alter column club_id set default tests.circle();
 
 \else
 \echo 1..1

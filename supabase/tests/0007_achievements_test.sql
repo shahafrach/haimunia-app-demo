@@ -65,28 +65,11 @@ select throws_ok(
   'a member cannot award themselves an achievement');
 
 select tests.set_auth(tests.uid('m2'));
-select results_eq(
-  $$ select count(*)::int from public.member_achievements where user_id = tests.uid('m1') $$,
-  $$ values (1) $$,
-  'another member reads a club-visible unlock while show_achievements is on');
-
-select tests.clear_auth();
-update public.profiles set show_achievements = false where id = tests.uid('m1');
-select tests.set_auth(tests.uid('m2'));
 select is_empty(
   $$ select 1 from public.member_achievements where user_id = tests.uid('m1') $$,
-  'the unlock disappears for another member once show_achievements is off');
+  'another member, even in the same circle, does not read the unlock: achievements are per user, and are shared as a post');
 
 select tests.clear_auth();
-update public.profiles set show_achievements = true where id = tests.uid('m1');
-insert into public.blocks (blocker_id, blocked_id) values (tests.uid('m2'), tests.uid('m1'));
-select tests.set_auth(tests.uid('m2'));
-select is_empty(
-  $$ select 1 from public.member_achievements where user_id = tests.uid('m1') $$,
-  'a block edge hides the unlock regardless of the toggle');
-select tests.clear_auth();
-delete from public.blocks where blocker_id = tests.uid('m2') and blocked_id = tests.uid('m1');
-
 -- --- the unlock-once partial unique index ------------------
 select throws_ok(
   $$ insert into public.member_achievements (user_id, achievement_id, visibility)

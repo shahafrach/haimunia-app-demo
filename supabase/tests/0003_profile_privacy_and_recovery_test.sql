@@ -1,10 +1,8 @@
 -- COMM-020: real two-user RLS enforcement for 202608280003 (profile privacy
 -- and recovery).
--- Boundaries: a self write cannot move is_admin, club_id, or
--- recovery_verified_at, and cannot stamp recovery_verified_at on insert.
--- visible_to_club=false hides a member from other members but not from self
--- or from anyone else - is_admin is not a read path. can_view_profile_field flips per toggle, raises on
--- an unknown field, and a block edge short-circuits it before any toggle.
+-- Boundaries: a self write cannot move recovery_verified_at, and cannot stamp
+-- it on insert. Profiles are visible only to people who share a circle
+-- (202610250003); can_view_profile_field is "same circle, no block".
 -- CI is the first real run of this file.
 
 \set rls_helpers_included true
@@ -26,23 +24,6 @@ insert into public.invite_redemptions (user_id, invite_id, role)
 values ('aaaaaaaa-0000-4000-8000-0000000000f0', '11111111-2222-4333-8444-555555555555', 'member');
 
 -- --- the protected columns cannot move on a self update -------------
-select tests.set_auth(tests.uid('m1'));
-select lives_ok(
-  $$ update public.profiles set is_admin = true where id = tests.uid('m1') $$,
-  'a self update naming is_admin is accepted');
-select is(
-  (select is_admin from public.profiles where id = tests.uid('m1')),
-  false,
-  'the protect trigger pinned is_admin to its old value');
-
-select lives_ok(
-  $$ update public.profiles set club_id = gen_random_uuid() where id = tests.uid('m1') $$,
-  'a self update naming club_id is accepted');
-select is(
-  (select club_id from public.profiles where id = tests.uid('m1')),
-  public.default_club_id(),
-  'the protect trigger pinned club_id to the seeded club');
-
 select tests.set_auth(tests.uid('norec'));
 select lives_ok(
   $$ update public.profiles set recovery_verified_at = now() where id = tests.uid('norec') $$,
@@ -81,59 +62,64 @@ select isnt(
   null,
   'mark_recovery_verified stamped the column past the protect trigger');
 
--- --- visible_to_club ---------------------------------------------
+-- --- profiles are scoped by circle (202610250003) -----------------
+-- The fixture circle holds m1, m2, m3. A stranger shares no circle with them.
 select tests.clear_auth();
-update public.profiles set visible_to_club = false where id = tests.uid('m2');
+insert into auth.users (instance_id, id, aud, role, email, created_at, updated_at)
+values ('00000000-0000-0000-0000-000000000000', 'aaaaaaaa-0000-4000-8000-0000000000f1',
+        'authenticated', 'authenticated', 'stranger@members.haimuniya.invalid', now(), now());
+insert into public.profiles (id, handle, display_name, recovery_verified_at)
+values ('aaaaaaaa-0000-4000-8000-0000000000f1', 'stranger', 'Stranger', now());
 
 select tests.set_auth(tests.uid('m1'));
-select is_empty(
-  $$ select 1 from public.profiles where id = tests.uid('m2') $$,
-  'a hidden member is invisible to another member');
-
-select tests.set_auth(tests.uid('m2'));
 select results_eq(
   $$ select count(*)::int from public.profiles where id = tests.uid('m2') $$,
   $$ values (1) $$,
-  'a hidden member still sees their own row');
+  'a member sees the profile of someone in their circle');
+select is_empty(
+  $$ select 1 from public.profiles where id = 'aaaaaaaa-0000-4000-8000-0000000000f1' $$,
+  'a member does not see the profile of someone who shares no circle');
 
-select tests.set_auth(tests.uid('admin'));
+select tests.set_auth('aaaaaaaa-0000-4000-8000-0000000000f1');
+select is_empty(
+  $$ select 1 from public.profiles where id <> 'aaaaaaaa-0000-4000-8000-0000000000f1' $$,
+  'a person in no circle sees only their own profile');
 select results_eq(
-  $$ select count(*)::int from public.profiles where id = tests.uid('m2') $$,
-  $$ values (0) $$,
-  'a hidden member is hidden from everyone else - the is_admin flag is not a read path any more');
-
-select tests.clear_auth();
-update public.profiles set visible_to_club = true where id = tests.uid('m2');
+  $$ select count(*)::int from public.profiles where id = 'aaaaaaaa-0000-4000-8000-0000000000f1' $$,
+  $$ values (1) $$,
+  'and does see their own');
 
 select tests.set_auth(tests.uid('m1'));
 select lives_ok(
-  $$ update public.profiles set show_prs = true where id = tests.uid('m1') $$,
-  'a member can flip their own show_prs toggle');
-select tests.set_auth(tests.uid('m2'));
-select is( public.can_view_profile_field(tests.uid('m1'), 'show_prs'), true,
-  'member B sees show_prs while member A has it on' );
+  $$ update public.profiles set emoji = E'\U0001F4AA' where id = tests.uid('m1') $$,
+  'a member sets their emoji');
 
-select tests.set_auth(tests.uid('m1'));
-update public.profiles set show_prs = false where id = tests.uid('m1');
-select tests.set_auth(tests.uid('m2'));
-select is( public.can_view_profile_field(tests.uid('m1'), 'show_prs'), false,
-  'the answer flips when member A turns show_prs off' );
-
-select throws_ok(
-  $$ select public.can_view_profile_field(tests.uid('m1'), 'show_birthday') $$,
-  'P0001',
-  'unknown profile field show_birthday',
-  'an unknown field name raises, and there is no birthday field');
-
-select tests.set_auth(tests.uid('m1'));
-select is( public.can_view_profile_field(tests.uid('m1'), 'show_prs'), true,
-  'self is always true even with the toggle off' );
+-- --- can_view_profile_field is "same circle, no block" ----------------
+select is( public.can_view_profile_field(tests.uid('m2'), 'anything'), true,
+  'true for someone in my circle' );
+select is( public.can_view_profile_field(tests.uid('m1'), 'anything'), true,
+  'true for myself' );
+select is( public.can_view_profile_field('aaaaaaaa-0000-4000-8000-0000000000f1', 'anything'), false,
+  'false for someone who shares no circle' );
 
 select tests.clear_auth();
 insert into public.blocks (blocker_id, blocked_id) values (tests.uid('m1'), tests.uid('m2'));
 select tests.set_auth(tests.uid('m2'));
-select is( public.can_view_profile_field(tests.uid('m1'), 'show_achievements'), false,
-  'a block edge returns false before the show_achievements toggle is read' );
+select is( public.can_view_profile_field(tests.uid('m1'), 'anything'), false,
+  'a block edge returns false even inside a shared circle' );
+select is_empty(
+  $$ select 1 from public.profiles where id = tests.uid('m1') $$,
+  'and hides the blocker''s profile row');
+
+-- --- the profile is display name and emoji only -----------------------
+select is_empty(
+  $$ select column_name::text from information_schema.columns
+      where table_schema = 'public' and table_name = 'profiles'
+        and column_name in ('bio', 'is_admin', 'visible_to_club', 'show_prs', 'show_achievements',
+                            'in_leaderboards', 'allow_follows', 'allow_mentions', 'allow_messages',
+                            'show_in_attendee_lists', 'show_workout_results', 'show_attendance',
+                            'show_upcoming_booking', 'assigned_coach_id', 'club_id') $$,
+  'the privacy toggles and staff columns are gone from profiles');
 
 select * from finish();
 rollback;
