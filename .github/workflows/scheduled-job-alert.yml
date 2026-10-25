@@ -56,15 +56,8 @@ name: scheduled-job-alert
 #     live until it's on `main` - a file existing on a feature branch does
 #     not satisfy go-live item A.5.
 on:
-  schedule:
-    # Every six hours, on the hour. This was once a day while it cost a
-    # service-role key to run; it costs nothing now, and the in-database check
-    # it watches runs hourly, so a daily backstop would have left "the
-    # monitor itself is dead" undetected for up to 23 hours while the
-    # script's own staleness budget is two. Four runs a day bounds that at
-    # six. Members are not affected by this cadence either way - a real job
-    # failure reaches the admins in-app within the hour, from the database.
-    - cron: "0 */6 * * *"
+  # Schedule removed 2026-10-25: the Supabase project this ran against was
+  # deleted. Re-enable after the new Supabase project exists.
   workflow_dispatch: {}
 permissions:
   contents: read

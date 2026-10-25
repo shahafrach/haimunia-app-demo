@@ -1,13 +1,16 @@
 # CLAUDE.md — read this before touching anything
 
-האימוניה: a Hebrew, RTL, offline-first PWA for one CrossFit gym, with an
-opt-in Supabase community layer. **It ships to real members.** Despite the
-`-demo` in the repository name, `cloud-config.js` points at a production
-project holding real profiles, posts and training logs.
+A Hebrew, RTL, offline-first PWA for training logs shared in small private
+circles of friends. Free, no payments, no public sign-up. It is a personal
+project, not a product.
 
-For what is true *right now* — version, counts, what is in flight, what is
-deliberately open — read **[`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md)**.
-This file is the rules; that one is the state.
+**Every session reads [`docs/circles/decisions.md`](docs/circles/decisions.md)
+first.** It holds the settled product and architecture decisions; the reasoning
+and what would reverse each is in [`docs/journal.md`](docs/journal.md). The
+work plan is [`docs/circles/audit.md`](docs/circles/audit.md). This file is the
+rules; those are the decisions. Much of the code still reflects the earlier
+gym app until the strip session removes it — where code and decisions.md
+disagree, decisions.md wins.
 
 ---
 
@@ -21,6 +24,10 @@ PostCSS. `index.html` carries the entire stylesheet inline, and `app.js`,
 scope. **The repository root is the website** — Cloudflare Pages serves it
 verbatim, which is why `functions/_middleware.js` exists to 404 the paths
 that should not be public.
+
+New circles modules start with `// @ts-check`; database types come from
+`supabase gen types` into a `.d.ts` referenced from JSDoc. That is type
+checking without a build step.
 
 If a change seems to need a build step, it is the wrong change. If it seems
 to need React, read the file you are about to edit first: it almost
@@ -41,17 +48,17 @@ theme's text on the other theme's background. *Prefer existing tokens*
 (`--surface`, `--border`, `--steel`, `--chalk`, `--brass`…) — a rule built
 from tokens themes itself and needs no duplicate at all.
 
-**Migrations reach production through `npm run push:prod`, never by hand.**
+**Migrations reach the database through `npm run push:prod`, never by hand.**
 It refuses unless you are on a clean, in-sync `main`, both migration guards
-pass, and production has nothing the repository does not — then shows you every
-schema-changing statement and waits for you to type `apply`. The full
-procedure, and the CI job to build once Actions minutes return on 2026-10-01,
-is **[`docs/ops/MIGRATIONS.md`](docs/ops/MIGRATIONS.md)**.
+pass, and the database has nothing the repository does not — then shows you
+every schema-changing statement and waits for you to type `apply`. The full
+procedure is **[`docs/ops/MIGRATIONS.md`](docs/ops/MIGRATIONS.md)**. Sessions
+without an explicit instruction never run migrations or link to a database.
 
 **Never edit an applied migration. Forward migrations only.** Supabase
 tracks migrations by filename, so editing one that has already run is
-invisible: a local `db reset` replays the edited file and passes while
-production still carries what the original did. Corrections go in a NEW
+invisible: a local `db reset` replays the edited file and passes while the
+database still carries what the original did. Corrections go in a NEW
 migration. `scripts/check-migration-immutability.mjs` enforces this against
 the merge base and runs in CI.
 
@@ -68,33 +75,12 @@ publishable Supabase key and the VAPID *public* key belong in
 private key never appear in this repository at all. `functions/_middleware.js`
 is disclosure control, not a secret store — and git history is history.
 
-**Never store health, payment, phone or email data for members.** Sign-in is
-a username mapped to a synthetic `<name>@members.haimuniya.invalid` address
-(`usernameToEmail`, cloud.js) precisely so no real address exists to leak.
-There is no phone column, no payment column and no health column in the
-schema, and there must not be one. Arbox owns bookings and payments; this app
-is what happens *after* training.
-
----
-
-## Desktop
-
-**The staff desktop shell exists, and it is gated on `is_staff()`.**
-`src/desktop-layout.js` writes two attributes on `<html>`:
-`data-layout="desktop"` when `(min-width: 1024px) and (pointer: fine)`
-matches, and `data-staff="1"` when that *and* the viewer is staff. Every
-shell rule is prefixed with **both**, and there is deliberately **no rule
-keyed on `data-layout` alone**.
-
-**Member layouts on desktop must not change.** That absence above is the
-whole mechanism: a member at a laptop matches nothing. The numbers are
-measured, not asserted — sidebar 248px at x=892, logging column 560px at
-x=300, no context column — by
-`scripts/browser-check/desktop-staff-shell.mjs` and `desktop-layout.mjs`.
-The 560px logging column never changes width at any breakpoint; only the
-staff-home tab widens. If you are about to widen a member surface, read the
-argument in the `WIDE DESKTOP` comment block in `index.html` first, and if
-you still disagree, raise it rather than changing it.
+**Never store email addresses for members.** Sign-in is a username mapped to
+a synthetic `<name>@members.haimuniya.invalid` address (`usernameToEmail`,
+cloud.js) precisely so no real address exists to leak. No email, no SMTP.
+Health, payment and phone data are banned too: there is no phone, payment or
+health column in the schema, and there must not be one. Body weight never
+leaves the device.
 
 ---
 
@@ -115,7 +101,7 @@ the reason. "I fixed the one I was shown" is not a finished change.
 
 ## Parallel work
 
-Several sessions run against this repo at once. These rules are about
+Several sessions may run against this repo at once. These rules are about
 merge conflicts, not about style.
 
 **Only one open branch adds a migration at a time.** Two branches each adding
@@ -131,8 +117,9 @@ intended. Check open PRs before writing one.
 
 Every branch touches them, so every branch conflicts on them. **Put the
 changelog entry in the PR description instead** — write it as it should
-appear, and it can be lifted verbatim. A consolidation session updates these
-four after merges, bumps the version once, and runs `npm run sync-version`.
+appear, and it can be lifted verbatim. A consolidation session (the closing
+session after each wave) updates these four after merges, bumps the version
+once, and runs `npm run sync-version`.
 
 **A branch that ADDS a file to a directory something else enumerates can
 break main while git reports no conflict.** The directories are
@@ -156,27 +143,17 @@ checks to go green on that merge.** A green run on a branch that is behind
 **Every PR gets one Claude review when it is opened, and `@claude` in a PR
 comment gets an answer.** `.github/workflows/claude-review.yml` runs
 `anthropics/claude-code-action` on `opened`, and again on any PR comment
-containing `@claude` — the conversation tab or pinned to a line of the diff.
-It walks the rules above: the Supabase security surface (RLS policies,
-`SECURITY DEFINER` functions, `anon` grants), edits to applied
+containing `@claude`. It walks the rules above: the Supabase security surface
+(RLS policies, `SECURITY DEFINER` functions, `anon` grants), edits to applied
 migrations, sibling drift, a CSS rule missing from a theme block, a new file
-missing from the `sw.js` precache list, secrets in client files, and member
-health, payment, phone or email data.
+missing from the `sw.js` precache list, secrets in client files, member email,
+health, payment or phone data, and cross-circle reads.
 
-To trigger one by hand, comment `@claude` on the PR saying what you want looked
-at. A push does NOT re-run the checklist — it used to, and on a private
-repository that is a runner per push for a re-read of a diff the reviewer has
-mostly already seen. Ask when a push is worth a second look.
-
-The workflow needs the `CLAUDE_CODE_OAUTH_TOKEN` repository secret — without
-it the job skips with a notice rather than failing. PRs from forks are
-skipped. It holds `contents: read`, so it reads, reviews and comments, but
-cannot push a fix: ask it what to change, not to change it.
-
-**It comments; it does not gate.** Every hard rule in this file already has a
-deterministic guard that fails the build in `test.yml`. A review finding is a
-second reader, not a verdict — and a finding that keeps recurring is a sign
-that rule needs a guard, not a louder prompt.
+It comments; it does not gate. Every hard rule here should have a
+deterministic guard that fails the build; a finding that keeps recurring means
+that rule needs a guard, not a louder prompt. A push does NOT re-run the
+checklist; comment `@claude` when a push is worth a second look. The workflow
+needs the `CLAUDE_CODE_OAUTH_TOKEN` repository secret and skips without it.
 
 ---
 
@@ -187,10 +164,10 @@ printed. "Tests pass" is not a result; `1940 pass, 0 fail` is.
 
 **If a suite could not run in this environment, name it and say so.** Several
 genuinely cannot run in a sandbox — `supabase test db` needs Docker,
-`npm run check:drift` needs a linked project and network to the Supabase
-project, and the browser checks need Chromium. An honest "I could not run
-the pgTAP suite here" is worth more than silence, and far more than a claim
-that turns out to be inferred. Never present reasoning as measurement.
+`npm run check:drift` needs a linked project and network, and the browser
+checks need Chromium. An honest "I could not run the pgTAP suite here" is
+worth more than silence, and far more than a claim that turns out to be
+inferred. Never present reasoning as measurement.
 
 The three suites, and what each is for:
 
@@ -209,39 +186,29 @@ was not measured in Chromium is a guess.
 
 **The usage budget is limited. Work efficiently.** A session that spends its
 budget re-running a green suite has no budget left for the change it was
-asked to make. These rules are about what not to spend it on.
+asked to make.
 
-**Skip `npm ci` if `node_modules` already exists.** The install is minutes of
-budget for a directory that is already there. Run it when `node_modules` is
-missing, or when a change touches `package.json` or `package-lock.json` —
-not as a reflex at the top of a session.
+**Skip `npm ci` if `node_modules` already exists.** Run it when `node_modules`
+is missing, or when a change touches `package.json` or `package-lock.json`.
 
 **While working, run only what relates to the change.** One test file, one
 browser scenario — `node --test test/<the-one>.test.mjs`, or
 `node scripts/browser-check/<the-one>.mjs`. The whole suite is a final check,
 not a feedback loop.
 
-**At the end, run the full `npm test` once and the browser checks once.**
-Both in the foreground, and wait for each to finish — a suite that was
-started and not read is budget spent for no result, and reporting on it
-would be inventing the number. Both, once, and then stop.
+**At the end of a code session, run the full `npm test` once and the browser
+checks once,** both in the foreground, and wait for each to finish. A suite
+that was started and not read is budget spent for no result. A docs-only
+session runs only the tests that read the files it changed.
 
-**Never start background watchers, sleep loops or repeated polling.** No
-`--watch`, no `sleep` loop waiting on a file, no re-running a command to see
-whether the answer changed. They burn budget while producing nothing, and
-nothing in this repository needs them.
+**Never start background watchers, sleep loops or repeated polling.**
 
 **Never run the same suite twice unless a fix changed code.** A second
-identical run cannot tell you anything the first did not. If a suite failed
-and you changed nothing, it still fails; if you changed code, run it again
-and report the second number.
+identical run cannot tell you anything the first did not.
 
-**If `community-render-cost` fails, note it once and move on.** It measures
-render cost against a threshold and is the one check that reports differently
-on a loaded machine. Say it failed, say what it printed, and do not re-run it
-hunting for a green.
+**If `community-render-cost` fails, note it once and move on.** It is the one
+check that reports differently on a loaded machine. Say it failed, say what it
+printed, and do not re-run it hunting for a green.
 
-**Keep the final report under 20 lines.** The suite numbers, what changed,
-what you could not run and why. A long report is not a more honest one — the
-Verification rules above say what has to be in it, and nothing says it has to
-be padded.
+**Keep the final report short.** The suite numbers, what changed, what you
+could not run and why.

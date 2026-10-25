@@ -88,17 +88,8 @@ name: backup-database
 # backup jobs prove and still not the same as a rehearsed restore.
 # ---------------------------------------------------------------------------
 on:
-  schedule:
-    # 02:17 UTC, six days a week. Off the hour on purpose: every cron on the
-    # hour contends with every other cron on the hour, and a backup that gets
-    # queued behind the internet is a backup that sometimes does not run.
-    - cron: "17 2 * * 1-6"
-    # Sunday is the same backup PLUS the restore drill below. Weekly rather
-    # than nightly at the owner's choice: Actions minutes are metered since
-    # the repository went private, and a rehearsal that runs every seven days
-    # still catches a backup that has stopped being restorable long before
-    # anyone needs it.
-    - cron: "17 2 * * 0"
+  # Schedule removed 2026-10-25: the Supabase project this ran against was
+  # deleted. Re-enable after the new Supabase project exists.
   workflow_dispatch:
     inputs:
       drill:

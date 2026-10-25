@@ -1,0 +1,44 @@
+# Decision journal
+
+One line per decision: `date | decision | alternatives | why | what would reverse it`.
+Product and architecture decisions for the circles app. Newest at the bottom.
+
+2026-10-25 | Free app for friends; no payments, no public sign-up, no paid services; chat stays in WhatsApp | Paid product, public sign-up, in-app chat | Nothing to fund, nothing to moderate at scale, WhatsApp already holds the conversation | A wish to charge or open sign-up
+2026-10-25 | Own repo on the personal account and a new Supabase project | Reuse the gym repo and project | The old project is deleted and the gym account no longer owns the code | None foreseeable
+2026-10-25 | Drop `training_log_usage` | Keep it as in the 2026-10-02 decisions | It served the gym's standalone app, which does not exist here | A need to count anonymous usage
+2026-10-25 | A circle is a `clubs` row; membership in `circle_members(club_id, user_id, role, joined_at, share_defaults)`; up to 10 circles per user | Parallel circle tables | Reuses ~36 existing `club_id` columns; 10 caps fan-out and UI | A real need for more than 10, or `clubs` carrying gym meaning that cannot be removed
+2026-10-25 | Two circle types, Couple (max 2, both owners) and Friends (max 20, creator owner), defaults editable | One generic type | The two groups share different things; defaults save setup | Users routinely overriding most defaults
+2026-10-25 | Circle settings owner-only, member settings per circle | Global member settings | Privacy depends on who is in the circle | Settings screens proving too heavy
+2026-10-25 | A member's privacy setting always wins; hidden data is never sent to the server | Filter hidden data server-side | A server that never receives data cannot leak it | None
+2026-10-25 | Logging is sharing by circle defaults; one tap skips one workout | A compose step per post | Fewer taps is the point; sharing becomes the default behaviour | Members posting things they did not mean to share
+2026-10-25 | A post belongs to exactly one circle; sharing to several makes one post each | One post visible in many circles | Simple RLS and simple deletion on leave | Duplicates becoming a visible problem
+2026-10-25 | Reactions only: fist bump first, at most two others; no text comments or mentions | Comments, mentions | No moderation, no abuse surface, nothing to translate | Members asking for comments
+2026-10-25 | A PR with no reaction after a day rises to the top of the circle screen, silently | Notify the circle | Gets attention without a push | Complaints that PRs go unseen
+2026-10-25 | "Trained together" counts for the tagged member only after they confirm | Count on tag | A tag must not change anyone's numbers unasked | None
+2026-10-25 | Personal weekly target; circle sees percent of own target; competition compares percent, never absolute numbers | Absolute leaderboards | Compares effort, not strength; no ranking of the strong | A circle asking for absolute rankings
+2026-10-25 | Count weeks the target was met; no daily streaks; a missed week resets nothing and sends no message | Daily streaks, streak-at-risk nudges | Streak pressure works against rest and injury | Evidence members want streaks
+2026-10-25 | Pause mode shows "paused" to the circle, no percent | Show 0% | A pause is not a failure | None
+2026-10-25 | PRs show lift and percent; absolute weight only if chosen; body weight never leaves the device | Show weights by default | Weight is private by default | None
+2026-10-25 | Estimated 1RM only from sets of 10 reps or fewer, labeled "estimated"; celebrate only real rep-max PRs | Estimate from any set | High-rep estimates are noise and would celebrate fiction | A better estimator
+2026-10-25 | Optional benchmark of the month; Rx and scaled in separate lists; results visible only after you log yours, enforced in the database | Open results | Stops anchoring and comparison before logging | Low use
+2026-10-25 | Prefill from the last session of a lift; target under 30 seconds per lift; heaviest set one tap away in history | Blank forms | Logging speed decides whether the app is used | None
+2026-10-25 | WhatsApp is the main channel; cards drawn on canvas on the device, Hebrew RTL, built before the tap, shared as a file alone via Web Share, download fallback | Server-rendered images, link previews | No server cost, no data leaves the device, Web Share must run inside the tap | Web Share dropping file support on target browsers
+2026-10-25 | Week starts Sunday, Asia/Jerusalem, for everyone; weekly card ready Saturday night | Per-user time zone and week start | One shared week makes circle comparison coherent | Members outside Israel
+2026-10-25 | Notifications off by default; only two can be enabled (reaction to your PR, weekly card); optional quiet hours Friday evening to Saturday night | Many notification types | Low noise; Shabbat | Real need for more types
+2026-10-25 | Invite page detects in-app browsers and asks to open in Safari or Chrome; guided Add to Home Screen after joining | Join inside the WhatsApp browser | In-app browsers lose storage and cannot install a PWA | In-app browsers becoming reliable
+2026-10-25 | Leaving or removal deletes the member's posts in that circle; the private log stays on the device | Keep posts, anonymise | Leaving should take your data with you | None
+2026-10-25 | Owner who leaves passes ownership to the longest-standing member; the last member to leave deletes the circle | Block leaving, orphaned circles | No circle without an owner and no dead data | None
+2026-10-25 | Account deletion removes all posts and reactions; the circle sees "a member left" | Leave a tombstone with the name | Privacy | None
+2026-10-25 | Keep invite-based sign-up with a recovery method; no email, no SMTP | Real email sign-up (the 2026-10-02 decision) | Nothing to host or leak; no mail deliverability to run | A recovery method proving too weak in practice
+2026-10-25 | An invite joins one circle: 32-byte random token, only the hash stored, 7-day expiry, use limit, token after `#`, joined only via `join_circle` with rate limits | Open invite codes | The `#` fragment never reaches servers or logs; a leaked link expires | None
+2026-10-25 | Anonymous sign-ins off | Keep them for sign-up | Not needed with invite sign-up; closes an abuse path | None
+2026-10-25 | Every SECURITY DEFINER function: empty `search_path`, execute revoked from public and anon, listed in a reviewed-functions table checked by a pgTAP guard over `pg_proc` | Review by hand | A guard fails the build; a checklist does not | None
+2026-10-25 | Every circle table gets a cross-circle leak test | RLS review only | The characteristic failure of a multi-circle app is one circle reading another | None
+2026-10-25 | Drop the `post-photos` bucket; no third-party scripts | Keep photos | Photos are the heaviest privacy and moderation surface; none are needed | Members wanting photos
+2026-10-25 | Short docs: security procedure, database definition (Israel Privacy Protection Law, Amendment 13), Hebrew privacy page | Long policy set | Proportionate to a friends app, still legally anchored | A change in what is stored
+2026-10-25 | Drop gym, staff, coach, Arbox, gym display, text comments, mentions, saved/hidden posts, pins, announcements, member of the week, recaps, search, follows/friends, absolute leaderboards, feed ranking, reports/restrictions, events | Keep some as dormant code | Dead code is attack surface and sibling drift | A feature being asked for again
+2026-10-25 | Keep reactions, private records, per-user achievements, notifications and push subscriptions, account deletion, self-export, rate limits, idempotency, `client_error` | Rebuild | Already built and still fit the product | None
+2026-10-25 | Supabase free plan; keepalive and encrypted backup required once the project exists; no Realtime | Paid plan, Realtime | Free plan pauses idle projects and takes no backups; Realtime adds channel limits and cost | Outgrowing free limits
+2026-10-25 | Scheduled workflows (keepalive, backup, job alert) lose their schedule triggers; workflow_dispatch stays | Leave them failing against a deleted project | They target the deleted project | The new Supabase project exists
+2026-10-25 | CI only on pull requests and relevant paths | CI on every push | Metered Actions minutes | Minutes stop being scarce
+2026-10-25 | Stay buildless; new circles modules start with `// @ts-check`; types from `supabase gen types` into a `.d.ts` referenced from JSDoc | TypeScript, a bundler | Type safety with no build step | A real need for a build step

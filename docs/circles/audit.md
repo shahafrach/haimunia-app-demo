@@ -1,8 +1,14 @@
 # Circles: audit
 
-Written 2026-10-02 on branch `claude/kind-bardeen-9nhh36`. Read-only: no code,
-migration or test was changed. Decisions this audit assumes are in
-[decisions.md](decisions.md).
+Written 2026-10-02 on branch `claude/kind-bardeen-9nhh36`; sections 5 and 6
+updated 2026-10-25. Read-only: no code, migration or test was changed.
+
+**The decisions were replaced on 2026-10-25** ([decisions.md](decisions.md)):
+the app is now a free private-circles app for friends, with no email and no
+SMTP. Sections 1 to 4 are the 2026-10-02 inventory and still hold as a map of
+what exists, but any line in them that assumes real-email sign-up, `post-photos`,
+events, `training_log_usage` as "keep", or a public app is superseded by
+decisions.md. Read decisions.md first.
 
 ## 0. Method and limits
 
@@ -355,36 +361,49 @@ The first list is CLAUDE.md. Each line is what has to change, not an argument.
 
 No conflict found in `functions/_middleware.js` or `test/public-surface.test.mjs`. Not read for conflicts: `TERMS.md` beyond a grep, `docs/audit/*` apart from the matrix, `docs/owner-guide`.
 
-## 5. Proposed session order
+## 5. Session order
 
-Decision 6 order, with two additions: `CLAUDE.md` is rewritten first so later sessions follow the right rules, and `is_staff()`, `is_admin()` and `has_perm()` stay as stubs until the schema session.
-
-Why the stubs: kept policies and functions (`posts_feed_select`, `post_comments_visible`, `training_log_usage_report`, `my_posting_restrictions`) call `is_staff()` or `club_feature_enabled()` today. Dropping the helpers in the strip would break them before their replacements exist. In session 2 redefine them to return `false` and remove them in session 5.
+Each session ends with a closing session (reconcile docs, version bump, full
+suites, merge-result check) before the next wave. Only one open branch adds a
+migration at a time, so the schema-touching sessions run strictly in sequence.
 
 | # | Session | Scope |
 |---|---|---|
-| 1 | Strip, client side | Rewrite `CLAUDE.md` (email rule, staff, Arbox, real-member claim). Delete staff shell, coach tools, gym display, announcements, pins, events (O2), recaps, admin and onboarding UI, the three gym edge functions, their `src/*` files, `sw.js` and `index.html` entries, and their unit tests and browser checks. |
-| 2 | Strip, database side | One migration: unschedule DROP jobs, drop DROP functions and gym tables, remove `club_feature_enabled()` from policies, stub `is_staff()`, `is_admin()`, `has_perm()` to `false`, give `training_log_usage_report()` a non-staff gate. Delete the pgTAP files for dropped features (a large share of the 134; count them in this session). |
-| 3 | pgTAP guard over definers | One test that enumerates `pg_proc` where `prosecdef`, fails on any function not in a committed allow-list with class GLOBAL, GLOBAL-SELF or SCOPE, and asserts: `search_path` is `''`, no EXECUTE for `anon` or `public` unless allow-listed, GLOBAL-SELF rows reference `auth.uid()`. SCOPE rows start as expected-failing and flip in sessions 5 and 6. Also asserts no member-data read policy is `using (true)`. Catches the old overloads in section 1 note 5. |
-| 4 | Circles schema | Remove `clubs_guard_single_row()` and `default_club_id()`. Add `circle_members`, `my_circles()`, `is_circle_member()`, `is_circle_owner()`. Replace `profiles.club_id`. Invite table with token hash, expiry, uses, circle. Redeem RPC. Backfill: test accounts only, so truncate. Supabase Auth config for real email. |
-| 5 | Post-path RLS | `workout_posts` / `post_comments` / `reactions` / `post_media` scoped by circle, `post_visibility` and `follows` removed, share-to-several-circles RPC (one post per circle), storage policies, `is_community_member()` and `can_view_profile_field()` rewritten, stubs deleted. |
-| 6 | Remaining SCOPE functions | `feed_page`, `feed_leaderboard`, `community_profile`, `community_search`, `community_streaks`, challenges, achievement and PR shares, moderation as circle-owner powers, notification fan-out and recipients. Flip the guard's expected failures. Add a cross-circle leak matrix: two circles, one user in both, one outsider. |
-| 7 | Sign-up, invites, circle management (client) | Real email sign-up and confirmation, `?token=` invite link, create circle, switcher, leave, remove member, owner handoff, delete circle, account deletion with owner rules. |
-| 8 | Client feed and state | `state.club` becomes active circle plus list, composer with circle picker, per-circle realtime channels (note the ten-channel cap in `cloud.js:4190`), offline cache keys, URLs. |
-| 9 | Policy and consolidation | `PRIVACY.md`, `TERMS.md`, README, COMMUNITY_SETUP, PER_CLUB_SETUP, INCIDENT_RESPONSE. Version bump, status docs, browser checks, one full `npm test`, `supabase test db`, guard green. |
+| 1 | Repo split (after the new project exists) | New Supabase and Cloudflare Pages projects wired in, `cloud-config.js` repointed, scheduled workflows re-enabled, keepalive and encrypted backup running. |
+| 2 | Strip gym | Remove all DROP features (client, edge functions, tables, functions, cron jobs, `post-photos`, `training_log_usage`), their tests and precache entries; stub `is_staff()`-style helpers until the schema session. |
+| 3 | Definer guard | pgTAP guard over `pg_proc` plus the reviewed-functions table: empty `search_path`, execute revoked from public and anon, no unreviewed definer. |
+| 4 | Circles schema | `circle_members`, types and limits, `share_defaults`, hash-only invite table, `clubs` single-row guard removed, anonymous sign-ins off, cross-circle leak tests per table. |
+| 5 | Circles RPCs | `join_circle` with rate limits, create/leave/remove/ownership handoff, last-member delete, per-circle post sharing, targets and weekly counts, benchmark-of-month visibility rule. |
+| 6a | Circles client (parallel with 6b) | Circle switcher, create/settings screens, first-run and empty-circle screens, logging prefill, percent-of-target views, privacy-first sharing on device. |
+| 6b | Share cards (parallel with 6a) | Canvas cards on device, Hebrew RTL, PR card and weekly circle card, Web Share file with download fallback. |
+| 7 | Sharing pipeline | Logging as sharing by circle defaults, one-tap skip, reactions, "trained together" confirmation, unreacted-PR surfacing. |
+| 8 | Notifications | Two opt-in notifications, quiet hours, weekly card readiness Saturday night Asia/Jerusalem. |
+| 9 | Rebrand | Name, icons, copy, README, remove gym language everywhere. |
+| 10 | Pilot readiness | Invite page (in-app browser detection, Add to Home Screen step), security procedure, database definition, Hebrew privacy page, account deletion and export checks. |
 
-About 9 sessions. The earlier estimate of 12 to 17 included client rewrites that sessions 7 and 8 now bound, and the strip is smaller than first thought because the DROP set is mostly self-contained.
+Sessions 6a and 6b touch different files and add no migration, so they can run in parallel.
 
 ## 6. Open questions
 
-Not decided here. None blocks sessions 1 to 3.
+Resolved by the 2026-10-25 decisions:
+
+| # | Question | Answer |
+|---|---|---|
+| O1 | Anonymous sign-ins | Off. Sign-up is invite-based with a recovery method; the `training_log_usage` anon insert concern is moot because that table is dropped. |
+| O2 | Events | Drop. |
+| O3 | Achievements, PR shares, challenges | Achievements are per user. PR shares are posts, one per circle. Challenges are not kept (not in the keep list). |
+| O5 | Abuse handling without staff | No reports or posting restrictions. A circle is invite-only among friends: the owner removes members, anyone can leave, account deletion exists. |
+| O6 | Search | Dropped. People are added by invite link only. |
+| O7 | Limits | 10 circles per user, 2 members (Couple) or 20 (Friends) per circle, invites 7-day expiry with a use limit. Invite rate limits are set in `join_circle` (value open, see below). |
+
+Still open:
 
 | # | Question | Needed by |
 |---|---|---|
-| O1 | Anonymous sessions: the community sign-up today starts from `ensureAnonymousSession()`. With real email, do anonymous sign-ins stay on? The standalone app's `training_log_usage` inserts use the `anon` role with no session, so turning anonymous sign-ins off should not affect it. Verify before changing the project setting. | Session 4 |
-| O2 | Events (`events`, `event_attendees`, RSVP, capacity): the brief does not name them. Classified DROP above. | Session 1 |
-| O3 | Achievements, PR shares, challenges: per user, shared into circles, or per circle? Section 1 treats shares as posts and challenges as per circle. | Session 6 |
-| O4 | Profile fields: `visible_to_club` and the per-field privacy toggles become "visible to people I share a circle with". Any per-circle override? | Session 5 |
-| O5 | With no staff and no global directory, who handles abuse in a public app? The design makes the circle owner the moderator and the repository owner the operator through the service role. App-store review expects report, block and delete-account paths; the first two exist, the third is circle-bounded. | Session 6 |
-| O6 | `community_search` currently searches every profile. In a private-circle app it can only search within shared circles, so adding a person is by link only. Confirm. | Session 6 |
-| O7 | Limits: circles per user, members per circle, invites per hour. None exist today. | Session 4 |
+| O4 | Profile fields (`visible_to_club`, per-field privacy toggles): the decisions give per-circle sharing settings but do not say which profile fields (name, avatar) are shown and whether they can differ per circle. | Session 4 |
+| O8 | Recovery method for sign-up with no email: recovery code, passkey, or both. | Session 4 |
+| O9 | Numeric rate limits for `join_circle` and invite creation. | Session 5 |
+| O10 | Avatars: `avatar-photos` bucket is not on the drop list. Keep (with circle-scoped read) or drop? | Session 2 |
+| O11 | Edge functions `purge_abandoned_profiles`, `notif_push_send`, `sanitize_upload`: keep as listed in section 3 unless the strip shows otherwise; `sanitize_upload` is only needed if avatars stay. | Session 2 |
+| O12 | Realtime is off, but `cloud.js` uses per-circle channels (section 5 of the old plan). Confirm all of that code is removed rather than gated. | Session 6a |
+| O13 | Benchmark of the month: who chooses the benchmark, owner or a fixed list. | Session 5 |
