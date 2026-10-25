@@ -396,13 +396,13 @@ Resolved by the 2026-10-25 decisions:
 | O3 | Achievements, PR shares, challenges | Achievements are per user. PR shares are posts, one per circle. Challenges are not kept (not in the keep list). |
 | O5 | Abuse handling without staff | No reports or posting restrictions. A circle is invite-only among friends: the owner removes members, anyone can leave, account deletion exists. |
 | O6 | Search | Dropped. People are added by invite link only. |
-| O7 | Limits | 10 circles per user, 2 members (Couple) or 20 (Friends) per circle, invites 7-day expiry with a use limit. Invite rate limits are set in `join_circle` (value open, see below). |
-| O4 | Profile is display name and emoji only, the same in every circle. No other profile fields; `visible_to_club` is dropped. |
-| O8 | Keep the existing recovery mechanism. No passkeys for now. |
-| O9 | `join_circle`: 10 attempts per user per hour. Invite creation: 20 per circle per day. |
-| O10 | Drop avatars and the `avatar-photos` bucket. Emoji instead. |
-| O11 | Keep `purge_abandoned_profiles` and `notif_push_send`. Drop `sanitize_upload`. |
-| O12 | Remove the Realtime code; do not gate it. |
-| O13 | The circle owner picks the benchmark from the fixed list of eight named benchmarks the app already has. |
+| O7 | Limits | 10 circles per user, 2 members (Couple) or 20 (Friends) per circle, invites 7-day expiry with a use limit. Rate limits: see O9. |
+| O4 | Profile fields | Profile is display name and emoji only, the same in every circle. No other profile fields; `visible_to_club` is dropped. |
+| O8 | Recovery method | Keep the existing recovery mechanism. No passkeys for now. |
+| O9 | Rate limits | `join_circle`: 10 attempts per user per hour. Invite creation: 20 per circle per day. |
+| O10 | Avatars | Drop avatars and the `avatar-photos` bucket. Emoji instead. |
+| O11 | Edge functions | Keep `purge_abandoned_profiles` and `notif_push_send`. Drop `sanitize_upload`. |
+| O12 | Realtime code | Remove the Realtime code; do not gate it. |
+| O13 | Benchmark of the month | The circle owner picks the benchmark from the fixed list of eight named benchmarks the app already has. |
 
 Nothing is open.
