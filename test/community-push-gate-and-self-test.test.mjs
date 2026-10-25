@@ -36,7 +36,7 @@ function seeded(opts) {
   const mock = createMockSupabase(Object.assign({
     profiles: [{ id: "u1", handle: "dana", display_name: "דנה", is_admin: false, recovery_verified_at: VERIFIED, visible_to_club: true }],
     invite_redemptions: [{ user_id: "u1", invite_id: "inv-1", role: "member", redeemed_at: VERIFIED }],
-    clubs: [{ id: "club-1", name: "חיימוניה" }],
+    clubs: [{ id: "club-1", name: "מעגל הדגמה" }],
     analytics_events: [],
     notifications: [], notification_preferences: [], push_subscriptions: [],
     follows: [], hidden_posts: [], saved_posts: [],
@@ -136,7 +136,7 @@ test("before the first logged workout and before joining the community, the app 
   // true: a member looking at the push controls has a community profile by
   // construction, so the workout half is what covers everybody else - the
   // training log is the whole app for a member who never joined the club.
-  const mock = createMockSupabase({ profiles: [], clubs: [{ id: "club-1", name: "חיימוניה" }], analytics_events: [] });
+  const mock = createMockSupabase({ profiles: [], clubs: [{ id: "club-1", name: "מעגל הדגמה" }], analytics_events: [] });
   const window = await bootCommunity(mock, { syncEnabled: false, localStorage: PUSH_ON });
   stubPush(window, { logged: 0 });
 

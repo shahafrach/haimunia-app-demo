@@ -1024,8 +1024,8 @@
       `<div style="margin-top:6px;"><b style="color:var(--chalk);">${device}</b><div>${steps}</div></div>`;
     return `<div data-push-permission-help="1" style="color:var(--steel);font-size:12px;line-height:1.6;margin-top:8px;border-top:1px solid var(--border);padding-top:8px;">
       <div style="font-weight:700;color:var(--chalk);">איך מאשרים התראות</div>
-      ${line("אייפון", "קודם מוסיפים את האפליקציה למסך הבית: בספארי, כפתור השיתוף ← „הוספה למסך הבית”. אחר כך פותחים אותה משם, ובהגדרות המכשיר: הגדרות ← התראות ← האימוניה ← „אפשר התראות”.")}
-      ${line("אנדרואיד", "הגדרות ← אפליקציות ← האימוניה ← התראות ← מפעילים „הצג התראות”. בכרום אפשר גם: ⋮ ← הגדרות אתר ← התראות.")}
+      ${line("אייפון", "קודם מוסיפים את האפליקציה למסך הבית: בספארי, כפתור השיתוף ← „הוספה למסך הבית”. אחר כך פותחים אותה משם, ובהגדרות המכשיר: הגדרות ← התראות ← BOX-LOG ← „אפשר התראות”.")}
+      ${line("אנדרואיד", "הגדרות ← אפליקציות ← BOX-LOG ← התראות ← מפעילים „הצג התראות”. בכרום אפשר גם: ⋮ ← הגדרות אתר ← התראות.")}
       <div class="chip-row" style="margin-top:8px;">
         <button type="button" class="chip-btn" data-community-action="notif-push-self-test">ניסיון חוזר</button>
       </div>

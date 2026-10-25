@@ -137,7 +137,7 @@ test("a WOD save that fails with QuotaExceededError has no visible side effect",
 test("reloading with an already-committed server-side redemption skips the neutral start screen and goes straight to credentials", async () => {
   const mock = createMockSupabase({
     profiles: [], invite_redemptions: [{ user_id: "new-1", invite_id: "inv-1", role: "member", redeemed_at: new Date().toISOString() }],
-    clubs: [{ id: "club-1", name: "חיימוניה" }],
+    clubs: [{ id: "club-1", name: "מעגל הדגמה" }],
     community_streaks: [], workout_posts: [], feed_page_rows: [], member_contact_log: [],
     coach_engagement_flags: [], analytics_events: [], notifications: [], notification_preferences: [],
     monthly_club_recaps: [], reports: [],

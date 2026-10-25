@@ -43,7 +43,7 @@ function seeded(extra, asStaff) {
       { user_id: "u2", invite_id: "inv-1", role: "member", redeemed_at: VERIFIED },
       { user_id: "coach1", invite_id: "inv-1", role: "coach", redeemed_at: VERIFIED },
     ],
-    clubs: [{ id: "club-1", name: "חיימוניה" }],
+    clubs: [{ id: "club-1", name: "מעגל הדגמה" }],
     analytics_events: [],
     challenges: [], challenge_participants: [], challenge_teams: [], challenge_progress: [],
     events: [], event_attendees: [],

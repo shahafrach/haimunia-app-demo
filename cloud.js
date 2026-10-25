@@ -667,7 +667,7 @@
   // line at 390px - if it does not fit, shorten the gloss, never shrink the
   // type); `body` is the sheet's explanation. Keys are lowercased for lookup.
   const TERM_GLOSSARY = Object.freeze([
-    { id: "wod", term: "WOD", gloss: "אימון היום", body: "האימון המשותף שכל המועדון עושה באותו יום. ראשי תיבות של Workout Of the Day." },
+    { id: "wod", term: "WOD", gloss: "אימון היום", body: "האימון היומי המשותף. ראשי תיבות של Workout Of the Day." },
     { id: "amrap", term: "AMRAP", gloss: "כמה סיבובים הספקתם", body: "עובדים בזמן קבוע — נניח 20 דקות — וסופרים כמה סיבובים שלמים הספקתם. אין \"לסיים\", יש \"כמה\"." },
     { id: "emom", term: "EMOM", gloss: "תרגיל חדש כל דקה", body: "בתחילת כל דקה מתחילים את התרגיל הבא. מה שנשאר מהדקה הוא המנוחה שלכם." },
     { id: "fortime", term: "For Time", gloss: "כמה מהר סיימתם", body: "עושים את כל מה שכתוב, כמה שיותר מהר, ורושמים את הזמן." },
@@ -1129,7 +1129,7 @@
     // rather than saying "you are not allowed" - a head coach who tried to
     // remove another head coach has the permission and is being told about
     // this row, not about themselves.
-    "cannot remove a member at or above your own role": "אפשר להסיר רק חבר/ה בדרגה נמוכה משלכם. מאמן/ת ראשי/ת, מנהל/ת או בעל/ת המועדון מוסרים/ות על ידי מנהל/ת המערכת.",
+    "cannot remove a member at or above your own role": "אפשר להסיר רק חבר/ה בדרגה נמוכה משלכם. מנהל/ת או בעל/ת המועדון מוסרים/ות על ידי מנהל/ת המערכת.",
     "use account deletion for your own account": "כדי למחוק את החשבון שלכם יש להשתמש במחיקת חשבון במסך החשבון, לא בהסרת חבר/ה.",
     // The COMM-016 gate. Worth being blunt that this closes reading too:
     // feed_page carries the same is_community_member() check as post_create,
@@ -1152,7 +1152,7 @@
     // the first news, and "go and read a tab" is a colder thing to say to
     // somebody who has just been refused than "go and read a tab, and there
     // are people you can ask".
-    posting_restricted: "צוות המועדון הגביל את הפרסום מהחשבון הזה, ולכן פוסטים ותגובות חדשים לא נשלחים. אפשר להמשיך לקרוא את הפיד ולעודד אחרים כרגיל. הסיבה שנרשמה ומועד סיום ההגבלה מופיעים בטאב \"חשבון\", וההגבלה נפתחת רק על ידי הצוות — כדאי לפנות למאמן/ת.",
+    posting_restricted: "המועדון הגביל את הפרסום מהחשבון הזה, ולכן פוסטים ותגובות חדשים לא נשלחים. אפשר להמשיך לקרוא את הפיד ולעודד אחרים כרגיל. הסיבה שנרשמה ומועד סיום ההגבלה מופיעים בטאב \"חשבון\", וההגבלה נפתחת רק על ידי המנהלים — כדאי לפנות לבעל/ת המעגל.",
     "not authorized": "לחשבון הזה אין הרשאה לפעולה הזו. הרשאות של צוות המועדון ניתנות על ידי מנהל/ת, וניסיון נוסף לא ישנה את התוצאה.",
     // The only server refusal that clears on its own, so the only one that
     // earns a "try again". Matches the wording react() and the comment
@@ -1241,7 +1241,7 @@
   // RECOGNISED the error - not where it fell through to its own generic. A
   // generic replacing a specific one is a downgrade, which is why this cannot
   // simply call serverErrorText() everywhere.
-  const SERVER_ERROR_GENERIC = "הפעולה לא הושלמה. אפשר לנסות שוב, ואם זה חוזר כדאי לפנות לצוות המועדון.";
+  const SERVER_ERROR_GENERIC = "הפעולה לא הושלמה. אפשר לנסות שוב, ואם זה חוזר כדאי לפנות לבעל/ת המועדון.";
   function failText(domainMessage, error) {
     const translated = serverErrorText(error);
     return translated && translated !== SERVER_ERROR_GENERIC ? translated : domainMessage;
@@ -1636,7 +1636,7 @@
     const ordered = {};
     for (const key of Object.keys(sections).sort()) ordered[key] = sections[key];
     return {
-      kind: "haimuniya-account-export",
+      kind: "box-log-account-export",
       format_version: 1,
       exported_at: new Date().toISOString(),
       user_id: uid,
@@ -1667,7 +1667,7 @@
     let ok = false;
     try {
       const payload = await buildSelfExport();
-      ok = !!payload && downloadJsonFile(payload, `haimuniya-my-data-${new Date().toISOString().slice(0, 10)}.json`);
+      ok = !!payload && downloadJsonFile(payload, `box-log-my-data-${new Date().toISOString().slice(0, 10)}.json`);
     } catch (e) { ok = false; }
     state.ui.selfExportBusy = false;
     if (typeof window.showToast === "function") window.showToast(ok ? "ההורדה התחילה: כל מה שנשמר עליכם בשרת, בקובץ אחד." : "הורדת הנתונים נכשלה. נסו שוב כשיש חיבור.");
@@ -2052,7 +2052,7 @@
       //   gateView "login" the credential form, alone on a screen.
       //
       // THE TWO SENTENCES MOVED UP VERBATIM. The invite-code screen's own
-      // copy — "הכניסה עם קוד הזמנה שמקבלים מהמאמן/ת" and "הקוד לא נוגע
+      // copy — "הכניסה עם קוד הזמנה שמקבלים מחבר/ה במעגל" and "הקוד לא נוגע
       // לרישום האימונים" — is the app's own best writing and the sentence
       // that stops a nervous member panicking. It was one screen too late.
       // It is repeated on the invite step rather than moved off it:
@@ -2081,8 +2081,8 @@
 
           <div style="padding:16px;">
           <div style="font-weight:800;font-size:20px;margin-bottom:8px;">קהילת המועדון</div>
-          <div style="color:var(--chalk);font-size:15px;line-height:1.5;margin-bottom:12px;">${bidiText("כאן רואים מה קורה במועדון: אימונים ושיאים של חברי המועדון, הודעות מהמאמנים ולוחות תוצאות.")}</div>
-          <div style="color:var(--steel);font-size:14px;line-height:1.6;margin-bottom:18px;">${bidiText("הכניסה עם קוד הזמנה שמקבלים מהמאמן/ת. הקוד לא נוגע לרישום האימונים שלכם — הוא רק פותח את לשונית הקהילה.")}</div>
+          <div style="color:var(--chalk);font-size:15px;line-height:1.5;margin-bottom:12px;">${bidiText("כאן רואים מה קורה במועדון: אימונים ושיאים של חברי המועדון, ולוחות תוצאות.")}</div>
+          <div style="color:var(--steel);font-size:14px;line-height:1.6;margin-bottom:18px;">${bidiText("הכניסה עם קוד הזמנה שמקבלים מחבר/ה במעגל. הקוד לא נוגע לרישום האימונים שלכם — הוא רק פותח את לשונית הקהילה.")}</div>
           <button class="save-btn" data-community-action="start-signup">יש לי קוד הזמנה</button>
           <div style="display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;margin-top:18px;">
             <span style="color:var(--steel);font-size:14px;">${bidiText("כבר יש לך חשבון קהילה?")}</span>
@@ -2133,7 +2133,7 @@
     //    below it, because they go to different places and answer different
     //    questions: back to the choice screen, versus straight to the login
     //    form. Collapsing them would make one of the two labels a lie.
-    if (!state.redemption) return `<div class="chart-card"><button class="gate-back" data-community-action="gate-back">‹ חזרה</button>${renderJoinProgress(0)}<div style="font-weight:800;font-size:18px;margin:0 0 6px;">קוד הזמנה למועדון</div><div style="color:var(--steel);font-size:14px;line-height:1.6;margin-bottom:14px;">${bidiText("הכניסה עם קוד הזמנה שמקבלים מהמאמן/ת. הקוד לא נוגע לרישום האימונים שלכם — הוא רק פותח את לשונית הקהילה.")}</div>${state.ui.inviteCodeDraft ? `<div class="footer-note" data-invite-prefilled="1" style="margin-bottom:10px;color:var(--brass);">${bidiText("הקוד מולא אוטומטית מהקישור שנסרק. אפשר להמשיך.")}</div>` : ""}<form id="communityInviteCode">${field("communityInviteCode", "code", "קוד הזמנה", `<input class="text-input" name="code" dir="ltr" inputmode="text" autocomplete="off" autocapitalize="off" maxlength="128" placeholder="קוד הזמנה" value="${esc(state.ui.inviteCodeDraft)}" data-invite-code required/>`)}<button class="save-btn" type="submit"${state.ui.redeemingCode ? " disabled" : ""} style="margin-top:12px;">${state.ui.redeemingCode ? "בודקים…" : "אישור קוד"}</button></form><div style="display:flex;justify-content:center;margin-top:16px;"><button class="gate-alt" data-community-action="back-to-login">כבר יש לכם חשבון? התחברות</button></div>${state.ui.message ? `<div class="footer-note" role="status" style="margin-top:10px;color:var(--brass);">${esc(state.ui.message)}</div>` : ""}</div>`;
+    if (!state.redemption) return `<div class="chart-card"><button class="gate-back" data-community-action="gate-back">‹ חזרה</button>${renderJoinProgress(0)}<div style="font-weight:800;font-size:18px;margin:0 0 6px;">קוד הזמנה למועדון</div><div style="color:var(--steel);font-size:14px;line-height:1.6;margin-bottom:14px;">${bidiText("הכניסה עם קוד הזמנה שמקבלים מחבר/ה במעגל. הקוד לא נוגע לרישום האימונים שלכם — הוא רק פותח את לשונית הקהילה.")}</div>${state.ui.inviteCodeDraft ? `<div class="footer-note" data-invite-prefilled="1" style="margin-bottom:10px;color:var(--brass);">${bidiText("הקוד מולא אוטומטית מהקישור שנסרק. אפשר להמשיך.")}</div>` : ""}<form id="communityInviteCode">${field("communityInviteCode", "code", "קוד הזמנה", `<input class="text-input" name="code" dir="ltr" inputmode="text" autocomplete="off" autocapitalize="off" maxlength="128" placeholder="קוד הזמנה" value="${esc(state.ui.inviteCodeDraft)}" data-invite-code required/>`)}<button class="save-btn" type="submit"${state.ui.redeemingCode ? " disabled" : ""} style="margin-top:12px;">${state.ui.redeemingCode ? "בודקים…" : "אישור קוד"}</button></form><div style="display:flex;justify-content:center;margin-top:16px;"><button class="gate-alt" data-community-action="back-to-login">כבר יש לכם חשבון? התחברות</button></div>${state.ui.message ? `<div class="footer-note" role="status" style="margin-top:10px;color:var(--brass);">${esc(state.ui.message)}</div>` : ""}</div>`;
     // Right after the code, before anything else — this is what turns the
     // bootstrap anonymous session into a real, log-in-from-any-device
     // account. state.user.is_anonymous flips to false the moment

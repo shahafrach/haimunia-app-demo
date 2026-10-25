@@ -14,8 +14,7 @@ the Hebrew governs for members.
 # תנאי שימוש
 
 התנאים האלה חלים על השימוש שלכם ביומן האימונים ובתכונות הקהילה. אין
-חברה מאחורי האפליקציה — היא מופעלת ישירות על ידי צוות המאמנים של
-המועדון עבור החברים שלו, ובכל מקום שכתוב "אנחנו" הכוונה היא אליהם.
+חברה מאחורי האפליקציה — היא מופעלת ישירות על ידי מפעיל/ת האפליקציה עבור מעגלים פרטיים של חברים, ובכל מקום שכתוב "אנחנו" הכוונה היא אליהם.
 שימוש באפליקציה או פתיחת חשבון משמעם הסכמה לתנאים. מי שלא מסכים, שלא
 ישתמש בשירות.
 
@@ -103,7 +102,7 @@ the Hebrew governs for members.
 
 ## יצירת קשר
 
-שאלות בנוגע לתנאים — למאמן/ת שלכם ישירות. אין חברה או כתובת תמיכה
+שאלות בנוגע לתנאים — למי שהזמין אתכם או למפעיל/ת האפליקציה. אין חברה או כתובת תמיכה
 נפרדת מאחורי האפליקציה.
 
 ---
@@ -111,8 +110,7 @@ the Hebrew governs for members.
 # Terms of Service (English)
 
 These terms govern your use of the app's training log and community
-features. There is no separate company behind this app — it is run
-directly by the club's own coaching team for their own members, and
+features. There is no separate company behind this app — it is run directly by the app's operator for private circles of friends, and
 wherever these terms say "we" or "the operator," that's who is meant. By
 creating an account or using the app, you agree to these terms. If you do
 not agree, do not use the service.
@@ -168,7 +166,7 @@ You agree not to:
 
 You retain ownership of the training-log and community content you create.
 By publishing a post, comment, photo, or profile field to an audience wider
-than yourself, you grant the coaching team a license to store, display, and
+than yourself, you grant the operator a license to store, display, and
 distribute that content to the audience you selected, for as long as it
 remains published or until you remove it or delete your account. You are
 responsible for content you publish and confirm you have the right to post
@@ -216,5 +214,5 @@ takes effect means you accept the updated terms.
 
 ## Contact
 
-Questions about these terms can be sent to your coach directly — there is
+Questions about these terms can be sent to the operator directly — there is
 no separate company or support email behind this app.

@@ -30,8 +30,7 @@ the Hebrew governs for members.
   מאמן לא רואה אותו, ואפשר לכבות או להפעיל בכל רגע בהגדרות, במקטע
   "נתונים וגיבוי".
 - **"יום אימון" באפליקציה הוא יום שרשמתם בו אימון ביומן** — לא כניסה
-  לשיעור. האפליקציה לא מחוברת למערכת הרישום או הצ'ק־אין של המועדון
-  (Arbox), ואין לה שום מקור נוכחות אחר.
+  לשיעור. האפליקציה לא מחוברת למערכת רישום או צ'ק־אין, ואין לה שום מקור נוכחות אחר.
 - **המאמנים לא רואים את רשימת האימונים שלכם.** מה שהם רואים זה השוואת
   קצב: כמה אימונים בשבוע רשמתם לאחרונה מול הקצב שלכם קודם. זה נאכף
   בבסיס הנתונים, לא רק בהבטחה.
@@ -43,21 +42,19 @@ the Hebrew governs for members.
   ביומן לא מתפרסם מעצמו.
 - **אין פרסומות, אין מכירת מידע, אין מיקום, ואין כתובת מייל** — אלא אם
   תבחרו לשלוח דיווח על תקלה במייל: אז ההודעה יוצאת מכתובת המייל שלכם
-  לתיבת ה־Gmail של המועדון (ראו "ספקי תשתית").
+  לכתובת התמיכה שהוגדרה באפליקציה (ראו "ספקי תשתית").
 
 ## מי מפעיל את האפליקציה
 
-אין חברה מאחורי האפליקציה. היא מופעלת ישירות על ידי צוות המאמנים של
-המועדון עבור החברים שלו — אין ישות משפטית רשומה, אין כתובת עסק ואין
+אין חברה מאחורי האפליקציה. היא מופעלת ישירות על ידי מפעיל/ת האפליקציה עבור מעגלים פרטיים של חברים — אין ישות משפטית רשומה, אין כתובת עסק ואין
 מחלקת ציות, והמסמך הזה לא טוען שדין או בית משפט של מדינה מסוימת חלים
 עליו. בכל מקום שכתוב בו "אנחנו" הכוונה היא לצוות שמפעיל את האפליקציה
-ואת המועדון. אם תתעורר אי־הסכמה, היא תיפתר ישירות ביניכם לבין הצוות,
+ואת המועדון. אם תתעורר אי־הסכמה, היא תיפתר ישירות ביניכם לבין מפעיל/ת האפליקציה,
 כמו כל שאלה אחרת שקשורה למועדון.
 
-לכל שאלה, בקשה או תלונה בנושא פרטיות — פנו למאמן/ת שלכם ישירות, בדיוק
-כמו בכל נושא אחר במועדון. הכתובת היחידה באפליקציה היא תיבת ה־Gmail של
-המועדון, שמוצעת במסך הדיווח על תקלה לשליחת דיווח במייל (ראו "ספקי
-תשתית"); גם אותה קורא הצוות, שהוא כל התמיכה שיש לאפליקציה.
+לכל שאלה, בקשה או תלונה בנושא פרטיות — פנו למי שהזמין אתכם או למפעיל/ת האפליקציה, בדיוק
+כמו בכל נושא אחר במועדון. אם הוגדרה כתובת תמיכה באפליקציה, היא מוצעת במסך הדיווח על תקלה לשליחת דיווח במייל (ראו "ספקי
+תשתית"); גם אותה קורא/ת מפעיל/ת האפליקציה, שהוא/היא כל התמיכה שיש לאפליקציה.
 
 ## מה נשמר במכשיר ומה יוצא ממנו
 
@@ -103,8 +100,7 @@ the Hebrew governs for members.
 **מי רואה את זה.** רק אתם. הגיבוי הזה נפרד לחלוטין מהקהילה: אין בו
 פרופיל, אין פיד ואין פרסום, ואף חבר אחר ואף מאמן לא יכולים לקרוא אותו
 דרך האפליקציה — ההרשאות בבסיס הנתונים מתירות את הרשומות האלה לחשבון
-שלכם בלבד. מי שמנהל את בסיס הנתונים עצמו — כלומר צוות המאמנים שמפעיל
-את השירות — יכול טכנית לגשת אליו, כמו בכל שירות שמאחסן מידע.
+שלכם בלבד. מי שמנהל את בסיס הנתונים עצמו — כלומר מפעיל/ת השירות — יכול טכנית לגשת אליו, כמו בכל שירות שמאחסן מידע.
 
 **איך מכבים.** בהגדרות, במקטע "נתונים וגיבוי", יש כפתור לכיבוי הגיבוי
 האוטומטי. כיבוי עוצר כל העלאה עתידית ונשמר גם אם תסגרו ותפתחו את
@@ -200,7 +196,7 @@ the Hebrew governs for members.
 
 **מה לא נאסף:** אין תעודת זהות, אין מיקום, אין פרטי אשראי או חשבון בנק,
 אין מידע ביומטרי, אין תאריך לידה, אין נתוני נוכחות או רישום לשיעורים
-ממערכת השיעורים של המועדון, ואין שימוש בשום דבר מהרשימה למטרות פרסום.
+ממערכת רישום חיצונית, ואין שימוש בשום דבר מהרשימה למטרות פרסום.
 
 ## ימי אימון ומה המאמנים רואים
 
@@ -209,8 +205,7 @@ the Hebrew governs for members.
 **מה נחשב "יום אימון".** כשרשומה של אימון כוח או WOD מהיומן שלכם מגיעה
 לשרת, נרשם יום אימון אחד בתאריך שרשום עליה. שלושה תרגילים באותו יום הם
 יום אחד. מדידת משקל גוף אינה אימון ואינה נספרת. **זו לא נוכחות
-בשיעור:** האפליקציה לא מחוברת למערכת הרישום או הצ'ק־אין של המועדון
-(Arbox), ואין לה שום דרך לדעת אם הגעתם לשיעור. היא יודעת רק מה רשמתם
+בשיעור:** האפליקציה לא מחוברת למערכת רישום או צ'ק־אין, ואין לה שום דרך לדעת אם הגעתם לשיעור. היא יודעת רק מה רשמתם
 ביומן. היום הזה נרשם גם אם מחקתם אחר כך את הרשומה שיצרה אותו — הרישום
 מצטבר ולא מתבטל.
 
@@ -343,12 +338,9 @@ the Hebrew governs for members.
   כל הודעה.
 - **Gmail (דיווח על תקלה במייל).** במסך הדיווח על תקלה אפשר לשלוח את
   הדיווח גם במייל. הכפתור פותח את אפליקציית המייל שלכם עם הודעה שממוענת
-  לכתובת של המועדון, haimuniya@gmail.com — תיבת Gmail שמופעלת על ידי
-  Google. אם תשלחו אותה, היא יוצאת מהכתובת שלכם כמו כל מייל: המועדון,
-  ו־Google כספקית התיבה, מקבלים את כתובת המייל האמיתית שלכם, את התיאור
+  לכתובת התמיכה שהוגדרה באפליקציה (אם הוגדרה כתובת כזו). אם תשלחו אותה, היא יוצאת מהכתובת שלכם כמו כל מייל: מפעיל/ת האפליקציה, ואם התיבה מתארחת אצל ספק (למשל Google), גם הוא, מקבלים את כתובת המייל האמיתית שלכם, את התיאור
   ואת הפרטים הטכניים. זו הדרך היחידה באפליקציה שבה כתובת מייל אמיתית
-  שלכם מגיעה אלינו, ורק אם בחרתם בה. הודעות כאלה נשמרות בתיבת הדואר של
-  המועדון ואינן נמחקות עם החשבון שלכם באפליקציה.
+  שלכם מגיעה אלינו, ורק אם בחרתם בה. הודעות כאלה נשמרות בתיבת הדואר של מפעיל/ת האפליקציה ואינן נמחקות עם החשבון שלכם באפליקציה.
 
 ## הבסיס לעיבוד המידע
 
@@ -424,8 +416,7 @@ the Hebrew governs for members.
 בכרטיס הגיבוי) בלי שזה ישפיע
 על מה שכבר נעשה. בתוך האפליקציה אפשר לייצא את הנתונים המקומיים, לכבות
 את הגיבוי האוטומטי, לשנות כל מתג פרטיות, לחסום חברים, לדווח על תוכן
-ולבקש מחיקת חשבון מלאה. למימוש זכות שאין לה כפתור באפליקציה — פנו
-למאמן/ת שלכם ישירות. אם יש רשות להגנת הפרטיות רלוונטית במקום מגוריכם,
+ולבקש מחיקת חשבון מלאה. למימוש זכות שאין לה כפתור באפליקציה — פנו למי שהזמין אתכם או למפעיל/ת האפליקציה. אם יש רשות להגנת הפרטיות רלוונטית במקום מגוריכם,
 אפשר לפנות גם אליה.
 
 ## גיל
@@ -456,7 +447,7 @@ the Hebrew governs for members.
 
 ## יצירת קשר
 
-שאלות, בקשות או תלונות בנוגע למדיניות הזו — למאמן/ת שלכם ישירות, כמתואר
+שאלות, בקשות או תלונות בנוגע למדיניות הזו — למי שהזמין אתכם או למפעיל/ת האפליקציה, כמתואר
 בסעיף "מי מפעיל את האפליקציה".
 
 ---
@@ -483,8 +474,7 @@ the Hebrew governs for members.
   other member and no coach can read it, and you can turn it off or on at
   any time in Settings, under "data and backup".
 - **A "training day" in this app is a day you logged a workout** — not a
-  class you attended. The app is not connected to the club's class
-  booking or check-in system (Arbox) and has no other attendance source.
+  class you attended. The app is not connected to any class booking or check-in system and has no other attendance source.
 - **Coaches do not see your list of workouts.** What they see is a rate
   comparison: how many sessions a week you have logged recently against
   your own earlier rate. That is enforced by the database, not only
@@ -498,26 +488,19 @@ the Hebrew governs for members.
   it.**
 - **No ads, no sale of data, no location, and no email address** —
   unless you choose to send a bug report by email: that message goes
-  from your own email address to the club's Gmail inbox (see
+  from your own email address to the support address configured in the app (see
   "Infrastructure providers").
 
 ## Who runs this
 
-There is no separate company behind this app. It is run directly by the
-club's own coaching team for their own members — there is no registered
+There is no separate company behind this app. It is run directly by the app's operator for private circles of friends — there is no registered
 legal entity, business address, or compliance department, and this policy
 does not claim that any particular country's law or courts govern it.
-Wherever this policy says "we" or "the operator," it means the coaching
-team who runs the app and the club. If a disagreement ever came up, it
-would be worked out directly between you and the coaching team, the same
-way any other question about the club would be.
+Wherever this policy says "we" or "the operator," it means the person who runs the app. If a disagreement ever came up, it
+would be worked out directly between you and the operator.
 
-For any privacy question, request, or complaint, contact your coach
-directly — the same way you'd reach them about anything else related to
-the club. The only email address in the app is the club's Gmail inbox,
-offered on the report-a-problem screen for sending a bug report by email
-(see "Infrastructure providers"); it is read by the same coaching team,
-who are the whole of "support" for this app.
+For any privacy question, request, or complaint, contact the person who invited you, or the app's operator, directly. If a support address is configured, it is offered on the report-a-problem screen for sending a bug report by email
+(see "Infrastructure providers"); it is read by the operator, who is the whole of "support" for this app.
 
 ## What stays on your device, and what leaves it
 
@@ -569,8 +552,7 @@ and the question is asked again at the next first workout.
 community: no profile, no feed, no publishing, and no other member and no
 coach can read it through the app — the database's own row-level rules
 allow those records to your account and to nobody else. Whoever
-administers the database itself — that is, the coaching team running the
-service — can technically access it, as with any service that stores
+administers the database itself — that is, the operator running the service — can technically access it, as with any service that stores
 data.
 
 **How to turn it off.** In Settings, under "data and backup", there is a
@@ -662,7 +644,7 @@ time.
   contact followed a drop-in-rate flag. The app does not check what is
   written in it beyond its length. Every staff member can read every
   such note; you cannot see them in the app, and you are entitled to ask
-  what is recorded about you — ask your coach.
+  what is recorded about you — ask the operator.
 - **The reason for a posting restriction.** If a staff member with a
   moderation permission restricts your posting (temporarily or
   permanently), we record the type of restriction, when it ends, who
@@ -695,7 +677,7 @@ time.
 
 **What we do not collect:** no government ID, no location, no card or
 bank details, no biometric data, no date of birth, no class attendance or
-booking data from the club's class-booking system, and nothing on this
+booking data from any class-booking system, and nothing on this
 list is used for advertising.
 
 ## Training days and what coaches see
@@ -708,7 +690,7 @@ your log reaches the server, one training day is recorded on the date
 written on it. Three lifts on the same day are one day. A bodyweight
 reading is not training and is not counted. **This is not class
 attendance:** the app is not connected to the club's booking or check-in
-system (Arbox) and has no way of knowing whether you came to a class. It
+system and has no way of knowing whether you came to a class. It
 only knows what you logged. A day stays recorded even if you later delete
 the entry that produced it — the record is cumulative and is not
 retracted.
@@ -731,7 +713,7 @@ notice and ask how you are doing, rather than someone quietly drifting
 away. No decision about you is made automatically. Full transparency: you
 cannot see this flag yourself in the app — it is deliberately hidden from
 the member it is about. You are entitled to ask whether one exists for
-you; ask your coach.
+you; ask the operator.
 
 **In the new-members list**, coaches also see the number of training days
 you have logged since joining — a count only, with no dates and no
@@ -863,13 +845,12 @@ Two points of accuracy about the toggles:
   message.
 - **Gmail (bug reports by email).** The report-a-problem screen can also
   send the report by email. That button opens your own mail app with a
-  message addressed to the club's address, haimuniya@gmail.com — a Gmail
-  inbox run by Google. If you send it, it goes out from your own address
-  like any email: the club, and Google as the provider of that inbox,
+  message addressed to the support address configured in the app (if one is configured). If you send it, it goes out from your own address
+  like any email: the operator, and the mailbox provider,
   receive your real email address, the description and the technical
   details. This is the only path in the app by which a real email
   address of yours reaches us, and only if you choose it. Such messages
-  are kept in the club's mailbox and are not deleted with your app
+  are kept in the operator's mailbox and are not deleted with your app
   account.
 
 ## Basis for processing
@@ -966,7 +947,7 @@ back it up" on the backup card) without
 affecting what has already been done. In the app you can export your
 local data, turn off automatic backup, change every privacy toggle, block
 members, report content, and request full account deletion. To exercise a
-right that has no button in the app, contact your coach directly. If a
+right that has no button in the app, contact the operator directly. If a
 data protection authority is relevant where you live, you can raise
 concerns with them too.
 
@@ -976,7 +957,7 @@ This service is not directed at children under 13, and we do not
 knowingly collect personal information from anyone under that age. 13 is
 a baseline we chose as a reasonable policy, not a number a specific law
 requires here. If you believe a child has created an account, contact
-your coach and we will remove it.
+the operator and we will remove it.
 
 ## Security
 
@@ -1001,5 +982,5 @@ needed, by a notice inside the app.
 
 ## Contact
 
-Questions, requests, or complaints about this policy go to your coach
+Questions, requests, or complaints about this policy go to the operator
 directly — see "Who runs this" above.

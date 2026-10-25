@@ -11,7 +11,7 @@ try{for(const [width,height] of [[390,844],[430,932]])for(const theme of ['light
  await installMockCloud(page,{
  profiles:[{id:'u1',handle:'qa_member',display_name:'חבר בדיקה',is_admin:false,recovery_verified_at:now,visible_to_club:true}],
  invite_redemptions:[{user_id:'u1',invite_id:'inv-1',role:'member',redeemed_at:now}],
- clubs:[{id:'club-1',name:'האימוניה'}],
+ clubs:[{id:'club-1',name:'מעגל הדגמה'}],
  notifications:[{id:'n1',user_id:'u1',type:'event_cancelled',category:'events',title:'עדכון מהמועדון',body:'הודעת בדיקה מקומית לבדיקת התראות',deep_link:'/community/feed',created_at:now,read_at:null}],
  notification_preferences:[],feed_page_rows:[],follows:[],hidden_posts:[],saved_posts:[]
  },{user:{id:'u1',is_anonymous:false,email:'qa@members.haimuniya.invalid'}});

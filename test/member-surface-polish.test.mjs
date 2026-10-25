@@ -41,7 +41,7 @@ function club(opts = {}) {
       { user_id: "admin", invite_id: "inv-1", role: "admin", redeemed_at: VERIFIED },
       { user_id: "office", invite_id: "inv-1", role: "staff", redeemed_at: VERIFIED },
     ],
-    clubs: [{ id: "club-1", name: "חיימוניה" }],
+    clubs: [{ id: "club-1", name: "מעגל הדגמה" }],
     follows: [], blocks: [], notifications: [], notification_preferences: [],
     feed_page_rows: [], hidden_posts: [], saved_posts: [],
   }, opts.tables || {}));

@@ -59,7 +59,7 @@ function seeded(opts) {
   const mock = createMockSupabase({
     profiles: o.profiles || profiles(),
     invite_redemptions: (o.profiles || profiles()).map((p) => ({ user_id: p.id, invite_id: "inv-1", role: "member", redeemed_at: VERIFIED })),
-    clubs: [{ id: "club-1", name: "חיימוניה" }],
+    clubs: [{ id: "club-1", name: "מעגל הדגמה" }],
     club_features: o.features || [],
     feed_page_rows: posts,
     // The mock's post_tag_training_partners arm reads this table for the

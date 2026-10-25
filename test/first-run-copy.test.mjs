@@ -62,7 +62,7 @@ test("the carousel no longer promises club information this app does not hold", 
     "the new copy must not repeat the promise");
   assert.ok(!/שעות הפעילות[^']*זמין/.test(fixedRules[1]), "nor a reworded version of it");
 
-  // Screen 3 told a new member to book a session. Booking is Arbox's job by
+  // Screen 3 told a new member to book a session. Booking is another system's job by
   // deliberate scope decision - this app is opened AFTER training - so the
   // instruction had no route and set the wrong expectation of what they had
   // just installed.

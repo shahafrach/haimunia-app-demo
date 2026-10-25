@@ -96,12 +96,12 @@ test("/photos/ and the npm manifest are not public (launch-readiness S11)", asyn
   }
 });
 
-test("blocking /photos/ and package.json does not take the app's own photos or manifest with it", async () => {
-  // The app's photos live under /assets/, and /manifest.json is the PWA
+test("blocking /photos/ and package.json does not take the app's own assets or manifest with it", async () => {
+  // The app's own images and fonts live under /assets/, and /manifest.json is the PWA
   // manifest - the reason package.json is an exact path, not a .json rule.
   const sw = readFileSync(new URL("sw.js", root), "utf8");
-  const photos = [...sw.matchAll(/"\.(\/assets\/(?:club-)?photos\/[^"]+)"/g)].map((m) => m[1]);
-  assert.ok(photos.length >= 8, `sw.js precaches few photos (${photos.length}) - did the regex stop matching?`);
+  const photos = [...sw.matchAll(/"\.(\/assets\/[^"]+)"/g)].map((m) => m[1]);
+  assert.ok(photos.length >= 8, `sw.js precaches few assets (${photos.length}) - did the regex stop matching?`);
   for (const p of [...photos, "/manifest.json", "/src/shared/safe-helpers.js"]) {
     assert.equal((await serve(p)).status, 200, `${p} must still be served`);
   }

@@ -564,7 +564,7 @@
     var c = global.HAIMUNIA_CONFIG;
     return (c && c.brand) || {};
   }
-  function brandName() { return brandCfg().appName || "האימוניה"; }
+  function brandName() { return brandCfg().appName || "BOX-LOG"; }
   function brandWordmark() { return brandCfg().wordmark || brandName(); }
   function brandChampionTitle() { return brandCfg().championTitle || ("אלוף " + brandName()); }
 

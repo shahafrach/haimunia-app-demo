@@ -121,7 +121,7 @@
     HEIGHT: 1350,
     PAD: 84,
     MIME: "image/png",
-    FILE_NAME: "haimunia.png",
+    FILE_NAME: "box-log.png",
     WORDMARK: brandWordmark(),
     // The dark theme's own tokens (index.html, :root[data-theme="dark"]),
     // written out rather than read through getComputedStyle: the card is the

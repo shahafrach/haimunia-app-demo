@@ -80,7 +80,7 @@ const seedTables = {
     { user_id: "u1", invite_id: "inv-1", role: "member", redeemed_at: VERIFIED },
     { user_id: "u2", invite_id: "inv-1", role: "member", redeemed_at: VERIFIED },
   ],
-  clubs: [{ id: "club-1", name: "חיימוניה" }],
+  clubs: [{ id: "club-1", name: "מעגל הדגמה" }],
   feed_page_rows: Array.from({ length: FEED_ROWS }, (_, i) => feedRow(i)),
   feed_impressions: [], feed_interactions: [], hidden_posts: [], saved_posts: [],
   private_records: [], follows: [], blocks: [], analytics_events: [],

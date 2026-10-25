@@ -276,9 +276,8 @@ Three real tiers, as of `202608270005`:
   sign-up (which invite code they used) or afterward by an admin, from
   the Account tab's member-management panel (`202608270011`) or the
   `grant_coach_role_by_handle()` RPC (`202608270007`, service-role only).
-  Deliberately *not* scoped to "their own" classes or members — Arbox
-  already owns class scheduling and rosters, so this app's coach tier
-  only needs to cover the community-layer actions above, not a parallel
+  Deliberately *not* scoped to "their own" classes or members — this app's
+  coach tier only needs to cover the community-layer actions above, not a parallel
   membership model.
 - **Member** — the default: feed, sharing, comments, streaks.
 

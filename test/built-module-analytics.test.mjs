@@ -37,7 +37,7 @@ function baseMock(extra) {
       { user_id: "u1", invite_id: "inv-1", role: "member", redeemed_at: daysAgoIso(400) },
       { user_id: "u9", invite_id: "inv-1", role: "member", redeemed_at: daysAgoIso(3) },
     ],
-    clubs: [{ id: "club-1", name: "חיימוניה" }],
+    clubs: [{ id: "club-1", name: "מעגל הדגמה" }],
     club_features: [],
     community_streaks: [], workout_posts: [], feed_page_rows: [], member_contact_log: [],
     coach_engagement_flags: [], analytics_events: [], notifications: [], notification_preferences: [],
