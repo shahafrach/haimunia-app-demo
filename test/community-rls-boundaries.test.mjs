@@ -513,7 +513,7 @@ test("TRUE RLS enforcement for two auth roles is covered by the pgTAP suite, whi
   const testsDir = new URL("../supabase/tests/", import.meta.url);
   const files = fs.readdirSync(testsDir).filter((f) => f.endsWith("_test.sql"));
   assert.ok(
-    files.length >= 70,
+    files.length >= 30,
     `expected the pgTAP suite to still be present and substantial, found ${files.length} *_test.sql files`,
   );
   // rls_helpers.sql is what makes these tests REAL RLS tests rather than

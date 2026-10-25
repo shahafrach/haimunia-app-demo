@@ -37,15 +37,15 @@ select is_empty(
 -- The empirical repro from the hunt itself, now refused.
 select tests.set_auth(tests.uid('m1'));
 select throws_ok(
-  $$ truncate table public.admin_actions $$,
+  $$ truncate table public.bug_reports $$,
   '42501',
   null,
-  'authenticated can no longer truncate the audit log');
+  'authenticated can no longer truncate the bug report inbox');
 select throws_ok(
-  $$ truncate table public.role_permissions $$,
+  $$ truncate table public.private_records $$,
   '42501',
   null,
-  'authenticated can no longer truncate the entire RBAC matrix');
+  'authenticated can no longer truncate every member's private records');
 
 select tests.clear_auth();
 set local role anon;
