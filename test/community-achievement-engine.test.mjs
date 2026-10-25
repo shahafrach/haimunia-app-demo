@@ -166,8 +166,8 @@ test("the Account tab lists an earned badge and offers a later Share for one not
   );
   const window = await bootReady(mock);
   window.document.getElementById("tabCommunityBtn").click();
-  await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
-  window.document.querySelector('[data-community-action="set-tab"][data-tab="account"]').click();
+  await waitFor(() => !!window.document.getElementById("communityHead"), 3000);
+  
   await waitFor(() => !!window.document.querySelector('[data-community-action="ach-share-later"]'), 3000);
 
   window.document.querySelector('[data-community-action="ach-share-later"]').click();

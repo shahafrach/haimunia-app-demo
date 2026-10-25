@@ -97,17 +97,8 @@ for (const [tabId, label] of [
 
 // The Community surface, signed in - where the structural findings were.
 await switchTab(page, "tabCommunityBtn");
-await page.waitForSelector(".subtabbar", { timeout: 20000 });
-await scan(page, "Community / Feed");
-
-for (const tab of ["boards", "account"]) {
-  const sel = `[data-community-action="set-tab"][data-tab="${tab}"]`;
-  if (await page.$(sel)) {
-    await page.click(sel);
-    await page.waitForTimeout(250);
-    await scan(page, `Community / ${tab}`);
-  }
-}
+await page.waitForSelector("#communityHead", { timeout: 20000 });
+await scan(page, "Community / Account");
 
 // Settings lives inside the hamburger menu, so it needs the menu opened
 // first - clicking the row directly hits an element that is present in the

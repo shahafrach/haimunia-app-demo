@@ -20,7 +20,7 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import fs from "node:fs";
-import { bootCommunity, waitFor } from "./helpers/boot.mjs";
+import { bootCommunity, waitFor, holdPosts } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
 import { cloudSource } from "./helpers/community-src.mjs";
 
@@ -38,7 +38,7 @@ function seededFeed() {
   const mock = createMockSupabase({
     profiles: [{ id: "u1", handle: "dana", display_name: "דנה", is_admin: false, recovery_verified_at: V, visible_to_club: true }],
     invite_redemptions: [{ user_id: "u1", invite_id: "inv-1", role: "member", redeemed_at: V }],
-    community_feed: [
+    feed_page_rows: [
       { id: "w1", post_type: "POST_WORKOUT", author_id: "u1", display_name: "דנה", published_at: V,
         metadata: { workout_name: "Cindy", workout_date: "2026-09-05", result_text: "18", score_type: "amrap", effort: "rx", is_pr: true } },
       { id: "w2", post_type: "POST_WORKOUT", author_id: "u1", display_name: "דנה", published_at: V,
@@ -56,6 +56,8 @@ function seededFeed() {
 async function openFeed(mock, opts = {}) {
   const window = await bootCommunity(mock, { syncEnabled: false, ...opts });
   window.document.getElementById("tabCommunityBtn").click();
+  await waitFor(() => !!window.document.getElementById("communityHead"), 5000);
+  holdPosts(window, mock.db.feed_page_rows);
   await waitFor(() => window.document.querySelectorAll("[data-post-id]").length >= 4, 5000);
   return window;
 }
@@ -124,7 +126,7 @@ test("no movement NAME was translated - the glossary explains concepts and leave
   const constants = fs.readFileSync(new URL("../src/constants.js", import.meta.url), "utf8");
   const labels = constants.slice(constants.indexOf("const CATEGORY_LABELS = {"), constants.indexOf("const MOVEMENTS"));
   const pairs = [...labels.matchAll(/"?([A-Za-z][A-Za-z ]*?)"?:\s*"([^"]+)"/g)];
-  assert.ok(pairs.length >= 16, `expected the full category set, found ${pairs.length}`);
+  assert.ok(pairs.length >= 15, `expected the full category set, found ${pairs.length}`);
   for (const [, key, value] of pairs) {
     assert.equal(value, key.trim(), `CATEGORY_LABELS.${key.trim()} must stay an identity map - see this test's comment`);
   }
@@ -282,7 +284,6 @@ test("one explicit switch overrides the counter in both directions, and says whi
   // And the switch itself is reachable, with a status line that tells the
   // truth - "on" is not the whole story once the counter has retired them.
   const d = back.document;
-  d.querySelector('[data-community-action="set-tab"][data-tab="account"]').click();
   await waitFor(() => !!d.querySelector("[data-term-marks]"), 4000);
   const row = d.querySelector("[data-term-marks]").closest("label");
   assert.ok(row.textContent.includes("סימוני הסבר על מונחים"));
@@ -311,7 +312,7 @@ test("the sheet is in the dialog registry, so Escape, the Tab trap and the backd
   assert.match(src, /for \(const d of CLOUD_DIALOGS\) \{\s*\n\s*if \(d\.isOpen\(\)\) \{ e\.preventDefault\(\); d\.close\(\); return; \}/);
   const regAt = src.indexOf("const CLOUD_DIALOGS");
   const dialogKeys = [...src.slice(regAt, regAt + 6000).matchAll(/key: "([a-zA-Z]+)"/g)].map((m) => m[1]);
-  assert.ok(dialogKeys.indexOf("termSheet") < dialogKeys.indexOf("challengeView"),
+  assert.ok(dialogKeys.indexOf("termSheet") < dialogKeys.indexOf("notifCenter"),
     "the term sheet must come before the overlays it can be opened from");
   assert.match(src, /data-cloud-dialog="termSheet"/);
   // Third, behind confirmSheet and outwardShare and ahead of every overlay a

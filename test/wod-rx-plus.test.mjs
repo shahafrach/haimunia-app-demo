@@ -210,7 +210,7 @@ test("every surface that names the effort names Rx+, not \"Scaled\" and not sile
     "and certainly not as Scaled");
 });
 
-test("at the club boundary an Rx+ result publishes as Rx, because that column is a boolean", async () => {
+test("at the sharing boundary an Rx+ result publishes as Rx, because that column is a boolean", async () => {
   const window = await bootApp();
   window.saveWelcomeForm("רונית");
   const d = await openWodLogForm(window);
@@ -221,22 +221,13 @@ test("at the club boundary an Rx+ result publishes as Rx, because that column is
   const wodId = window.allWods().find((w) => w.scoreType === "time").id;
   const [entry] = window.wodEntriesFor(wodId);
 
-  // club_wod_results.rx and posts.rx are boolean columns and this change adds
-  // no migration. All three bridges into the community layer coerce, so the
+  // posts.rx is a boolean column and this change adds no migration, so the
   // decision is made here rather than by an RPC's jsonb_typeof fallback.
-  const offered = window.communityWodLogFor(wodId).find((r) => r.id === entry.id);
-  assert.equal(offered.rx, true, "Rx+ is Rx, and true is a true statement about it");
-  assert.equal(typeof offered.rx, "boolean");
-
-  const attach = window.communityWodEntryForAttach(entry.id);
-  assert.equal(attach.rx, true);
-  assert.equal(typeof attach.rx, "boolean");
-
   const candidate = window.communityShareCandidates().find((c) => c.id === entry.id);
   assert.equal(candidate.rx, true);
   assert.equal(typeof candidate.rx, "boolean");
   assert.match(candidate.comparisonKey, /:rx$/,
-    "and it compares in the Rx bucket on the club board, which is the only bucket the key shape has for it");
+    "and it compares in the Rx bucket, which is the only bucket the key shape has for it");
 
   // The member's own record keeps the distinction the club board cannot.
   assert.equal(window.wodEntriesFor(wodId)[0].rx, "plus");

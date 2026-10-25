@@ -24,7 +24,7 @@
 // one path where responsiveness is the entire point.
 import { test } from "node:test";
 import assert from "node:assert";
-import { bootCommunity, waitFor } from "./helpers/boot.mjs";
+import { bootCommunity, holdPosts, waitFor } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
 
 const VERIFIED = new Date().toISOString();
@@ -73,9 +73,11 @@ function countRenders(window) {
   return { get count() { return n; }, stop() { window.render = real; } };
 }
 
-async function openFeed(window, atLeast) {
+async function openFeed(window, atLeast, mock) {
   window.document.getElementById("tabCommunityBtn").click();
-  await waitFor(() => window.document.querySelectorAll("#communityFeedList .post-card").length >= atLeast, 5000);
+  await waitFor(() => !!window.document.getElementById("communityHead"), 5000);
+  holdPosts(window, mock.db.feed_page_rows);
+  await waitFor(() => window.document.querySelectorAll("#communityHeldPosts .post-card").length >= atLeast, 5000);
 }
 
 test("many reaction loads landing together produce ONE rebuild, not one per post", async () => {
@@ -88,7 +90,7 @@ test("many reaction loads landing together produce ONE rebuild, not one per post
   // fires one loadReactionsFor() per card. No test-only hook in cloud.js:
   // this is the real path a member takes.
   const probe = countRenders(window);
-  await openFeed(window, 8);
+  await openFeed(window, 8, mock);
   // Long enough for all eight reaction responses AND the coalesced flush.
   await new Promise((r) => setTimeout(r, 800));
   const n = probe.count;
@@ -109,20 +111,13 @@ test("many reaction loads landing together produce ONE rebuild, not one per post
 test("a member's own tap still rerenders synchronously - the fix must not defer what someone just did", async () => {
   const mock = seeded([row(1), row(2)]);
   const window = await bootCommunity(mock, { syncEnabled: false });
-  await openFeed(window, 2);
+  await openFeed(window, 2, mock);
   await new Promise((r) => setTimeout(r, 300));
 
   const probe = countRenders(window);
-  // setFeedScope is the plainest user action on this screen: changing the
-  // feed's scope. It was four role="tab" chips and is one <select> now, so
-  // the action is a "change" rather than a click - the point of the test is
-  // unchanged, that a thing the member just did repaints in the same turn.
-  const select = window.document.getElementById("communityFeedFilters");
-  assert.ok(select, "the feed has a scope filter to switch with");
-  const other = Array.from(select.options).find((o) => o.value !== select.value);
-  assert.ok(other, "the filter offers a scope to switch to");
-  select.value = other.value;
-  select.dispatchEvent(new window.Event("change", { bubbles: true }));
+  // Reacting is the plainest user action on a post card; the optimistic
+  // toggle repaints in the same turn it was tapped.
+  window.document.querySelector('[data-post-id="p1"] [data-community-action="cheer"]').click();
   // NO await. If this action had been routed through the coalescing path the
   // DOM would still be the old one at this point in the same turn.
   const immediate = probe.count;

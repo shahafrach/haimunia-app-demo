@@ -58,7 +58,7 @@ test("communityRpc attaches p_idempotency_key to every queued action", () => {
 
 test("every OUTBOX_ACTION has a SQL function that accepts p_idempotency_key", () => {
   const actions = outboxActions();
-  assert.ok(actions.length >= 5, `expected the full queued-action set, found ${actions.length}`);
+  assert.ok(actions.length >= 4, `expected the full queued-action set, found ${actions.length}`);
 
   const missing = [];
   for (const action of actions) {

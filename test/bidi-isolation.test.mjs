@@ -512,9 +512,9 @@ test("pathological input terminates and stays lossless", () => {
 // Everything above tests the helper. This tests that the helper is reached.
 // Five of the original cloud.js <bdi> pass's call sites were carried into
 // src/community/* as bare esc() when cloud.js was split per feature
-// (docs/audit/ux-stash-review.md), and boards.js held the textbook version of
-// it: leaderboardRowHtml() next to renderRankedList's rowHtml, same visual
-// row, same data, one nameHtml()-wrapped and one not. A member's own typed
+// (docs/audit/ux-stash-review.md), and the leaderboard rows held the textbook version of
+// it: one nameHtml()-wrapped and one not (that module is gone since the
+// leaderboards were dropped; the scan below now covers what is left). A member's own typed
 // display name is the mixed-script case this whole file exists for — "דני
 // Smith" in an RTL row reorders — so a name interpolated into element TEXT
 // must go through bidiText(), which escapes and isolates in one step.
@@ -603,7 +603,7 @@ test("the scanner below really does catch a bare esc() name — it is not vacuou
 });
 
 test("no member display name renders through bare esc() in an RTL paragraph", () => {
-  for (const file of ["src/community/boards.js", "src/community/challenges.js"]) {
+  for (const file of ["src/community/reactions.js", "src/community/privacy.js", "src/community/notifications.js", "src/community/achievements.js", "src/community/auth.js", "src/community/share-prompt.js", "cloud.js"]) {
     const found = bareNameSinks(communityFile(file));
     assert.deepEqual(
       found,
@@ -611,18 +611,4 @@ test("no member display name renders through bare esc() in an RTL paragraph", ()
       `${file} renders a member-typed name into element text through esc() instead of bidiText():\n  ${found.join("\n  ")}`,
     );
   }
-});
-
-test("the two ranked-row renderers in boards.js both isolate the name", () => {
-  // renderRankedList's rowHtml goes through nameHtml(); leaderboardRowHtml()
-  // takes a pre-resolved name and must reach bidiText() itself. This is the
-  // pair that drifted; assert they agree rather than only that one is fixed.
-  const src = communityFile("src/community/boards.js");
-  const body = (name) => {
-    const at = src.indexOf(`function ${name}(`);
-    assert.notEqual(at, -1, `${name} must still exist in boards.js`);
-    return src.slice(at, src.indexOf("\n  }", at));
-  };
-  assert.match(body("leaderboardRowHtml"), /\$\{bidiText\(name\)\}/);
-  assert.match(src.slice(src.indexOf("const rowHtml =")), /\$\{nameHtml\(it\.display_name, it\.handle\)\}/);
 });

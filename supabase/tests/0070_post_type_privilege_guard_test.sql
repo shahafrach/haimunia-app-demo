@@ -73,15 +73,13 @@ select throws_ok(
   'post type is staff only',
   'nor POST_NEW_MEMBER');
 
--- Putting somebody else's uid in author_id is not a way round it either -
--- posts_insert_self refuses that first, with a policy error rather than the
--- trigger's message. Both boundaries stand.
+-- Putting somebody else's uid in author_id is not a way round it either.
 select throws_ok(
   $$ insert into public.workout_posts (author_id, post_type, visibility, title, result_text, occurred_on)
      values (tests.uid('coach'), 'POST_COACH', 'club', 'Ghost-written', 'x', current_date) $$,
-  '42501',
-  null,
-  'and attributing it to a real coach is refused by posts_insert_self before the trigger is even reached');
+  'P0001',
+  'post type is staff only',
+  'and attributing it to somebody else is refused too - the trigger runs before posts_insert_self, and either boundary alone would stop it');
 
 -- =====================================================================
 -- 3. THE UPDATE VECTOR - the one a WITH CHECK could not have closed
@@ -116,81 +114,40 @@ select lives_ok(
   'and an edit that does not name post_type at all never fires the trigger');
 
 -- =====================================================================
--- 5. Staff, by both halves of the predicate
+-- 5. Nobody holds staff status any more
 -- =====================================================================
--- This is byte-for-byte feed_page's own author_is_staff branch, so a coach
--- and an is_admin profile are exactly the two ways in.
+-- The staff exemption (a coach redemption, profiles.is_admin) went with the
+-- staff features in 202610250001: is_staff()/is_admin() are stubs returning
+-- false, and the guard no longer consults the is_admin column either.
 select tests.set_auth(tests.uid('coach'));
-select lives_ok(
+select throws_ok(
   $$ insert into public.workout_posts (id, author_id, post_type, visibility, title, result_text, occurred_on)
      values ('40700000-0000-4000-8000-000000000003', tests.uid('coach'), 'POST_COACH', 'club', 'Real coach note', 'x', current_date) $$,
-  'a coach - redeemed at role_rank >= 20 - inserts POST_COACH');
-select lives_ok(
-  $$ insert into public.workout_posts (id, author_id, visibility, title, result_text, occurred_on)
-     values ('40700000-0000-4000-8000-000000000004', tests.uid('coach'), 'club', 'To be promoted', 'x', current_date) $$,
-  'and creates an ordinary post...');
-select lives_ok(
-  $$ update public.workout_posts set post_type = 'POST_COACH'
-     where id = '40700000-0000-4000-8000-000000000004' $$,
-  '...then promotes it, which is EXACTLY what congratulateCelebrateItem() and coachEngageReachOut() do in the shipped client: post_create, then one own-row update to POST_COACH');
-
+  'P0001',
+  'post type is staff only',
+  'a member redeemed with the old coach role is refused too');
 select tests.set_auth(tests.uid('admin'));
-select lives_ok(
+select throws_ok(
   $$ insert into public.workout_posts (author_id, post_type, visibility, title, result_text, occurred_on)
      values (tests.uid('admin'), 'POST_ANNOUNCEMENT', 'club', 'Admin note', 'x', current_date) $$,
-  'and the profiles.is_admin half of the predicate is a way in too, independently of any redeemed role');
+  'P0001',
+  'post type is staff only',
+  'and so is a profile still carrying is_admin - the column is not a way past the guard');
 
 -- =====================================================================
 -- 6. The author_id IS NULL exemption - the load-bearing one
 -- =====================================================================
--- Every real producer of these four labels writes an authorless row. Without
--- this branch post_new_member_on_join, member_of_week_publish,
--- challenge_progress_apply's cooperative milestone and
--- attendance_milestones_on_log would all break at once.
+-- A server-authored label is an authorless row; the guard lets those through
+-- because a migration or the service role is the only thing that can write one.
 select tests.clear_auth();
 select lives_ok(
   $$ insert into public.workout_posts (author_id, post_type, visibility, body, status, published_at)
      values (null, 'POST_NEW_MEMBER', 'club', 'server authored', 'active', now()) $$,
-  'an authorless POST_NEW_MEMBER still inserts - this is the shape post_new_member_on_join writes');
+  'an authorless POST_NEW_MEMBER still inserts - this is the shape a server-side producer writes');
 select lives_ok(
   $$ insert into public.workout_posts (author_id, post_type, visibility, body, status, published_at)
      values (null, 'POST_ANNOUNCEMENT', 'club', 'server authored', 'active', now()) $$,
-  'and an authorless POST_ANNOUNCEMENT, which is the shape member_of_week_publish writes');
-
--- The real producer, end to end, rather than a hand-written imitation of it.
-select tests.clear_auth();
-insert into public.challenges (id, title, description, challenge_type, metric_type, status, start_at, end_at, target_value, created_by)
-values ('40700000-0000-4000-8000-000000000010', 'Club rows', 'x', 'cooperative', 'reps', 'active',
-        now() - interval '1 day', now() + interval '7 days', 100, tests.uid('coach'));
-insert into public.challenge_participants (challenge_id, user_id) values ('40700000-0000-4000-8000-000000000010', tests.uid('m1'));
-select tests.set_auth(tests.uid('m1'));
-select lives_ok(
-  $$ insert into public.challenge_progress (challenge_id, user_id, delta)
-     values ('40700000-0000-4000-8000-000000000010', tests.uid('m1'), 100) $$,
-  'and a real cooperative-challenge milestone crossing still posts its authorless POST_CHALLENGE...');
-select tests.clear_auth();
-select isnt_empty(
-  $$ select 1 from public.workout_posts
-     where post_type = 'POST_CHALLENGE'
-       and (metadata ->> 'challenge_id') = '40700000-0000-4000-8000-000000000010' $$,
-  '...so the guard did not break challenge_progress_apply, which is the producer nearest to it');
-
--- =====================================================================
--- 7. A staff member who loses their role loses the label with it
--- =====================================================================
--- The predicate is a fact about the ROW's author, re-evaluated on every
--- write, not a permission checked once at creation time.
-select tests.clear_auth();
-update public.invite_redemptions set role = 'member' where user_id = tests.uid('coach');
-select tests.set_auth(tests.uid('coach'));
-select throws_ok(
-  $$ insert into public.workout_posts (author_id, post_type, visibility, title, result_text, occurred_on)
-     values (tests.uid('coach'), 'POST_COACH', 'club', 'After demotion', 'x', current_date) $$,
-  'P0001',
-  'post type is staff only',
-  'a demoted coach is refused on the next write - the guard asks the redemption table, it does not trust a label already on a neighbouring row');
-select tests.clear_auth();
-update public.invite_redemptions set role = 'coach' where user_id = tests.uid('coach');
+  'and an authorless POST_ANNOUNCEMENT');
 
 select * from finish();
 rollback;

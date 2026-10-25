@@ -3,8 +3,7 @@
 -- Boundaries: a self write cannot move is_admin, club_id, or
 -- recovery_verified_at, and cannot stamp recovery_verified_at on insert.
 -- visible_to_club=false hides a member from other members but not from self
--- or a real admin. allow_follows=false and a block edge are enforced by the
--- follows insert policy. can_view_profile_field flips per toggle, raises on
+-- or from anyone else - is_admin is not a read path. can_view_profile_field flips per toggle, raises on
 -- an unknown field, and a block edge short-circuits it before any toggle.
 -- CI is the first real run of this file.
 
@@ -100,43 +99,12 @@ select results_eq(
 select tests.set_auth(tests.uid('admin'));
 select results_eq(
   $$ select count(*)::int from public.profiles where id = tests.uid('m2') $$,
-  $$ values (1) $$,
-  'a hidden member is still visible to a real admin');
+  $$ values (0) $$,
+  'a hidden member is hidden from everyone else - the is_admin flag is not a read path any more');
 
 select tests.clear_auth();
 update public.profiles set visible_to_club = true where id = tests.uid('m2');
 
--- --- allow_follows and block edges gate the follows insert -------
-update public.profiles set allow_follows = false where id = tests.uid('m2');
-select tests.set_auth(tests.uid('m1'));
-select throws_ok(
-  $$ insert into public.follows (follower_id, followed_id)
-     values (tests.uid('m1'), tests.uid('m2')) $$,
-  '42501',
-  null,
-  'a follow targeting allow_follows=false is refused by the policy');
-
-select tests.clear_auth();
-update public.profiles set allow_follows = true where id = tests.uid('m2');
-select tests.set_auth(tests.uid('m1'));
-select lives_ok(
-  $$ insert into public.follows (follower_id, followed_id)
-     values (tests.uid('m1'), tests.uid('m2')) $$,
-  'the same follow is allowed once allow_follows is back on');
-
-select tests.clear_auth();
-insert into public.blocks (blocker_id, blocked_id) values (tests.uid('m3'), tests.uid('m1'));
-select tests.set_auth(tests.uid('m1'));
-select throws_ok(
-  $$ insert into public.follows (follower_id, followed_id)
-     values (tests.uid('m1'), tests.uid('m3')) $$,
-  '42501',
-  null,
-  'a follow across a block edge in either direction is refused by the policy');
-select tests.clear_auth();
-delete from public.blocks where blocker_id = tests.uid('m3') and blocked_id = tests.uid('m1');
-
--- --- can_view_profile_field -----------------------------------
 select tests.set_auth(tests.uid('m1'));
 select lives_ok(
   $$ update public.profiles set show_prs = true where id = tests.uid('m1') $$,

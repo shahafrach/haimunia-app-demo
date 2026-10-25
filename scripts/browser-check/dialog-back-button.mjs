@@ -68,7 +68,7 @@ import { chromium } from "playwright";
 import { resolveLocalOnlyTarget } from "./lib/target.mjs";
 import {
   switchTab, dismissWelcomeModal, selectMovement, consoleErrorCollector,
-  clickOverlayBackdrop, readAppConfirm, resolveAppConfirm, openManagementPanel,
+  clickOverlayBackdrop, readAppConfirm, resolveAppConfirm,
 } from "./lib/actions.mjs";
 import { installMockCloud } from "./lib/mockCloud.mjs";
 
@@ -291,9 +291,6 @@ async function runCloudMemberDialogs(browser) {
   const page = await browser.newPage({ viewport: { width: 420, height: 900 } });
   const errors = await consoleErrorCollector(page);
 
-  const NOW = Date.now();
-  const isoDay = (d) => new Date(NOW + d * 86400000).toISOString();
-  const isoHour = (h) => new Date(NOW + h * 3600000).toISOString();
   const seedTables = {
     profiles: [
       { id: "u1", handle: "dana", display_name: "דנה", is_admin: false, recovery_verified_at: VERIFIED, visible_to_club: true, show_achievements: true, allow_follows: true },
@@ -312,13 +309,6 @@ async function runCloudMemberDialogs(browser) {
       enabled: true, config: { client_claimable: true },
     }],
     member_achievements: [],
-    challenges: [{ id: "c1", challenge_type: "individual_target", title: "12 אימונים החודש", description: "", metric_type: "session_count", target_value: 12, start_at: isoDay(-5), end_at: isoDay(20), status: "active", join_mode: "open", visibility: "club", created_by: "u1", config: {} }],
-    challenge_participants: [{ challenge_id: "c1", user_id: "u1", club_id: "club-1", team_id: null, joined_at: isoDay(-1), status: "active", progress_value: 4, completed_at: null }],
-    challenge_teams: [], challenge_progress: [],
-    events: [{ id: "e1", event_type: "workshop", title: "סדנת גמישות", description: "", status: "published", start_at: isoHour(24), end_at: null, location: "אולם 1", capacity: null, registration_deadline: null, created_by: "u1" }],
-    event_attendees: [],
-    weekly_recaps: [{ id: "wr-1", user_id: "u1", week_start: "2026-08-17", sessions_completed: 5, streak: 2, prs: [], achievements: [], challenge_progress: [], club_challenge_progress: {}, upcoming_event: null, generated_at: VERIFIED }],
-    onboarding_progress: [{ user_id: "u1", welcomed_at: VERIFIED, first_week_shown_at: VERIFIED, first_month_shown_at: VERIFIED }],
     workout_posts: [{ id: "post-1", author_id: "author-1", post_type: "POST_TEXT", body: "תוכן לבדיקה", status: "active", created_at: VERIFIED, published_at: VERIFIED }],
     feed_page_rows: [{ id: "post-1", author_id: "author-1", post_type: "POST_TEXT", body: "תוכן לבדיקה", created_at: VERIFIED }],
     post_comments: [], reports: [], admin_actions: [], pins: [], posting_restrictions: [],
@@ -332,42 +322,7 @@ async function runCloudMemberDialogs(browser) {
   await page.waitForSelector("#app", { state: "visible", timeout: 10000 });
   await dismissWelcomeModal(page);
   await switchTab(page, "tabCommunityBtn");
-  await page.waitForSelector(".subtabbar", { timeout: 5000 });
-
-  // ---- composer: full 4-affordance sample --------------------------------
-  await page.evaluate(() => {
-    window.__mock.onRpc("post_create", (args, ctx) => {
-      const id = "post-new";
-      ctx.db.workout_posts = ctx.db.workout_posts || [];
-      ctx.db.workout_posts.push({ id, body: args.body, visibility: args.visibility, author_id: ctx.currentUser.id });
-      return { data: id, error: null };
-    });
-  });
-  async function openComposer() {
-    await page.click('[data-community-action="open-composer"]');
-    await page.waitForSelector('[data-cloud-dialog="composer"]', { timeout: 5000 });
-  }
-  await openComposer();
-  await page.click('[data-community-action="composer-cancel"]');
-  await page.waitForSelector('[data-cloud-dialog="composer"]', { state: "hidden", timeout: 5000 });
-  check("composer: X (cancel) closes it", true);
-  await openComposer();
-  await page.keyboard.press("Escape");
-  await page.waitForSelector('[data-cloud-dialog="composer"]', { state: "hidden", timeout: 5000 });
-  check("composer: Escape closes it", true);
-  await openComposer();
-  // See clickOverlayBackdrop's own comment: on the Community tab, a naive
-  // corner-of-the-overlay click hits the persistent header or bottom tab bar
-  // instead of the dialog's own backdrop (a real, separate bug this file's
-  // audit found and reported, not fixed here) — clicking just above the
-  // actual .modal-sheet sidesteps both.
-  await clickOverlayBackdrop(page, '[data-cloud-dialog="composer"]');
-  await page.waitForSelector('[data-cloud-dialog="composer"]', { state: "hidden", timeout: 5000 });
-  check("composer: backdrop click closes it", true);
-  await openComposer();
-  await checkBackCloses(page, "composer", '[data-cloud-dialog="composer"]');
-  const postsAfterComposerBack = await page.evaluate(() => (window.__mock.db.workout_posts || []).length);
-  check("composer: closing via back did not publish anything", postsAfterComposerBack === 1, `expected 1 (the seeded post), got ${postsAfterComposerBack}`);
+  await page.waitForSelector("#communityHead", { timeout: 5000 });
 
   // ---- prPrompt: no on-screen trigger by design (client reaction to a
   // detected PR) — opened the same way test/community-dialog-focus.test.mjs
@@ -413,46 +368,20 @@ async function runCloudMemberDialogs(browser) {
     postsAfterWorkoutPromptBack === postsBeforeWorkoutPromptBack,
     `expected ${postsBeforeWorkoutPromptBack}, got ${postsAfterWorkoutPromptBack}`);
 
-  // ---- profileView (directory row) --------------------------------------
-  await page.evaluate(() => {
-    window.__mock.onRpc("community_profile", () => ({
-      data: { display_name: "נועם", role: "member", member_since: "2023-04-01", training_frequency: "3 בשבוע" },
-      error: null,
-    }));
-  });
-  await page.click('[data-community-action="set-tab"][data-tab="directory"]');
-  await page.waitForSelector('[data-community-action="view-profile"][data-id="u2"]', { timeout: 5000 });
-  await page.click('[data-community-action="view-profile"][data-id="u2"]');
-  await page.waitForSelector('[data-cloud-dialog="profileView"]', { timeout: 5000 });
-  await checkBackCloses(page, "profileView", '[data-cloud-dialog="profileView"]');
-
   // ---- notifCenter --------------------------------------------------------
   await switchTab(page, "tabCommunityBtn");
-  await page.click('[data-community-action="set-tab"][data-tab="feed"]').catch(() => {});
   await page.waitForSelector('[data-community-action="feed-notifications"]', { timeout: 5000 });
   await page.click('[data-community-action="feed-notifications"]');
   await page.waitForSelector('[data-cloud-dialog="notifCenter"]', { timeout: 5000 });
   await checkBackCloses(page, "notifCenter", '[data-cloud-dialog="notifCenter"]');
 
-  // ---- reportSheet — back must DISMISS, not submit a report --------------
-  await page.waitForSelector('[data-community-action="toggle-post-menu"][data-id="post-1"]', { timeout: 5000 });
-  await page.click('[data-community-action="toggle-post-menu"][data-id="post-1"]');
-  await page.click('[data-community-action="report"][data-id="post-1"]');
-  await page.waitForSelector('[data-cloud-dialog="reportSheet"]', { timeout: 5000 });
-  await page.click('[data-report-reason="harassment"]');
-  await checkBackCloses(page, "reportSheet", '[data-cloud-dialog="reportSheet"]');
-  const reportsAfterBack = await page.evaluate(() => (window.__mock.db.reports || []).length);
-  check("reportSheet: back dismissed — a reason was picked but never submitted, so no report was filed", reportsAfterBack === 0, String(reportsAfterBack));
-
   // ---- termSheet (Account tab's glossary entry point) --------------------
-  await page.click('[data-community-action="set-tab"][data-tab="account"]');
   await page.waitForSelector('[data-community-action="term-glossary-open"]', { timeout: 5000 });
   await page.click('[data-community-action="term-glossary-open"]');
   await page.waitForSelector('[data-cloud-dialog="termSheet"]', { timeout: 5000 });
   await checkBackCloses(page, "termSheet", '[data-cloud-dialog="termSheet"]');
 
   // ---- confirmSheet (delete-account, Account tab) — back must cancel ----
-  await page.click('[data-community-action="set-tab"][data-tab="account"]');
   await page.waitForSelector('[data-community-action="delete-account"]', { timeout: 5000 });
   await page.click('[data-community-action="delete-account"]');
   await page.waitForSelector('[data-cloud-dialog="confirmSheet"]', { timeout: 5000 });
@@ -460,100 +389,7 @@ async function runCloudMemberDialogs(browser) {
   const stillSeesAccountTab = await page.evaluate(() => !!document.querySelector('[data-community-action="delete-account"]'));
   check("confirmSheet: back cancelled — the account row is still there, nothing was deleted", stillSeesAccountTab);
 
-  // ---- challengeView / eventView / recapView ------------------------------
-  await page.click('[data-community-action="set-tab"][data-tab="boards"]');
-  await page.waitForSelector('[data-challenge-id="c1"]', { timeout: 5000 });
-  await page.click('[data-challenge-id="c1"] [data-community-action="open-challenge"]');
-  await page.waitForSelector('[data-community-action="leave-challenge"]', { timeout: 5000 });
-  await checkBackCloses(page, "challengeView", '[data-cloud-dialog="challengeView"]');
-
-  await page.waitForSelector('[data-event-id="e1"]', { timeout: 5000 });
-  await page.click('[data-event-id="e1"] [data-community-action="open-event"]');
-  await page.waitForSelector('[data-cloud-dialog="eventView"] [data-community-action="event-rsvp"]', { timeout: 5000 });
-  await checkBackCloses(page, "eventView", '[data-cloud-dialog="eventView"]');
-
-  await page.click('[data-community-action="set-tab"][data-tab="account"]');
-  await page.waitForSelector('[data-community-action="open-recap"]', { timeout: 5000 });
-  await page.click('[data-community-action="open-recap"]');
-  await page.waitForSelector('[data-cloud-dialog="recapView"] [data-community-action="share-recap"]', { timeout: 5000 });
-  await checkBackCloses(page, "recapView", '[data-cloud-dialog="recapView"]');
-
   check("no console errors (cloud.js member dialogs)", errors.length === 0, errors.join(" | "));
-
-  await page.close();
-  await target.close();
-}
-
-// ============================================================================
-// PART 3 — cloud.js's CLOUD_DIALOGS, head_coach session (modAction/modContext)
-// ============================================================================
-async function runCloudAdminDialogs(browser) {
-  const target = await resolveLocalOnlyTarget();
-  const page = await browser.newPage({ viewport: { width: 420, height: 900 } });
-  const errors = await consoleErrorCollector(page);
-
-  const seedTables = {
-    profiles: [
-      { id: "mod-1", handle: "mod", display_name: "מודרטור", is_admin: false, recovery_verified_at: VERIFIED, visible_to_club: true },
-      { id: "author-1", handle: "kobi", display_name: "קובי", is_admin: false, recovery_verified_at: VERIFIED, visible_to_club: true },
-      { id: "reporter-1", handle: "noa", display_name: "נועה", is_admin: false, recovery_verified_at: VERIFIED, visible_to_club: true },
-    ],
-    invite_redemptions: [
-      { user_id: "mod-1", invite_id: "i1", role: "head_coach", redeemed_at: VERIFIED },
-      { user_id: "author-1", invite_id: "i2", role: "member", redeemed_at: VERIFIED },
-      { user_id: "reporter-1", invite_id: "i3", role: "member", redeemed_at: VERIFIED },
-    ],
-    clubs: [{ id: "club-1", name: "חיימוניה" }],
-    workout_posts: [{ id: "post-1", author_id: "author-1", post_type: "POST_TEXT", body: "תוכן שדווח", status: "active", created_at: VERIFIED, published_at: VERIFIED }],
-    post_comments: [],
-    reports: [{ id: "rep-1", reporter_id: "reporter-1", target_type: "post", target_id: "post-1", reason: "harassment", note: "", status: "open", created_at: VERIFIED }],
-    admin_actions: [], pins: [], posting_restrictions: [],
-    feed_page_rows: [{ id: "post-1", author_id: "author-1", post_type: "POST_TEXT", body: "תוכן שדווח", created_at: VERIFIED }],
-    follows: [], hidden_posts: [], saved_posts: [], notifications: [], notification_preferences: [],
-  };
-
-  await installMockCloud(page, seedTables, { user: { id: "mod-1", is_anonymous: false, email: "mod@members.haimuniya.invalid" } });
-  await page.goto(target.url, { waitUntil: "networkidle" });
-  await page.waitForSelector("#app", { state: "visible", timeout: 10000 });
-  await dismissWelcomeModal(page);
-  // The club panel asks for a management login (2026-09-15) - management is a
-  // separate identity from the member signed in - so this scenario has to
-  // register credentials for the head coach and go through the gate, the same
-  // way a person would. tabClubManageBtn, not tabManageBtn: moderation is
-  // club work, and the app panel would refuse a head coach.
-  await page.evaluate(() => window.__mock.seedCredentials("mod-1", "mod@members.haimuniya.invalid", "Aa123456789!"));
-  await openManagementPanel(page, "tabClubManageBtn", "mod@members.haimuniya.invalid", "Aa123456789!");
-  await page.click('[data-community-action="set-manage-tab"][data-tab="moderation"]');
-  await page.waitForSelector('[data-community-action="mod-action"]', { timeout: 5000 });
-
-  // ---- modAction: full 4-affordance sample -------------------------------
-  async function openModAction() {
-    await page.click('[data-community-action="mod-action"][data-decision="warn"]');
-    await page.waitForSelector('[data-cloud-dialog="modAction"]', { timeout: 5000 });
-  }
-  await openModAction();
-  await page.click('[data-community-action="mod-action-cancel"]');
-  await page.waitForSelector('[data-cloud-dialog="modAction"]', { state: "hidden", timeout: 5000 });
-  check("modAction: X (cancel) closes it", true);
-  await openModAction();
-  await page.keyboard.press("Escape");
-  await page.waitForSelector('[data-cloud-dialog="modAction"]', { state: "hidden", timeout: 5000 });
-  check("modAction: Escape closes it", true);
-  await openModAction();
-  await clickOverlayBackdrop(page, '[data-cloud-dialog="modAction"]');
-  await page.waitForSelector('[data-cloud-dialog="modAction"]', { state: "hidden", timeout: 5000 });
-  check("modAction: backdrop click closes it", true);
-  await openModAction();
-  await checkBackCloses(page, "modAction", '[data-cloud-dialog="modAction"]');
-  const reportStatusAfterBack = await page.evaluate(() => window.__mock.db.reports.find((r) => r.id === "rep-1")?.status);
-  check("modAction: back cancelled the review — the report is still open, nothing was actioned", reportStatusAfterBack === "open", reportStatusAfterBack);
-
-  // ---- modContext ---------------------------------------------------------
-  await page.click('[data-community-action="mod-context"]');
-  await page.waitForSelector('[data-cloud-dialog="modContext"]', { timeout: 5000 });
-  await checkBackCloses(page, "modContext", '[data-cloud-dialog="modContext"]');
-
-  check("no console errors (cloud.js admin dialogs)", errors.length === 0, errors.join(" | "));
 
   await page.close();
   await target.close();
@@ -562,7 +398,6 @@ async function runCloudAdminDialogs(browser) {
 const browser = await chromium.launch();
 await runAppDialogs(browser);
 await runCloudMemberDialogs(browser);
-await runCloudAdminDialogs(browser);
 await browser.close();
 
 console.log(failed ? "\ndialog-back-button: FAILED" : "\ndialog-back-button: all checks passed");

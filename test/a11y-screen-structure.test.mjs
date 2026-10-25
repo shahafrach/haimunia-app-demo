@@ -26,7 +26,7 @@ import assert from "node:assert";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { bootApp, bootCommunity, waitFor, seedAdminStepUp, unlockAdminPanel } from "./helpers/boot.mjs";
+import { bootApp, bootCommunity, waitFor } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -211,148 +211,30 @@ test("a11y structure — training log, the WOD sub-tabs each keep the structure"
 });
 
 // ---------------------------------------------------------------------------
-// The community layer: the screens COMM-329's "Not done" list named, reached
-// for real through bootCommunity() with an admin fixture.
+// The community layer: the one screen it has left, reached for real through
+// bootCommunity() with a mock Supabase project. The feed, boards, directory
+// and coach sub-tabs, the Manage screens and the challenge dialog were dropped
+// with the gym features; what remains is the signed-in home (profile, privacy,
+// achievements, notification preferences, sign out).
 // ---------------------------------------------------------------------------
 
 const VERIFIED = new Date().toISOString();
 
 function communityMock() {
-  const posts = [0, 1, 2].map((i) => ({
-    id: `p${i}`,
-    post_type: "POST_TEXT",
-    author_id: `u${i + 2}`,
-    author: { display_name: `חבר ${i}`, handle: `m${i}` },
-    body: `פוסט מספר ${i}`,
-    visibility: "club",
-    created_at: VERIFIED,
-    published_at: VERIFIED,
-    reaction_count: 1,
-    comment_count: 1,
-    media: [],
-    metadata: {},
-  }));
   const mock = createMockSupabase({
-    profiles: [{ id: "u1", handle: "dana", display_name: "דנה", is_admin: true, recovery_verified_at: VERIFIED, visible_to_club: true }],
+    profiles: [{ id: "u1", handle: "dana", display_name: "דנה", is_admin: false, recovery_verified_at: VERIFIED, visible_to_club: true }],
     invite_redemptions: [{ user_id: "u1", invite_id: "inv-1", role: "member", redeemed_at: VERIFIED }],
     clubs: [{ id: "club-1", name: "חיימוניה" }],
-    feed_page_rows: posts,
-    feed_impressions: [],
-    feed_interactions: [],
-    follows: [],
-    hidden_posts: [],
-    saved_posts: [],
   });
   mock.setUser({ id: "u1", is_anonymous: false, email: "dana@members.haimuniya.invalid" });
-  seedAdminStepUp(mock, "u1", "dana@members.haimuniya.invalid");
   return mock;
 }
 
-async function openCommunity(mock) {
-  const window = await bootCommunity(mock, { syncEnabled: false });
-  window.document.getElementById("tabCommunityBtn").click();
-  await waitFor(() => !!window.document.querySelector(".subtabbar [role=\"tab\"]"), 4000);
-  return window;
-}
-
-// feed / boards (the challenges screen) / directory / account - the four the
-// acceptance criterion names, under the names this app actually ships them.
-const COMMUNITY_TABS = ["feed", "boards", "directory", "account"];
-
-for (const sub of COMMUNITY_TABS) {
-  test(`a11y structure — community, ${sub}`, async () => {
-    const window = await openCommunity(communityMock());
-    const tab = window.document.querySelector(`.subtabbar [data-tab="${sub}"]`);
-    assert.ok(tab, `the community sub-tab "${sub}" is not on the bar`);
-    tab.click();
-    await waitFor(() => window.document.querySelector(`#commTab-${sub}`).getAttribute("aria-selected") === "true", 4000);
-    assertScreen(window, `קהילה / ${sub}`);
-    assert.equal(window.document.getElementById("content").getAttribute("aria-labelledby"), `commTab-${sub}`,
-      `#content must be named by the community sub-tab that is showing`);
-  });
-}
-
-// The scope chips were a role="tablist" of four, and this test pinned that
-// strip against the panel it controlled. They are one <select> now — the
-// screen was stacking three navigation layers (bottom bar, community
-// sub-tabs, scope chips) and a filter is the one of the three that is not
-// navigation. What has to stay true is the same pair it always checked: the
-// control has a name, and the region it filters says which scope is in
-// force. role="region", not "tabpanel": with no tablist left on the screen,
-// a tabpanel would promise tabs that do not exist.
-test("a11y structure — community, the feed scope filter names itself and the region it filters", async () => {
-  const window = await openCommunity(communityMock());
-  await waitFor(() => !!window.document.getElementById("communityFeedFilters"), 4000);
-  const select = window.document.getElementById("communityFeedFilters");
-  assert.equal(select.tagName, "SELECT");
-  assert.equal(select.getAttribute("aria-label"), "סינון הפיד", "the filter must carry its own name");
-  assert.equal(select.getAttribute("aria-controls"), "communityFeedPanel");
-  const panel = window.document.getElementById("communityFeedPanel");
-  assert.ok(panel, "the filter needs one stable region to control");
-  assert.equal(panel.getAttribute("role"), "region");
-  const chosen = select.options[select.selectedIndex];
-  assert.ok(chosen, "no feed scope is selected");
-  assert.match(panel.getAttribute("aria-label") || "", new RegExp(chosen.textContent.trim()),
-    "the feed region must name the scope currently filtering it");
-});
-
-test("a11y structure — community, the staff Manage screen", async () => {
+test("a11y structure — community, the signed-in home", async () => {
   const window = await bootCommunity(communityMock(), { syncEnabled: false });
-  window.document.getElementById("tabManageBtn").click();
-  await unlockAdminPanel(window);
-  await waitFor(() => !!window.document.querySelector('.subtabbar[aria-label="ניווט בניהול"]'), 4000);
-  assertScreen(window, "ניהול מערכת");
-});
-
-// A dialog is a screen too, and it is where the community layer keeps most of
-// its sub-sections: the challenge detail is the deepest one in the app (an h2
-// title, then progress / leaderboard / participants / rules under it), so it
-// is the one that would catch a sub-header converted to the wrong level.
-test("a11y structure — community, the challenge detail dialog nests under its own title", async () => {
-  const mock = createMockSupabase({
-    profiles: [{ id: "u1", handle: "dana", display_name: "דנה", is_admin: false, recovery_verified_at: VERIFIED, visible_to_club: true, allow_follows: true, in_leaderboards: true }],
-    invite_redemptions: [{ user_id: "u1", invite_id: "inv-1", role: "member", redeemed_at: VERIFIED }],
-    clubs: [{ id: "club-1", name: "חיימוניה" }],
-    challenges: [{
-      id: "c1", challenge_type: "individual_target", title: "12 אימונים החודש",
-      description: "תיאור האתגר", metric_type: "session_count", target_value: 12,
-      start_at: new Date(Date.now() - 5 * 86400000).toISOString(),
-      end_at: new Date(Date.now() + 20 * 86400000).toISOString(),
-      status: "active", join_mode: "open", visibility: "club", created_by: "u1",
-      config: { rules_text: "כל אימון נספר פעם אחת" },
-    }],
-    challenge_participants: [{ challenge_id: "c1", user_id: "u1", status: "active", joined_at: VERIFIED }],
-    challenge_teams: [], challenge_progress: [],
-    workout_posts: [], feed_page_rows: [], analytics_events: [],
-    notifications: [], notification_preferences: [], attendance_log: [],
-  });
-  mock.setUser({ id: "u1", is_anonymous: false, email: "dana@members.haimuniya.invalid" });
-  const window = await bootCommunity(mock, { syncEnabled: false });
   window.document.getElementById("tabCommunityBtn").click();
-  await waitFor(() => !!window.document.querySelector(".subtabbar"), 4000);
-  window.document.querySelector('[data-community-action="set-tab"][data-tab="boards"]').click();
-  await waitFor(() => !!window.document.querySelector('[data-challenge-id="c1"]'), 4000);
-  window.document.querySelector('[data-challenge-id="c1"] [data-community-action="open-challenge"]').click();
-  await waitFor(() => !!window.document.querySelector('[data-cloud-dialog="challengeView"]'), 4000);
-  // The dialog opens on a loading body and fills once chal_progress() answers.
-  await waitFor(() => window.document.querySelector('[data-cloud-dialog="challengeView"]').querySelectorAll("h3").length > 0, 4000);
-
-  const dialog = window.document.querySelector('[data-cloud-dialog="challengeView"]');
-  const heads = outline(dialog);
-  assert.ok(heads.length > 1, `the challenge dialog has ${heads.length} heading(s) — its sub-sections are still plain divs`);
-  assert.equal(heads[0].level, 2, "the dialog's own title must be the shallowest heading in it");
-  // Seeded from the dialog's own title: a dialog is not a document, its
-  // shallowest heading is the h2 that names it, and everything in it nests
-  // under that rather than under the page <h1> behind the overlay.
-  let deepest = heads[0].level;
-  for (const h of heads) {
-    assert.ok(h.level <= deepest + 1,
-      `challenge dialog: h${deepest} jumps straight to h${h.level} ("${h.text.slice(0, 40)}")`);
-    deepest = Math.max(deepest, h.level);
-  }
-  assert.ok(heads.some((h) => h.level === 3), "no sub-section heading inside the challenge dialog");
-  assert.equal(dialog.getAttribute("aria-labelledby"), "challengeViewTitle");
-  assertEveryControlIsNamed(window.document, "קהילה / אתגר");
+  await waitFor(() => !!window.document.getElementById("communityHead"), 4000);
+  assertScreen(window, "קהילה");
 });
 
 // ---------------------------------------------------------------------------

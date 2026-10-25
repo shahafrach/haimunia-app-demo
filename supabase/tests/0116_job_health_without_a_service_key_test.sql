@@ -203,19 +203,15 @@ select ok(
   (select last_checked_at from public.job_health_state) > now() - interval '1 minute',
   'and last_checked_at is stamped by the run, so a stopped checker cannot read as a healthy one');
 
--- The admins hear about it, through the existing notifications path.
+-- Nobody is notified in-app any more: there are no admins, so
+-- admin_alert_recipients() is empty and the gate is the workflow reading
+-- job_health_status(). A member must never receive an operational alert.
 select is(
-  (select count(*)::int from public.notifications
-    where type = 'job_health_alert' and user_id = tests.uid('admin')),
-  1, 'the admin is notified once');
+  (select count(*)::int from public.admin_alert_recipients()),
+  0, 'there is nobody to notify - no role holds the admin audience any more');
 select is(
-  (select count(*)::int from public.notifications
-    where type = 'job_health_alert' and user_id = tests.uid('coach')),
-  0, 'a coach is not - restarting a cron job is not something a coach can do, and an alert with no remedy is an interruption');
-select is(
-  (select count(*)::int from public.notifications
-    where type = 'job_health_alert' and user_id = tests.uid('m1')),
-  0, 'and a member certainly is not');
+  (select count(*)::int from public.notifications where type = 'job_health_alert'),
+  0, 'so no job_health_alert is written, to a member or anyone else');
 select is_empty(
   $$ select n.id from public.notifications n
       where n.type = 'job_health_alert'
@@ -230,23 +226,6 @@ select is(
   (select count(*)::int from public.notifications where type = 'job_health_alert'),
   (select count(*)::int from public.admin_alert_recipients()),
   'and sends nothing new: one notification per admin in total, not one per admin per run (job_health_check''s own 6-hour re-alert rule, with notif_create''s 1-hour de-dupe behind it)');
-
--- ===========================================================================
--- 4. The extraction did not change who hears about a bug report
--- ===========================================================================
--- bug_report_alert_recipients() became a wrapper over admin_alert_recipients()
--- in the same migration. Same audience, or the extraction was not behaviour-
--- preserving and 0111 is about to fail for a reason nobody will connect to
--- this change.
-select set_eq(
-  $$ select * from public.bug_report_alert_recipients() $$,
-  $$ select * from public.admin_alert_recipients() $$,
-  'bug_report_alert_recipients() still answers exactly what it did, now via the shared roster');
-select ok(
-  (select count(*)::int from public.admin_alert_recipients() r where r = tests.uid('admin')) = 1
-  and (select count(*)::int from public.admin_alert_recipients() r where r = tests.uid('owner')) = 1
-  and (select count(*)::int from public.admin_alert_recipients() r where r = tests.uid('coach')) = 0,
-  'the admin and the owner are on it; the coach is not');
 
 select * from finish();
 rollback;

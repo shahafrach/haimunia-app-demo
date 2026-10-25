@@ -65,16 +65,6 @@ test("it is still in Settings too - this was an addition, not a move", async () 
     "including its explanatory line, which the nav row does not repeat");
 });
 
-test("the desktop sidebar gets it as well - it shares renderNavSettingsRow", async () => {
-  // A desktop user has no hamburger to find. Putting the row in
-  // renderNavSettingsRow rather than renderNavMenuList is what covers both.
-  const window = await bootApp();
-  const sidebar = window.document.getElementById("desktopSidebar");
-  assert.ok(sidebar, "the desktop sidebar exists in the DOM");
-  assert.ok(sidebar.querySelector('[data-action="open-support"]'),
-    "and carries the support row");
-});
-
 test("the two rows do not wear the same icon", async () => {
   // The first version fell back to ICONS.settingsIcon, which would have put
   // two identical gears on adjacent rows.

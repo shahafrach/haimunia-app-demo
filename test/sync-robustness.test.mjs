@@ -58,7 +58,7 @@ test("a real second pull only fetches records newer than the cursor left by the 
 
   const window = await bootCommunity(mock, { syncEnabled: true });
   window.document.getElementById("tabCommunityBtn").click();
-  await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
+  await waitFor(() => !!window.document.getElementById("communityHead"), 3000);
 
   // A second record lands on the server after the first pull already
   // ran (and set its cursor).

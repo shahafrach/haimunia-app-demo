@@ -130,8 +130,6 @@
     if (typeof window.isCommunitySignedIn !== "function" || !window.isCommunitySignedIn()) return false;
     if (!state.user || !state.profile) return false;
     if (!sharePromptsEnabled()) return false;
-    if (!isModuleEnabled("feed")) return false;
-    if (kind === "achievement" && !isModuleEnabled("achievements")) return false;
     return true;
   }
   // Rule 3's own half: true when the club will be shown this member's card
@@ -304,7 +302,7 @@
     p.publishing = true;
     p.error = "";
     rerender();
-    const { queued, error } = await shareWorkoutRecord(item, "public", null);
+    const { queued, error } = await shareWorkoutRecord(item, "public");
     if (error) {
       p.publishing = false;
       p.error = serverErrorText(error);
@@ -315,7 +313,6 @@
       setMessage("האימון יישלח למועדון כשהחיבור יחזור");
     } else {
       setMessage("האימון שותף למועדון");
-      await loadFeed();
     }
     rerender();
     sharePromptClosed();
@@ -351,7 +348,6 @@
   // pattern the privacy toggles beside it already use.
   function renderSharePromptPrefPanel() {
     if (!state.user || !state.profile) return "";
-    if (!isModuleEnabled("feed")) return "";
     const on = sharePromptsEnabled();
     return `<div class="ach-section" id="sharePromptPrefPanel" style="margin-top:18px;">${sectionHead("var(--brass)", "הצעות שיתוף")}
       <div style="color:var(--steel);font-size:12px;line-height:1.6;margin-bottom:8px;">אחרי אימון, שיא או מדליה נשאל פעם אחת אם לשתף. שום דבר לא מתפרסם בלי לחיצה שלכם.</div>

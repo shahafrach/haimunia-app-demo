@@ -132,8 +132,7 @@ function captureRecordIds(window) {
 }
 async function openAccountTab(window) {
   window.document.getElementById("tabCommunityBtn").click();
-  await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
-  window.document.querySelector('[data-community-action="set-tab"][data-tab="account"]').click();
+  await waitFor(() => !!window.document.getElementById("communityHead"), 3000);
   await waitFor(() => !!window.document.querySelector("[data-privacy-field]"), 3000);
 }
 // The switch, flipped the way a member flips it: the checkbox in the Account
@@ -377,18 +376,6 @@ test("the profile-wide toggles do not withhold a member's own share - they are a
   await waitFor(() => !!window.document.getElementById("achUnlock"), 3000);
 });
 
-test("the club's achievements module off silences the medal celebration and nothing else", async () => {
-  const mock = seeded();
-  mock.db.club_features = [{ module_key: "achievements", enabled: false, config: {} }];
-  const window = await bootReady(mock);
-  window.HaimuniaEvents.emit(window.PRODUCT_EVENTS.ACHIEVEMENT_UNLOCKED, { code: "first_pr", member_achievement_id: "ma-5", visibility: "club" });
-  await new Promise((r) => setTimeout(r, 80));
-  assert.equal(window.document.getElementById("achUnlock"), null);
-
-  await logPastTheArrivalCard(window, "Medals Deadlift");
-  await logReps(window, 110);
-  await waitFor(() => !!promptEl(window), 3000);
-});
 
 test("show_workout_results off does not block the share - it is stated on the prompt, with the way to change it", async () => {
   // This toggle DEFAULTS FALSE and governs what other members may READ
@@ -429,18 +416,6 @@ test("show_workout_results on drops the note, rather than telling every member t
   assert.doesNotMatch(promptEl(window).textContent, /לא את התוצאה עצמה/);
 });
 
-test("a club with the feed module switched off is not offered a feed to post into", async () => {
-  const mock = seeded();
-  mock.db.club_features = [{ module_key: "feed", enabled: false, config: {} }];
-  const window = await bootReady(mock);
-  await logPastTheArrivalCard(window, "NoFeed Deadlift");
-  await logReps(window, 113);
-  await new Promise((r) => setTimeout(r, 80));
-  assert.equal(promptEl(window), null);
-  await openAccountTab(window);
-  assert.equal(window.document.querySelector("[data-share-prompt-pref]"), null,
-    "and the switch for it is not offered either");
-});
 
 test("an achievement whose own visibility is only_me still offers no share control", async () => {
   // Pre-existing item-level privacy, re-asserted here because it is the third
@@ -516,7 +491,7 @@ test("both workout-share callers go through the one write, with the on-conflict 
     assert.notEqual(at, -1, caller + " must exist");
   }
   assert.match(posts, /const result = await writeWorkoutSharePost\(payload\);/);
-  assert.match(posts, /const \{ queued, error \} = await shareWorkoutRecord\(item, visibility, photoPath\);/);
+  assert.match(posts, /const \{ queued, error \} = await shareWorkoutRecord\(item, visibility\);/);
 });
 
 // ---------------------------------------------------------------------------
@@ -547,7 +522,7 @@ test("what the prompt writes is a POST_WORKOUT, and reads as one in the rebuilt 
     "and the client deliberately does not name post_type - pr_share's later upgrade to POST_PR must not be undone by a re-share");
 
   // The other half: the row the server hands back, drawn by the real card.
-  mock.db.feed_page_rows = [{
+  const rebuilt = [{
     id: "prompt-post-1", post_type: "POST_WORKOUT", author_id: "u1",
     author: { display_name: "דנה", handle: "dana" },
     title: written.title, result_text: written.result_text,
@@ -557,6 +532,8 @@ test("what the prompt writes is a POST_WORKOUT, and reads as one in the rebuilt 
     metadata: { source_type: written.source_type, source_id: written.source_record_id },
   }];
   window.document.getElementById("tabCommunityBtn").click();
+  await waitFor(() => !!window.document.getElementById("communityHead"), 4000);
+  window.holdPosts(rebuilt);
   await waitFor(() => !!window.document.querySelector('[data-post-id="prompt-post-1"]'), 4000);
 
   const cardEl = window.document.querySelector('[data-post-id="prompt-post-1"]');

@@ -29,10 +29,6 @@ function seeded() {
       { blocker_id: "member-4", blocked_id: ME, created_at: "2026-09-03" },
     ],
     challenge_progress: [{ id: "cp1", challenge_id: "ch1", user_id: ME, delta: 1, entered_by: "coach-9", note: "staff note", created_at: "2026-09-04" }],
-    post_media: [
-      { post_id: "p1", storage_path: `${ME}/a.jpg`, alt_text: "", position: 0 },
-      { post_id: "p2", storage_path: `${OTHER}/b.jpg`, alt_text: "", position: 0 },
-    ],
   });
   mock.setUser({ id: ME, is_anonymous: false, created_at: new Date().toISOString() });
   mock.onRpc("bug_report_list_mine", () => ({ data: [{ id: "b1", body: "broken", status: "open", created_at: "2026-09-05" }], error: null }));
@@ -55,7 +51,6 @@ test("the export holds the member's own rows only, and no staff columns", async 
   assert.strictEqual(out.user_id, ME);
   assert.deepStrictEqual(out.data.private_records.map((r) => r.record_id), ["e1"]);
   assert.deepStrictEqual(out.data.posts.map((r) => r.id), ["p1"]);
-  assert.deepStrictEqual(out.data.post_media.map((r) => r.storage_path), [`${ME}/a.jpg`]);
   assert.deepStrictEqual(out.data.blocked, [{ blocked_id: "member-3", created_at: "2026-09-03" }], "never who blocked the member");
   assert.deepStrictEqual(out.data.bug_reports.map((r) => r.id), ["b1"]);
   const text = JSON.stringify(out);

@@ -72,8 +72,6 @@ select is( public.redeem_invite_code('wrongcode', 'device-key-C'), 'rate_limited
 
 -- --- an already-redeemed caller gets their role back, never a signal --
 select tests.set_auth(tests.uid('m1'));
-select is( public.redeem_invite_code('wrongcode'), 'member',
-  'the one-arg wrapper returns the existing role for a redeemed caller' );
 select is( public.redeem_invite_code('wrongcode', 'device-key-A'), 'member',
   'the two-arg form does the same and never raises' );
 

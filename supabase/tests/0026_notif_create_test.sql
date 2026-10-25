@@ -28,24 +28,24 @@ select * from no_plan();
 -- =====================================================================
 select tests.set_auth(tests.uid('m1'));
 select throws_ok(
-  $$ select public.notif_create(tests.uid('m2'), 'comment_reply', 'community',
-       'title', 'body', 'comment', gen_random_uuid(), '/community/feed') $$,
+  $$ select public.notif_create(tests.uid('m2'), 'trained_together', 'community',
+       'title', 'body', 'workout_post', gen_random_uuid(), '/community/feed') $$,
   '42501',
   null,
   'a plain member cannot call notif_create directly');
 
 select tests.set_auth(tests.uid('coach'));
 select throws_ok(
-  $$ select public.notif_create(tests.uid('m2'), 'comment_reply', 'community',
-       'title', 'body', 'comment', gen_random_uuid(), '/community/feed') $$,
+  $$ select public.notif_create(tests.uid('m2'), 'trained_together', 'community',
+       'title', 'body', 'workout_post', gen_random_uuid(), '/community/feed') $$,
   '42501',
   null,
   'a coach cannot call notif_create directly either');
 
 select tests.set_auth(tests.uid('admin'));
 select throws_ok(
-  $$ select public.notif_create(tests.uid('m2'), 'comment_reply', 'community',
-       'title', 'body', 'comment', gen_random_uuid(), '/community/feed') $$,
+  $$ select public.notif_create(tests.uid('m2'), 'trained_together', 'community',
+       'title', 'body', 'workout_post', gen_random_uuid(), '/community/feed') $$,
   '42501',
   null,
   'an admin cannot call notif_create directly either - the boundary is the missing grant, not a role check');
@@ -57,39 +57,26 @@ select throws_ok(
 select tests.clear_auth();
 select lives_ok(
   $$ insert into public.notifications (user_id, type, category, deep_link)
-     values (tests.uid('m1'), 'comment_reply', 'community',
+     values (tests.uid('m1'), 'trained_together', 'community',
              '/community/feed?post=' || gen_random_uuid()::text || '&comment=' || gen_random_uuid()::text) $$,
   'a real ~90-character deep link inserts without the old "invalid repetition count(s)" error');
 select throws_ok(
   $$ insert into public.notifications (user_id, type, category, deep_link)
-     values (tests.uid('m1'), 'comment_reply', 'community', 'https://evil.example/redirect') $$,
+     values (tests.uid('m1'), 'trained_together', 'community', 'https://evil.example/redirect') $$,
   '23514',
   null,
   'a deep_link with no leading slash still fails the CHECK, so it cannot become an open redirect');
 
 -- =====================================================================
--- fixtures for the behavioural suite: a mapped-key off preference, an
--- announcement to exercise the operational override, and a block edge.
+-- fixtures for the behavioural suite: a mapped-key off preference
+-- and a block edge.
 -- Built as the bootstrap superuser, same as every other file in this
 -- suite.
 -- =====================================================================
 select tests.clear_auth();
 insert into public.notification_preferences (user_id, type, channel)
-values (tests.uid('m2'), 'mentions', 'off');
+values (tests.uid('m2'), 'reactions', 'off');
 insert into public.blocks (blocker_id, blocked_id) values (tests.uid('m1'), tests.uid('m3'));
-insert into public.notification_preferences (user_id, type, channel)
-values (tests.uid('m3'), 'announcements', 'off');
-
--- The 202608280027 fan-out trigger is not what this file tests, and it
--- would otherwise fire on this INSERT and pre-write the exact rows the
--- behavioural section below means to create itself, tripping notif_create's
--- own dedupe window before this file ever calls it directly. Disabled only
--- for these two rows, re-enabled immediately after.
-alter table public.announcements disable trigger announcements_notify_insert;
-insert into public.announcements (id, author_id, title, body, important) values
-  ('c0260000-0000-4000-8000-000000000001', tests.uid('admin'), 'Not important', 'body', false),
-  ('c0260000-0000-4000-8000-000000000002', tests.uid('admin'), 'Important', 'body', true);
-alter table public.announcements enable trigger announcements_notify_insert;
 
 -- =====================================================================
 -- unknown type / unknown category raise
@@ -101,7 +88,7 @@ select throws_ok(
   null,
   'a type that fails the ^[a-z][a-z0-9_.]{2,63}$ shape raises');
 select throws_ok(
-  $$ select public.notif_create(tests.uid('m1'), 'comment_reply', 'not_a_category',
+  $$ select public.notif_create(tests.uid('m1'), 'trained_together', 'not_a_category',
        't', 'b', null, null, null) $$,
   'P0001',
   'unknown notification category not_a_category',
@@ -111,25 +98,25 @@ select throws_ok(
 -- a plain, unsuppressed call actually writes a row and returns its id
 -- =====================================================================
 select lives_ok(
-  $$ select public.notif_create(tests.uid('m1'), 'comment_reply', 'community',
-       'hi', 'body', 'comment', 'c0260000-0000-4000-8000-0000000000a1'::uuid,
+  $$ select public.notif_create(tests.uid('m1'), 'trained_together', 'community',
+       'hi', 'body', 'workout_post', 'c0260000-0000-4000-8000-0000000000a1'::uuid,
        '/community/feed?post=x') $$,
   'a normal call with no suppression rule in play lives');
 select isnt_empty(
   $$ select 1 from public.notifications
-     where user_id = tests.uid('m1') and type = 'comment_reply'
+     where user_id = tests.uid('m1') and type = 'trained_together'
        and source_id = 'c0260000-0000-4000-8000-0000000000a1' $$,
   'the row actually landed');
 
 -- =====================================================================
 -- title/body are truncated, not rejected
 -- =====================================================================
-select public.notif_create(tests.uid('m1'), 'comment_reply', 'community',
-  repeat('t', 200), repeat('b', 600), 'comment',
+select public.notif_create(tests.uid('m1'), 'trained_together', 'community',
+  repeat('t', 200), repeat('b', 600), 'workout_post',
   'c0260000-0000-4000-8000-0000000000a2'::uuid, null);
 select results_eq(
   $$ select char_length(title), char_length(body) from public.notifications
-     where user_id = tests.uid('m1') and type = 'comment_reply'
+     where user_id = tests.uid('m1') and type = 'trained_together'
        and source_id = 'c0260000-0000-4000-8000-0000000000a2' $$,
   $$ values (160, 500) $$,
   'a 200-character title and a 600-character body are truncated to 160 and 500, not rejected');
@@ -143,8 +130,8 @@ select results_eq(
 -- actor, never to gate the call.
 -- =====================================================================
 select pg_catalog.set_config('request.jwt.claim.sub', tests.uid('m2')::text, true);
-select public.notif_create(tests.uid('m2'), 'comment_reply', 'community',
-  't', 'b', 'comment', 'c0260000-0000-4000-8000-0000000000a3'::uuid, null);
+select public.notif_create(tests.uid('m2'), 'trained_together', 'community',
+  't', 'b', 'workout_post', 'c0260000-0000-4000-8000-0000000000a3'::uuid, null);
 select is_empty(
   $$ select 1 from public.notifications
      where user_id = tests.uid('m2') and source_id = 'c0260000-0000-4000-8000-0000000000a3' $$,
@@ -164,16 +151,16 @@ select tests.clear_auth();
 -- a block edge in either direction suppresses the write
 -- =====================================================================
 select pg_catalog.set_config('request.jwt.claim.sub', tests.uid('m3')::text, true);
-select public.notif_create(tests.uid('m1'), 'comment_reply', 'community',
-  't', 'b', 'comment', 'c0260000-0000-4000-8000-0000000000a5'::uuid, null);
+select public.notif_create(tests.uid('m1'), 'trained_together', 'community',
+  't', 'b', 'workout_post', 'c0260000-0000-4000-8000-0000000000a5'::uuid, null);
 select is_empty(
   $$ select 1 from public.notifications
      where user_id = tests.uid('m1') and source_id = 'c0260000-0000-4000-8000-0000000000a5' $$,
   'a block edge between recipient and actor (blocker m1, blocked m3) suppresses the write, actor on the blocked side');
 
 select pg_catalog.set_config('request.jwt.claim.sub', tests.uid('m1')::text, true);
-select public.notif_create(tests.uid('m3'), 'comment_reply', 'community',
-  't', 'b', 'comment', 'c0260000-0000-4000-8000-0000000000a6'::uuid, null);
+select public.notif_create(tests.uid('m3'), 'trained_together', 'community',
+  't', 'b', 'workout_post', 'c0260000-0000-4000-8000-0000000000a6'::uuid, null);
 select is_empty(
   $$ select 1 from public.notifications
      where user_id = tests.uid('m3') and source_id = 'c0260000-0000-4000-8000-0000000000a6' $$,
@@ -182,51 +169,36 @@ select is_empty(
 select tests.clear_auth();
 
 -- =====================================================================
--- an off preference on the mapped key suppresses a non-operational row;
--- an important announcement overrides it
+-- an off preference on the mapped key suppresses the row
 -- =====================================================================
-select public.notif_create(tests.uid('m2'), 'mention', 'community',
-  't', 'b', 'comment', 'c0260000-0000-4000-8000-0000000000a7'::uuid, null);
+select public.notif_create(tests.uid('m2'), 'reaction', 'community',
+  't', 'b', 'post', 'c0260000-0000-4000-8000-0000000000a7'::uuid, null);
 select is_empty(
   $$ select 1 from public.notifications
      where user_id = tests.uid('m2') and source_id = 'c0260000-0000-4000-8000-0000000000a7' $$,
-  'mention is suppressed for a recipient with the mapped mentions preference off');
-
-select public.notif_create(tests.uid('m3'), 'announcement', 'club',
-  't', 'b', 'announcement', 'c0260000-0000-4000-8000-000000000001'::uuid, null);
-select is_empty(
-  $$ select 1 from public.notifications
-     where user_id = tests.uid('m3') and source_id = 'c0260000-0000-4000-8000-000000000001' $$,
-  'a non-important announcement is suppressed for a recipient with announcements off');
-
-select public.notif_create(tests.uid('m3'), 'announcement', 'club',
-  't', 'b', 'announcement', 'c0260000-0000-4000-8000-000000000002'::uuid, null);
-select isnt_empty(
-  $$ select 1 from public.notifications
-     where user_id = tests.uid('m3') and source_id = 'c0260000-0000-4000-8000-000000000002' $$,
-  'an important announcement reaches the same recipient anyway - it is operational');
+  'a reaction is suppressed for a recipient with the mapped reactions preference off');
 
 -- =====================================================================
 -- dedupe: an identical (user_id, type, source_id) within the window is not
 -- written twice; a different source_id is a different event and is not
 -- deduped
 -- =====================================================================
-select public.notif_create(tests.uid('owner'), 'comment_reply', 'community',
-  't', 'b', 'comment', 'c0260000-0000-4000-8000-0000000000a8'::uuid, null);
-select public.notif_create(tests.uid('owner'), 'comment_reply', 'community',
-  't', 'b', 'comment', 'c0260000-0000-4000-8000-0000000000a8'::uuid, null);
+select public.notif_create(tests.uid('owner'), 'trained_together', 'community',
+  't', 'b', 'workout_post', 'c0260000-0000-4000-8000-0000000000a8'::uuid, null);
+select public.notif_create(tests.uid('owner'), 'trained_together', 'community',
+  't', 'b', 'workout_post', 'c0260000-0000-4000-8000-0000000000a8'::uuid, null);
 select results_eq(
   $$ select count(*)::int from public.notifications
-     where user_id = tests.uid('owner') and type = 'comment_reply'
+     where user_id = tests.uid('owner') and type = 'trained_together'
        and source_id = 'c0260000-0000-4000-8000-0000000000a8' $$,
   $$ values (1) $$,
   'calling notif_create twice with the same (user, type, source_id) inside the window writes exactly one row');
 
-select public.notif_create(tests.uid('owner'), 'comment_reply', 'community',
-  't', 'b', 'comment', 'c0260000-0000-4000-8000-0000000000a9'::uuid, null);
+select public.notif_create(tests.uid('owner'), 'trained_together', 'community',
+  't', 'b', 'workout_post', 'c0260000-0000-4000-8000-0000000000a9'::uuid, null);
 select results_eq(
   $$ select count(*)::int from public.notifications
-     where user_id = tests.uid('owner') and type = 'comment_reply' $$,
+     where user_id = tests.uid('owner') and type = 'trained_together' $$,
   $$ values (2) $$,
   'a distinct source_id for the same user and type is a distinct event, not deduped');
 

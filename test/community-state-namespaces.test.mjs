@@ -27,7 +27,7 @@ const src = cloudSource();
 const ROOT_SCALARS = [
   "configured", "client", "user", "profile", "redemption", "syncEnabled",
   "signupStarted", "communityDataLoaded", "communityDataLoading",
-  "permissions", "permissionsLoaded", "featureFlags", "avatarUpload",
+  "featureFlags",
   // Launch-readiness audit, CQ-006. Load-failure flags for the two root
   // scalars immediately above - not a feature domain of their own, just
   // "did the last fetch of profile/redemption fail", read only by the join
@@ -62,29 +62,12 @@ test("the state root is the session core plus per-domain namespaces, nothing els
       `state.${ns} is a flat non-namespace key - put it inside a feature domain (or in ROOT_SCALARS here, deliberately)`);
   }
   assert.deepEqual(namespaces, [
-    "ui", "feed", "posts", "engagement", "members", "club", "leaderboard",
-    "admin", "analytics", "challenges", "events", "search", "achievements",
-    "notif", "onboarding", "intro", "recaps",
-    // COMM-153's member-facing half: the caller's OWN active posting
-    // restriction, feeding the Account-tab panel. A namespace rather than a
-    // root scalar because it groups the lazy-load pair with the row they
-    // gate. Deliberately has no `error` leaf - a failed load and "not
-    // restricted" render identically, so an error flag would be unread state
-    // and the third assertion in this file would (correctly) reject it.
-    "myRestriction",
+    "ui", "posts", "engagement", "members", "achievements", "notif",
     // The community write queue's view-model (launch-readiness audit,
     // RELIABILITY): { pending, failed }. A real namespace rather than two
     // root scalars, because it groups two related leaves that are always
     // read together by the outbox banner.
     "outbox",
-    "coach",
-    // 202609220004. The monthly owner report: the twelve months of
-    // owner_reports rows, which of them is on screen, and the one open
-    // drill-down. A namespace rather than root scalars because the
-    // drill-down carries its own loading/loaded/error triple - a failed list
-    // read must not blank the seven figures that loaded fine - and those
-    // three names are exactly the ones the flat root used to collide on.
-    "ownerReport",
   ], "the namespace set changed - update this list and docs/community/backlog.md's COMM-365 row");
 });
 
@@ -235,7 +218,7 @@ test("the dialog registry keeps DOM keys and state paths separate", () => {
   // existing `posts` namespace - "composing, own-post controls, sharing" -
   // rather than spending the namespace pin above on a surface that is
   // already exactly that.
-  assert.equal(entries.length, 18, "every dialog entry needs a key and an isOpen getter");
+  assert.equal(entries.length, 8, "every dialog entry needs a key and an isOpen getter");
   const state = readStateLiteral();
   for (const [, key, path] of entries) {
     const value = path.split(".").slice(1).reduce((o, k) => (o == null ? o : o[k]), state);

@@ -28,7 +28,7 @@ test("the app shell's own core files are required precache assets", () => {
 test("cloud.js and its community-only src/* dependencies are optional, not required", () => {
   const requiredBlock = sw.slice(sw.indexOf("const REQUIRED_ASSETS"), sw.indexOf("const OPTIONAL_ASSETS"));
   const optionalBlock = sw.slice(sw.indexOf("const OPTIONAL_ASSETS"), sw.indexOf("const ASSETS ="));
-  for (const asset of ['"./cloud.js"', '"./src/eventbus.js"', '"./src/analytics.js"', '"./src/realtime.js"', '"./src/image.js"']) {
+  for (const asset of ['"./cloud.js"', '"./src/eventbus.js"', '"./src/analytics.js"']) {
     assert.ok(!requiredBlock.includes(asset), `${asset} must not be in REQUIRED_ASSETS`);
     assert.ok(optionalBlock.includes(asset), `${asset} must be in OPTIONAL_ASSETS`);
   }

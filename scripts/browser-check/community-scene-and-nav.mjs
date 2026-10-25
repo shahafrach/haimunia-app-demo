@@ -3,8 +3,8 @@
 // phone the club actually uses — and re-measured at 1440 as the member-
 // layout regression guard CLAUDE.md asks for.
 //
-// WHY THIS SCRIPT EXISTS. Two of the three findings it covers are pure
-// geometry, and jsdom reports every rect as 0x0 at (0,0):
+// WHY THIS SCRIPT EXISTS. The finding it covers is pure geometry, and jsdom
+// reports every rect as 0x0 at (0,0):
 //
 //   1. THE WORDMARK APPEARED TWICE. The community scene photo is the club's
 //      logo wall, and the painted "האימוניה" on it landed at y=54-100 —
@@ -20,20 +20,9 @@
 //      A self-calibrating check: it proves the difference it claims to
 //      make, rather than asserting a threshold nobody can re-derive.
 //
-//   2. THREE STACKED NAVIGATION LAYERS. The bottom bar, the community
-//      sub-tabs, and the feed scope chips — 96px of chips, because four
-//      Hebrew labels wrap onto two lines. The scopes are a filter rather
-//      than a destination, so they collapsed into one <select> riding the
-//      "הפיד שלי" section head. What is measured is that there are two
-//      full-width nav rails left and not three, that the filter shares a
-//      row with the heading instead of occupying one of its own, and that
-//      no scope label truncates inside it — the reason a rail was tempting
-//      in the first place.
-//
-// The third finding (undo on community deletes) is behaviour, and it is
-// pinned in test/community-delete-undo.test.mjs. Only its one geometric
-// claim is here: the toast has to appear over the scene without covering
-// the bottom bar it floats above.
+// The feed scope filter and the undo-on-delete toast that this script used to
+// measure went with the feed in the strip-gym change; the wordmark check and
+// the 1440 member-layout guard stay.
 import { chromium } from "playwright";
 import { resolveLocalOnlyTarget } from "./lib/target.mjs";
 import { switchTab, consoleErrorCollector, dismissWelcomeModal } from "./lib/actions.mjs";
@@ -86,13 +75,8 @@ async function openCommunity(width, height) {
   await page.goto(target.url, { waitUntil: "networkidle" });
   await page.waitForSelector("#app", { state: "visible", timeout: 10000 });
   await dismissWelcomeModal(page);
-  // Above the desktop breakpoint the hamburger is gone and the sidebar is
-  // the only nav, same distinction desktop-layout.mjs and
-  // community-feed-social.mjs already make and for the same reason.
-  const onSidebar = await page.locator("#desktopSidebar").isVisible();
-  if (onSidebar) await page.click("#desktopSidebar .navrow[data-tab='community']");
-  else await switchTab(page, "tabCommunityBtn");
-  await page.waitForSelector('[data-post-id="p1"]', { timeout: 10000 });
+  await switchTab(page, "tabCommunityBtn");
+  await page.waitForSelector("#communityHead", { timeout: 10000 });
   await page.waitForTimeout(400);
   return { page, errors };
 }
@@ -184,95 +168,6 @@ const fills = await page.evaluate(() => {
 check("the re-framed photo still covers the whole visible band, down to the sheet", fills.covers, JSON.stringify(fills));
 check("and it skips at least the top quarter of the source frame, where the paint is", fills.skipped >= 0.25, String(fills.skipped.toFixed(3)));
 
-// ---- 2. two navigation layers, not three ---------------------------------
-const nav = await page.evaluate(() => {
-  const r = (el) => { const b = el.getBoundingClientRect(); return { x: +b.x.toFixed(1), y: +b.y.toFixed(1), w: +b.width.toFixed(1), h: +b.height.toFixed(1) }; };
-  const app = document.getElementById("app").getBoundingClientRect();
-  // A "rail" here means what the finding meant: a full-width horizontal
-  // strip of sibling controls that exists to move you somewhere. The bottom
-  // bar and the community sub-tab bar are the two; anything else that spans
-  // the column and holds three or more sibling buttons would be a third.
-  const rails = [...document.querySelectorAll("#bottomTabBar, .subtabbar, .chip-row[role='tablist']")]
-    .filter((el) => el.getBoundingClientRect().height > 0)
-    .map((el) => ({ sel: el.id ? "#" + el.id : el.className, ...r(el) }));
-  const head = document.querySelector("#communityFeedTop .ach-section-head");
-  const title = head && head.querySelector(".ach-section-title");
-  const filter = document.getElementById("communityFeedFilters");
-  const firstCard = document.querySelector('[data-post-id="p1"]');
-  return {
-    rails,
-    tag: filter && filter.tagName,
-    filterRect: filter && r(filter),
-    titleRect: title && r(title),
-    sameRow: !!(filter && title) && Math.abs((filter.getBoundingClientRect().top + filter.getBoundingClientRect().height / 2)
-      - (title.getBoundingClientRect().top + title.getBoundingClientRect().height / 2)) < 8,
-    insideColumn: !!filter && filter.getBoundingClientRect().right <= app.right + 0.5 && filter.getBoundingClientRect().left >= app.left - 0.5,
-    firstCardTop: firstCard ? +firstCard.getBoundingClientRect().top.toFixed(1) : null,
-  };
-});
-check("exactly two navigation rails are on screen, the bottom bar and the community sub-tabs", nav.rails.length === 2, JSON.stringify(nav.rails.map((x) => x.sel)));
-check("the feed's scope filter is one control, not a rail of chips", nav.tag === "SELECT", String(nav.tag));
-check("it rides the section head's own row rather than taking a row of its own", nav.sameRow, JSON.stringify({ filter: nav.filterRect, title: nav.titleRect }));
-// 96px was the measured height of the two-line chip row this replaces.
-check("and it is one line tall (<=56px, against the 96px the chips measured)", nav.filterRect && nav.filterRect.h <= 56, String(nav.filterRect && nav.filterRect.h));
-check("a 44px tap target, like every other control on this screen", nav.filterRect && nav.filterRect.h >= 44, String(nav.filterRect && nav.filterRect.h));
-check("it stays inside the app column", nav.insideColumn);
-
-// Every scope still reachable, and none of them truncated inside the control
-// — truncation is the failure a dropdown trades a rail for, so it is checked
-// rather than assumed.
-const scopes = await page.evaluate(() => {
-  const sel = document.getElementById("communityFeedFilters");
-  const out = [];
-  const before = sel.value;
-  for (const o of sel.options) {
-    sel.value = o.value;
-    out.push({ value: o.value, label: o.textContent, fits: sel.scrollWidth <= sel.clientWidth + 1 });
-  }
-  sel.value = before;
-  return out;
-});
-check("all four scopes are offered, in order", JSON.stringify(scopes.map((s) => s.value)) === JSON.stringify(["for_you", "following", "achievements", "coach"]), JSON.stringify(scopes.map((s) => s.value)));
-check("and no scope label is clipped by the control", scopes.every((s) => s.fits), JSON.stringify(scopes.filter((s) => !s.fits)));
-
-// Choosing one actually filters: the control is navigation-equivalent to the
-// chips it replaced, not a decoration.
-await page.selectOption("#communityFeedFilters", "achievements");
-await page.waitForFunction(() => {
-  const p = document.getElementById("communityFeedPanel");
-  return p && /הישגים/.test(p.getAttribute("aria-label") || "");
-}, null, { timeout: 5000 });
-check("choosing a scope switches the feed region it names", true);
-await page.selectOption("#communityFeedFilters", "for_you");
-await page.waitForSelector('[data-post-id="p1"]', { timeout: 5000 });
-
-// ---- 3. the undo toast, where it has to sit ------------------------------
-await page.click('[data-post-id="p1"] [data-community-action="toggle-post-menu"]');
-await page.waitForSelector('[data-post-id="p1"] .post-menu', { timeout: 5000 });
-await page.click('[data-community-action="post-delete"]');
-await page.waitForSelector('[data-community-action="confirm-yes"]', { timeout: 5000 });
-await page.click('[data-community-action="confirm-yes"]');
-await page.waitForSelector("#appToastBar", { timeout: 5000 });
-const toast = await page.evaluate(() => {
-  const bar = document.getElementById("appToastBar");
-  const inner = bar.firstElementChild;
-  const undo = bar.querySelector('[data-action="toast-action"]');
-  const tabbar = document.querySelector("#bottomTabBar").getBoundingClientRect();
-  const b = inner.getBoundingClientRect();
-  return {
-    text: (bar.textContent || "").trim(),
-    undo: undo ? (undo.textContent || "").trim() : null,
-    clearsTabBar: b.bottom <= tabbar.top + 0.5,
-    inViewport: b.top >= 0 && b.bottom <= window.innerHeight + 0.5,
-    postGone: document.querySelector('[data-post-id="p1"]') === null,
-  };
-});
-check("deleting your own post removes it and offers an undo", toast.postGone && toast.undo === "בטלו", JSON.stringify(toast));
-check("the toast floats clear of the bottom bar it sits above", toast.clearsTabBar && toast.inViewport, JSON.stringify(toast));
-await page.click('#appToastBar [data-action="toast-action"]');
-await page.waitForSelector('[data-post-id="p1"]', { timeout: 5000 });
-check("and tapping בטלו puts the post back on the feed", true);
-
 check("no console errors on the community tab", errors.length === 0, errors.join(" | "));
 
 // ===========================================================================
@@ -283,22 +178,18 @@ console.log("\n--- 1440px ---");
   const { page: wide, errors: wideErrors } = await openCommunity(1440, 900);
   const geo = await wide.evaluate(() => {
     const app = document.getElementById("app").getBoundingClientRect();
-    const filter = document.getElementById("communityFeedFilters").getBoundingClientRect();
-    const head = document.querySelector("#communityFeedTop .ach-section-head").getBoundingClientRect();
+    const head = document.getElementById("communityHead").getBoundingClientRect();
     return {
-      appW: +app.width.toFixed(1), appX: +app.x.toFixed(1),
-      filterW: +filter.width.toFixed(1), filterH: +filter.height.toFixed(1),
-      inside: filter.right <= app.right + 0.5 && filter.left >= app.left - 0.5,
-      onHeadRow: Math.abs((filter.top + filter.height / 2) - (head.top + head.height / 2)) < 8,
+      appW: +app.width.toFixed(1),
+      inside: head.right <= app.right + 0.5 && head.left >= app.left - 0.5,
       staff: document.documentElement.getAttribute("data-staff"),
     };
   });
-  // CLAUDE.md: member layouts on desktop must not change. This member is not
-  // staff, so nothing about the shell may key on the laptop at all — and the
-  // new control must stay inside the same column it occupies on the phone.
-  check("a member at 1440 is not in the staff shell", geo.staff === null, JSON.stringify(geo.staff));
-  check("the scope filter stays inside the member column at 1440", geo.inside, JSON.stringify(geo));
-  check("and still rides the section head's row rather than a rail of its own", geo.onHeadRow, JSON.stringify(geo));
+  // CLAUDE.md: member layouts on desktop must not change. Nothing about the
+  // shell may key on the laptop at all, and the account head must stay inside
+  // the same column it occupies on the phone.
+  check("a member at 1440 is not in a staff shell", geo.staff === null, JSON.stringify(geo.staff));
+  check("the account head stays inside the member column at 1440", geo.inside, JSON.stringify(geo));
   check("no console errors at 1440", wideErrors.length === 0, wideErrors.join(" | "));
 }
 

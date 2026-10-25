@@ -63,7 +63,7 @@ on:
         required: true
         default: all
         type: choice
-        options: [all, purge_abandoned_profiles, admin_reset_password, recap_weekly, sanitize_upload, notif_push_send]
+        options: [all, purge_abandoned_profiles, notif_push_send]
 permissions:
   contents: read
 concurrency:

@@ -30,37 +30,6 @@ const indexHtml = fs.readFileSync(new URL("../index.html", import.meta.url), "ut
 const VERIFIED = new Date().toISOString();
 
 // =====================================================================
-// 1. Photo upload: no file input may use display:none
-// =====================================================================
-// A display:none input is not rendered at all, and Safari - notably inside a
-// standalone PWA, which is exactly how this app is installed - does not
-// reliably forward a wrapping <label>'s activation to a control that is not
-// in the layout. The picker never opens and nothing errors, so it reads as a
-// button that does nothing. All four uploads in this app (avatar, composer,
-// PR photo, club WOD) shared the pattern, so all four were equally affected.
-test("no file input hides itself with display:none - it breaks the picker on an installed iOS PWA", () => {
-  const inputs = cloudJs.match(/<input type="file"[^>]*>/g) || [];
-  assert.ok(inputs.length >= 4, `expected the app's file inputs to be found, got ${inputs.length}`);
-  for (const el of inputs) {
-    assert.ok(!/display\s*:\s*none/.test(el),
-      `a file input still uses display:none, which does not open the picker on iOS:\n  ${el}`);
-    assert.match(el, /class="file-input-hidden"/,
-      `a file input is not using the visually-hidden helper:\n  ${el}`);
-  }
-});
-
-test("the visually-hidden helper keeps the input rendered, focusable and label-activatable", () => {
-  const rule = indexHtml.match(/\.file-input-hidden\{[^}]*\}/);
-  assert.ok(rule, ".file-input-hidden must be defined in the stylesheet");
-  const css = rule[0];
-  // The whole point: it must NOT remove the element from the layout.
-  assert.ok(!/display\s*:\s*none/.test(css), "the helper must not use display:none - that is the bug it replaces");
-  assert.ok(!/visibility\s*:\s*hidden/.test(css), "visibility:hidden also makes the control unfocusable");
-  assert.match(css, /position\s*:\s*absolute/, "it should be taken out of flow rather than out of the layout");
-  assert.match(css, /clip-path\s*:\s*inset\(50%\)/, "and clipped so it has no visible or tappable area");
-});
-
-// =====================================================================
 // 2. An earned medal still prints its rule
 // =====================================================================
 // Reported from the phone as the Squat bronze plate being lit but unlabelled,
@@ -134,39 +103,11 @@ async function bootGhost(stalledDays) {
   // fixture has only the one, under the shared id.
   (window.document.getElementById("tabClubManageBtn") || window.document.getElementById("tabManageBtn")).click();
   await unlockAdminPanel(window);
-  await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
+  await waitFor(() => !!window.document.getElementById("communityHead"), 3000);
   window.document.querySelector('[data-community-action="set-manage-tab"][data-tab="invites"]').click();
   await waitFor(() => !!window.document.querySelector('[data-incomplete-signups-section="1"]'), 3000);
   return window;
 }
-
-test("an invite that is still inside the grace period explains the wait on screen, not in a tooltip", async () => {
-  // 6 stalled days against a 7-day grace period: this is the exact state the
-  // real device report hit, and the button is CORRECTLY disabled.
-  const window = await bootGhost(6);
-  const card = window.document.querySelector('[data-ghost-user-id="ghost-1"]');
-  assert.ok(card, "the incomplete-signup card should render");
-  const btn = card.querySelector('[data-community-action="ghost-reclaim"]');
-  assert.ok(btn.disabled, "6 days against a 7-day grace period must stay disabled - that part was never the bug");
-  assert.match(card.textContent, /אפשר לשחרר רק אחרי 7 ימים ללא השלמה/,
-    "the reason must be readable without hovering");
-  // "עוד יום אחד", not "עוד 1 ימים" - this assertion pinned the wrong Hebrew
-  // until the round-6 hunt found it (a plural noun beside the number one,
-  // right next to a helper in the same file that already handled the
-  // singular). Kept asserting the countdown exists; corrected to the form the
-  // app should have been rendering all along.
-  assert.match(card.textContent, /עוד יום אחד/, "and should say how much longer, so the admin knows to come back");
-});
-
-test("an invite past the grace period offers the button with no waiting note", async () => {
-  // The control for the test above: the note must not linger once it is false.
-  const window = await bootGhost(9);
-  const card = window.document.querySelector('[data-ghost-user-id="ghost-1"]');
-  const btn = card.querySelector('[data-community-action="ghost-reclaim"]');
-  assert.ok(!btn.disabled, "9 days is past the 7-day grace period");
-  assert.ok(!/אפשר לשחרר רק אחרי/.test(card.textContent),
-    "the waiting note must disappear once the invite is actually releasable");
-});
 
 // ===========================================================================
 // Tap-to-prefill from the recent chips (2026-09-15)

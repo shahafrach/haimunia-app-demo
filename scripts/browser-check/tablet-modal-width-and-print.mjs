@@ -61,11 +61,9 @@ for (const width of [600, 700, 850]) {
   await page.goto(target.url, { waitUntil: "networkidle" });
   await page.waitForSelector("#app", { state: "visible" });
   await dismissWelcomeModal(page);
-  // The mobile hamburger (#navMenuBtn) is display:none at this width - the
-  // desktop sidebar's own "open-settings" row is the visible path here
-  // (see openSettings()'s own comment in lib/actions.mjs for why a bare
-  // selector would be ambiguous between the two).
-  await page.click("#desktopSidebar [data-action='open-settings']");
+  // The desktop sidebar is gone (strip gym), so the hamburger is the one path
+  // at every width.
+  await openSettings(page);
   await page.waitForFunction(() => document.getElementById("settingsOverlay")?.classList.contains("open"), { timeout: 5000 });
   const sheetWidth = await page.evaluate(() => document.querySelector("#settingsOverlay .modal-sheet")?.getBoundingClientRect().width);
   check("1280px viewport: the existing ≥900px 592px cap still applies (not silently overridden by the new base cap)", sheetWidth <= 600, `sheetWidth=${sheetWidth}`);

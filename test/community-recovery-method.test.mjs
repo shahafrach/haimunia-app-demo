@@ -38,7 +38,7 @@ test("full signup stamps recovery_verified_at and lands the member in the commun
 
   window.document.querySelector('#communityProfile input[name="displayName"]').value = "dana";
   submit(window, "communityProfile");
-  await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
+  await waitFor(() => !!window.document.getElementById("communityHead"), 3000);
 
   const prof = mock.db.profiles.find((p) => p.handle === "dana");
   assert.ok(prof, "profile row created");
@@ -95,7 +95,7 @@ test("a first-ever profile save whose automatic recovery verification fails show
   // above exercises) still works.
   failVerify = false;
   window.document.querySelector('[data-community-action="verify-recovery"]').click();
-  await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
+  await waitFor(() => !!window.document.getElementById("communityHead"), 3000);
   assert.ok(mock.db.profiles.find((p) => p.handle === "dana").recovery_verified_at, "manual retry stamped the column and unlocked the app");
 });
 
@@ -116,7 +116,7 @@ test("a member whose profile is still unverified sees the Hebrew recovery gate, 
   // The gate renders first (recovery_verified_at null), and its own
   // verifyRecovery() call then stamps the column and re-renders into the
   // unlocked app.
-  await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
+  await waitFor(() => !!window.document.getElementById("communityHead"), 3000);
   assert.ok(mock.db.profiles[0].recovery_verified_at, "the gate's verifyRecovery() call stamped the column");
 });
 
@@ -160,11 +160,11 @@ test("a failed verification keeps the gate, shows a retry message, and does not 
   // The visible retry button forces another attempt; this time it works.
   failNext = false;
   window.document.querySelector('[data-community-action="verify-recovery"]').click();
-  await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
+  await waitFor(() => !!window.document.getElementById("communityHead"), 3000);
   assert.ok(mock.db.profiles[0].recovery_verified_at, "manual retry stamped the column and unlocked the app");
 });
 
-test("recovery on a new device: signing in with the same credentials reaches the same profile, redemption and coach role, no recovery prompt", async () => {
+test("recovery on a new device: signing in with the same credentials reaches the same profile and redemption, no recovery prompt", async () => {
   // Site-data deletion / reinstall / device change all reduce to the same
   // thing for this app: no local session, sign in with the same
   // username+password. The account is already verified (backfilled or
@@ -184,12 +184,9 @@ test("recovery on a new device: signing in with the same credentials reaches the
   window.document.querySelector('#communityLogin input[name="password"]').value = "CorrectHorse9";
   submit(window, "communityLogin");
 
-  await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
+  await waitFor(() => !!window.document.getElementById("communityHead"), 3000);
   assert.equal(window.document.querySelector('[data-community-action="verify-recovery"]'), null, "a verified returning member is never asked to re-verify");
   assert.equal(window.document.getElementById("communityInviteCode"), null, "and is never asked to redeem the invite again");
-  // Coach powers restored: the staff-only weekly-challenge setter renders.
-  window.document.querySelector('[data-community-action="set-tab"][data-tab="boards"]').click();
-  await waitFor(() => !!window.document.getElementById("communityWeeklyChallenge"), 3000);
 });
 
 test("an existing username+password account with a backfilled timestamp is not forced to re-verify", async () => {
@@ -203,6 +200,6 @@ test("an existing username+password account with a backfilled timestamp is not f
 
   const window = await bootCommunity(mock, { syncEnabled: false });
   window.document.getElementById("tabCommunityBtn").click();
-  await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
+  await waitFor(() => !!window.document.getElementById("communityHead"), 3000);
   assert.equal(verifyCalls, 0, "no verify RPC fired for an already-verified account");
 });

@@ -327,25 +327,9 @@
      apply on top of those classes' own margin-bottom-only rules, adding
      unwanted top/side spacing wherever a div/span became a real heading. */
   h1, h2, h3 { margin: 0; font: inherit; }
-  /* No overflow-x:hidden here (removed post-e421b48) - per the CSS overflow
-     spec, a non-visible overflow-x with overflow-y left unset forces
-     overflow-y's used value to auto on the SAME element, and since html and
-     body sit directly in .desktop-sidebar's ancestor chain, that silently
-     turned one of them into a "scroll container" position:sticky resolves
-     against instead of the real viewport - body never actually scrolls
-     itself (nothing caps its height), so the sidebar just tracked scrollY
-     in lockstep like static/relative positioning, confirmed live via
-     scrollTo() + getBoundingClientRect(). #app already clips its own
-     content (below) and is a sibling of .desktop-sidebar, not an ancestor,
-     so it was never part of this bug and needs no change; .app-shell must
-     NOT get its own overflow-x:hidden either for the same reason #app is
-     safe and html/body were not - .app-shell is .desktop-sidebar's direct
-     parent, so hiding overflow there would reintroduce the identical bug
-     one level down. scripts/browser-check/desktop-layout.mjs now asserts
-     the sidebar's top stays fixed across a real scroll, and
-     text-scale.mjs's existing "no horizontal overflow" check (unaffected
-     by this removal) still guards against anything actually bleeding past
-     the viewport. */
+  /* No overflow-x:hidden on html/body: a non-visible overflow-x forces
+     overflow-y to auto on the same element and turns it into a scroll
+     container. #app clips its own content (below). */
   html,body{ margin:0; padding:0; background:var(--bg); color:var(--chalk); font-family:'Rubik',sans-serif; overscroll-behavior-y:contain; touch-action:pan-y; width:100%; }
   /* svh, not dvh: reported live as "the screen vibrates when you switch
      tabs" - the switch-tab handler (app.js) resets scroll to top on every
@@ -378,8 +362,7 @@
   .justify-between{ justify-content:space-between; }
   .justify-center{ justify-content:center; }
   .flex-1{ flex:1; }
-  .gap-6{ gap:6px; } .gap-8{ gap:8px; } .gap-10{ gap:10px; } .gap-16{ gap:16px; }
-  .wrap{ flex-wrap:wrap; }
+  .gap-6{ gap:6px; } .gap-8{ gap:8px; } .gap-10{ gap:10px; }   .wrap{ flex-wrap:wrap; }
   /* max(env(...), 28px): some Android WebView/Chrome combinations report
      safe-area-inset-top as 0 on an installed (standalone) PWA even though
      the status bar still overlays the page — without a floor, .brand-stripe
@@ -1195,16 +1178,7 @@
      wraps the same kind of extreme input correctly; this brings .who-name
      in line with it. */
   .who-name{ font-weight:800; font-size:15px; overflow-wrap:anywhere; }
-  /* The same break rule .who-name carries, for the member rows that render a
-     name from the server. Live bug hunt, fresh round 7 (2026-09-15): the
-     overflow-wrap fix was added for one screen and scoped to that one
-     selector, so an 80-character unbroken Hebrew name in a SEARCH result or
-     the members directory still rendered as one 800px line inside a 354px
-     row - measured bleeding to -440px, off the edge of the viewport and
-     under the row's own buttons. A long single-token name is not exotic in
-     Hebrew, and these rows take their text from whatever a member typed. */
-  .member-name{ overflow-wrap:anywhere; min-width:0; }
-  .who-sub{ color:var(--steel); font-size:12.5px; margin-top:2px; }
+    .who-sub{ color:var(--steel); font-size:12.5px; margin-top:2px; }
   .navrow{ width:100%; display:flex; align-items:center; gap:10px; padding:12px 10px; border-radius:14px; text-align:right; min-height:44px; }
   .navrow.active{ background:color-mix(in srgb, var(--energy) 10%, transparent); }
   .navrow.active .nav-label{ color:var(--energy); }
@@ -1238,238 +1212,8 @@
   .nav-label{ font-weight:700; font-size:15px; flex:1; }
   .nav-sub{ color:var(--steel); font-size:12px; margin-top:1px; }
   .subnav{ padding:0 0 8px 52px; display:flex; flex-direction:column; gap:2px; }
-  .subitem{ width:100%; display:flex; align-items:center; justify-content:space-between; padding:9px 10px; font-size:13.5px; font-weight:600; color:var(--steel); border-radius:10px; min-height:44px; text-align:right; }
-  .nav-badge{ display:inline-flex; align-items:center; justify-content:center; min-width:18px; height:18px; padding:0 5px; border-radius:999px; background:var(--energy); color:#fff; font-size:10px; font-weight:800; flex-shrink:0; }
-  .divider-label{ color:var(--steel); font-size:11.5px; font-weight:700; letter-spacing:.5px; padding:16px 10px 6px; }
-  /* Phase 6: each of the 4 solo tabs gets a small page-title at the top of
-     its own content, additive above what was already there (the calendar's
-     own prev/next-month row, for example, is untouched below this) - the
-     only page identity before this was the one global header shared by
-     every tab. */
-  .page-title{ font-family:'Anton','Secular One','Rubik',sans-serif; font-weight:400; letter-spacing:.3px; font-size:22px; color:var(--chalk); margin-bottom:14px; }
-  /* Desktop / wide-viewport layout. Everything here lives inside the media
-     query on purpose - below 900px .app-shell/.desktop-sidebar have no
-     rules at all, so the mobile layout (#app centered, max-width:480px,
-     unchanged from before this phase) is completely untouched. */
-  .desktop-sidebar{ display:none; }
-  /* Same "no rules at all below the breakpoint" treatment as
-     .desktop-sidebar directly above - #contextCol is in the markup at every
-     width but is display:none by default, so the phone layout cannot see
-     it. See the ≥1200px block further down for what it becomes. */
-  .context-col{ display:none; }
-  @media (min-width: 900px){
-    .app-shell{ display:flex; align-items:flex-start; justify-content:center; gap:32px; max-width:1100px; margin:0 auto; padding:28px 24px; }
-    .desktop-sidebar{ display:flex; flex-direction:column; width:248px; flex-shrink:0; position:sticky; top:28px; background:var(--surface); border:1px solid var(--border); border-radius:20px; padding:18px 14px; box-shadow:var(--shadow-card); }
-    .desktop-sidebar .who{ margin:0 0 14px; }
-    .desktop-sidebar .navrow{ padding:10px 10px; }
-    .desktop-sidebar .subnav{ padding-bottom:6px; }
-    /* The mobile nav menu (hamburger + full-page overlay) is replaced by
-       this persistent sidebar at this width - hide the trigger and, for
-       belt-and-suspenders, the overlay itself (it can only ever be open
-       here if someone resizes down mid-session and back up; .open still
-       wins if that happens, this only affects the closed default). */
-    #navMenuBtn{ display:none; }
-    .modal-overlay#navMenuOverlay:not(.open){ display:none; }
-    /* Same reasoning as #navMenuBtn just above: the sidebar already covers
-       every destination (including Community), so the fixed mobile bottom
-       nav is redundant clutter at this width, not a second way in. */
-    #bottomNavWrap .tabbar{ display:none; }
-    #app{ max-width:560px; margin:0; flex:1; padding-top:0; }
-    .app-shell .header{ margin-top:0; }
-    /* .modal-sheet is width:100% - correct on a phone, where 100% IS the
-       content measure, and wrong at every width above this breakpoint,
-       where nothing caps it. Measured at 1440x900 before this rule:
-       #settingsSheet 1440px wide, so #themeRow ran to 1374px and each of
-       its three options to 452x44 - a 10:1 segmented button, on the
-       screen whose whole point (spec §4.1) is that a control should look
-       like a control. The exercise picker was the same shape: 1400px-wide
-       rows carrying one word each, pinned to the far right.
-
-       592px = #app's own 560px content measure + the sheet's 16px inner
-       padding on each side, so a sheet holds the same line length as the
-       column it covers instead of inventing a second, much wider one.
-       Centred with a logical auto margin rather than justify-content for
-       the reason spelled out on .install-dock below.
-
-       This is NOT the same thing as spec §6.2's "at ≥1200px the pickers
-       render in the context column instead of over the page" - that is a
-       re-mount and needs the JS this file does not own. The two do not
-       collide: a picker mounted into #contextCol is not a .modal-sheet
-       and never matches this rule. Until then, a capped centred sheet is
-       strictly better than a 1440px band. */
-    .modal-sheet{ max-width:592px; margin-inline:auto; }
-    /* The install dock is a mobile bottom SHEET - full-bleed, flat to the
-       screen edge, top corners rounded into the tab bar underneath it. None
-       of that is true here: there is no tab bar at this width (hidden just
-       above), and a 448px sheet centred in a 1440px viewport lands at
-       x=496-944 while the content column it belongs to sits at x=300-860,
-       so it reads as an orphaned mobile artefact rather than part of the
-       page (measured at 1440x900). At this width it becomes what it
-       actually is on a desktop - a corner toast: no full-width band, real
-       margins off the viewport edge so its shadow is not clipped, and
-       pushed to the far side from .desktop-sidebar (which is a sticky card
-       at the top of the inline-start side).
-       The card's own `margin:0 auto` is what centres it on phones, so the
-       desktop placement is expressed as auto on ONE side only - a logical
-       margin rather than a flex justify-content, because in an RTL flex row
-       flex-start/flex-end read backwards to most people and this is exactly
-       the kind of rule that gets "fixed" the wrong way later. */
-    .install-dock{ background:transparent; padding:0 24px 24px; }
-    .install-dock-card{ margin-inline-start:auto; margin-inline-end:0; max-width:420px; box-shadow:0 18px 44px rgba(0,0,0,.38); }
-  }
-
-  /* ===================================================================
-     WIDE DESKTOP (design spec §6). Measured before this block, at
-     1440x900: shell x=170-1270 (max-width:1100px), #app x=300-860,
-     sidebar x=892-1140 - 808px of live column in a 1440px viewport, so
-     632px (43.9%) carried nothing. At 1920 it is 1112px (57.9%).
-
-     Five decisions are encoded here. All five are deliberate and the
-     first is the one that constrains the rest.
-
-     1. THE 560px LOGGING COLUMN NEVER CHANGES WIDTH, AT ANY BREAKPOINT.
-        #app keeps max-width:560px from the ≥900 block above, untouched
-        below. Logging a set is a one-hand, one-column task done standing
-        at a rack; widening it would damage the app's best screen in
-        order to fill space on its least-used one. The single exception
-        is the staff rule (4), which is not a logging surface.
-
-     4. THE ONE PART OF §6 THAT NEEDS NO JS: THE STAFF TABLE AREA.
-        Spec §6.2 merges #app and the context column into one ~940px
-        table area on the ניהול tab. Because the context column is empty
-        for now, that merge is just "#app is wider here" - so unlike (3)
-        it ships working today, and it is the surface the club owner
-        actually opens a laptop for. Rule and hooks are at (4) below.
-
-     2. THE CAP COMES OFF, BUT LIFTING IT ALONE RECLAIMS NOTHING.
-        .app-shell{max-width:1100px} is the real cause of the number
-        above - at 1440px the shell throws away 340px before the layout
-        inside it does anything. It is raised to 1440px here. But note
-        what that does on its own: the shell is centred by margin:0 auto
-        and its contents are centred inside it by justify-content:center,
-        so widening an under-filled shell moves the dead space from
-        outside the shell to inside it and the columns land on exactly
-        the same x. That is verified, not assumed (1440px, two columns:
-        #app x=300-860 both before and after). Raising the cap is
-        therefore necessary and not sufficient - what reclaims the space
-        is a third column standing in it, and that is (3).
-
-     3. THE CONTEXT COLUMN IS A MOUNT POINT AND MUST NEVER RENDER EMPTY.
-        #contextCol is markup + styling only; every module that belongs
-        in it (spec §6.2: the exercise history table, the progress chart,
-        the calendar day detail, the club rail) is rendered by app.js /
-        cloud.js, which this file does not own. An empty sticky card is
-        worse than no card, so the rules that show the column are gated
-        on `:has(> .context-col > *)` - it takes an actual element child
-        to make the column exist as a box. Until app.js writes into it,
-        this whole tier is inert and the 900px two-column layout is what
-        ships, byte for byte. The contract is on #contextCol in the body.
-
-     5. THE BREAKPOINT IS 1280px, NOT THE SPEC'S 1200px - ARITHMETIC.
-        Spec §6.1 asks for [sidebar 248][app 560][context 380-520] at
-        ≥1200px. Those minima do not fit: 248 + 560 + 380 = 1188px of
-        column, and a 1200px viewport has only 12px left over for two
-        gutters and two page margins. Honouring 1200 literally means
-        either a horizontal scrollbar or a ~288px context column, and
-        380px is the floor precisely because the modules re-mounted there
-        are the phone-shaped ones. So the columns and their minima win
-        and the number moves: gap 24 + page margin 20 puts the true
-        minimum at 248+560+380+48+40 = 1276px, rounded up to the nearest
-        real laptop width, 1280. At exactly 1280 the context column lands
-        at 384px; at 1440 it reaches its 520px cap. Between 1200 and 1279
-        the cap is off but the layout is still the two-column one. This
-        is a deviation from the spec's stated number, made because the
-        spec's stated widths cannot all be true at once; it is flagged
-        rather than silently absorbed.
-     =================================================================== */
-  @media (min-width: 1200px){
-    /* (2) The cap itself. Positionally a no-op while the context column
-       is absent - see the note above - which is exactly why it is safe
-       to land ahead of the JS that fills the column. */
-    .app-shell{ max-width:1440px; }
-    /* (4) "#app and the context column merge into one ~940px table
-       area" for staff (spec §6.2). The moderation queue, the member roster,
-       the incomplete-signups list and the analytics dashboard are
-       genuinely tabular work, and this is the one surface where 560px is
-       a cost rather than a feature - it is also the only part of §6 that
-       needs no new JS, because the space is reclaimed by the column that
-       is already there rather than by a new one.
-
-       Two independent hooks, either of which is enough: cloud.js's
-       manage sub-tab bar carries both a distinct aria-label and per-tab
-       ids (renderManageApp, cloud.js). Both are cloud.js's strings and
-       this file cannot pin them, so it depends on both rather than one -
-       and if a rename ever takes out both, the failure is a 560px admin
-       column, i.e. today's layout, not a broken one.
-
-       The non-staff deny branch of renderManageApp() renders no sub-tab
-       bar at all, so it correctly stays at 560px.
-
-       The :not() prefix makes this and the context column (below)
-       mutually exclusive by CONDITION rather than by cascade order:
-       once there is a third column in the row, #app goes back to
-       sharing it instead of claiming 940px of it. Written this way so
-       that reordering these two blocks cannot change the outcome. */
-    .app-shell:not(:has(> .context-col > *)) #app:has(#content .subtabbar[aria-label="ניווט בניהול"]),
-    .app-shell:not(:has(> .context-col > *)) #app:has(#content .subtabbar #manageTab-moderation){ max-width:940px; }
-    /* (4b) The same rule, extended 2026-09-17 on the owner's instruction to
-       widen the other surfaces that are tables rather than forms.
-
-       ONE tab qualifies, and the restraint is the point. חברים (the member
-       directory) renders log-list/log-row - the identical row shape the
-       member roster uses on ניהול, which is already widened three lines
-       above. Reading a list of people is the same task at 940px that it is
-       at 560px, only with fewer wraps.
-
-       Deliberately NOT widened, each for its own reason rather than by
-       omission:
-         - פיד is a reading column. 560px is close to the measure prose
-           wants; 940px of body text is worse, not more.
-         - חשבון is forms, and a 940px form row puts its label and its
-           control at opposite ends of the screen.
-         - לוחות is mixed - leaderboards are tables but challenges are
-           cards, and widening would stretch the cards to fix the tables.
-           It needs the two split before it can be judged, not a blanket
-           rule.
-         - The logging column never changes width at any breakpoint. That is
-           rule (1) above and this does not touch it.
-
-       [aria-selected="true"] is load-bearing and is the one real difference
-       from the ניהול rule above. Every commTab-* button is in the DOM on
-       every community sub-tab, so matching the id alone would widen the feed
-       and the account form too. The manage rule can match on presence
-       because the whole manage BAR only exists on that tab. */
-    .app-shell:not(:has(> .context-col > *)) #app:has(#content .subtabbar #commTab-directory[aria-selected="true"]){ max-width:940px; }
-  }
-  @media (min-width: 1280px){
-    /* (3) Every rule below is gated on the column actually having an
-       element child. Nothing here can put an empty box on screen. */
-    .app-shell:has(> .context-col > *){ gap:24px; padding-inline:20px; }
-    /* (1), and this line is the whole of it. The ≥900 block gives #app
-       `flex:1` with `max-width:560px`, which reads as "560px" only while
-       there are two columns in the row. Add a third flex item and the
-       grow/shrink maths reasserts itself: measured at 1280px before this
-       rule, #app collapsed to 424px because the context column reached
-       its 520px cap and the remainder was all #app had left. 560px is a
-       constraint, not a preference - it is the width the logging screen
-       was designed at - so in three-column mode #app stops being
-       flexible at all and the context column absorbs every pixel of the
-       difference (384px at 1280, 520px at 1440 and above). */
-    .app-shell:has(> .context-col > *) > #app{ flex:0 0 560px; }
-    .app-shell:has(> .context-col > *) > .context-col{
-      display:block; flex:1 1 380px; min-width:380px; max-width:520px;
-      /* Same card as .desktop-sidebar, deliberately identical so the two
-         side columns read as one shell rather than two components. */
-      position:sticky; top:28px; background:var(--surface); border:1px solid var(--border);
-      border-radius:20px; padding:18px 16px; box-shadow:var(--shadow-card);
-      /* The sidebar is short enough to never need this; the context
-         column hosts history tables and badge grids, so it scrolls
-         inside its own sticky card instead of growing past the viewport
-         and taking the stick with it. */
-      max-height:calc(100dvh - 56px); overflow-y:auto; overscroll-behavior:contain;
-    }
-  }
-  .cat-group{ margin-bottom:14px; }
+      .divider-label{ color:var(--steel); font-size:11.5px; font-weight:700; letter-spacing:.5px; padding:16px 10px 6px; }
+    .cat-group{ margin-bottom:14px; }
   .cat-head{ display:flex; align-items:center; gap:6px; margin-bottom:6px; }
   .cat-name{ color:var(--steel); font-size:12px; font-weight:700; letter-spacing:.5px; text-transform:uppercase; }
   /* Security hunt round 8: the delete-custom-wod X had zero gap to the
@@ -1654,7 +1398,6 @@
      no-op there rather than a second breakpoint to keep in sync. 448px
      matches .save-btn's own established narrow-single-column cap
      elsewhere, rather than inventing a new number. */
-  [data-invite-management-section]{ max-width:448px; }
   /* SIBLING DRIFT, fixed: every rule in this block used to name
      input[type="date"] alone, so the four <input type="datetime-local">
      controls in the community layer (the announcement expiry and the event
@@ -1868,42 +1611,7 @@
      faces - the same reason .page-title and .celebration-title above are 400.
      Size goes up a little to carry the lighter weight. */
   .ach-section-title{ font-family:'Anton','Secular One','Rubik',sans-serif; font-weight:400; font-size:15.5px; letter-spacing:.2px; color:var(--chalk); }
-  /* THE FEED'S SCOPE FILTER, riding the "הפיד שלי" section head instead of
-     a rail of its own (cloud.js, filterHtml + sectionHead's `trailing`).
-     It was four .chip-btn role="tab"s in a .chip-row, measured at 96px tall
-     at 390x844 because the four Hebrew labels wrap onto two lines - the
-     third stacked navigation layer on a screen that already carries the
-     bottom bar and the community sub-tab bar.
-     margin-inline-start:auto, not margin-left: this is an RTL document and
-     the logical property is what puts the control at the row's END on both
-     directions rather than pinning it to a physical side.
-     width:auto overrides .text-input's own width:100%, which would take the
-     whole row and push the heading out.
-     NO COLOUR OF ITS OWN, deliberately - every paint it has comes from
-     .text-input's tokens (--surface2, --border, --chalk), so it themes
-     itself in light and dark and needs no duplicate in either dark block.
-     min-height:44px keeps it a real tap target; the smaller font is what
-     stops the longest scope label ("אחרי מי שאני עוקב/ת") from truncating
-     at 390px, measured, not assumed. */
-  .feed-scope-select{ margin-inline-start:auto; width:auto; max-width:62%; min-height:44px; padding:6px 10px; font-size:13.5px; font-weight:700; }
-  /* Usability pass: the Manage tab's "ניהול" sub-tab (cloud.js
-     renderManageApp) stacks five rare admin tools - moderation, audit log,
-     club settings, analytics, onboarding content - one after another, which
-     read as one undifferentiated ~5000px scroll. Wrapping each in <details>
-     (manageAdminArea(), cloud.js) fixes that without adding a second layer
-     of tabs, which is exactly what the operator-depth rework (see that
-     function's own comment) collapsed seven sub-tabs down to three to avoid
-     in the first place. Own summary styling rather than reusing
-     .ach-section-head/.ach-section-title directly: those sit INSIDE each
-     area too (one per sub-section), and a summary needs a disclosure
-     affordance those don't. */
-  details.manage-area{ margin-top:18px; }
-  details.manage-area > summary{ display:flex; align-items:center; gap:8px; padding:4px 0; cursor:pointer; list-style:none; font-family:'Anton','Secular One','Rubik',sans-serif; font-weight:400; font-size:15.5px; letter-spacing:.2px; color:var(--chalk); }
-  details.manage-area > summary::-webkit-details-marker{ display:none; }
-  details.manage-area > summary::before{ content:"›"; display:inline-block; color:var(--steel); transition:transform .15s ease; flex-shrink:0; }
-  details.manage-area[open] > summary::before{ transform:rotate(90deg); }
-  details.manage-area > .manage-area-body{ margin-top:12px; }
-  .ach-row{ display:flex; gap:14px; overflow-x:auto; padding-bottom:4px; -webkit-overflow-scrolling:touch; }
+    .ach-row{ display:flex; gap:14px; overflow-x:auto; padding-bottom:4px; -webkit-overflow-scrolling:touch; }
   /* Community tab: real buttons and admin-only framing, instead of the
      11px underlined .link-btn (meant for a de-emphasized action like
      "delete account") standing in for every primary action. */
@@ -2005,20 +1713,7 @@
      pixel-identical to an enabled one, cursor:pointer included. One rule,
      every button/input/textarea in the app. */
   button:disabled, input:disabled, textarea:disabled, select:disabled{ opacity:.45; cursor:default; }
-  /* Real device report (2026-09-15, first real-phone session this app has
-     ever had): "העלאת תמונה" did nothing on an installed iOS PWA. All four
-     file inputs in this app (avatar, composer, PR photo, club WOD) hid
-     themselves with display:none inside a wrapping <label>. A
-     display:none input is not rendered, and Safari - notably inside a
-     standalone PWA - does not reliably forward a label activation to a
-     control that does not exist in the layout, so the picker never opens
-     and there is no error to see. The portable fix is to keep the input
-     rendered and merely invisible: it stays in the layout, stays
-     focusable, stays label-activatable, and is still impossible to see or
-     accidentally hit. Not display:none, never for a file input. */
-  .file-input-hidden{ position:absolute; width:1px; height:1px; padding:0; margin:-1px;
-    overflow:hidden; clip:rect(0 0 0 0); clip-path:inset(50%); white-space:nowrap; border:0; }
-  /* The screen-reader-only class. It was already IN USE (cloud.js's staff
+    /* The screen-reader-only class. It was already IN USE (cloud.js's staff
      rail spells the moderation badge's count out for a reader beside an
      aria-hidden numeral) and had no rule anywhere, so that sentence was
      simply painting on screen next to the badge it was meant to replace -
@@ -2080,9 +1775,7 @@
      a two-tone badge for a status with no admin meaning at all. .admin-tag
      itself now stays reserved for real admin-context labels ("ניהול"). */
   .tag{ display:inline-flex; align-items:center; font-size:10px; font-weight:800; letter-spacing:.3px; border-radius:999px; padding:2px 9px; margin-inline-start:8px; border:1px solid transparent; }
-  .tag-brass{ background:var(--brass); border-color:var(--brass); color:var(--avatar-ink); }
-  .admin-card{ border-color:var(--energy); }
-  .field-label{ font-size:11px; font-weight:700; color:var(--steel); display:block; margin-bottom:4px; }
+      .field-label{ font-size:11px; font-weight:700; color:var(--steel); display:block; margin-bottom:4px; }
   .field + .field{ margin-top:10px; }
   /* ...but only when the fields are actually stacked. The two-up form rows
      (`<div class="flex gap-10 field">` around two field() labels) make those
@@ -2108,45 +1801,7 @@
   /* Community: identity + timing, so a feed post reads as a person and a
      moment rather than an anonymous card of numbers. */
   .avatar-badge{ display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; border-radius:50%; color:var(--avatar-ink); font-weight:800; line-height:1; }
-  /* THE CLUB BOARD (design direction C, "לוח הקיר"). Today's programming is
-     the one thing on this screen that exists physically in the gym - it is
-     written on a board on the wall - so it is drawn as that board rather than
-     as another card. This is the only surface in the app with its own
-     material, and that is the point: it should be recognisable across the
-     room, not blend into the feed.
-     Slate is darker than --surface in BOTH themes on purpose; it is a
-     material, not an elevation, so it does not follow the card ramp. */
-  .wod-board{
-    position:relative;
-    background:
-      radial-gradient(90% 60% at 25% 8%, rgba(242,236,225,.055), transparent 62%),
-      radial-gradient(70% 50% at 85% 95%, rgba(242,236,225,.035), transparent 60%),
-      linear-gradient(178deg, #1B2531, #141C27);
-    border:1px solid #0A0F16;
-    border-radius:8px;
-    padding:20px 18px 18px;
-    margin-bottom:12px;
-    box-shadow:0 1px 0 rgba(242,236,225,.08) inset, 0 22px 40px -22px rgba(0,0,0,.95);
-    overflow:hidden;
-    color:#F2ECE1;
-  }
-  /* Chalk dust. A data URI, so it costs no request and nothing for the CSP
-     to allow. */
-  .wod-board::after{
-    content:""; position:absolute; inset:0; pointer-events:none; opacity:.40; mix-blend-mode:soft-light;
-    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='c'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='4'/></filter><rect width='160' height='160' filter='url(%23c)' opacity='.42'/></svg>");
-  }
-  .wod-board > *{ position:relative; }
-  .wod-board-eyebrow{ font-size:11px; color:var(--brass); font-weight:700; letter-spacing:.16em; }
-  .wod-board-date{ font-size:11px; color:rgba(242,236,225,.45); font-weight:600; }
-  .wod-board-title{ font-family:'Anton','Secular One','Rubik',sans-serif; font-weight:400; font-size:21px; line-height:1.15; color:#FFFDF8; margin:14px 0; }
-  .wod-board-lines{ font-family:'JetBrains Mono','Rubik',ui-monospace,monospace; font-size:15px; line-height:1.9; direction:ltr; text-align:left; color:#F2ECE1; white-space:pre-wrap; }
-  .wod-board-rule{ height:1px; background:rgba(242,236,225,.15); margin:16px 0 14px; }
-  .wod-board-label{ font-size:10.5px; color:rgba(242,236,225,.45); font-weight:700; letter-spacing:.14em; margin-bottom:9px; }
-  .wod-board-names{ display:flex; flex-wrap:wrap; align-items:center; font-size:14px; font-weight:600; color:#F2ECE1; }
-  .wod-board-sep{ color:rgba(242,236,225,.28); padding:0 9px; }
-  .wod-board-ghost{ background:rgba(242,236,225,.06); border-color:rgba(242,236,225,.15); color:#F2ECE1; }
-  .post-card{ padding:16px; }
+                          .post-card{ padding:16px; }
   .post-head{ display:flex; align-items:center; gap:10px; margin-bottom:10px; }
   .post-head-text{ display:flex; flex-direction:column; gap:1px; min-width:0; flex:1 1 auto; }
   /* THE NAME LINE: the profile link, then the role badge, on ONE line.
@@ -2174,14 +1829,7 @@
   .post-time{ color:var(--steel); font-size:11px; }
   .post-title{ font-size:16px; margin-bottom:4px; }
   .post-result{ color:var(--brass); font-weight:700; }
-  .post-photo{ width:100%; max-height:360px; object-fit:cover; border-radius:12px; margin-top:10px; display:block; }
-  /* 2-4 photos lay out as a 2-column grid (matching .ach-grid's visual
-     weight) instead of stacking full-width - each cell keeps .post-photo's
-     own rounding but drops its standalone margin-top in favor of the
-     grid's own gap. */
-  .post-media-grid{ display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:10px; }
-  .post-media-grid .post-photo{ margin-top:0; max-height:200px; }
-  .post-actions{ margin-top:12px; }
+        .post-actions{ margin-top:12px; }
   /* Feed polish pass. The action row used to be two identical grey
      .chip-btn boxes - a reaction and a comment count looked exactly like
      any utility toggle elsewhere in the app (a filter chip, a subtab).
@@ -2213,14 +1861,7 @@
      elsewhere in Community. */
   .post-card[data-post-type="POST_CHALLENGE"]{ border-top:3px solid color-mix(in srgb, var(--teal) 55%, transparent); }
   .post-card[data-post-type="POST_EVENT"]{ border-top:3px solid color-mix(in srgb, var(--blue) 55%, transparent); }
-  /* The composer trigger - was a plain .chip-btn, now the fake-input row
-     every social feed uses for the same tap target: own avatar + a
-     placeholder-styled label, full-width, left-aligned text (RTL: text
-     starts at the trailing edge, same reading direction as a real input). */
-  .post-composer-trigger{ display:flex; align-items:center; gap:10px; width:100%; background:var(--surface); border:1px solid var(--border); border-radius:999px; padding:8px 14px 8px 8px; margin:0 0 10px; box-shadow:var(--shadow-card); text-align:start; }
-  .post-composer-trigger-text{ color:var(--steel); font-size:13.5px; }
-  .comment-row{ display:flex; align-items:flex-start; gap:8px; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:8px 10px; }
-  .tab-badge{ display:inline-flex; align-items:center; justify-content:center; min-width:16px; height:16px; padding:0 4px; margin-inline-start:6px; border-radius:999px; background:var(--red); color:#fff; font-size:10px; font-weight:800; }
+        .tab-badge{ display:inline-flex; align-items:center; justify-content:center; min-width:16px; height:16px; padding:0 4px; margin-inline-start:6px; border-radius:999px; background:var(--red); color:#fff; font-size:10px; font-weight:800; }
   /* Promoted from ~19 classless, inline-styled cloud.js elements (COMM-347):
      each of these instances used to retype its whole look inline, in some
      cases identically at 2-3 call sites. Only genuinely dynamic values
@@ -2275,40 +1916,6 @@
   .post-menu-item.danger{ color:var(--red-text); }
 
 
-  /* ===== מסך תצוגה במועדון (202609230005) =============================
-     The wall screen. Every colour below is a token, so this themes itself
-     and needs no copy in either dark block - the rule CLAUDE.md asks for.
-     Sized in vw/vmin rather than px because the only thing that matters is
-     how it reads from the far side of a room, on a screen nobody will ever
-     zoom. */
-  :root[data-gym-display="1"] body{ overflow:hidden; }
-  .gd-root{ position:fixed; inset:0; z-index:100; display:flex; flex-direction:column;
-    gap:2.2vmin; padding:4vmin 5vmin; background:var(--club-navy); color:var(--chalk);
-    font-family:inherit; overflow:hidden; }
-  .gd-head{ display:flex; align-items:baseline; justify-content:space-between; gap:2vmin; }
-  .gd-brand{ font-size:3.2vmin; font-weight:800; letter-spacing:.04em; color:var(--brass); }
-  .gd-clock{ font-size:3.2vmin; font-weight:700; color:var(--steel);
-    font-variant-numeric:tabular-nums; }
-  .gd-title{ margin:0; font-size:8vmin; font-weight:800; line-height:1.05; text-wrap:balance; }
-  .gd-note{ font-size:3.2vmin; color:var(--steel); }
-  .gd-list{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column;
-    gap:1.2vmin; overflow:hidden; flex:1; }
-  .gd-row{ display:flex; align-items:center; gap:2.4vmin; background:var(--surface);
-    border:1px solid var(--border); border-radius:1.6vmin; padding:1.6vmin 2.4vmin; }
-  .gd-rank{ font-size:3.6vmin; font-weight:800; color:var(--steel); min-width:5vmin;
-    font-variant-numeric:tabular-nums; }
-  .gd-name{ font-size:4.4vmin; font-weight:700; flex:1; min-width:0;
-    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .gd-result{ font-size:4.4vmin; font-weight:800; color:var(--energy-text);
-    display:flex; align-items:center; gap:1.2vmin; font-variant-numeric:tabular-nums; }
-  .gd-rx{ font-size:2.2vmin; font-weight:800; color:var(--club-navy);
-    background:var(--brass); border-radius:999px; padding:.3vmin 1.2vmin; }
-  .gd-empty{ flex:1; display:flex; flex-direction:column; align-items:center;
-    justify-content:center; gap:1.6vmin; text-align:center; }
-  .gd-empty-title{ font-size:6vmin; font-weight:800; }
-  .gd-empty-sub{ font-size:3.2vmin; color:var(--steel); }
-  .gd-foot{ font-size:2.2vmin; color:var(--steel); text-align:center; }
-
   /* ===== The social feed pass =========================================
      EVERY RULE BELOW IS BUILT FROM TOKENS (--surface, --surface2, --border,
      --steel, --chalk, --brass, --energy, --energy-text, --blue), which is
@@ -2334,115 +1941,19 @@
   .reaction-pill.is-mine{ background:color-mix(in srgb, var(--energy) 18%, var(--surface)); border-color:var(--energy); }
   .reaction-pill .reaction-icon{ flex:0 0 auto; }
   .reaction-pill .reaction-count{ font-variant-numeric:tabular-nums; }
-  /* The comment count beside it: the same pill geometry so the two line up,
-     but deliberately NOT the same filled treatment - it opens a thread
-     rather than registering a reaction, and the rule just below keeps it
-     transparent and quiet. Its glyph is a stroke icon on currentColor, so it
-     takes --steel from that rule in both themes. */
-  .comment-pill{ display:inline-flex; align-items:center; gap:6px; }
-  .comment-pill .action-icon{ flex:0 0 auto; }
-  .comment-pill .reaction-count{ font-variant-numeric:tabular-nums; }
-  /* "דנה ועוד 4" - a name, not a number, and a real button because tapping
+        /* "דנה ועוד 4" - a name, not a number, and a real button because tapping
      it opens the list of who. */
   .reaction-summary{ color:var(--steel); font-size:12px; font-weight:600; padding:0 2px; }
   .reaction-summary:hover{ color:var(--chalk); text-decoration:underline; }
 
-  /* Comments under every card: the two latest, the reply links and the
-     always-present "הוספת תגובה…" box. The hairline is what separates the
-     conversation from the post without adding a second card edge. */
-  .comment-preview-wrap{ margin-top:10px; padding-top:8px; border-top:1px solid var(--border); }
-  .comment-preview .comment-row{ background:var(--surface2); border-color:transparent; }
-  .comment-more{ color:var(--steel); font-size:12px; font-weight:600; }
-
-  /* THE SEND CONTROL LIVES INSIDE THE FIELD, AND ONLY ONCE THERE IS TEXT.
-     It used to be a filled orange .chip-btn beside the input, and on a 390px
-     phone the two did not fit on one line: the form is flex-wrap, so the
-     button dropped underneath - a full-width primary CTA reading "שליחה"
-     under EVERY card in the feed, on an empty field it could do nothing
-     with. One send affordance per card, appearing when it has something to
-     send, is the whole of the fix. It is still the form's <button
-     type="submit">, so Enter in the field and a tap on the icon are the same
-     submit they always were, and it is hidden with display:none (not
-     opacity) so it is out of the tab order and out of the accessibility tree
-     while there is nothing to send. */
-  /* The form keeps the margin and the positioning context the inline styles
-     it replaced were carrying: .mention-picker is `position:absolute;
-     top:100%` and hangs off THIS element, so dropping `position:relative`
-     here would send the @-picker to the initial containing block. */
-  .comment-form{ position:relative; margin-top:8px; }
-  .comment-form .text-input{ width:100%; padding-inline-end:46px; }
-  .comment-send{ position:absolute; inset-inline-end:5px; top:50%; transform:translateY(-50%);
-    width:36px; height:36px; border:0; border-radius:999px; padding:0; background:transparent;
-    color:var(--energy-text); cursor:pointer; display:none; align-items:center; justify-content:center; }
-  .comment-form[data-has-text="1"] .comment-send{ display:inline-flex; }
-  .comment-send:hover{ background:color-mix(in srgb, var(--energy) 12%, transparent); }
-  .comment-send:disabled{ color:var(--steel); cursor:default; }
-
-  /* The composer row: the fake input plus the camera beside it. */
-  .post-composer-row{ display:flex; align-items:center; gap:8px; margin:0 0 10px; }
-  .post-composer-row .post-composer-trigger{ flex:1 1 auto; margin:0; }
-  .composer-photo-btn{ flex:0 0 auto; width:40px; height:40px; border-radius:999px; background:var(--surface); border:1px solid var(--border); color:var(--steel); font-size:17px; line-height:1; box-shadow:var(--shadow-card); display:flex; align-items:center; justify-content:center; }
-
-  /* The streak figure on "החברים הפעילים במועדון". It used to be a .mono
-     span holding the WHOLE phrase, and .mono is `direction:ltr;
-     unicode-bidi:isolate` - so "3 ימים ברצף" was laid out in an LTR
-     paragraph inside an RTL row: the digit was flung to the far side of the
-     Hebrew words with the gap between them, and at a streak of exactly one
-     the string carried no digit at all. Only the NUMBER is monospaced now -
-     digits are what .mono is for - and the words around it stay in the
-     document's own direction. */
-  .streak-count{ color:var(--brass); font-weight:700; font-size:12.5px; white-space:nowrap; flex:0 0 auto; }
-  .streak-count .streak-days{ font-weight:800; font-size:13px; }
-  /* THE SAME UNDERLINE, ONE CARD DOWN. The rows of that list put the avatar
-     and the member's name inside one .link-btn, which is this app's INLINE
-     link idiom - so the name carried the same rule under it that the post
-     author's did, on the same screen. A whole row is not an inline link:
-     no underline, no 36px floor of its own (the row sets its own height),
-     and the name ellipses rather than shoving the streak off the end.
-     Declared as a class rather than as a fourth inline style block because
-     eleven other member-name links in this module still carry the underline
-     on surfaces this pass did not photograph - see the PR - and this is what
-     they move to. */
-  .member-row-link{ display:flex; align-items:center; gap:10px; min-width:0; padding:0; min-height:0;
-    color:inherit; text-decoration:none; text-align:start; }
-  .member-row-link .member-row-name{ font-weight:700; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-
-  /* "התאמנו היום" - the same rows the card used, laid out as faces. Scrolls
-     horizontally rather than wrapping, so six classmates cost one row at any
-     width. RTL: the row is a plain flex and inherits the document direction,
-     so the first face sits at the trailing (right) edge like every other
-     list on this screen. */
-  .classmates-strip{ margin:0 0 12px; }
-  .classmates-strip-row{ display:flex; gap:12px; overflow-x:auto; padding-bottom:4px; }
-  .classmate-cell{ flex:0 0 auto; display:flex; flex-direction:column; align-items:center; gap:5px; width:62px; }
-  .classmate-chip{ display:flex; flex-direction:column; align-items:center; gap:5px; width:100%; background:none; border:0; padding:0; color:inherit; cursor:pointer; }
-  .classmate-chip-name{ font-size:11px; color:var(--steel); max-width:62px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  /* The card's follow control, at strip size. Only the metrics change - the
-     button, its action and follow() behind it are the shared ones. */
-  .classmate-chip-follow .chip-btn{ padding:2px 10px; font-size:10.5px; min-height:0; }
-
-  /* Stacked avatars on the club-WOD roll-up. The negative inline margin is
-     what makes them overlap; :first-child cancels it so the group still
-     starts flush with whatever precedes it. */
-  .stacked-avatars{ display:flex; align-items:center; }
-  .stacked-avatar{ display:inline-flex; margin-inline-start:-8px; border-radius:50%; box-shadow:0 0 0 2px var(--surface); }
-  .stacked-avatar:first-child{ margin-inline-start:0; }
-  .stacked-avatar-more{ width:28px; height:28px; align-items:center; justify-content:center; background:var(--surface2); color:var(--steel); font-size:11px; font-weight:800; }
-  .club-wod-rollup .field-label{ margin-bottom:4px; }
-
-  /* "פוסטים חדשים". Sticky rather than fixed, so it rides the top of the
-     feed panel and never covers the tab bar or the composer. */
-  .new-posts-pill-wrap{ position:sticky; top:8px; z-index:20; display:flex; justify-content:center; pointer-events:none; height:0; }
-  .new-posts-pill{ pointer-events:auto; box-shadow:0 6px 18px rgba(0,0,0,.18); }
-
-  /* Pull to refresh. Height is written by the touchmove handler, never by a
-     render; data-ready flips once the pull passes the trigger distance. */
-  .pull-refresh{ height:0; overflow:hidden; display:flex; align-items:center; justify-content:center; transition:height .18s ease; }
-  .pull-refresh-mark{ width:22px; height:22px; border-radius:50%; border:2px solid var(--border); border-top-color:var(--brass); }
-  .pull-refresh[data-ready="1"] .pull-refresh-mark{ border-color:var(--brass); border-top-color:var(--energy); }
-  @media (prefers-reduced-motion: no-preference){
-    .pull-refresh[data-ready="1"] .pull-refresh-mark{ animation:pullSpin .9s linear infinite; }
-  }
+      
+            
+      
+        
+            
+          
+    
+        
   @keyframes pullSpin{ to{ transform:rotate(360deg); } }
 
   /* Skeleton blocks. One rule for all six shapes the loading card uses, and
@@ -2453,13 +1964,10 @@
     .skeleton-block{ background:linear-gradient(90deg, var(--border) 25%, var(--surface2) 50%, var(--border) 75%); background-size:200% 100%; animation:skeletonShimmer 1.4s ease-in-out infinite; }
   }
   @keyframes skeletonShimmer{ 0%{ background-position:200% 0; } 100%{ background-position:-200% 0; } }
-  .progress-track{ background:var(--border); border-radius:999px; height:6px; overflow:hidden; margin-top:4px; }
-  .progress-track > div{ height:100%; background:var(--brass); }
-  .notif-group{ border-inline-start:3px solid transparent; }
+      .notif-group{ border-inline-start:3px solid transparent; }
   .notif-group.emphasise{ border-inline-start-color:var(--energy); }
   .notif-group-body{ padding-inline-start:8px; }
-  .badge-grid{ display:flex; flex-wrap:wrap; gap:8px; }
-
+  
   .celebration-stars{ position:absolute; inset:0; pointer-events:none; overflow:hidden; }
   .cstar{ position:absolute; opacity:.35; }
   @media (prefers-reduced-motion: no-preference){
@@ -2475,20 +1983,7 @@
   }
   @keyframes celebrationPop{ 0%{ transform:scale(.85); opacity:0; } 100%{ transform:scale(1); opacity:1; } }
 
-  /* ---- The printable joining sheet -----------------------------------
-     The box owner's objection to the invite flow was that a 48-character
-     hex code "cannot be printed on a flyer". cloud.js's renderInviteQrPanel()
-     renders [data-invite-print] - a QR, three instructions and the code as a
-     fallback - and window.print() is the whole delivery mechanism. No popup
-     (a blocker eats it), no generated PDF, no download.
-
-     The card is in the normal document flow but visually hidden on screen,
-     because a print stylesheet cannot reveal markup that was never
-     rendered. clip-path rather than display:none: a printer must be able to
-     lay it out, and display:none in the base state is not reliably undone
-     by a print media block in every engine. */
-  .invite-print-card{ position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
-  @media print{
+    @media print{
     /* Hide the whole app, then re-show the sheet. visibility (not display)
        is what makes this reliable: it inherits, so one rule on <body> hides
        every screen surface at once - the nav, the overlays, the rest of the
@@ -2509,27 +2004,7 @@
        that look like the app crashed. */
     html{ background:#FFFFFF; }
     body{ visibility:hidden; background:#FFFFFF; }
-    .invite-print-card, .invite-print-card *{ visibility:visible; }
-    .invite-print-card{
-      position:absolute; inset-block-start:0; inset-inline-start:0;
-      width:100%; height:auto; overflow:visible;
-      clip-path:none; white-space:normal;
-      display:flex; flex-direction:column; align-items:center;
-      gap:14px; padding:24px; text-align:center;
-      /* Printed on white paper with black ink regardless of the app's own
-         dark theme, and stated explicitly: a dark-themed card would come out
-         of the printer as a solid black page, and a QR needs dark modules on
-         a light ground to scan at all. */
-      background:#FFFFFF; color:#000000;
-      font-family:Rubik, system-ui, sans-serif;
-    }
-    .invite-print-club{ font-size:26pt; font-weight:800; }
-    .invite-print-title{ font-size:15pt; }
-    .invite-print-qr{ width:78mm; height:78mm; }
-    .invite-print-steps{ font-size:12pt; line-height:1.9; text-align:right; direction:rtl; padding-inline-start:20px; margin:0; }
-    .invite-print-code-label{ font-size:10pt; }
-    .invite-print-code{ font-family:'JetBrains Mono', monospace; font-size:9pt; word-break:break-all; max-width:120mm; }
-  }
+                                  }
   /* Approved immersive composition — shared by the existing render paths. */
   :root{ --club-coral:#f0443e; --club-blue:#1455b8; }
   /* THE SAME REDUCTION THE ADD SCREEN ALREADY HAD, on the three screens that
@@ -2747,15 +2222,6 @@
   .cal-panel[data-calendar-view="list"] .cal-grid,.cal-panel[data-calendar-view="list"] .cal-weekdays,.cal-panel[data-calendar-view="list"] .cal-legend{display:none;}
   .history-month-list section{margin-bottom:20px;}
 
-  /* Match the existing desktop shell's 560px reading column. Its save
-     action stays in that column in both two- and three-column layouts. */
-  @media(min-width:900px){
-    #bottomNavWrap{left:max(24px,calc(50% - 420px)); right:auto; width:560px;}
-  }
-  @media(min-width:1280px){
-    body:has(.app-shell > .context-col > *) #bottomNavWrap{left:auto; right:calc((100vw - min(1376px,100vw - 40px))/2 + 272px);}
-  }
-
   /* ==== "Navy Stripe" direction — Add screen only (2026-09) ==============
      Approved after several rounds of interactive mockups (glass, bold
      contrast, HUD, holo-chrome, brutalist, then a synthesis of the real
@@ -2901,121 +2367,6 @@
     }
   }
 
-  /* ===================================================================
-     THE DESKTOP STAFF SHELL (2026-09-18)
-     ===================================================================
-     Three columns for gym staff at a real desktop, and nothing else. Every
-     rule below is prefixed html[data-layout="desktop"][data-staff="1"] -
-     both attributes, always, with no exceptions - and that prefix is the
-     whole safety argument, pinned by a test that walks this block and fails
-     on any selector missing either half:
-
-       * A PHONE matches nothing. data-layout is only written when
-         (min-width: 1024px) AND (pointer: fine) both hold.
-       * A MEMBER AT A LAPTOP matches nothing. They carry data-layout and
-         never data-staff, and there is deliberately no rule keyed on
-         data-layout alone. Their sidebar, their 560px logging column, their
-         940px table surfaces and their context column are the ones the
-         ≥900/1200/1280 blocks above already gave them, untouched. The CSS
-         comments in those blocks argue at length that the logging column
-         must never change width at any breakpoint, and rule (1) there still
-         holds here: THE CENTRE COLUMN BELOW IS NOT THE LOGGING COLUMN. It
-         is #app on one tab - the staff home - and every other tab renders
-         at exactly the width it did before.
-
-     NO NEW COLOURS. Every value below is an existing token (--surface,
-     --border, --steel, --chalk, --brass, --teal, --shadow-card...). That is
-     not decoration: those tokens are already redefined for both dark
-     mechanisms at the top of this file, so this shell follows the theme in
-     both of them without a single rule of its own. There is nothing here to
-     duplicate into the prefers-color-scheme block or into
-     :root[data-theme="dark"], because there is no hardcoded colour to go
-     stale in either. The one previous attempt at this feature shipped 23
-     hardcoded hex values and no dark half at all.
-
-     FONTS: unchanged. The app's own self-hosted stacks apply as they do
-     everywhere else; this block sets no font-family.
-     =================================================================== */
-  html[data-layout="desktop"][data-staff="1"] .app-shell{
-    /* Wider than the member shell's 1440 cap because there are three real
-       columns here rather than two and a sometimes-third, and aligned to the
-       top rather than centred so the rail does not float. */
-    max-width:1680px; align-items:flex-start; gap:24px; padding:28px 24px;
-  }
-  /* THE RIGHT-HAND RAIL. inset-inline-start is the RIGHT edge in this
-     document (dir="rtl"), written logically rather than as `right` so a
-     Latin locale would flip it correctly instead of needing this found and
-     reversed by hand. Sticky rather than fixed: it scrolls with a long page
-     until it reaches the top, which keeps it inside the shell's own grid
-     instead of floating over it. */
-  html[data-layout="desktop"][data-staff="1"] .desktop-sidebar{
-    width:264px; flex-shrink:0; position:sticky; top:28px;
-    max-height:calc(100dvh - 56px); overflow-y:auto; overscroll-behavior:contain;
-  }
-  html[data-layout="desktop"][data-staff="1"] .nav-group{ margin-bottom:14px; }
-  html[data-layout="desktop"][data-staff="1"] .nav-group-head{
-    color:var(--steel); font-size:11px; font-weight:800; letter-spacing:.08em;
-    text-transform:uppercase; padding:6px 10px 4px;
-  }
-  /* THE CENTRE COLUMN, and the one tab it applies to. #app is the logging
-     column on every other tab and keeps its own width there; only the staff
-     home widens, which is what :has() is checking for. Same mechanism the
-     ניהול tab's 940px rule already uses two blocks up. */
-  html[data-layout="desktop"][data-staff="1"] #app:has(#content .staff-home){
-    max-width:none; flex:1 1 auto; min-width:0;
-  }
-  /* THE LEFT CONTEXT COLUMN. The ≥1280 rules above already reveal
-     #contextCol once it has an element child and style it as a sticky card;
-     this only sets its measure for the staff shell and makes it appear from
-     1024 rather than 1280, since at this width it is the point of the
-     screen rather than an extra. */
-  html[data-layout="desktop"][data-staff="1"] .app-shell:has(> .context-col > *) > .context-col{
-    display:block; flex:0 0 320px; min-width:300px; max-width:360px;
-    position:sticky; top:28px; background:var(--surface); border:1px solid var(--border);
-    border-radius:20px; padding:16px 14px; box-shadow:var(--shadow-card);
-    max-height:calc(100dvh - 56px); overflow-y:auto; overscroll-behavior:contain;
-  }
-  html[data-layout="desktop"][data-staff="1"] .context-col-head{
-    font-size:13px; font-weight:800; color:var(--steel); margin:0 0 10px;
-    letter-spacing:.04em;
-  }
-  /* The rail holds the same coach sections the phone renders, so its cards
-     lose the outer margins they need in a single-column scroll. */
-  html[data-layout="desktop"][data-staff="1"] .context-col .chart-card{ margin-bottom:10px; }
-  html[data-layout="desktop"][data-staff="1"] .context-col .ach-section{ margin-bottom:10px; }
-  /* Below 1180 the three columns stop fitting: the rail is the one that
-     goes, because the centre column is the work and the sidebar is the
-     navigation. Nothing is lost - every section in it is also on the coach
-     sub-tab, which the sidebar still reaches. */
-  @media (max-width: 1180px){
-    html[data-layout="desktop"][data-staff="1"] .app-shell:has(> .context-col > *) > .context-col{ display:none; }
-  }
-
-  /* ---- The week strip ------------------------------------------------ */
-  /* Seven boxes, published or empty, and the state is a WORD in every one
-     of them rather than a colour alone. */
-  html[data-layout="desktop"][data-staff="1"] .staff-week{
-    display:grid; grid-template-columns:repeat(7, minmax(0, 1fr)); gap:8px;
-  }
-  html[data-layout="desktop"][data-staff="1"] .staff-week-day{
-    min-height:72px; display:flex; flex-direction:column; gap:4px;
-    border:1px solid var(--border); border-radius:12px; padding:8px;
-    background:var(--surface2); color:var(--steel); text-align:start;
-  }
-  html[data-layout="desktop"][data-staff="1"] .staff-week-day.is-published{
-    background:var(--surface); color:var(--chalk); border-color:var(--brass);
-  }
-  html[data-layout="desktop"][data-staff="1"] .staff-week-day[aria-current="date"]{
-    box-shadow:inset 0 0 0 1px var(--teal);
-  }
-  html[data-layout="desktop"][data-staff="1"] .staff-week-when{
-    font-size:11px; font-weight:800; color:var(--steel);
-  }
-  html[data-layout="desktop"][data-staff="1"] .staff-week-what{
-    font-size:12.5px; font-weight:700; overflow-wrap:anywhere;
-  }
-  html[data-layout="desktop"][data-staff="1"] .staff-home > .page-title{ margin-bottom:14px; }
-
 </style>
 </head>
 <body>
@@ -3044,20 +2395,7 @@
   <div style="color:var(--steel); font-size:13px; font-weight:700;">טוען את היומן שלך…</div>
 </div>
 
-<!-- Plain block below the desktop breakpoint (#appShell/#desktopSidebar's
-     CSS rules are entirely inside the @media (min-width:900px) block, see
-     .app-shell/.desktop-sidebar below) so nothing here changes the mobile
-     layout. At the wide breakpoint this becomes a persistent sidebar
-     (the CSS alone decides which nav surface shows - no JS branching -
-     the same way this app already handles the light/dark theme split
-     through CSS layering rather than a JS check); its content is
-     rendered by renderDesktopSidebar() (app.js), from the exact same
-     getNavItems() registry the mobile nav menu reads, deliberately
-     without the tabAddBtn/etc ids (avoiding duplicate DOM ids - the
-     mobile copy keeps them, this one uses data-tab alone, which the
-     click delegator already reads). -->
 <div id="appShell" class="app-shell">
-<nav id="desktopSidebar" class="desktop-sidebar" aria-label="ניווט ראשי"></nav>
 <div id="app" style="display:none;">
   <header class="header" aria-label="כותרת האפליקציה">
     <div class="flex items-center gap-8">
@@ -3107,50 +2445,6 @@
 
   <main aria-label="תוכן ראשי"><div id="content" role="tabpanel"></div></main>
 </div>
-<!-- The wide-desktop context column (design spec §6.2). Third and last
-     child of #appShell, so in this RTL flex row it lands on the far
-     inline-end side, opposite #desktopSidebar, with #app between them.
-
-     THIS ELEMENT IS EMPTY ON PURPOSE AND IS INVISIBLE WHILE IT IS.
-     .context-col is display:none at every width, and the ≥1280px rules
-     that turn it into a sticky card are all gated on
-     `:has(> .context-col > *)` - it takes a real element child to make
-     this a box on screen. So an unfilled context column is not a wide
-     empty card, it is nothing at all, and the two-column ≥900px layout
-     is exactly what renders. That gate is the point: shipping an empty
-     sticky card would be worse than shipping no column.
-
-     THE CONTRACT, for whoever wires the content (app.js / cloud.js):
-
-       const col = document.getElementById("contextCol");
-       col.innerHTML = <html for the current tab>;   // to show
-       col.innerHTML = "";                           // to hide
-
-     - Show/hide is driven ENTIRELY by whether there is an element child.
-       There is no class to toggle, no hidden attribute to manage, and no
-       width check to duplicate in JS - the media query already owns the
-       breakpoint, and JS that also owns it will drift from it. Write the
-       markup unconditionally on every render and let CSS decide whether
-       the column is on screen; below 1280px it costs one innerHTML write
-       and renders nothing.
-     - `col.innerHTML = ""` genuinely hides it, and so does whitespace
-       (a text node is not an element child), but write "" - the rule
-       being relied on should be the obvious one.
-     - The right place to call this is render() in app.js, immediately
-       after the #desktopSidebar write (which is the same shape: an
-       out-of-#content surface regenerated on every render), and before
-       the #content write, so that a handler bound after render sees both.
-     - Spec §6.2 rule: this column may only ever hold a SECOND VIEW OF
-       EXISTING STATE - the selected exercise's history table and chart
-       (רישום), the PR table (התקדמות), the selected day's detail
-       (לוח שנה), the WOD list (אימונים), the club rail (קהילה). It may
-       never hold anything the phone cannot reach by another route, and
-       it is not a place to put a desktop-only feature.
-     - It scrolls inside itself and is position:sticky, so the first
-       child should be a heading; there is deliberately no aria-label
-       here, because a landmark's name has to describe what is actually
-       mounted in it and this file does not know that. -->
-<aside id="contextCol" class="context-col"></aside>
 </div>
 
 <!-- Full-page nav menu, replacing the old top tabbar. Reuses the existing
@@ -3581,24 +2875,16 @@
      they have to exist by the time either one runs. -->
 <script defer src="./src/eventbus.js"></script>
 <script defer src="./src/analytics.js"></script>
-<script defer src="./src/realtime.js"></script>
-<script defer src="./src/image.js"></script>
 <!-- The community write queue. Must load before cloud.js, which registers
      its handlers at module load so a queue drained on the first `online`
      event already knows how to send what it is holding. -->
 <script defer src="./src/dormancy.js"></script>
 <script defer src="./src/outbox.js"></script>
-<script defer src="./src/community/events.js"></script>
 <script defer src="./src/community/outward.js"></script>
 <script defer src="./src/community/achievements.js"></script>
 <script defer src="./src/community/notifications.js"></script>
-<script defer src="./src/community/challenges.js"></script>
-<script defer src="./src/community/coach-tools.js"></script>
-<script defer src="./src/community/club.js"></script>
-<script defer src="./src/community/feed.js"></script>
-<script defer src="./src/community/comments.js"></script>
-<script defer src="./src/community/boards.js"></script>
-<script defer src="./src/community/directory.js"></script>
+<script defer src="./src/community/reactions.js"></script>
+<script defer src="./src/community/privacy.js"></script>
 <script defer src="./src/community/posts.js"></script>
 <!-- The share prompt after real training, and the one coordinator the
      workout, PR and achievement prompts all pass through. After posts.js
@@ -3606,8 +2892,6 @@
      from inside function bodies, which run long after every script has. -->
 <script defer src="./src/community/share-prompt.js"></script>
 <script defer src="./src/community/auth.js"></script>
-<script defer src="./src/community/admin.js"></script>
-<script defer src="./src/community/gym-display.js"></script>
 <script defer src="./cloud.js"></script>
 <script defer src="./src/constants.js"></script>
 <script defer src="./src/format.js"></script>
@@ -3617,7 +2901,6 @@
      window.communityIsStaff() is half the answer, and before app.js,
      which calls applyDesktopLayout() on every render and starts the
      watch once at boot. Both calls are typeof-guarded either way. -->
-<script defer src="./src/desktop-layout.js"></script>
 <script defer src="./app.js"></script>
 </body>
 </html>

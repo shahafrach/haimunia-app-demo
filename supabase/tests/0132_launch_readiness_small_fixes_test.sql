@@ -1,5 +1,7 @@
--- Four small launch-readiness items, each with the case that made it a defect
--- and the case that proves the fix discriminates (202609230009-12).
+-- Two small launch-readiness items, each with the case that made it a defect
+-- and the case that proves the fix discriminates (202609230009-12). The event
+-- image and member-of-the-week sections went with their features in
+-- 202610250001.
 
 \set rls_helpers_included true
 create extension if not exists pgtap with schema extensions;
@@ -45,33 +47,6 @@ select is(
 select tests.clear_auth();
 
 -- =====================================================================
--- N8 / AUDIT-RECON-003: an event image must be https
--- =====================================================================
-select throws_ok(
-  $$ insert into public.events (id, title, event_type, start_at, created_by, status, image_url)
-     values ('e0132000-0000-4000-8000-000000000001', 'x', 'social_night', now(),
-             tests.uid('coach'), 'draft', 'javascript:alert(1)') $$,
-  '23514', null, 'a javascript: image URL is refused by the column, not only by the renderer');
-
-select throws_ok(
-  $$ insert into public.events (id, title, event_type, start_at, created_by, status, image_url)
-     values ('e0132000-0000-4000-8000-000000000002', 'x', 'social_night', now(),
-             tests.uid('coach'), 'draft', 'http://example.com/a.jpg') $$,
-  '23514', null, 'and so is plain http - a mixed-content image is a broken image with a leak attached');
-
-select lives_ok(
-  $$ insert into public.events (id, title, event_type, start_at, created_by, status, image_url)
-     values ('e0132000-0000-4000-8000-000000000003', 'x', 'social_night', now(),
-             tests.uid('coach'), 'draft', 'https://example.com/a.jpg') $$,
-  'an https URL is accepted - the check discriminates rather than simply forbidding');
-
-select lives_ok(
-  $$ insert into public.events (id, title, event_type, start_at, created_by, status, image_url)
-     values ('e0132000-0000-4000-8000-000000000004', 'x', 'social_night', now(),
-             tests.uid('coach'), 'draft', null) $$,
-  'and null is still allowed - most events have no image');
-
--- =====================================================================
 -- N11: a revoked push endpoint does not live forever
 -- =====================================================================
 insert into public.push_subscriptions (user_id, endpoint, keys, created_at, revoked_at)
@@ -94,21 +69,6 @@ select isnt_empty(
 select isnt_empty(
   $$ select 1 from public.push_subscriptions where endpoint = 'https://push.example/live' $$,
   'and a LIVE subscription is never touched, whatever its age');
-
--- =====================================================================
--- N7 / COMM-315: the member of the week is told
--- =====================================================================
--- Asserted on the definition rather than by publishing: member_of_week_publish
--- needs a week's worth of eligibility fixtures to reach its insert, and what
--- is being fixed here is that the call was absent entirely.
-select ok(
-  (select pg_get_functiondef(oid) like '%notif_create%'
-     from pg_proc where proname = 'member_of_week_publish' and pronamespace = 'public'::regnamespace),
-  'member_of_week_publish notifies the member it is about');
-select ok(
-  (select pg_get_functiondef(oid) like '%exception when others%'
-     from pg_proc where proname = 'member_of_week_publish' and pronamespace = 'public'::regnamespace),
-  'and best-effort: a notification that cannot be written must not roll back the club''s choice');
 
 select * from finish();
 rollback;

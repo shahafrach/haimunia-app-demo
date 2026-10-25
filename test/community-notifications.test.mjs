@@ -36,7 +36,7 @@
 // way the RLS boundary tests do.
 import { test } from "node:test";
 import assert from "node:assert";
-import { bootCommunity, waitFor, notifPrefControl, notifPrefOption, notifPrefValue, pickNotifPref } from "./helpers/boot.mjs";
+import { bootCommunity, holdPosts, waitFor, notifPrefControl, notifPrefOption, notifPrefValue, pickNotifPref } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
 
 const VERIFIED = new Date().toISOString();
@@ -52,7 +52,7 @@ function notif(i, extra) {
   return Object.assign({
     id: `n${i}`,
     user_id: "u1",
-    type: "comment_reply",
+    type: "achievement_unlocked",
     category: "community",
     title: `התראה ${i}`,
     body: `גוף ההתראה ${i}`,
@@ -80,7 +80,7 @@ function seeded(notifications, opts) {
 
 async function openCommunity(window) {
   window.document.getElementById("tabCommunityBtn").click();
-  await waitFor(() => !!window.document.getElementById("communityClubTop"), 4000);
+  await waitFor(() => !!window.document.getElementById("communityHead"), 4000);
 }
 async function openCenter(window) {
   await openCommunity(window);
@@ -94,15 +94,14 @@ async function openCenter(window) {
 }
 async function openAccount(window) {
   await openCommunity(window);
-  window.document.querySelector('[data-community-action="set-tab"][data-tab="account"]').click();
-  await waitFor(() => !!notifPrefControl(window, "mentions"), 4000);
+  await waitFor(() => !!notifPrefControl(window, "trained_together"), 4000);
 }
 const centerText = (window) => window.document.querySelector("[data-notif-center]").textContent;
 
 // ===== COMM-140 notification centre ===================================
 
 test("the bell opens a dialog; each row carries an icon, title, body and relative time", async () => {
-  const mock = seeded([notif(1, { type: "comment_reply", title: "תגובה חדשה", body: "נועם הגיב/ה לך" })]);
+  const mock = seeded([notif(1, { type: "trained_together", title: "תגובה חדשה", body: "נועם הגיב/ה לך" })]);
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openCenter(window);
 
@@ -111,30 +110,27 @@ test("the bell opens a dialog; each row carries an icon, title, body and relativ
   assert.equal(dlg.getAttribute("aria-modal"), "true");
   const rowEl = dlg.querySelector('[data-community-action="notif-open"]');
   assert.ok(rowEl, "a notification row renders");
-  assert.match(rowEl.textContent, /תגובה חדשה/);
+  assert.match(rowEl.textContent, /תויגתם/, "the client title for the type");
   assert.match(rowEl.textContent, /נועם הגיב/);
   assert.match(rowEl.textContent, /לפני|עכשיו/, "a relative timestamp is shown");
 });
 
-test("rows are grouped under the five category headings in order", async () => {
+test("rows are grouped under the two category headings in order", async () => {
   const mock = seeded([
-    notif(1, { type: "comment_reply", category: "community" }),
+    notif(1, { type: "trained_together", category: "community" }),
     notif(2, { type: "achievement_unlocked", category: "training" }),
-    notif(3, { type: "challenge_update", category: "challenges" }),
-    notif(4, { type: "event_cancelled", category: "events" }),
-    notif(5, { type: "announcement", category: "club" }),
   ]);
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openCenter(window);
   const t = centerText(window);
-  const order = ["קהילה", "אימונים", "אתגרים", "אירועים", "מועדון"].map((h) => t.indexOf(h));
+  const order = ["קהילה", "אימונים"].map((h) => t.indexOf(h));
   assert.ok(order.every((i) => i >= 0), "every category heading is present");
   assert.deepEqual(order.slice().sort((a, b) => a - b), order, "headings render in category order");
 });
 
 test("the centre pages 20 at a time and hands the cursor back for the next page", async () => {
   const rows = [];
-  for (let i = 1; i <= 25; i++) rows.push(notif(i, { type: "comment_reply" }));
+  for (let i = 1; i <= 25; i++) rows.push(notif(i, { type: "trained_together" }));
   const mock = seeded(rows);
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openCenter(window);
@@ -210,7 +206,7 @@ test("opening the centre marks the rows it showed read, and the badge drops", as
 
 test("mark all read clears rows loaded after the first page", async () => {
   const rows = [];
-  for (let i = 1; i <= 25; i++) rows.push(notif(i, { type: "comment_reply" }));
+  for (let i = 1; i <= 25; i++) rows.push(notif(i, { type: "trained_together" }));
   const mock = seeded(rows);
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openCenter(window);
@@ -233,7 +229,7 @@ test("mark all read clears rows loaded after the first page", async () => {
 });
 
 test("mark read is optimistic and rolls back when the server rejects it", async () => {
-  const mock = seeded([notif(1, { type: "comment_reply", deep_link: "/community/boards?challenge=ch1" })]);
+  const mock = seeded([notif(1, { type: "trained_together", deep_link: "/community/boards?challenge=ch1" })]);
   mock.onRpc("notif_mark_read", () => ({ data: null, error: { message: "boom" } }));
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openCenter(window);
@@ -264,74 +260,18 @@ test("the 90-day horizon is not walked until 'show older' is used", async () => 
   await waitFor(() => /התראה ישנה/.test(centerText(window)), 4000);
 });
 
-// Live bug hunt round 4 (2026-09-11): ensureNotifRealtime() used to arm only
-// inside ensureCommunityDataLoaded()'s deferred batch - gated on the member
-// actually visiting Community or Manage. loadNotifUnread() (a plain count)
-// was already promoted into refreshSession()'s eager batch for exactly this
-// reason (the header badge needs a real number from first paint, not only
-// once Community happens to be visited) - the realtime subscription that
-// keeps that badge LIVE had never been given the same promotion.
-test("the notification realtime channel arms at session start, without the member ever visiting Community", async () => {
-  const mock = seeded([]);
-  const window = await bootCommunity(mock, { syncEnabled: false });
-  // Deliberately never call openCommunity() / click into the Community tab
-  // at all - the app boots straight onto the training log, same as a
-  // member who opens the app only to log a workout.
-  await waitFor(() => mock.openChannels().includes("notif-u1"), 4000);
-});
-
-test("a realtime-arriving batched notification does not collapse an already-expanded group mid-read", async () => {
-  const mock = seeded([
-    notif(1, { type: "reaction" }),
-    notif(2, { type: "reaction" }),
-    notif(3, { type: "reaction" }),
-  ]);
-  const window = await bootCommunity(mock, { syncEnabled: false });
-  await openCenter(window);
-  const group = window.document.querySelectorAll('[data-community-action="notif-toggle-group"]');
-  assert.equal(group.length, 1, "three reactions collapse into one group");
-  group[0].click();
-  await waitFor(() => window.document.querySelectorAll('[data-community-action="notif-open"]').length === 3, 4000);
-
-  await waitFor(() => mock.openChannels().includes("notif-u1"), 4000);
-  // A realtime INSERT unshift()s onto the front of c.rows - the exact
-  // sequence that used to change the group's own key (derived from
-  // group[0].id) out from under it, silently re-collapsing an
-  // already-expanded group mid-read.
-  mock.emitRealtime("notif-u1", { eventType: "INSERT", new: { id: "n-live-reaction", user_id: "u1", type: "reaction", category: "community", title: "עוד עידוד", read_at: null, created_at: new Date().toISOString() } });
-
-  await waitFor(() => window.document.querySelectorAll('[data-community-action="notif-open"]').length === 4, 4000);
-  const groupAfter = window.document.querySelector('[data-community-action="notif-toggle-group"]');
-  assert.equal(groupAfter.getAttribute("aria-expanded"), "true",
-    "the group must stay expanded through the realtime insert, not silently snap shut mid-read");
-});
-
-test("the badge refreshes on a realtime own-row event", async () => {
-  const mock = seeded([notif(1)]);
-  const window = await bootCommunity(mock, { syncEnabled: false });
-  await openCommunity(window);
-  await waitFor(() => mock.openChannels().includes("notif-u1"), 4000);
-
-  mock.emitRealtime("notif-u1", { eventType: "INSERT", new: { id: "n-live", user_id: "u1", type: "mention", category: "community", title: "x", read_at: null, created_at: new Date().toISOString() } });
-  await waitFor(() => /2 חדשות/.test(window.document.querySelector('[data-community-action="feed-notifications"]').getAttribute("aria-label")), 4000);
-
-  const before = mock.callsTo("notif_unread_count").length;
-  mock.emitRealtime("notif-u1", { eventType: "UPDATE", new: { id: "n1", user_id: "u1" } });
-  await waitFor(() => mock.callsTo("notif_unread_count").length > before, 4000);
-});
-
 // ===== COMM-142 immediate versus batched rendering ===================
 
 test("routing: an immediate notification renders as its own row", async () => {
   const mock = seeded([
-    notif(1, { type: "comment_reply" }),
-    notif(2, { type: "comment_reply" }),
+    notif(1, { type: "trained_together" }),
+    notif(2, { type: "trained_together" }),
   ]);
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openCenter(window);
   assert.equal(window.document.querySelectorAll('[data-community-action="notif-open"]').length, 2, "two standalone rows");
   assert.equal(window.document.querySelectorAll('[data-community-action="notif-toggle-group"]').length, 0, "no collapsed group");
-  assert.equal(window.classifyNotification({ type: "comment_reply" }), "immediate");
+  assert.equal(window.classifyNotification({ type: "trained_together" }), "immediate");
 });
 
 test("routing: a batched type renders as one collapsed row that expands", async () => {
@@ -353,7 +293,7 @@ test("routing: a batched type renders as one collapsed row that expands", async 
   assert.equal(window.classifyNotification({ type: "reaction" }), "batched");
 });
 
-test("notifRoute honours the per-type preference, with the operational-announcement override", async () => {
+test("notifRoute honours the per-type preference, and an unknown type is suppressed", async () => {
   // Explicitly flag-off: this asserts the "push reads as in_app" fallback,
   // which only exists while push is unavailable. Default is on since B3.
   const mock = seeded([notif(1)]);
@@ -361,20 +301,11 @@ test("notifRoute honours the per-type preference, with the operational-announcem
   await openCommunity(window);
 
   assert.deepEqual(window.notifRoute("reaction", { reactions: "off" }), { channel: "off", mode: "batched", suppressed: true });
-  assert.deepEqual(window.notifRoute("mention", {}), { channel: "in_app", mode: "immediate", suppressed: false });
+  assert.deepEqual(window.notifRoute("trained_together", {}), { channel: "in_app", mode: "immediate", suppressed: false });
   // web push is off in V1: a stored "push" degrades to in-app
   assert.equal(window.notifRoute("reaction", { reactions: "push" }).channel, "in_app");
-  // operational announcements always land in-app, muted or not
-  assert.deepEqual(window.notifRoute("announcement", { announcements: "off" }), { channel: "in_app", mode: "immediate", suppressed: false });
-});
-
-test("a muted type still renders in-app when it is an operational announcement", async () => {
-  const mock = seeded([notif(1, { type: "announcement", category: "club", title: "תחזוקה מתוכננת" })], {
-    notification_preferences: [{ user_id: "u1", type: "announcements", channel: "off" }],
-  });
-  const window = await bootCommunity(mock, { syncEnabled: false });
-  await openCenter(window);
-  assert.match(centerText(window), /תחזוקה מתוכננת/, "the operational announcement row is shown despite the off preference");
+  // a type the client no longer knows (comments, announcements ... went with their features) is suppressed
+  assert.equal(window.notifRoute("announcement", {}).suppressed, true);
 });
 
 // ===== COMM-143 phase 1 types and deep links =========================
@@ -384,11 +315,10 @@ test("deep link resolution maps route and source fields to the exact target", as
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openCommunity(window);
   const R = window.notifResolveTarget;
-  assert.deepEqual(R({ deep_link: "/community/feed?post=p1&comment=c9" }), { tab: "feed", post: "p1", comment: "c9" });
+  assert.deepEqual(R({ deep_link: "/community/feed?post=p1" }), { tab: "account", post: "p1" });
   assert.deepEqual(R({ deep_link: "/community/account/achievements?ma=ma1" }), { tab: "account", achievement: "ma1" });
-  assert.deepEqual(R({ deep_link: "/community/boards?challenge=ch1" }), { tab: "boards", challenge: "ch1" });
-  assert.deepEqual(R({ deep_link: "/community/feed?announcement=a1" }), { tab: "feed", announcement: "a1" });
   assert.equal(R({ source_type: "post", source_id: "p2" }).post, "p2", "source_type/source_id is the fallback");
+  assert.deepEqual(R({ deep_link: "/community/boards?challenge=ch1" }), { tab: "account" }, "a link into a dropped screen lands on the home");
 });
 
 test("tapping a row opens its deep-link target and marks it read", async () => {
@@ -396,41 +326,37 @@ test("tapping a row opens its deep-link target and marks it read", async () => {
     id: "p7", post_type: "POST_TEXT", author_id: "u1",
     author: { display_name: "דנה", handle: "dana" }, body: "פוסט", visibility: "club",
     created_at: new Date(BASE).toISOString(), published_at: new Date(BASE).toISOString(),
-    reaction_count: 0, comment_count: 1, media: [], metadata: {},
+    reaction_count: 0, comment_count: 0, media: [], metadata: {},
   };
   const mock = seeded(
-    [notif(1, { type: "comment_reply", deep_link: "/community/feed?post=p7&comment=c3" })],
+    [notif(1, { type: "trained_together", deep_link: "/community/feed?post=p7" })],
     { feed: [post] },
   );
   const window = await bootCommunity(mock, { syncEnabled: false });
-  await openCenter(window);
+  await openCommunity(window);
+  holdPosts(window, [post]);
+  window.document.querySelector('[data-community-action="feed-notifications"]').click();
+  await waitFor(() => !!window.document.querySelector('[data-community-action="notif-open"]'), 4000);
 
   window.document.querySelector('[data-community-action="notif-open"]').click();
   await waitFor(() => !window.document.querySelector("[data-notif-center]"), 4000);
-  await waitFor(() => !!window.document.querySelector('#communityFeedList [data-post-id="p7"]'), 4000);
-
-  const feedTabBtn = window.document.querySelector('[data-community-action="set-tab"][data-tab="feed"]');
-  assert.ok(feedTabBtn.className.includes("active"), "the feed sub-tab is the active screen");
-  assert.ok(window.document.querySelector('#communityFeedList [data-post-id="p7"] [data-comment-input]'), "the target post's thread is open");
+  await waitFor(() => !!window.document.querySelector('#communityHeldPosts [data-post-id="p7"]'), 4000);
   assert.deepEqual(mock.callsTo("notif_mark_read").slice(-1)[0], { p_ids: ["n1"] }, "the tapped row was marked read");
 });
 
-test("each Phase 1 type carries its own icon, category and copy", async () => {
+test("each type carries its own icon, category and copy", async () => {
   const mock = seeded([
-    notif(1, { type: "comment_reply", category: "community" }),
-    notif(2, { type: "mention", category: "community" }),
-    notif(3, { type: "achievement_unlocked", category: "training" }),
-    notif(4, { type: "announcement", category: "club" }),
+    notif(1, { type: "trained_together", category: "community" }),
+    notif(2, { type: "achievement_unlocked", category: "training" }),
   ]);
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openCenter(window);
   const html = window.document.querySelector("[data-notif-center]").innerHTML;
-  assert.match(html, /↩️/, "reply icon");
+  assert.match(html, /🤝/, "trained-together icon");
   assert.match(html, /🏅/, "achievement icon");
-  assert.match(html, /📢/, "announcement icon");
   // category placement
   const t = centerText(window);
-  assert.ok(t.indexOf("אימונים") < t.indexOf("מועדון"), "training before club");
+  assert.ok(t.indexOf("קהילה") < t.indexOf("אימונים"), "community before training");
 });
 
 // ===== COMM-144 preferences per type =================================
@@ -440,63 +366,20 @@ test("the Account panel lists every type with Push (disabled), In-app and Off", 
   const window = await bootCommunity(mock, { syncEnabled: false, localStorage: { "haimunia-demo:notifPushFlag": "0" } });
   await openAccount(window);
 
-  // "comments"/"replies"/"achievements" were re-keyed to their real server
-  // notif_pref_key() names (comment_on_post/comment_reply/achievement_
-  // unlocked, COMM-218/219), monthly_club_recap was added (COMM-309), and
-  // streak_at_risk was added by the community structure research pass
-  // (202609100002) - a plain, member-visible reminder type. feed_activity
-  // was added by the live bug hunt round 4 fix (2026-09-11): its pref key
-  // used to be the orphaned pre-rename "comments" (nothing ever wrote that
-  // key), so this toggle could never be muted at all - see NOTIF_TYPES.
-  // feed_activity's own comment in cloud.js. new_report and
-  // engagement_decline_flagged are both staff/moderator-only
-  // (mod_alert_recipients()) and are deliberately absent here: this seeded
-  // member holds no moderation permission, so both rows are gated out -
-  // see the dedicated staff test below. trained_together was added by
-  // 202609220005 ("התאמנו יחד"): a plain member-visible type, and its own
-  // row rather than a fold into `mentions`, because notif_pref_key() has an
-  // arm for mention/coach_mention and none for trained_together - one
-  // toggle could not honestly write both server keys.
   const types = new Set([...window.document.querySelectorAll("[data-notif-pref-select]")].map((b) => b.dataset.type));
-  assert.deepEqual([...types].sort(), [
-    "achievement_unlocked", "announcements", "challenges", "comment_on_post", "comment_reply",
-    "events", "feed_activity", "friend_achievements", "mentions", "monthly_club_recap", "reactions",
-    "streak_at_risk", "trained_together", "weekly_recap",
-  ], "all fourteen member-visible preference types are listed");
-  assert.ok(!types.has("new_report"), "the moderator-only type is not shown to a plain member");
-  assert.ok(!types.has("engagement_decline_flagged"), "the staff-only engagement alert type is not shown to a plain member");
+  assert.deepEqual([...types].sort(), ["achievement_unlocked", "reactions", "trained_together"],
+    "the member-visible preference types that are left (comments, mentions, challenges, events, announcements, recaps, streaks and friend alerts went with their features)");
 
   // Real device feedback: a disabled push button ("התראת דחיפה · בקרוב")
   // used to still render in V1, unbalancing the row next to in_app/off -
   // the option is omitted entirely now while the flag is off, not merely
   // disabled. See test/community-web-push.test.mjs for the dedicated
   // coverage of this and the flag-on case.
-  const push = notifPrefOption(window, "comment_on_post", "push");
+  const push = notifPrefOption(window, "reactions", "push");
   assert.equal(push, null, "push is not offered at all in V1, not just disabled");
-  const inApp = notifPrefOption(window, "comment_on_post", "in_app");
+  const inApp = notifPrefOption(window, "reactions", "in_app");
   assert.ok(!inApp.disabled, "In-app works");
-  assert.equal(notifPrefValue(window, "comment_on_post"), "in_app", "the default selection is In-app");
-});
-
-test("a moderator sees the new_report and engagement_decline_flagged preference rows; a plain member never does", async () => {
-  const modMock = createMockSupabase({
-    profiles: [{ id: "u1", handle: "dana", display_name: "דנה", is_admin: false, recovery_verified_at: VERIFIED, visible_to_club: true }],
-    invite_redemptions: [{ user_id: "u1", invite_id: "inv-1", role: "coach", redeemed_at: VERIFIED }],
-    clubs: [{ id: "club-1", name: "חיימוניה" }],
-    notifications: [], notification_preferences: [], feed_page_rows: [],
-    follows: [], hidden_posts: [], saved_posts: [],
-  });
-  modMock.setUser({ id: "u1", is_anonymous: false, email: "dana@members.haimuniya.invalid" });
-  const modWindow = await bootCommunity(modMock, { syncEnabled: false });
-  await openAccount(modWindow);
-  assert.ok(notifPrefControl(modWindow, "new_report"), "a coach (community.comment.moderate) sees the row");
-  assert.ok(notifPrefControl(modWindow, "engagement_decline_flagged"), "and the engagement-decline alert row too - same staffOnly gate as new_report (202609100002)");
-
-  const memberMock = seeded([]);
-  const memberWindow = await bootCommunity(memberMock, { syncEnabled: false });
-  await openAccount(memberWindow);
-  assert.ok(!notifPrefControl(memberWindow, "new_report"), "a plain member does not");
-  assert.ok(!notifPrefControl(memberWindow, "engagement_decline_flagged"), "nor the engagement-decline alert row");
+  assert.equal(notifPrefValue(window, "reactions"), "in_app", "the default selection is In-app");
 });
 
 test("changing a preference is a direct own-row upsert into notification_preferences", async () => {
@@ -504,29 +387,28 @@ test("changing a preference is a direct own-row upsert into notification_prefere
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openAccount(window);
 
-  pickNotifPref(window, "mentions", "off");
-  await waitFor(() => mock.db.notification_preferences.some((r) => r.type === "mentions" && r.channel === "off"), 4000);
+  pickNotifPref(window, "trained_together", "off");
+  await waitFor(() => mock.db.notification_preferences.some((r) => r.type === "trained_together" && r.channel === "off"), 4000);
 
-  const row = mock.db.notification_preferences.find((r) => r.type === "mentions");
+  const row = mock.db.notification_preferences.find((r) => r.type === "trained_together");
   assert.equal(row.user_id, "u1", "written under the caller's own id");
   assert.equal(row.channel, "off");
 
   // reflected on re-render
-  window.document.querySelector('[data-community-action="set-tab"][data-tab="feed"]').click();
-  window.document.querySelector('[data-community-action="set-tab"][data-tab="account"]').click();
-  await waitFor(() => !!notifPrefControl(window, "mentions"), 4000);
-  assert.equal(notifPrefValue(window, "mentions"), "off");
+  window.render();
+  await waitFor(() => !!notifPrefControl(window, "trained_together"), 4000);
+  assert.equal(notifPrefValue(window, "trained_together"), "off");
 });
 
 test("stored preferences load and drive the panel selection", async () => {
   const mock = seeded([], { notification_preferences: [
     { user_id: "u1", type: "reactions", channel: "off" },
-    { user_id: "u1", type: "comment_reply", channel: "in_app" },
+    { user_id: "u1", type: "trained_together", channel: "in_app" },
   ] });
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openAccount(window);
   assert.equal(notifPrefValue(window, "reactions"), "off");
-  assert.equal(notifPrefValue(window, "comment_reply"), "in_app");
+  assert.equal(notifPrefValue(window, "trained_together"), "in_app");
 });
 
 test("a failed preference save reverts the control and shows the Hebrew error", async () => {
@@ -540,31 +422,12 @@ test("a failed preference save reverts the control and shows the Hebrew error", 
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openAccount(window);
 
-  pickNotifPref(window, "events", "off");
+  pickNotifPref(window, "reactions", "off");
   await waitFor(() => /לא ניתן לשמור העדפה זו/.test(window.document.getElementById("content").textContent), 4000);
-  assert.equal(notifPrefValue(window, "events"), "in_app", "the control reverted to In-app");
-});
-
-test("the panel notes that operational announcements always show in-app", async () => {
-  const mock = seeded([]);
-  const window = await bootCommunity(mock, { syncEnabled: false });
-  await openAccount(window);
-  const panel = [...window.document.querySelectorAll(".ach-section")].find((s) => /העדפות התראות/.test(s.textContent));
-  assert.match(panel.textContent, /הודעות תפעוליות מהמועדון תמיד יופיעו/);
+  assert.equal(notifPrefValue(window, "reactions"), "in_app", "the control reverted to In-app");
 });
 
 // ===== COMM-219 announcements row states the important/urgent bypass ==
-
-test("the announcements row states plainly that important/urgent still reach a member who turned it off", async () => {
-  const mock = seeded([]);
-  const window = await bootCommunity(mock, { syncEnabled: false });
-  await openAccount(window);
-  const toggle = notifPrefControl(window, "announcements");
-  const row = toggle.closest(".log-row");
-  assert.match(row.textContent, /חשוב/, "mentions the important tier");
-  assert.match(row.textContent, /דחוף/, "mentions the urgent tier");
-  assert.match(row.textContent, /כבוי/, "makes clear this applies even when the toggle is off");
-});
 
 // ===== push path is feature-flagged off ==============================
 
@@ -579,7 +442,7 @@ test("no push subscription is created and push offers no control at all with the
   // there is no button to click at all while the flag is off (see
   // community-web-push.test.mjs for the dedicated coverage of both states).
   assert.equal(
-    notifPrefOption(window, "comment_on_post", "push"), null,
+    notifPrefOption(window, "reactions", "push"), null,
     "no push control exists in the DOM in V1");
   await new Promise((r) => setTimeout(r, 40));
   assert.ok(!seenTables.includes("push_subscriptions"), "nothing writes push_subscriptions in V1");
@@ -588,124 +451,11 @@ test("no push subscription is created and push offers no control at all with the
 
 // ===== Launch-readiness fix 1: new_report / monthly_club_recap registered ==
 
-test("new_report and monthly_club_recap render with Hebrew client copy, not the server's raw English/unknown-type fallback", async () => {
-  const mock = seeded([
-    notif(1, { type: "new_report", category: "community", title: "New report to review", body: "A post was reported (spam)" }),
-    notif(2, { type: "monthly_club_recap", category: "club", title: "סיכום החודש של הקהילה", body: "42 אימונים, 11 פוסטים ו-3 חברים חדשים החודש." }),
-  ]);
-  const window = await bootCommunity(mock, { syncEnabled: false });
-  await openCenter(window);
-  const html = window.document.querySelector("[data-notif-center]").innerHTML;
-  const text = centerText(window);
-  assert.match(html, /🚩/, "new_report gets its own registered icon, not the generic 🔔 unknown-type fallback");
-  assert.match(text, /דיווח חדש לבדיקה/, "new_report's Hebrew client label wins over the server's English title");
-  assert.doesNotMatch(text, /New report to review/, "the raw English server title never leaks into the centre");
-  assert.match(html, /🗓️/, "monthly_club_recap gets its own registered icon");
-  assert.match(text, /סיכום החודש של הקהילה/);
-  assert.equal(window.classifyNotification({ type: "new_report" }), "immediate");
-  assert.equal(window.classifyNotification({ type: "monthly_club_recap" }), "immediate", "COMM-309: fires at most 12x/year on a deliberate publish, nothing to roll up");
-});
-
 // ===== Launch-readiness fix 2: monthly recap deep link vs weekly (COMM-309) =
-
-test("deep link resolution tells a monthly club recap apart from a weekly one", async () => {
-  const mock = seeded([notif(1)]);
-  const window = await bootCommunity(mock, { syncEnabled: false });
-  await openCommunity(window);
-  const R = window.notifResolveTarget;
-  // Both real deep links share the "/community/recap" prefix and both would
-  // match the weekly branch's own /\/recap(\/|$)/ regex - this is exactly
-  // the bug: without a month-specific branch ABOVE it, every monthly recap
-  // notification resolved as if it were a weekly one.
-  assert.deepEqual(R({ deep_link: "/community/recap/monthly?month=2026-08-01" }), { tab: "account", recapMonth: "2026-08-01" });
-  assert.deepEqual(R({ deep_link: "/community/recap?week=2026-08-24" }), { tab: "account", recapWeek: "2026-08-24" });
-  assert.deepEqual(R({ source_type: "monthly_club_recap", source_id: "mcr-1" }), { tab: "account", recapMonth: null }, "source_type fallback also resolves to the monthly target, not the weekly one");
-});
-
-test("tapping a monthly club recap notification lands on the Account tab's recap card, never the weekly recap dialog", async () => {
-  const recapRow = {
-    id: "mcr-1", club_id: "club-1", month_start: "2026-08-01",
-    sessions_logged: 42, posts_created: 11, new_members: 3,
-    challenges_completed: 5, events_held: 2, generated_at: VERIFIED, published_at: VERIFIED,
-  };
-  const mock = seeded(
-    [notif(1, { type: "monthly_club_recap", category: "club", deep_link: "/community/recap/monthly?month=2026-08-01" })],
-    { monthly_club_recaps: [recapRow] },
-  );
-  const window = await bootCommunity(mock, { syncEnabled: false });
-  await openCenter(window);
-
-  window.document.querySelector('[data-community-action="notif-open"]').click();
-  await waitFor(() => !window.document.querySelector("[data-notif-center]"), 4000);
-  await waitFor(() => !!window.document.querySelector("[data-monthly-recap-section]"), 4000);
-
-  const accountTabBtn = window.document.querySelector('[data-community-action="set-tab"][data-tab="account"]');
-  assert.ok(accountTabBtn.className.includes("active"), "the account tab is the active screen");
-  assert.ok(!window.document.querySelector('[data-cloud-dialog="recapView"]'), "the weekly recap dialog (openRecap) never opens for a monthly recap");
-  assert.match(window.document.querySelector("[data-monthly-recap-section]").textContent, /2026-08-01/);
-  assert.deepEqual(mock.callsTo("notif_mark_read").slice(-1)[0], { p_ids: ["n1"] }, "the tapped row was marked read");
-});
 
 // ===== Launch-readiness fix 3: NOTIF_PREF_TYPES keys match the server ======
 
-test("comment_reply/comment_on_post/achievement_unlocked route on the server's real notif_pref_key(), the old client-only keys do nothing", async () => {
-  const mock = seeded([notif(1)]);
-  const window = await bootCommunity(mock, { syncEnabled: false });
-  await openCommunity(window);
-  // Server mapping (202608280026, unamended by this fix): comment_reply ->
-  // comment_reply; comment_on_post/comment_also -> comment_on_post;
-  // achievement_unlocked -> achievement_unlocked.
-  assert.deepEqual(window.notifRoute("comment_reply", { comment_reply: "off" }), { channel: "off", mode: "immediate", suppressed: true });
-  assert.equal(window.notifRoute("comment_reply", { replies: "off" }).channel, "in_app", "the old client-only 'replies' key no longer has any effect on this type");
-  assert.deepEqual(window.notifRoute("comment_on_post", { comment_on_post: "off" }), { channel: "off", mode: "immediate", suppressed: true });
-  assert.deepEqual(window.notifRoute("comment_also", { comment_on_post: "off" }), { channel: "off", mode: "batched", suppressed: true }, "comment_also shares comment_on_post's key on the server too");
-  assert.equal(window.notifRoute("comment_on_post", { comments: "off" }).channel, "in_app", "the old client-only 'comments' key no longer has any effect");
-  assert.deepEqual(window.notifRoute("achievement_unlocked", { achievement_unlocked: "off" }), { channel: "off", mode: "immediate", suppressed: true });
-  assert.equal(window.notifRoute("achievement_unlocked", { achievements: "off" }).channel, "in_app", "the old client-only 'achievements' key no longer has any effect");
-  // Known, documented gap left alone on purpose: the server has no arm for
-  // either challenge type, so a combined client 'challenges' toggle still
-  // has no real server-side counterpart to line up with.
-  assert.equal(window.notifRoute("challenge_ending_soon", { challenges: "off" }).channel, "off", "still suppresses client-side rendering...");
-  // Live bug hunt round 4 (2026-09-11): feed_activity's pref key was the
-  // orphaned pre-rename "comments" - nothing in NOTIF_PREF_TYPES ever wrote
-  // that key, so this toggle could never be muted at all. notif_pref_key()
-  // has no explicit arm for feed_activity (202608290009's SQL), so it falls
-  // through to its identity fallback - the real server key is the literal
-  // string "feed_activity".
-  assert.deepEqual(window.notifRoute("feed_activity", { feed_activity: "off" }), { channel: "off", mode: "batched", suppressed: true });
-  assert.equal(window.notifRoute("feed_activity", { comments: "off" }).channel, "in_app", "the old orphaned 'comments' key no longer has any effect on this type");
-});
-
-test("the comment_reply toggle writes the server's real preference key, not the old client-only 'replies'", async () => {
-  const mock = seeded([]);
-  const window = await bootCommunity(mock, { syncEnabled: false });
-  await openAccount(window);
-  pickNotifPref(window, "comment_reply", "off");
-  await waitFor(() => mock.db.notification_preferences.some((r) => r.type === "comment_reply" && r.channel === "off"), 4000);
-  assert.ok(!mock.db.notification_preferences.some((r) => r.type === "replies"), "the server-unrecognised key 'replies' is never written");
-});
-
 // ===== Launch-readiness fix 4: navigateToNotifTarget's missing branches ====
-
-test("tapping a challenge notification opens the challenge's own detail dialog, not just the Boards tab", async () => {
-  const mock = seeded(
-    [notif(1, { type: "challenge_ending_soon", category: "challenges", deep_link: "/community/boards?challenge=c1" })],
-    {
-      challenges: [{ id: "c1", challenge_type: "individual_target", title: "12 אימונים החודש", description: "", metric_type: "session_count", target_value: 12, start_at: iso(-5), end_at: iso(20), status: "active", join_mode: "open", visibility: "club", created_by: "coach1", config: {} }],
-      challenge_participants: [], challenge_teams: [], challenge_progress: [],
-    },
-  );
-  const window = await bootCommunity(mock, { syncEnabled: false });
-  await openCenter(window);
-
-  window.document.querySelector('[data-community-action="notif-open"]').click();
-  await waitFor(() => !window.document.querySelector("[data-notif-center]"), 4000);
-  await waitFor(() => !!window.document.querySelector('[data-cloud-dialog="challengeView"]'), 4000);
-
-  const boardsTabBtn = window.document.querySelector('[data-community-action="set-tab"][data-tab="boards"]');
-  assert.ok(boardsTabBtn.className.includes("active"), "the boards tab is the active screen");
-  assert.match(window.document.querySelector('[data-cloud-dialog="challengeView"]').textContent, /12 אימונים החודש/, "the specific challenge's own detail is open, not merely the tab");
-});
 
 test("tapping an achievement-unlocked notification scrolls to that achievement in the Account tab", async () => {
   const mock = seeded(
@@ -719,94 +469,6 @@ test("tapping an achievement-unlocked notification scrolls to that achievement i
   await waitFor(() => !window.document.querySelector("[data-notif-center]"), 4000);
   await waitFor(() => !!window.document.querySelector('[data-achievement-id="ma1"]'), 4000);
 
-  const accountTabBtn = window.document.querySelector('[data-community-action="set-tab"][data-tab="account"]');
-  assert.ok(accountTabBtn.className.includes("active"), "the account tab is the active screen");
   assert.ok(window.document.querySelector('[data-achievement-id="ma1"]'), "the specific unlocked achievement has a real DOM anchor to scroll to");
 });
 
-test("tapping an announcement notification scrolls to that announcement in the feed", async () => {
-  const mock = seeded(
-    [notif(1, { type: "announcement", category: "club", title: "תחזוקה מתוכננת", deep_link: "/community/feed?announcement=a1" })],
-    { announcements: [{ id: "a1", author_id: "coach1", title: "תחזוקה מתוכננת", body: "המערכת תהיה מושבתת בלילה", created_at: new Date(BASE).toISOString(), pinned_date: null, priority: "normal", expires_at: null, profiles: { handle: "coach1", display_name: "מאמן" } }] },
-  );
-  const window = await bootCommunity(mock, { syncEnabled: false });
-  await openCenter(window);
-
-  window.document.querySelector('[data-community-action="notif-open"]').click();
-  await waitFor(() => !window.document.querySelector("[data-notif-center]"), 4000);
-  await waitFor(() => !!window.document.querySelector('[data-announcement-id="a1"]'), 4000);
-
-  const feedTabBtn = window.document.querySelector('[data-community-action="set-tab"][data-tab="feed"]');
-  assert.ok(feedTabBtn.className.includes("active"), "the feed tab is the active screen");
-});
-
-// Real device feedback ("the feed is getting too long"): the announcements
-// archive below the feed now caps at ANNOUNCEMENTS_ARCHIVE_VISIBLE (3),
-// with the rest behind a closed <details> disclosure - the same pattern
-// renderAuditLog()'s "עוד סינונים" already uses. A closed <details>
-// collapses its content to zero height, so a notification deep-linking
-// into a row PAST that cap must open the disclosure before scrolling, or
-// the member lands on an invisible target - exactly the bug this test
-// would have caught, since a1 here is the 4th (oldest) of 4 announcements.
-test("an announcements archive past the visible cap sits behind a closed disclosure, and a notification deep link into it opens the disclosure before scrolling", async () => {
-  const ann = (id, offsetMinutes, title) => ({
-    id, author_id: "coach1", title, body: `תוכן ${title}`,
-    created_at: new Date(BASE + offsetMinutes * 60000).toISOString(),
-    pinned_date: null, priority: "normal", expires_at: null,
-    profiles: { handle: "coach1", display_name: "מאמן" },
-  });
-  const mock = seeded(
-    [notif(1, { type: "announcement", category: "club", title: "הודעה ראשונה", deep_link: "/community/feed?announcement=a1" })],
-    {
-      announcements: [
-        ann("a4", 40, "הודעה רביעית"), ann("a3", 30, "הודעה שלישית"),
-        ann("a2", 20, "הודעה שנייה"), ann("a1", 10, "הודעה ראשונה"),
-      ],
-    },
-  );
-  const window = await bootCommunity(mock, { syncEnabled: false });
-  await openCommunity(window);
-  await waitFor(() => !!window.document.querySelector('[data-announcement-id="a4"]'), 4000);
-
-  const a1Row = window.document.querySelector('[data-announcement-id="a1"]');
-  assert.ok(a1Row, "the 4th announcement is still in the DOM, just archived");
-  const details = a1Row.closest("details");
-  assert.ok(details, "it sits inside a <details> disclosure");
-  assert.equal(details.open, false, "closed by default - only the 3 most recent show without expanding");
-  assert.match(window.document.body.textContent, /עוד הודעות \(1\)/, "the disclosure names how many more there are");
-
-  // Each rerender() replaces the DOM tree, so a1Row (captured before
-  // opening the notification center) goes stale the moment the center
-  // opens - re-query live each time instead of reusing that reference.
-  const liveA1Details = () => {
-    const el = window.document.querySelector('[data-announcement-id="a1"]');
-    return el && el.closest("details");
-  };
-  await openCenter(window);
-  window.document.querySelector('[data-community-action="notif-open"]').click();
-  await waitFor(() => !window.document.querySelector("[data-notif-center]"), 4000);
-  await waitFor(() => !!liveA1Details() && liveA1Details().open === true, 4000);
-  assert.equal(liveA1Details().open, true, "the deep link opens the disclosure, not just scrolls toward it");
-});
-
-// Live bug hunt round 4 (2026-09-11): a mention/comment notification's
-// target post is not guaranteed to be on the currently-loaded (paginated)
-// feed page - navigateToNotifTarget() used to just querySelector for the
-// post's DOM node and silently do nothing at all when it wasn't found,
-// closing the notification center with zero sign anything was even
-// attempted.
-test("tapping a mention notification whose target post isn't on the loaded feed page shows an honest message instead of silently doing nothing", async () => {
-  const mock = seeded(
-    [notif(1, { type: "mention", category: "community", deep_link: "/community/feed?post=p-missing&comment=c-missing" })],
-  );
-  const window = await bootCommunity(mock, { syncEnabled: false });
-  await openCenter(window);
-
-  window.document.querySelector('[data-community-action="notif-open"]').click();
-  await waitFor(() => !window.document.querySelector("[data-notif-center]"), 4000);
-
-  const feedTabBtn = window.document.querySelector('[data-community-action="set-tab"][data-tab="feed"]');
-  assert.ok(feedTabBtn.className.includes("active"), "still navigates to the feed tab itself");
-  assert.equal(window.document.querySelector('[data-post-id="p-missing"]'), null, "the target post genuinely never rendered");
-  await waitFor(() => /לא נטען בפיד/.test(window.document.body.textContent), 4000);
-});

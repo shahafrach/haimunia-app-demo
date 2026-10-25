@@ -21,8 +21,6 @@ import { createMockSupabase } from "./helpers/mockSupabase.mjs";
 // ready for the day DMs ship); only the misleading client control is gone.
 const DEFAULTS = {
   visible_to_club: true, show_workout_results: false, show_prs: false, show_achievements: true,
-  show_attendance: false, show_upcoming_booking: false, show_in_attendee_lists: true,
-  in_leaderboards: true, allow_follows: true, allow_mentions: true,
 };
 
 function seededMember(overrides = {}) {
@@ -36,21 +34,19 @@ function seededMember(overrides = {}) {
 
 async function openAccountTab(window) {
   window.document.getElementById("tabCommunityBtn").click();
-  await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
-  window.document.querySelector('[data-community-action="set-tab"][data-tab="account"]').click();
+  await waitFor(() => !!window.document.getElementById("communityHead"), 3000);
   await waitFor(() => !!window.document.querySelector('[data-privacy-field]'), 3000);
 }
 
 test("the panel renders one checkbox per privacy column, each reflecting the stored value", async () => {
-  const mock = seededMember({ show_prs: true, in_leaderboards: false });
+  const mock = seededMember({ show_prs: true });
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openAccountTab(window);
 
   const boxes = [...window.document.querySelectorAll('[data-privacy-field]')];
   const byField = Object.fromEntries(boxes.map((b) => [b.dataset.privacyField, b]));
-  assert.deepEqual(boxes.map((b) => b.dataset.privacyField).sort(), Object.keys(DEFAULTS).sort(), "all 10 columns present, no show_birthday, no allow_messages (no DM feature exists)");
+  assert.deepEqual(boxes.map((b) => b.dataset.privacyField).sort(), Object.keys(DEFAULTS).sort(), "the four surviving columns are present; the rest were dropped with their features");
   assert.equal(byField.show_prs.checked, true);
-  assert.equal(byField.in_leaderboards.checked, false);
   assert.equal(byField.visible_to_club.checked, true);
 });
 
@@ -78,8 +74,7 @@ test("toggling a checkbox upserts that one column into profiles and round-trips"
   assert.equal(mock.db.profiles[0].is_admin, false);
 
   // Re-render reflects the new stored value.
-  window.document.querySelector('[data-community-action="set-tab"][data-tab="feed"]').click();
-  window.document.querySelector('[data-community-action="set-tab"][data-tab="account"]').click();
+  window.rerender && window.rerender();
   await waitFor(() => !!window.document.querySelector('[data-privacy-field]'), 3000);
   assert.equal(window.document.querySelector('[data-privacy-field="show_workout_results"]').checked, true);
 });
@@ -113,29 +108,6 @@ test("a failed save reverts the toggle and shows the Hebrew error", async () => 
   assert.equal(window.document.querySelector('[data-privacy-field="show_prs"]').checked, false, "the checkbox reverted");
 });
 
-test("allow_follows=false on another member hides the follow button but keeps block", async () => {
-  const mock = seededMember();
-  mock.db.profiles.push({ id: "u2", handle: "noam", display_name: "נועם", is_admin: false, allow_follows: false, recovery_verified_at: new Date().toISOString() });
-  const window = await bootCommunity(mock, { syncEnabled: false });
-  await openAccountTab(window);
-
-  const search = window.document.getElementById("communityPeopleSearch");
-  search.value = "noam";
-  search.dispatchEvent(new window.Event("input", { bubbles: true }));
-  // 202609220006 moved block off the row and into the card's "⋯" menu, so
-  // the row's own arrival is now marked by the menu button rather than by a
-  // visible block chip. The two facts this test is about are unchanged: no
-  // follow control for a member who disallows follows, and blocking them is
-  // still offered.
-  await waitFor(() => !!window.document.querySelector('[data-community-action="toggle-member-menu"][data-id="u2"]'), 3000);
-
-  assert.equal(window.document.querySelector('[data-community-action="follow"]'), null, "no follow button for a member who disallows follows");
-  assert.equal(window.document.querySelector('[data-community-action="block"]'), null, "and block is not a chip on the row any more");
-
-  window.document.querySelector('[data-community-action="toggle-member-menu"][data-id="u2"]').click();
-  await waitFor(() => !!window.document.querySelector('[data-member-menu="u2"] [data-community-action="block"]'), 3000);
-  assert.ok(window.document.querySelector('[data-member-menu="u2"] [data-community-action="block"]'), "block is still offered, one tap further in");
-});
 
 test("canViewProfileField forwards target and field to the RPC and returns its boolean", async () => {
   const mock = seededMember();
@@ -146,7 +118,7 @@ test("canViewProfileField forwards target and field to the RPC and returns its b
   });
   const window = await bootCommunity(mock, { syncEnabled: false });
   window.document.getElementById("tabCommunityBtn").click();
-  await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
+  await waitFor(() => !!window.document.getElementById("communityHead"), 3000);
 
   assert.equal(await window.canViewProfileField("u2", "show_prs"), true);
   assert.equal(await window.canViewProfileField("u2", "show_attendance"), false);
@@ -194,15 +166,3 @@ test("cross-member round-trip: a hidden field reads false for another member, a 
   assert.equal(await window.canViewProfileField("u1", "show_prs"), false, "u2's view flips back when u1 hides PRs");
 });
 
-test("the boards 'hide my result' link flips in_leaderboards off via upsert", async () => {
-  const mock = seededMember({ in_leaderboards: true });
-  const window = await bootCommunity(mock, { syncEnabled: false });
-  window.document.getElementById("tabCommunityBtn").click();
-  await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
-  window.document.querySelector('[data-community-action="set-tab"][data-tab="boards"]').click();
-  await waitFor(() => !!window.document.querySelector('[data-community-action="hide-my-leaderboard-result"]'), 3000);
-
-  window.document.querySelector('[data-community-action="hide-my-leaderboard-result"]').click();
-  await waitFor(() => mock.db.profiles[0].in_leaderboards === false, 3000);
-  assert.equal(mock.db.profiles[0].in_leaderboards, false);
-});

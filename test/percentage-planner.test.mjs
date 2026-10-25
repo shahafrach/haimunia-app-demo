@@ -46,6 +46,6 @@ test("the percentage table is offered only where it means something", () => {
   // Duration entries carry est1RM: 0 by construction (sanitizeEntry), so a
   // percentage of a hold is meaningless; the panel is gated on both a real
   // estimate and a reps-type lift.
-  assert.match(src, /\$\{est && !isDuration \? `/,
+  assert.match(src, /\$\{est && !isDuration \? renderStrengthPctChips\(est\)/,
     "no percentage table for holds and carries, which have no 1RM to take a percentage of");
 });

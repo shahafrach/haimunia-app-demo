@@ -321,7 +321,7 @@ const navRows = await page.evaluate(() =>
       chevron,
     };
   }));
-check("the nav menu has rows to measure", navRows.length >= 3, `${navRows.length} rows`);
+check("the nav menu has rows to measure", navRows.length >= 2, `${navRows.length} rows`);
 check(
   "every row lays out as a row, not a centred column",
   navRows.every((r) => r.direction === "row"),
@@ -337,19 +337,9 @@ check(
   navRows.every((r) => r.chipLeft !== null && r.labelLeft !== null && r.chipLeft > r.labelLeft),
   JSON.stringify(navRows.map((r) => `${r.text}:${r.chipLeft}>${r.labelLeft}`)),
 );
-// CONTROL: put .tabbtn's own column layout back and the management rows
-// become centred cards again, while the settings rows (no .tabbtn) do not.
-const controlRows = await withPatchedCss(
-  page,
-  ".navrow.tabbtn{ flex-direction:column !important; justify-content:center !important; }",
-  () => page.evaluate(() =>
-    [...document.querySelectorAll("#navMenuOverlay .navrow")].map((el) => getComputedStyle(el).flexDirection)),
-);
-check(
-  "CONTROL: the pre-fix rule really did split the menu into two layouts",
-  new Set(controlRows).size > 1,
-  JSON.stringify(controlRows),
-);
+// The CONTROL that used to sit here put .tabbtn's column layout back to show
+// the pre-fix menu split in two. The management rows it split against went
+// with the staff shell, so there is nothing left for the control to split.
 await page.click("#navMenuOverlay button[data-action='close-nav-menu']");
 await page.waitForTimeout(250);
 

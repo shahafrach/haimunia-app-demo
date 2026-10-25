@@ -27,7 +27,7 @@ test("a queued local edit reaches the mock server before a stale remote copy wou
   // Confirms the initial load (real refreshSession(), triggered
   // automatically the moment cloud.js boots with an existing session)
   // correctly reached the main app - i.e. redemption/profile loaded.
-  await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
+  await waitFor(() => !!window.document.getElementById("communityHead"), 3000);
 
   // Simulate: this device queued a real edit (weight 999) while the
   // "server" still only has an older, stale copy (weight 1).
@@ -68,12 +68,11 @@ test("full signup lifecycle executes for real: bootstrap -> redeem code -> set c
 
   window.document.querySelector('#communityProfile input[name="displayName"]').value = "dana";
   window.document.getElementById("communityProfile").dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
-  await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
+  await waitFor(() => !!window.document.getElementById("communityHead"), 3000);
 
   assert.ok(mock.db.profiles.find((p) => p.handle === "dana"), "the profile must actually exist server-side after the real saveProfile() ran");
   assert.equal(mock.getUser().is_anonymous, false, "the account must be permanent (not anonymous) after setCredentials()");
 
-  window.document.querySelector('[data-community-action="set-tab"][data-tab="account"]').click();
   window.document.querySelector('[data-community-action="sign-out"]').click();
   // A "different device" logging in with the same credentials - the
   // thing plain anonymous-only sign-in structurally could not do. Since
@@ -89,7 +88,7 @@ test("full signup lifecycle executes for real: bootstrap -> redeem code -> set c
   // communityProfile form id for its own profile-edit form) always has
   // one, so this alone distinguishes "reached the app" from "stuck on
   // a gate" without being tripped up by that id reuse.
-  await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
+  await waitFor(() => !!window.document.getElementById("communityHead"), 3000);
 
   assert.equal(window.document.getElementById("communityInviteCode"), null, "a returning member must not be asked to redeem the invite code again");
   assert.equal(window.document.getElementById("communityCredentials"), null, "a returning member must not be asked to set credentials again");
@@ -103,58 +102,3 @@ test("full signup lifecycle executes for real: bootstrap -> redeem code -> set c
   assert.equal(nameField && nameField.value, "dana", "landed on the account tab's profile editor pre-filled with the saved name, not an empty completion-gate form");
 });
 
-test("an admin can search for a member and grant coach, executing for real through the confirm dialog", async () => {
-  const mock = createMockSupabase({
-    profiles: [
-      { id: "admin-1", handle: "coach_admin", display_name: "מנהל", is_admin: true, recovery_verified_at: new Date().toISOString() },
-      { id: "member-1", handle: "dana", display_name: "דנה", is_admin: false, recovery_verified_at: new Date().toISOString() },
-    ],
-    invite_redemptions: [
-      { user_id: "admin-1", invite_id: "inv-1", role: "member", redeemed_at: new Date().toISOString() },
-      { user_id: "member-1", invite_id: "inv-1", role: "member", redeemed_at: new Date().toISOString() },
-    ],
-  });
-  mock.setUser({ id: "admin-1", is_anonymous: false, email: "coach_admin@members.haimuniya.invalid" });
-  seedAdminStepUp(mock, "admin-1", "coach_admin@members.haimuniya.invalid");
-  mock.onRpc("admin_search_members", (args, ctx) => ({
-    data: ctx.db.profiles
-      .filter((p) => p.id === args.p_query || p.handle.includes(args.p_query))
-      .map((p) => {
-        const ir = ctx.db.invite_redemptions.find((r) => r.user_id === p.id);
-        return { id: p.id, handle: p.handle, display_name: p.display_name, is_admin: p.is_admin, role: ir && ir.role, redeemed_at: ir && ir.redeemed_at, last_activity_on: null };
-      }),
-    error: null,
-  }));
-  mock.onRpc("admin_grant_coach", (args, ctx) => {
-    const row = ctx.db.invite_redemptions.find((r) => r.user_id === args.p_user_id);
-    if (row) row.role = "coach";
-    return { data: null, error: null };
-  });
-
-  const window = await bootCommunity(mock, { syncEnabled: false });
-  // Redesign, Phase 1: renderMemberManagement() moved from Community's
-  // "account" sub-tab to the Manage tab's own "members" sub-tab.
-  // The club panel (2026-09-15): the two management panels were made fully
-  // disjoint, so club surfaces live behind the head coach's row. An admin
-  // fixture gets BOTH rows and reaches this one by its own id; a coach
-  // fixture has only the one, under the shared id.
-  (window.document.getElementById("tabClubManageBtn") || window.document.getElementById("tabManageBtn")).click();
-  await unlockAdminPanel(window);
-  await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
-  window.document.querySelector('[data-community-action="set-manage-tab"][data-tab="members"]').click();
-
-  const search = window.document.getElementById("adminMemberSearch");
-  search.value = "dana";
-  search.dispatchEvent(new window.Event("input", { bubbles: true }));
-  await waitFor(() => !!window.document.querySelector('[data-community-action="admin-grant-coach"]'), 3000);
-
-  window.document.querySelector('[data-community-action="admin-grant-coach"]').click();
-  await waitFor(() => !!window.document.getElementById("communityConfirmTitle"), 3000);
-  window.document.querySelector('[data-community-action="confirm-yes"]').click();
-
-  await waitFor(() => {
-    const row = mock.db.invite_redemptions.find((r) => r.user_id === "member-1");
-    return !!row && row.role === "coach";
-  }, 3000);
-  assert.equal(mock.db.invite_redemptions.find((r) => r.user_id === "member-1").role, "coach", "the real admin_grant_coach RPC must have actually run, server-side role changed from the confirm click");
-});

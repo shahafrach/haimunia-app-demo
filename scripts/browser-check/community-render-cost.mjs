@@ -115,7 +115,9 @@ await page.goto(target.url, { waitUntil: "networkidle" });
 await page.waitForSelector("#app", { state: "visible", timeout: 10000 });
 await dismissWelcomeModal(page);
 await switchTab(page, "tabCommunityBtn");
-await page.waitForSelector("#communityFeedList .post-card", { timeout: 10000 });
+await page.waitForSelector("#communityHead", { timeout: 10000 });
+await page.evaluate(() => window.holdPosts(JSON.parse(JSON.stringify(window.__mock.db.feed_page_rows))));
+await page.waitForSelector("#communityHeldPosts .post-card", { timeout: 10000 });
 
 const measure = await page.evaluate(() => {
   const content = document.getElementById("content");
@@ -223,13 +225,13 @@ const perInteraction = await page.evaluate(async () => {
   const real = window.render;
   let count = 0;
   window.render = function () { count++; return real.apply(this, arguments); };
-  const btn = document.querySelector("#communityFeedList [data-community-action='react'], #communityFeedList [data-community-action='toggle-comments']");
+  const btn = document.querySelector("#communityHeldPosts [data-community-action='cheer']");
   const label = btn ? btn.getAttribute("data-community-action") : null;
   if (btn) { btn.click(); await new Promise((r) => setTimeout(r, 600)); }
   window.render = real;
   return { label, count };
 });
-console.log(`\nOne tap on the feed's "${perInteraction.label}" control triggered ${perInteraction.count} full-tab rebuild(s).`);
+console.log(`\nOne tap on the held post's "${perInteraction.label}" control triggered ${perInteraction.count} full-tab rebuild(s).`);
 check("one tap costs a small, bounded number of full rebuilds", perInteraction.count > 0 && perInteraction.count <= 4, String(perInteraction.count));
 
 const identity = await page.evaluate(() => {

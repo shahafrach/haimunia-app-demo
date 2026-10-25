@@ -24,7 +24,7 @@ const functions = readdirSync(dir, { withFileTypes: true })
   .filter((name) => existsSync(new URL(`${name}/index.ts`, dir)));
 
 test("there are functions to check", () => {
-  assert.ok(functions.length >= 4, `expected the Edge Functions, found ${JSON.stringify(functions)}`);
+  assert.ok(functions.length >= 2, `expected the Edge Functions, found ${JSON.stringify(functions)}`);
 });
 
 for (const name of functions) {
@@ -46,7 +46,7 @@ test("functions importing only supabase-js share one lockfile, byte for byte", (
     const remote = [...src.matchAll(/^import .* from "(https?:[^"]+)"/gm)].map((m) => m[1]);
     return remote.length === 1 && remote[0] === "https://esm.sh/@supabase/supabase-js@2.57.4";
   });
-  assert.ok(simple.length >= 4, `expected several single-dependency functions, found ${simple.length}`);
+  assert.ok(simple.length >= 2, `expected several single-dependency functions, found ${simple.length}`);
   const locks = new Set(simple.map((name) => readFileSync(new URL(`${name}/deno.lock`, dir), "utf8")));
   assert.equal(locks.size, 1,
     "these functions import exactly the same one module and must resolve to the same lock; "

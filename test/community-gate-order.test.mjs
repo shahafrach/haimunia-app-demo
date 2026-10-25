@@ -349,9 +349,8 @@ test("signing out returns a member to the choice screen, not to a bare login for
   const window = await bootCommunity(mock, { syncEnabled: false });
   const d = window.document;
   d.getElementById("tabCommunityBtn").click();
-  await waitFor(() => !!d.querySelector(".subtabbar"), 4000);
+  await waitFor(() => !!d.getElementById("communityHead"), 4000);
 
-  d.querySelector('[data-community-action="set-tab"][data-tab="account"]').click();
   await waitFor(() => !!d.querySelector('[data-community-action="sign-out"]'), 3000);
   d.querySelector('[data-community-action="sign-out"]').click();
   await waitForCommunityGate(window);

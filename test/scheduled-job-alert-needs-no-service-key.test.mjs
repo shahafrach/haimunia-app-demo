@@ -83,18 +83,3 @@ test("the check fails on a stale verdict, not only on ok:false", () => {
   assert.match(script, /ageMinutes > MAX_AGE_MINUTES/, "and compared, not merely logged");
 });
 
-test("job_health_alert is registered in the client's notification types", () => {
-  // Admin-only, so - exactly like new_bug_report - it gets a NOTIF_TYPES entry
-  // (icon and title) and deliberately NO NOTIF_PREF_TYPES row: an operational
-  // alert saying the backend has stopped working is not a thing to offer a
-  // mute switch for. Without the NOTIF_TYPES entry the centre would fall back
-  // to a bare 🔔, which is legible but anonymous.
-  //
-  // cloudSource() rather than a path: NOTIF_TYPES lived in cloud.js when this
-  // was written and moved to src/community/notifications.js in the split the
-  // same week. What is asserted is a property of the community LAYER, not of
-  // whichever file currently holds the map.
-  const cloud = cloudSource();
-  assert.match(cloud, /job_health_alert:\s*\{[^}]*category:\s*"community"/, "registered, under an existing category");
-  assert.match(cloud, /job_health_alert:\s*\{[^}]*mode:\s*"immediate"/, "immediate - a stalled cron job is not batch material");
-});

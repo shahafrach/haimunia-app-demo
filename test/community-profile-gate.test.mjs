@@ -13,14 +13,9 @@ import fs from "node:fs";
 
 const cloudJs = fs.readFileSync(new URL("../cloud.js", import.meta.url), "utf8");
 
-test("member search responds to typing (input), not only on blur (change)", () => {
-  assert.match(cloudJs, /input\.addEventListener\("input", \(\) => searchPeople\(input\.value\)\)/);
-  assert.doesNotMatch(cloudJs, /input\.addEventListener\("change", \(\) => searchPeople/);
-});
-
 test("a signed-in, code-redeemed user with no profile yet sees an unskippable profile-completion gate, not the tabbed UI", () => {
   const gateAt = cloudJs.indexOf("if (!state.profile) return");
-  const tabsAt = cloudJs.indexOf("const tabs = [");
+  const tabsAt = cloudJs.indexOf("const accountTab = ");
   assert.ok(gateAt > -1, "the profile gate must exist");
   assert.ok(gateAt < tabsAt, "the gate must be checked before the tabbed UI is ever built");
   const gate = cloudJs.slice(gateAt, cloudJs.indexOf("const p = state.profile"));

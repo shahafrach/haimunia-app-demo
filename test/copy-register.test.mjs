@@ -101,34 +101,7 @@ test("the armed confirm names its subject instead of asking a bare 'delete every
 
 // ===== FINDING 2 - the sidebar status line ================================
 
-test("a member with no current streak has their STATE reported, not an instruction issued", async () => {
-  const window = await bootApp();
-  // A fresh boot has no entries, so computeCurrentStreak() is 0 - the
-  // branch under test. The sidebar renders at every width (render() fills
-  // #desktopSidebar unconditionally); CSS alone decides whether it is
-  // visible, so the string is assertable here and was verified in Chromium
-  // at 1280px, which is where a member actually meets it.
-  const sub = window.document.querySelector("#desktopSidebar .who-sub");
-  assert.ok(sub, "the desktop sidebar must render the .who card's status line");
-  assert.equal(sub.textContent.trim(), "הרצף מתחיל באימון הבא",
-    "the zero-streak sub-line must read as a fact about the member, not as a call to action");
-});
 
-test("the streak status line keeps the same shape in both of its branches", async () => {
-  // The line it alternates with (`N ימים ברצף`) states what the streak IS.
-  // The replacement states where it starts, so the two are the same kind of
-  // sentence rather than one fact and one imperative - and it is true both
-  // for someone who has never trained and for someone whose streak lapsed,
-  // which "בואו נתחיל להתאמן" was not.
-  const window = await bootApp();
-  window.document.getElementById("tabAddBtn").click();
-  window.document.querySelector('[data-action="open-picker"]').click();
-  window.document.querySelector('[data-action="pick-movement"]').click();
-  await window.saveSet();
-  const sub = window.document.querySelector("#desktopSidebar .who-sub");
-  assert.match(sub.textContent, /ברצף/, "with a live streak the line reports the streak itself");
-  assert.ok(!sub.textContent.includes("נתחיל"), "and never falls back to the imperative");
-});
 
 test("'בואו נתחיל' is left to the two buttons that actually ask for a tap", () => {
   // Appendix A.9's point was collision, not wording: the same three words

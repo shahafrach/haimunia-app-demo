@@ -20,54 +20,8 @@ import { cloudSource } from "./helpers/community-src.mjs";
 // Every pattern below is unchanged.
 const cloudJs = cloudSource();
 
-test("a club of one does not read '1 חברי מועדון'", () => {
-  // Hebrew does not pluralise like that: the noun must be singular for 1.
-  // This is the first line of the first tab a new member lands on.
-  const at = cloudJs.indexOf("function clubMembersLabel(n)");
-  assert.ok(at > -1, "there is a label helper rather than a raw template");
-  const body = cloudJs.slice(at, cloudJs.indexOf("\n  }", at));
-  assert.match(body, /count === 1 \?/, "the count of one is a separate case");
-  assert.ok(!/^\s*return `\$\{count\} חברי מועדון`;/m.test(body.split("count === 1")[0]),
-    "and it is not the plural form");
-  // The header uses it, rather than re-inlining the plural.
-  assert.match(cloudJs, /\$\{clubMembersLabel\(club\.member_count\)\}/,
-    "the club header renders through the helper");
-  assert.ok(!/\$\{Number\(club\.member_count \|\| 0\)\} חברי מועדון/.test(cloudJs),
-    "the hardcoded plural must be gone");
-});
 
-test("an ordinary member's profile does not say 'member' twice in a row", () => {
-  // PROFILE_ROLE_LABELS.member is "חבר/ה" and the line that follows it
-  // hardcodes "חבר/ה מאז", so a plain member read "חבר/ה · חבר/ה מאז ...".
-  // Correct-looking only for coach/admin/staff, whose role label differs from
-  // the generic noun - which is why it survived: those are the fixtures.
-  const at = cloudJs.indexOf("function profileRoleAndSince(");
-  assert.ok(at > -1, "the role/since line is built by a helper now");
-  const body = cloudJs.slice(at, cloudJs.indexOf("\n  }", at));
-  assert.match(body, /roleLabel !== PROFILE_ROLE_LABELS\.member/,
-    "the generic member label is recognised and not repeated");
-  assert.match(body, /return `\$\{role\} · \$\{since\}`/, "other roles still get both halves");
-  // The control: the old inline concatenation must be gone.
-  assert.ok(!/\$\{roleLabel \? esc\(roleLabel\) : ""\}\$\{d\.member_since \? ` · חבר\/ה מאז/.test(cloudJs),
-    "the blind concatenation must be gone");
-});
 
-test("you are never offered a follow button on your own profile", () => {
-  // The database refuses it - follows carries check (follower_id <> followed_id)
-  // - but follow() only special-cases 23505 (already following, which becomes
-  // an unfollow), so a check violation fell through to a generic failure and
-  // dead-ended. Reachable in one tap by a member alone in the club: open your
-  // own post's byline, which is exactly what a first poster does.
-  const at = cloudJs.indexOf("const isSelfProfile =");
-  assert.ok(at > -1, "the profile overlay knows whether it is showing you");
-  const region = cloudJs.slice(at, at + 260);
-  assert.match(region, /pv\.userId === state\.user\.id/, "self is recognised by id");
-  assert.match(region, /const followBtn = \(isSelfProfile \|\| d\.allow_follows === false\) \? "" :/,
-    "and no follow control is rendered for yourself");
-  // The sibling report button already did this; the two must stay consistent.
-  assert.match(cloudJs, /const reportProfileBtn = \(state\.user && pv\.userId === state\.user\.id\) \? "" :/,
-    "the report button keeps its own self-check");
-});
 
 // ===========================================================================
 // The join path, round 2 (2026-09-15)

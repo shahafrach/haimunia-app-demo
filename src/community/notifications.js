@@ -22,18 +22,12 @@
 // apart rather than merged, so the drift is visible instead of being settled
 // by whichever script happens to load last.
 
-  // COMM-140/141, hoisted. Used to be built inline only inside feedTab's
-  // club-strip block, which meant the bell - and the unread-notification
-  // badge on it - was unreachable from anywhere the feed pill isn't shown:
-  // a club that turns the feed module off loses the bell for every member,
-  // and staff living on the new Manage tab had no bell at all. Standalone
-  // now so both feedTab and renderManageApp() can mount it.
+  // The notification bell and its unread badge, mounted on the Community
+  // screen's header.
+  const BELL_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M18 9a6 6 0 1 0-12 0c0 5-2 6.5-2 6.5h16S18 14 18 9Z"/><path d="M10.4 19a2 2 0 0 0 3.2 0"/></svg>';
   function renderNotificationBell() {
-    const club = state.club.row || null;
-    const unread = state.notif.unreadLoaded
-      ? Number(state.notif.unread) || 0
-      : Number((club && club.unread_notifications) || 0);
-    return `<button class="chip-btn" data-community-action="feed-notifications" aria-label="התראות${unread ? (unread === 1 ? ", התראה אחת חדשה" : `, ${unread} חדשות`) : ""}" aria-haspopup="dialog" style="position:relative;">${FEED_ICONS.bell}${unread ? `<span class="tab-badge" aria-hidden="true">${unread}</span>` : ""}</button>`;
+    const unread = state.notif.unreadLoaded ? (Number(state.notif.unread) || 0) : 0;
+    return `<button class="chip-btn" data-community-action="feed-notifications" aria-label="התראות${unread ? (unread === 1 ? ", התראה אחת חדשה" : `, ${unread} חדשות`) : ""}" aria-haspopup="dialog" style="position:relative;">${BELL_ICON}${unread ? `<span class="tab-badge" aria-hidden="true">${unread}</span>` : ""}</button>`;
   }
 
   // ==== COMM-140..144 notifications ====================================
@@ -58,13 +52,10 @@
   // The localStorage escape hatch inverts with the default, matching
   // coachEngage: set haimunia-demo:notifPushFlag to "0" to turn it back off
   // on one device.
-  // Two gates, and they are different things. featureFlags.notifPush is the
-  // build-level flag (a device escape hatch, default on since B3). The module
-  // is the CLUB's switch, owned by the admin panel and enforced server-side
-  // in notif_push_pending - checked here too so a club with push off does not
-  // offer members a button that would produce a subscription nothing sends to.
+  // featureFlags.notifPush is the build-level flag (a device escape hatch,
+  // default on).
   function notifPushEnabled() {
-    return !!(state.featureFlags && state.featureFlags.notifPush) && isModuleEnabled("push_notifications");
+    return !!(state.featureFlags && state.featureFlags.notifPush);
   }
   const NOTIF_PAGE_SIZE = 20;
   // COMM-141. Rows older than this are not walked by default.
@@ -75,202 +66,28 @@
   const NOTIF_CATEGORIES = [
     { id: "community", label: "קהילה" },
     { id: "training", label: "אימונים" },
-    { id: "challenges", label: "אתגרים" },
-    { id: "events", label: "אירועים" },
-    { id: "club", label: "מועדון" },
   ];
 
-  // Every notification type the server can send in V1. `mode` is how the
-  // centre renders it: an immediate row stands alone, a batched row is one
-  // collapsed group that expands. `pref` is the notification_preferences
-  // key its delivery is gated on (COMM-144). `operational: true` means it
-  // always lands in-app regardless of that preference. `icon` and `title`
-  // are the client copy; the server fills `body` and `deep_link`.
-  // `serverTitle: true` is the one exception: for an announcement the row's
-  // stored title IS the announcement's own headline (notif_announcement_fanout
-  // passes v_row.title), so it has to win over the generic client label.
-  // Every OTHER type gets a hardcoded English string from notif_create -
-  // 'Achievement unlocked', 'New comment on your post', 'Event cancelled' -
-  // which is why the client label is preferred everywhere else. The
-  // immediate/batched split here MUST match the server trigger set - see
-  // the routing table in contracts.md.
-  //
-  // `pref` values below match `public.notif_pref_key()` (202608280026, as
-  // amended). Three were re-keyed (COMM-218/219): `comment_reply` now reads
-  // `comment_reply` (was the client-only `replies`), `comment_on_post` and
-  // `comment_also` both now read `comment_on_post` (was `comments`), and
-  // `achievement_unlocked` now reads `achievement_unlocked` (was
-  // `achievements`) - each one made its Settings toggle actually suppress
-  // delivery for the first time, since the server's identity fallback maps
-  // an unmapped type to itself, not to the client's old coarse name.
-  // `challenge_ending_soon`/`challenge_update` are DELIBERATELY left on the
-  // shared client-only key `challenges`: the server has no arm for either
-  // (each falls through to its own raw type name), so there is no single
-  // server-side key a combined client toggle could honestly map to today.
-  // Splitting that one toggle into two, or adding the server arms, is a
-  // separate, larger change (schema coordination or a UX change) and is a
-  // documented known gap, same as contracts.md already records it.
-  //
-  // `new_report` (202609050003) and `monthly_club_recap` (202609010002) are
-  // both real server-emitted types with no `notif_pref_key` arm, so - same
-  // reasoning as the three above - each MUST use its own literal type name
-  // as `pref`, matching the server's identity fallback exactly.
-  // `new_report` is moderators-only (`mod_alert_recipients()`: is_admin or a
-  // role holding `community.comment.moderate`, owner included) - a plain
-  // member is never a recipient, so its Settings row is gated to staff in
-  // `renderNotifPrefsPanel()` (`staffOnly` below) rather than shown to
-  // everyone as a toggle that would never do anything for them.
-  // `monthly_club_recap` fans out club-wide to every member, so it gets an
-  // ordinary toggle everyone sees, sibling to `weekly_recap`. It is
-  // IMMEDIATE, not batched, per contracts.md: it fires at most twelve times
-  // a year, at the moment a staff member deliberately publishes it, so
-  // there is nothing to roll up.
+  // Every notification type the client renders. `mode` is how the centre
+  // draws it: an immediate row stands alone, a batched row is one collapsed
+  // group that expands. `pref` is the notification_preferences key its
+  // delivery is gated on. `icon` and `title` are the client copy; the server
+  // fills `body` and `deep_link`.
   const NOTIF_TYPES = {
-    comment_reply:         { category: "community",  mode: "immediate", pref: "comment_reply",       icon: "↩️", title: "תגובה חדשה לתגובה שלך" },
-    comment_on_post:       { category: "community",  mode: "immediate", pref: "comment_on_post",     icon: "💬", title: "תגובה חדשה על הפוסט שלך" },
-    comment_also:          { category: "community",  mode: "batched",   pref: "comment_on_post",     icon: "💬", title: "תגובות חדשות בשיחה שהשתתפת בה" },
-    mention:               { category: "community",  mode: "immediate", pref: "mentions",            icon: "@",  title: "תייגו אותך בתגובה" },
-    coach_mention:         { category: "community",  mode: "immediate", pref: "mentions",            icon: "@",  title: "מאמן/ת תייג/ה אותך" },
     reaction:              { category: "community",  mode: "batched",   pref: "reactions",           icon: "🔥", title: "עידודים חדשים על הפוסט שלך" },
-    // 202609220005. The author of a workout post named this member as
-    // somebody who trained with them. IMMEDIATE rather than batched, and
-    // deliberately: it is one person naming one person, at most ten times on
-    // one post, and it is the notification that tells a member a tag exists
-    // at all - which is what makes "you can remove it" a real option rather
-    // than a setting nobody finds. notif_create()'s own one-hour de-dupe on
-    // (user, type, source_id) already collapses a re-save of the same list.
-    //
-    // `pref` is the literal type name, the same no-server-pref-arm shape as
-    // new_report/streak_at_risk above: notif_pref_key() has no arm for
-    // trained_together, so its identity fallback (`else p_type`) makes the
-    // real server-side key the string "trained_together". Anything coarser
-    // here would be a toggle that silently suppresses nothing.
-    //
-    // NOT serverTitle: notif_create writes the fixed English 'You were
-    // tagged as a training partner' and the body carries the workout's own
-    // title, so the client label below is the one that should win.
+    // The author of a workout post named this member as somebody who trained
+    // with them. Immediate: it is one person naming one person.
     trained_together:      { category: "community",  mode: "immediate", pref: "trained_together",    icon: "🤝", title: "תויגתם כמי שהתאמנו יחד" },
-    // Live bug hunt (2026-09-11): pref was "comments" - the OLD pre-rename
-    // key COMM-218/219 renamed everywhere else to comment_on_post, just
-    // missed here. notif_pref_key()'s real SQL (202608290009) has no
-    // explicit arm for feed_activity, so it falls through to its identity
-    // fallback (`else p_type`) - the real server-side key is the literal
-    // string "feed_activity", not "comments". No key in NOTIF_PREF_TYPES
-    // ever wrote "comments" either way, so this toggle could never be muted
-    // at all - same shape as weekly_recap/streak_at_risk below, now fixed
-    // the same way (see the new NOTIF_PREF_TYPES row).
-    feed_activity:         { category: "community",  mode: "batched",   pref: "feed_activity",       icon: "📣", title: "פעילות חדשה בפיד" },
-    new_report:            { category: "community",  mode: "immediate", pref: "new_report",          icon: "🚩", title: "דיווח חדש לבדיקה" },
-    // Admins only, by 202609150005's bug_report_alert_recipients() - the same
-    // no-server-pref-arm shape as new_report above. Immediate rather than
-    // batched on purpose: a bug report is a member telling you the app is
-    // broken for them, and a six-hour batch window is the wrong latency for
-    // that. notif_create()'s own 1-hour de-dupe still collapses a burst.
-    new_bug_report:        { category: "community",  mode: "immediate", pref: "new_bug_report",      icon: "🐞", title: "דיווח תקלה חדש" },
-    // 202609190001. Admins only, by admin_alert_recipients() - exactly the
-    // same audience and the same no-server-pref-arm shape as new_bug_report
-    // above, and like it, deliberately absent from NOTIF_PREF_TYPES: an
-    // operational alert about the backend having stopped working is not a
-    // thing to offer a mute switch for. serverTitle is NOT set, so the
-    // client's fixed title wins and the server's row supplies the body
-    // ("N עבודות מתוזמנות לא רצו כמתוכנן") - the count is the whole message;
-    // job names never leave the database. There is no deep link because
-    // there is no in-app screen for this, and resolveNotifTarget() would
-    // otherwise land the admin on the feed, which is worse than no link.
-    job_health_alert:      { category: "community",  mode: "immediate", pref: "job_health_alert",    icon: "⚙️", title: "תקלה בעבודות המתוזמנות" },
-    // 202609220004. head_coach and above only, by owner_report_recipients() -
-    // the same no-server-pref-arm shape as new_report/new_bug_report above,
-    // so its pref key is its own literal type name, matching
-    // notif_pref_key()'s identity fallback.
-    //
-    // IT DOES GET A SETTINGS ROW, unlike job_health_alert, and that is not an
-    // inconsistency: notif_push_pending() only ever pushes a type the
-    // recipient has EXPLICITLY switched to push, on exactly this key, so
-    // without a row in NOTIF_PREF_TYPES a head coach could never receive this
-    // as a push at all. The row is staffOnly, so a member never sees a toggle
-    // for something they are never sent.
-    //
-    // NO DEEP LINK on the server side, for the reason job_health_alert states:
-    // the screen is a tab of the club MANAGEMENT panel, not a Community
-    // sub-tab, so resolveNotifTarget() would land the reader on the feed, and
-    // a link to the wrong place is worse than no link.
-    owner_report_ready:    { category: "club",       mode: "immediate", pref: "owner_report_ready",  icon: "📈", title: "דוח החודש של המועדון מוכן" },
     achievement_unlocked:  { category: "training",   mode: "immediate", pref: "achievement_unlocked",icon: "🏅", title: "פתחת הישג חדש" },
-    friend_achievement:    { category: "training",   mode: "batched",   pref: "friend_achievements", icon: "🎉", title: "חברים פתחו הישגים" },
-    challenge_ending_soon: { category: "challenges", mode: "immediate", pref: "challenges",          icon: "⏳", title: "אתגר מסתיים בקרוב" },
-    challenge_update:      { category: "challenges", mode: "batched",   pref: "challenges",          icon: "🏆", title: "עדכונים באתגר" },
-    event_cancelled:       { category: "events",     mode: "immediate", pref: "events",              icon: "🚫", title: "אירוע בוטל" },
-    announcement:          { category: "club",       mode: "immediate", pref: "announcements", operational: true, serverTitle: true, icon: "📢", title: "הודעה חשובה מהמועדון" },
-    weekly_recap:          { category: "club",       mode: "batched",   pref: "weekly_recap",        icon: "📅", title: "הסיכום השבועי שלך" },
-    monthly_club_recap:    { category: "club",       mode: "immediate", pref: "monthly_club_recap",  icon: "🗓️", title: "סיכום החודש של הקהילה" },
-    // Community structure research, 2026-09-10 (202609100002). Same
-    // no-server-pref-arm shape as new_report/monthly_club_recap above: each
-    // pref key is the type's own literal name, matching notif_pref_key()'s
-    // identity fallback for an unmapped type. streak_at_risk is a plain
-    // member-facing type; engagement_decline_flagged is staff-only in
-    // practice (only ever created for mod_alert_recipients()), same
-    // audience as new_report.
-    streak_at_risk:             { category: "training",  mode: "immediate", pref: "streak_at_risk",             icon: "🔥", title: "הרצף שלך בסכנה" },
-    // serverTitle: true (burst guard, 202609100004) - coach_notify_
-    // engagement_flags() now sends a genuinely different title depending
-    // on whether one flag or several apply to a given recipient ("חבר/ה
-    // עשוי/ה להתרחק" vs. "N חברים עשויים להתרחק"), so unlike every other
-    // non-serverTitle type here, the server's real string has to win -
-    // same reason `announcement` above is the one other exception.
-    engagement_decline_flagged: { category: "community", mode: "immediate", pref: "engagement_decline_flagged", serverTitle: true, icon: "📉", title: "חבר/ה עשוי/ה להתרחק" },
   };
   function notifTypeDef(type) { return NOTIF_TYPES[type] || null; }
 
-  // The Preferences panel in Account lists exactly these, in this order
-  // (COMM-144). Defaults: everything in_app (a missing row means in_app).
-  // `note`, when present, is a short caveat rendered under the row's label -
-  // used by COMM-219 so "כבוי" on `announcements` does not read as "silences
-  // everything": important/urgent announcements are operational
-  // (`notif_is_operational`) and always land in-app regardless of this row.
-  // Keys `comments`/`replies`/`achievements` were renamed to
-  // `comment_on_post`/`comment_reply`/`achievement_unlocked` (COMM-218/219)
-  // to match `NOTIF_TYPES[...].pref`, which now matches the server's real
-  // `notif_pref_key()` output - see the long note above NOTIF_TYPES. This is
-  // a stored-preference-row rename: a member's existing `notification_
-  // preferences` row keyed `comments`/`replies`/`achievements` is orphaned by
-  // this change (a fresh row under the new key reverts to the in_app
-  // default) exactly the way any other client-side re-key would; there is no
-  // migration step for it because notification_preferences is 100%
-  // client-written and this repo does not touch that table's data.
-  // `challenges` is UNCHANGED and stays a documented known gap (see above).
-  // `staffOnly: true` (added for `new_report`) hides the row from a plain
-  // member's Settings panel - `new_report` is never delivered to one, per
-  // `mod_alert_recipients()` - while keeping the key valid for `setNotifPref`
-  // (NOTIF_PREF_KEYS below is built from every entry, gated or not) so a
-  // moderator's own toggle still writes and reads correctly.
+  // The Preferences panel in Account lists exactly these, in this order.
+  // Defaults: everything in_app (a missing row means in_app).
   const NOTIF_PREF_TYPES = [
-    { key: "comment_on_post",     label: "תגובות על הפוסטים שלי" },
-    { key: "comment_reply",       label: "תגובות לתגובות שלי" },
-    { key: "mentions",            label: "תיוגים" },
-    // 202609220005. Its own row rather than folding into `mentions` above:
-    // the two are different server keys (notif_pref_key has an arm for
-    // mention/coach_mention and none for trained_together), so one toggle
-    // could not honestly write both - the same reason challenge_ending_soon
-    // and challenge_update are a documented gap rather than a merged row.
     { key: "trained_together",    label: "תיוג באימון משותף" },
     { key: "reactions",           label: "עידודים" },
-    // Live bug hunt (2026-09-11): feed_activity had no row here at all - see
-    // NOTIF_TYPES.feed_activity's own comment.
-    { key: "feed_activity",       label: "פעילות חדשה בפיד" },
     { key: "achievement_unlocked",label: "הישגים שנפתחו" },
-    { key: "friend_achievements", label: "הישגים של חברים" },
-    { key: "challenges",          label: "אתגרים" },
-    { key: "events",              label: "אירועים" },
-    { key: "announcements",       label: "הודעות מהמועדון", note: "הודעות ברמת ❗ חשוב ו-🚨 דחוף יגיעו אליכם גם כשזה כבוי." },
-    { key: "weekly_recap",        label: "סיכום שבועי" },
-    { key: "monthly_club_recap",  label: "סיכום חודשי" },
-    { key: "new_report",          label: "דיווחים חדשים לבדיקה", staffOnly: true },
-    // 202609220004. staffOnly, like new_report: only head_coach and above are
-    // ever sent one, and this row is also the only way to turn it into a
-    // push - see NOTIF_TYPES.owner_report_ready.
-    { key: "owner_report_ready",  label: "הדוח החודשי של המועדון", staffOnly: true },
-    { key: "streak_at_risk",              label: "תזכורת רצף אימונים" },
-    { key: "engagement_decline_flagged",  label: "התרעת ירידה במעורבות חבר/ה", staffOnly: true },
   ];
   const NOTIF_PREF_KEYS = new Set(NOTIF_PREF_TYPES.map((t) => t.key));
   const NOTIF_CHANNELS = ["push", "in_app", "off"];
@@ -842,153 +659,39 @@
     // into the first branch and opened plain feed instead of the event -
     // found by the schema agent while building the cancellation trigger
     // (202608290009).
-    if (q.post || st === "post" || st === "comment" || /\/feed(\/|$)/.test(path) && !q.announcement && !q.event) {
-      return { tab: "feed", post: q.post || (st === "post" ? sid : null), comment: q.comment || (st === "comment" ? sid : null) };
+    if (q.post || st === "post" || /\/feed(\/|$)/.test(path)) {
+      return { tab: "account", post: q.post || (st === "post" ? sid : null) };
     }
-    if (q.user || st === "profile") return { tab: "account", profile: q.user || sid };
-    if (q.challenge || st === "challenge" || /\/boards(\/|$)/.test(path)) return { tab: "boards", challenge: q.challenge || sid };
     if (q.ma || q.achievement || st === "achievement" || /\/achievements(\/|$)/.test(path)) return { tab: "account", achievement: q.ma || q.achievement || sid };
-    if (q.announcement || st === "announcement" || /\/announcement/.test(path)) return { tab: "feed", announcement: q.announcement || sid };
-    if (q.event || st === "event" || /\/events(\/|$)/.test(path)) return { tab: "feed", event: q.event || sid };
-    // COMM-309. monthly_club_recap's own deep link is
-    // /community/recap/monthly?month=<the month's first day> - recap_
-    // monthly_publish's real notif_create() call, contracts.md's "Later-
-    // phase types" entry for monthly_club_recap. This branch MUST come
-    // before the weekly one just below: that branch's own /\/recap(\/|$)/
-    // regex matches ANY path starting with "/recap", including
-    // "/community/recap/monthly" (it has a "/recap/" substring), so without
-    // this guard every monthly recap notification silently opened as a
-    // weekly one. There is no monthly-recap dialog to open (see openRecap's
-    // own comment - the monthly card is an inline Account-tab section, not a
-    // per-month browsable surface), so this resolves to a distinct
-    // `recapMonth` key rather than reusing `recapWeek`'s shape.
-    if (q.month || st === "monthly_club_recap" || /\/recap\/monthly(\/|$)/.test(path)) return { tab: "account", recapMonth: q.month || null };
-    // COMM-220/221. weekly_recap's own deep link is /community/recap?week=<monday>.
-    if (q.week || st === "weekly_recap" || /\/recap(\/|$)/.test(path)) return { tab: "account", recapWeek: q.week || null };
-    // 202609100002. coach_notify_engagement_flags()'s own deep link is
-    // /community/coach - lands a staff member on the sub-tab
-    // renderCoachTab() already lists open coach_engagement_flags rows on,
-    // same tab id the "coach" sub-tab push uses (tabs.push({id:"coach",...})).
-    if (st === "coach_engagement_flag" || /\/coach(\/|$)/.test(path)) return { tab: "coach" };
-    return { tab: "feed" };
+    return { tab: "account" };
   }
-  // COMM-140/COMM-229. The one place that actually navigates once a target
-  // has been resolved - shared by tapping a row in the centre (openNotif,
-  // which additionally marks it read first) and by a push notification's
-  // click (communityHandlePushDeepLink below, which has no stored row to
-  // mark read). Pulled out as its own function rather than duplicated so
-  // there is exactly one navigation path to keep correct.
   function navigateToNotifTarget(target) {
-    // Redesign, Phase 3 fix: a notification/deep-link tap can fire while
-    // the top-level app is on Manage, not Community - see
-    // window.switchToCommunityTopTab's own comment in app.js.
     if (typeof window.switchToCommunityTopTab === "function") window.switchToCommunityTopTab();
-    setCommunityTab(target.tab || "feed");
     if (target.post) {
-      state.engagement.openComments[target.post] = true;
-      if (target.comment) state.engagement.openReplies[target.comment] = true;
       rerender();
       setTimeout(() => {
-        // Security hunt (2026-09-11): was a naive manual '"'-only escape -
-        // querySelector can't execute script from a malformed selector, so
-        // this was never an XSS vector, but the shared cssSel() helper
-        // (CSS.escape when available) is the established, correct way to
-        // build a selector from an attacker-controlled string (target.post
-        // is reachable via ?notif=) and should be used for consistency.
         const sel = '[data-post-id="' + cssSel(target.post) + '"]';
         const node = document.querySelector(sel);
         if (node && node.scrollIntoView) {
           node.scrollIntoView({ block: "center" });
         } else {
-          // Live bug hunt (2026-09-11): the target post isn't guaranteed to
-          // be on the currently-loaded feed page (the feed is paginated) -
-          // this used to silently do nothing at all, closing the
-          // notification center with no sign anything was even attempted.
-          // Confirmed live with a real mention notification pointing at a
-          // post outside the loaded page.
-          delete state.engagement.openComments[target.post];
-          setMessage("התוכן הזה לא נטען בפיד כרגע — אפשר לגלול או לרענן ולנסות שוב");
+          setMessage("התוכן הזה לא נטען כרגע — אפשר לגלול או לרענן ולנסות שוב");
           rerender();
         }
       }, 60);
-    } else if (target.event) {
-      openEvent(target.event, "notification");
-    } else if (target.profile) {
-      viewCommunityProfile(target.profile);
-    } else if (target.challenge) {
-      // Same shape as the target.event branch just above: resolveNotifTarget
-      // already puts the tab on "boards", this opens the specific challenge
-      // detail on top of it (challenge_ending_soon/challenge_update).
-      openChallenge(target.challenge, "notification");
-    } else if (target.announcement) {
-      // Announcements render inline in the feed (there is no separate
-      // announcement dialog) - data-announcement-id on both the pinned card
-      // and the plain list rows (renderFeedTab) is the anchor, the same
-      // scrollIntoView pattern target.post already uses off data-post-id.
-      // loadAnnouncements() runs in the boot Promise.all, not lazily on tab
-      // entry, so the row is already in the DOM once the feed tab renders.
-      rerender();
-      setTimeout(() => {
-        const sel = '[data-announcement-id="' + String(target.announcement).replace(/"/g, '\\"') + '"]';
-        const node = document.querySelector(sel);
-        // Real device feedback ("the feed is getting too long"): older
-        // archive rows now sit behind a closed <details> disclosure - a
-        // closed one collapses its content to zero height, so scrolling to
-        // a node inside it lands on an invisible target. Open it first.
-        const details = node && node.closest("details");
-        if (details && !details.open) details.open = true;
-        // KEYED ON THE NODE'S EXISTENCE, not on whether it can be scrolled to.
-        // My first version wrote this as `else` on the scrollIntoView test,
-        // which conflates two different facts: a node that is present but
-        // whose environment has no scrollIntoView would have been reported as
-        // deleted. A regression test caught it immediately, which is the
-        // whole argument for writing the test before believing the fix.
-        if (!node) setMessage("ההודעה הזו כבר לא זמינה");
-        else if (node.scrollIntoView) node.scrollIntoView({ block: "center" });
-        // SAY SO WHEN IT IS GONE. Live bug hunt, fresh round 4 (2026-09-15) -
-        // sibling drift inside one function. target.post got exactly this
-        // fallback on 2026-09-11; the announcement and achievement branches
-        // below were written from the same scrollIntoView pattern and never
-        // given it. An announcement that has since been archived or deleted
-        // closed the notification centre, switched tabs, and then did
-        // nothing at all - indistinguishable, from the member's side, from a
-        // tap that simply did not register.
-      }, 60);
     } else if (target.achievement) {
-      // data-achievement-id on renderMyAchievements()'s own rows is the
-      // anchor (added alongside this fix - there was none before).
-      // loadMyAchievements() also runs in the boot Promise.all, so the row
-      // is already in state by the time the Account tab renders.
       rerender();
       setTimeout(() => {
         const sel = '[data-achievement-id="' + String(target.achievement).replace(/"/g, '\\"') + '"]';
         const node = document.querySelector(sel);
-        // Same fallback as the announcement branch above, for the same
-        // reason: a medal can be revoked or edited away (achievement_edit is
-        // a real audit action here), and its notification outlives it. Keyed
-        // on the node's existence, not on scrollability - see there.
         if (!node) setMessage("המדליה הזו כבר לא זמינה");
         else if (node.scrollIntoView) node.scrollIntoView({ block: "center" });
-      }, 60);
-    } else if (target.recapWeek !== undefined) {
-      openRecap(target.recapWeek || null, "notification");
-    } else if (target.recapMonth !== undefined) {
-      // No dialog to open (see renderMonthlyRecapMemberSection's own
-      // comment) - setCommunityTab("account") above already re-renders,
-      // which re-arms the lazy `!state.recaps.monthly.loaded` load effect
-      // (afterRenderCommunity) the first time a session reaches this tab.
-      // Scrolling to data-monthly-recap-section is still worth doing on its
-      // own timeout: a session that already visited Account this run has
-      // the row cached and rendered immediately, with nothing else to
-      // trigger the scroll.
-      setTimeout(() => {
-        const node = document.querySelector('[data-monthly-recap-section]');
-        if (node && node.scrollIntoView) node.scrollIntoView({ block: "center" });
       }, 60);
     } else {
       rerender();
     }
   }
+
   async function openNotif(id) {
     const c = state.notif.center;
     const row = c && c.rows.find((r) => r.id === id);
@@ -1274,7 +977,7 @@
     // would be a control that never does anything for most members. Same
     // permission pair the moderation queue itself gates on (hasPerm/isAdmin
     // above the queue render, and mod_alert_recipients() on the server).
-    const visiblePrefTypes = NOTIF_PREF_TYPES.filter((t) => !t.staffOnly || hasPerm(PERM.COMMENT_MODERATE) || isAdmin());
+    const visiblePrefTypes = NOTIF_PREF_TYPES;
     const rows = state.notif.prefsLoaded
       ? visiblePrefTypes.map(rowFor).join("")
       : `<div class="log-row" aria-hidden="true"><span style="height:12px;width:60%;background:var(--border);border-radius:6px;display:inline-block;"></span></div>`.repeat(4);

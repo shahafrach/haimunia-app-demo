@@ -34,14 +34,14 @@ test("A2: the section and card helpers emit real headings, so every screen built
   assert.match(cloudJs, /function sectionHead\([\s\S]{0,200}?<h2 class="ach-section-title">/,
     "sectionHead() must emit an <h2>");
   const sectionCalls = (cloudJs.match(/sectionHead\(/g) || []).length;
-  assert.ok(sectionCalls >= 30,
+  assert.ok(sectionCalls >= 5,
     `expected sectionHead() to still be the shared section header (found ${sectionCalls} call sites)`);
 });
 
 test("A2: every dialog title is a heading, not a styled div", () => {
   // Each of these is the aria-labelledby target of a role="dialog".
   const titleIds = [...cloudJs.matchAll(/aria-labelledby="([a-zA-Z]+Title)"/g)].map((m) => m[1]);
-  assert.ok(titleIds.length >= 12, `expected the full dialog set, found ${titleIds.length}`);
+  assert.ok(titleIds.length >= 8, `expected the full dialog set, found ${titleIds.length}`);
   for (const id of [...new Set(titleIds)]) {
     assert.match(cloudJs, new RegExp(`<h2 id="${id}"`),
       `#${id} labels a dialog but is not a heading - it will not appear in heading navigation`);
@@ -66,20 +66,11 @@ test("A1: the tab pattern is fully declared - tabs point at the panel and the pa
   assert.match(indexHtml, /<div id="content" role="tabpanel">/,
     "#content is the single tabpanel the Community tabs swap");
 
-  // ...cloud.js owns the tabs, which must point at it.
-  const tabBars = (cloudJs.match(/role="tablist"/g) || []).length;
-  assert.ok(tabBars >= 3, `expected the Community, Manage and feed-filter tablists (found ${tabBars})`);
-  assert.match(cloudJs, /id="commTab-\$\{t\.id\}" aria-controls="content"/,
-    "each Community tab must carry a stable id and aria-controls");
-  assert.match(cloudJs, /id="manageTab-\$\{t\.id\}" aria-controls="content"/,
-    "each Manage tab must carry a stable id and aria-controls");
-
-  // ...and the panel must be labelled by whichever tab is selected, which
-  // can only happen after render because the tabs are rendered by cloud.js.
-  assert.match(cloudJs, /panel\.setAttribute\("aria-labelledby", selectedTab\.id\)/,
-    "#content must be labelled by the active tab after each render");
-  assert.match(cloudJs, /panel\.removeAttribute\("aria-labelledby"\)/,
-    "and must drop a stale label when no tab is selected, rather than pointing at a removed id");
+  // The Community and Manage sub-tab bars went with the feed, boards,
+  // directory and staff screens: the signed-in home is one screen, so
+  // nothing in cloud.js declares a tablist any more (the check below keeps
+  // that true for any that comes back).
+  assert.ok(!/id="commTab-/.test(cloudJs) && !/id="manageTab-/.test(cloudJs), "no stale sub-tab ids");
 });
 
 test("A1: every tablist has an accessible name", () => {

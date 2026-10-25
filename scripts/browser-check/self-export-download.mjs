@@ -31,8 +31,8 @@ const EMAIL = "dana@members.haimuniya.invalid";
 const PASSWORD = "e2e-member-password";
 // Values that may appear in the seed but never in the file. Each is unique to
 // a staff column or to another member's row, so a hit names the leak.
-const STAFF_MARKERS = ["coach-9", "staff note", "published-by-coach", "classmate-secret", "push-endpoint-secret", "push-keys-secret"];
-const STAFF_FIELDS = ["is_admin", "assigned_coach_id", "deleted_by", "entered_by", "published_by", "classmates", "endpoint", "keys", "admin_note", "moderator_id"];
+const STAFF_MARKERS = ["coach-9", "staff note", "push-endpoint-secret", "push-keys-secret"];
+const STAFF_FIELDS = ["is_admin", "assigned_coach_id", "deleted_by", "entered_by", "endpoint", "keys", "admin_note", "moderator_id"];
 
 const seedTables = {
   profiles: [
@@ -52,34 +52,15 @@ const seedTables = {
     { id: "p-mine", author_id: ME, post_type: "POST_TEXT", body: "mine", visibility: "club", status: "active", created_at: "2026-09-01" },
     { id: "p-theirs", author_id: OTHER, post_type: "POST_TEXT", body: "theirs", visibility: "club", status: "active", created_at: "2026-09-01" },
   ],
-  post_comments: [
-    { id: "c-mine", post_id: "p-theirs", author_id: ME, body: "hi", deleted_by: "coach-9", status: "active", created_at: "2026-09-02" },
-    { id: "c-theirs", post_id: "p-mine", author_id: OTHER, body: "hey", status: "active", created_at: "2026-09-02" },
-  ],
   blocks: [
     { blocker_id: ME, blocked_id: "member-3", created_at: "2026-09-03" },
     // Who blocked the member is the one row a member must never learn.
     { blocker_id: "member-4", blocked_id: ME, created_at: "2026-09-03" },
   ],
-  challenge_progress: [
-    { id: "cp-mine", challenge_id: "ch1", user_id: ME, delta: 1, entered_by: "coach-9", note: "staff note", created_at: "2026-09-04" },
-    { id: "cp-theirs", challenge_id: "ch1", user_id: OTHER, delta: 3, created_at: "2026-09-04" },
-  ],
-  member_of_week: [
-    { id: "mow-mine", user_id: ME, week_start: "2026-08-31", category: "effort", reason: "great week", published_by: "published-by-coach", published_at: "2026-09-01" },
-  ],
-  weekly_recaps: [
-    { id: "wr-mine", user_id: ME, week_start: "2026-08-31", sessions_completed: 3, classmates: ["classmate-secret"], generated_at: "2026-09-07" },
-  ],
   push_subscriptions: [
     { id: "ps-mine", user_id: ME, endpoint: "push-endpoint-secret", keys: { p256dh: "push-keys-secret" }, created_at: "2026-09-01" },
   ],
-  post_media: [
-    { post_id: "p-mine", storage_path: `${ME}/a.jpg`, alt_text: "", position: 0 },
-    { post_id: "p-theirs", storage_path: `${OTHER}/b.jpg`, alt_text: "", position: 0 },
-  ],
-  community_streaks: [], feed_page_rows: [], notifications: [], notification_preferences: [],
-  challenges: [], onboarding_progress: [], reports: [],
+  feed_page_rows: [], notifications: [], notification_preferences: [],
 };
 
 const target = await resolveLocalOnlyTarget();
@@ -115,7 +96,7 @@ await page.waitForSelector("#communityLogin", { timeout: 5000 });
 await page.fill('#communityLogin input[name="username"]', "dana");
 await page.fill('#communityLogin input[name="password"]', PASSWORD);
 await submitForm(page, "#communityLogin");
-await page.waitForSelector(".subtabbar", { timeout: 8000 });
+await page.waitForSelector("#communityHead", { timeout: 8000 });
 check("the member signs in with their username and password", true);
 
 // Reads one download to JSON, and asserts everything the file promises.
@@ -137,18 +118,12 @@ async function verifyDownload(download, where) {
     JSON.stringify(ids(d.private_records, "record_id")) === JSON.stringify(["e-mine"]), JSON.stringify(ids(d.private_records, "record_id")));
   check(`${where}: posts are the member's own only`,
     JSON.stringify(ids(d.posts, "id")) === JSON.stringify(["p-mine"]), JSON.stringify(ids(d.posts, "id")));
-  check(`${where}: comments are the member's own only`,
-    JSON.stringify(ids(d.comments, "id")) === JSON.stringify(["c-mine"]), JSON.stringify(ids(d.comments, "id")));
-  check(`${where}: photos are only those on the member's own posts`,
-    JSON.stringify(ids(d.post_media, "storage_path")) === JSON.stringify([`${ME}/a.jpg`]), JSON.stringify(ids(d.post_media, "storage_path")));
-  check(`${where}: challenge progress is the member's own only`,
-    JSON.stringify(ids(d.challenge_progress, "id")) === JSON.stringify(["cp-mine"]), JSON.stringify(ids(d.challenge_progress, "id")));
   check(`${where}: blocks list who the member blocked, never who blocked them`,
     JSON.stringify(ids(d.blocked, "blocked_id")) === JSON.stringify(["member-3"]) && !text.includes("member-4"),
     JSON.stringify(d.blocked));
   // Row ids and bodies unique to the other member. Not a bare "theirs": the
   // member's own comment legitimately names the post it was left on.
-  const foreign = [OTHER, "e-theirs", "c-theirs", "cp-theirs", "\"theirs\"", "\"hey\"", "יוסי"].filter((m) => text.includes(m));
+  const foreign = [OTHER, "e-theirs", "\"theirs\"", "יוסי"].filter((m) => text.includes(m));
   check(`${where}: nothing of the other member's is anywhere in the file`, foreign.length === 0, foreign.join(", ") || "none");
 
   // No staff field, at any depth - checked on the parsed keys, not only the
@@ -163,9 +138,8 @@ async function verifyDownload(download, where) {
   const leakedValues = STAFF_MARKERS.filter((m) => text.includes(m));
   check(`${where}: no staff-only value is in the file`, leakedValues.length === 0, leakedValues.join(", ") || "none");
   check(`${where}: the member's own rows survive the filtering`,
-    (d.member_of_week || []).length === 1 && (d.weekly_recaps || []).length === 1 && (d.push_subscriptions || []).length === 1
-      && ids(d.bug_reports, "id").join() === "b-mine",
-    `mow=${(d.member_of_week || []).length} recaps=${(d.weekly_recaps || []).length} push=${(d.push_subscriptions || []).length}`);
+    (d.push_subscriptions || []).length === 1 && ids(d.bug_reports, "id").join() === "b-mine",
+    `push=${(d.push_subscriptions || []).length} bug_reports=${ids(d.bug_reports, "id").join()}`);
 }
 
 async function clickAndDownload(selector) {
@@ -195,8 +169,7 @@ await page.waitForFunction(() => !document.getElementById("settingsOverlay")?.cl
 // Surface 2: Community's account tab
 // ---------------------------------------------------------------------------
 await switchTab(page, "tabCommunityBtn");
-await page.waitForSelector(".subtabbar", { timeout: 5000 });
-await page.click('[data-community-action="set-tab"][data-tab="account"]');
+await page.waitForSelector("#communityHead", { timeout: 5000 });
 const accountBtn = '#content [data-community-action="self-export"]';
 await page.waitForSelector(accountBtn, { state: "visible", timeout: 5000 });
 await verifyDownload(await clickAndDownload(accountBtn), "Account tab");

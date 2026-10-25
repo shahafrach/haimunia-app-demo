@@ -32,7 +32,7 @@ function emitPr(window, record = RECORD) {
   window.HaimuniaEvents.emit(window.PRODUCT_EVENTS.PR_CREATED, { record });
 }
 
-test("PR_CREATED shows a prompt with Share, Add photo, Add note and Not now, and never auto-posts", async () => {
+test("PR_CREATED shows a prompt with Share, Add note and Not now, and never auto-posts", async () => {
   const mock = seeded();
   const window = await bootReady(mock);
   emitPr(window);
@@ -42,7 +42,6 @@ test("PR_CREATED shows a prompt with Share, Add photo, Add note and Not now, and
   assert.match(p.textContent, /Deadlift/);
   assert.match(p.textContent, /180/);
   assert.ok(p.querySelector('[data-community-action="pr-share"]'));
-  assert.ok(p.querySelector("[data-pr-file]"), "Add photo");
   assert.ok(p.querySelector('[data-community-action="pr-add-note"]'), "Add note");
   assert.ok(p.querySelector('[data-community-action="pr-not-now"]'), "Not now");
   assert.equal(mock.db.__prShare, undefined, "nothing published just from the event");

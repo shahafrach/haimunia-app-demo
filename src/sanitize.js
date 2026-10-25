@@ -24,54 +24,15 @@ function sanitizeWodMovementTag(t) {
   if (!name) return null;
   return { name, category: WOD_MOVE_CATEGORIES.includes(t.category) ? t.category : "Gymnastics" };
 }
-// Also the sanitizer for a CLUB WOD (202609060028), which is the same shape
-// with one different category. A club WOD is a snapshot of somebody's custom
-// WOD published to the whole box, so that a weekly-challenge comparison_key
-// of the form wod:<id>:<scoreType>:<rx|scaled> resolves on EVERY device
-// rather than only the author's — see allWods() in app.js.
-//
-// `category` is a render-time constant on both sides (it is not stored in
-// club_wods either) and only these two values exist, because two call sites
-// elsewhere are written as identity checks against it and would silently
-// change meaning for any third value: app.js deleteCustomWod() requires
-// "Custom" (so a member cannot delete the club's programming off their own
-// device), and cloud.js challengeKeyChoices() skips "Custom" (so a club WOD,
-// unlike a private one, is offerable as a challenge).
-//
-// THE CATEGORY IS NEVER READ OFF THE INPUT. It is decided by WHICH FUNCTION
-// YOU CALL, and that is a security boundary rather than a style choice.
-// sanitizeCustomWod() always produces "Custom"; only sanitizeClubWod() —
-// reached solely from app.js setClubWods()/loadCachedClubWods(), i.e. only
-// from club_wods_list() or the cache written from it — produces "Club".
-//
-// An earlier draft trusted `w.category`, and that was exploitable. The same
-// sanitizer runs on private_records restores (app.js, record_type
-// "custom_wod") and on imported backup files, so a member could hand-write
-// `category: "Club"` into a backup, import it, and mint a pseudo-club WOD on
-// their own device: undeletable, because deleteCustomWod() refuses anything
-// that is not "Custom", and offered as a weekly-challenge key, because
-// challengeKeyChoices() skips only "Custom". Two identity checks that each
-// read correctly in isolation combine into a privilege the member does not
-// have. Deciding by call site removes the input's vote entirely.
+// The category is never read off the input: it is decided by which function you
+// call, so a hand-written backup cannot mint a WOD with another category.
 function sanitizeCustomWod(w) { return sanitizeWodShape(w, "Custom"); }
-// The club catalogue's sanitizer. Same shape, "Club" category, and the only
-// path that carries retiredAt.
-function sanitizeClubWod(w) { return sanitizeWodShape(w, "Club"); }
 function sanitizeWodShape(w, category) {
   if (!w || typeof w !== "object") return null;
   const id = cleanId(w.id), name = cleanStr(w.name, LIMITS.nameLen);
   if (!id || !name) return null;
   const scoreType = WOD_SCORE_TYPES.includes(w.scoreType) ? w.scoreType : "time";
   const out = { id, name, category, scoreType, desc: cleanStr(w.desc, LIMITS.notesLen) };
-  // Retirement is the only exit a published club WOD has — there is no delete
-  // grant on club_wods, because weekly_challenges rows, workout_posts
-  // comparison keys and every member's own local wod_entries all reference
-  // the id. So a retired WOD keeps being merged into allWods() (history and
-  // challenge keys must keep resolving) and what retirement changes is only
-  // that the pickers stop offering it for NEW logs and NEW challenges.
-  // Carried as the bounded string the server sent (a timestamptz) or null;
-  // every consumer reads it for truthiness.
-  if (category === "Club") out.retiredAt = cleanStr(w.retiredAt, 40) || null;
   // EMOM structure lives on the WOD itself (unlike every other format, whose
   // per-movement fields are only ever baked into free text) — the log form
   // needs to know the movement rotation to render one reps field per
@@ -84,7 +45,7 @@ function sanitizeWodShape(w, category) {
   // duration station lose its seconds - in memory on load, and permanently
   // on the first re-save or on file import (docs/audit/
   // standalone-edition-plan.md §4.1). A WOD with none of the extra arrays
-  // (club WODs, anything built before) reads as all-"reps", which is exactly
+  // (anything built before) reads as all-"reps", which is exactly
   // what it meant.
   if (scoreType === "emom") {
     const rawMovements = Array.isArray(w.emomMovements) ? w.emomMovements : [];
