@@ -27,7 +27,7 @@ test("state carries per-form field errors, cleared on successful submit and on s
   // COMM-365 split the one-line sign-out reset into per-namespace lines, so
   // these two assignments no longer sit side by side.
   assert.match(src, /state\.ui\.fieldErrors = \{\};/);
-  assert.match(src, /state\.admin\.reports = \[\];/);
+  assert.match(src, /state\.achievements\.mine = \[\];/);
 });
 
 test("the invite code field uses field() instead of a bare labelless input", () => {
@@ -49,17 +49,3 @@ test("both handle inputs (profile gate and account tab) route through field() un
   assert.match(src, /error\.code === "23505"\) setFieldErrors\(formId, \{ displayName: "השם הזה כבר תפוס במועדון/);
 });
 
-test("the announcement and weekly-challenge composers validate every required field individually, not just as one generic message", () => {
-  assert.match(src, /field\("communityAnnouncement", "title", "כותרת"/);
-  assert.match(src, /field\("communityAnnouncement", "body", "תוכן"/);
-  assert.match(src, /field\("communityWeeklyChallenge", "title", "שם האתגר"/);
-  // The comparison key is a picker now, and its label says what a coach is
-  // choosing rather than naming the database column it lands in.
-  assert.match(src, /field\("communityWeeklyChallenge", "comparisonKey", "על מה מתחרים"/);
-  // dateField(), not field(): the five-persona audit's date-locale defect
-  // moved every <input type="date"> onto a wrapper that adds the Hebrew
-  // month echo. dateField() delegates to field(), so the per-field error
-  // behaviour this test is actually about is unchanged - only the call name.
-  assert.match(src, /dateField\("communityWeeklyChallenge", "startsOn", "תאריך התחלה"/);
-  assert.match(src, /dateField\("communityWeeklyChallenge", "endsOn", "תאריך סיום"/);
-});

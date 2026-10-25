@@ -24,8 +24,6 @@ import { test } from "node:test";
 import assert from "node:assert";
 import { bootApp } from "./helpers/boot.mjs";
 
-const FEATURE_KEY = "strength_percentages";
-const CACHE_KEY = "haimunia-demo:clubFeatures";
 
 // A movement with real history, so bestEst1RM() has something to answer with.
 async function movementWithHistory(window, name, weight = 100, reps = 5) {
@@ -40,13 +38,11 @@ async function movementWithHistory(window, name, weight = 100, reps = 5) {
 }
 const content = (window) => window.document.getElementById("content");
 const chips = (window) => [...content(window).querySelectorAll('[data-action="set-weight-from-pct"]')];
-const tableToggle = (window) => content(window).querySelector('[data-action="toggle-pct-table"]');
 const incrementChips = (window) => [...content(window).querySelectorAll('[data-action="set-pct-increment"]')];
 
 function turnKeyOn(window) {
-  // The shape cloud.js's loadClubFeatures() actually hands over: the
-  // { enabled, config } row club_features selects, not a bare boolean.
-  window.setClubFeatureFlags({ [FEATURE_KEY]: { enabled: true, config: {} } });
+  // The chips have no admin switch any more (the club_features table went with
+  // the staff); they are always on, so this only repaints.
   window.render();
 }
 
@@ -139,69 +135,6 @@ test("a hold has no 1RM to take a percentage of, so it gets no chips either", as
   window.setLogEntryType("duration");
   window.render();
   assert.equal(chips(window).length, 0, "a 90-second plank at 75% is not a thing");
-});
-
-test("with the key off - which is every member until the other branch lands - nothing changes", async () => {
-  const window = await bootApp();
-  await movementWithHistory(window, "Test Pct Off", 100, 5);
-
-  // No setClubFeatureFlags call at all: the club_features table has no row
-  // for this key yet, so this is the live state, not a contrived one.
-  assert.equal(chips(window).length, 0, "a missing key is not permission");
-  assert.equal(incrementChips(window).length, 0);
-  assert.ok(tableToggle(window), "and the collapsed table that shipped before is still exactly where it was");
-
-  // An explicit enabled:false is the same answer, by a different route.
-  window.setClubFeatureFlags({ [FEATURE_KEY]: { enabled: false, config: {} } });
-  window.render();
-  assert.equal(chips(window).length, 0, "an explicitly disabled module is off");
-  assert.ok(tableToggle(window), "still the table");
-
-  // A map that answers about OTHER modules and says nothing about this one is
-  // the shape a stale cache has - from before the key existed. Still off.
-  window.setClubFeatureFlags({ feed: { enabled: true, config: {} }, club_wod: { enabled: true, config: {} } });
-  window.render();
-  assert.equal(chips(window).length, 0, "answering about other modules is not answering about this one");
-  assert.ok(tableToggle(window), "still the table");
-});
-
-test("the two percentage surfaces are never both on screen", async () => {
-  const window = await bootApp();
-  await movementWithHistory(window, "Test Pct Both", 100, 5);
-
-  assert.ok(tableToggle(window) && chips(window).length === 0, "off: the table only");
-  turnKeyOn(window);
-  assert.ok(!tableToggle(window) && chips(window).length === 10, "on: the chips only");
-  // Two lists of percentages on one screen, rounding to different steps, is
-  // the sibling-drift defect this codebase is prone to - so the chips replace
-  // the table rather than joining it.
-});
-
-test("the chips work offline, from the cached answer, with no session and no network", async () => {
-  const window = await bootApp();
-  await movementWithHistory(window, "Test Pct Offline", 100, 5);
-
-  // What setClubFeatureFlags() persists is what a cold start reads. Assert the
-  // write, then prove the read: this is the whole offline claim.
-  window.setClubFeatureFlags({ [FEATURE_KEY]: { enabled: true, config: {} } });
-  assert.deepEqual(await window.dbGetSetting(CACHE_KEY), { [FEATURE_KEY]: true },
-    "the flattened map is what gets cached - nothing in it needs the network to interpret");
-
-  // Now the cold-start path itself: a cache written by a previous session,
-  // hydrated by the loader boot() calls before the first render. cloud.js is
-  // not loaded in this window at all, so there is no live answer to fall back
-  // on - if the chips render, they rendered off the disk.
-  await window.dbSetSetting(CACHE_KEY, { [FEATURE_KEY]: true });
-  await window.loadCachedClubFeatures();
-  window.render();
-  assert.equal(chips(window).length, 10, "a member who signed in once keeps the feature on the plane");
-
-  // And the same path with the key cached off.
-  await window.dbSetSetting(CACHE_KEY, { [FEATURE_KEY]: false });
-  await window.loadCachedClubFeatures();
-  window.render();
-  assert.equal(chips(window).length, 0);
-  assert.ok(tableToggle(window));
 });
 
 test("the chips say what they are computed from, in the words the table uses", async () => {

@@ -64,7 +64,7 @@ test("the share control is wired into the day-entries list (Calendar's day-detai
 });
 
 test("a successful publish collapses that entry's share control back down", () => {
-  const start = cloudJs.indexOf("async function publishWorkout(type, id, visibility, photoFile)");
+  const start = cloudJs.indexOf("async function publishWorkout(type, id, visibility)");
   const end = cloudJs.indexOf("\n  }", start);
   assert.match(cloudJs.slice(start, end), /delete state\.posts\.openShare\[shareKey\(type, id\)\];/);
 });

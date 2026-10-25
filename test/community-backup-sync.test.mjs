@@ -45,7 +45,7 @@ test("maybeAutoStartBackup only fires when there's no session yet, the member ha
   // indistinguishable from one who said no.
   assert.match(appJs, /window\.haimuniaBackupConsentPending = function \(\) \{ return backupConsent === null; \};/,
     "pending means unanswered, not declined");
-  assert.match(cloudJs, /window\.addEventListener\("haimunia-sync-needed", \(\) => \{ maybeAutoStartBackup\(\); flushOutbox\(\); pingActivity\(\); \}\);/);
+  assert.match(cloudJs, /window\.addEventListener\("haimunia-sync-needed", \(\) => \{ maybeAutoStartBackup\(\); flushOutbox\(\); \}\);/);
 });
 
 test("enableSyncIfAllowed only turns sync on, never off, and respects the opt-out", () => {

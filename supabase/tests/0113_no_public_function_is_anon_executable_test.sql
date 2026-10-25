@@ -44,7 +44,7 @@
 -- at all. Nothing in this app needs it: zero RLS policies name it, and the
 -- signup flow's signInAnonymously() produces an `authenticated` JWT with
 -- is_anonymous = true, which is a different thing entirely. authenticated, by
--- contrast, is supposed to reach ~140 of these, so this test says nothing
+-- contrast, is supposed to reach a few dozen of these, so this test says nothing
 -- about it.
 
 \set rls_helpers_included true
@@ -100,7 +100,7 @@ select ok(
      from pg_proc p
      join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public'
-      and has_function_privilege('authenticated', p.oid, 'execute')) > 100,
+      and has_function_privilege('authenticated', p.oid, 'execute')) > 20,
   'authenticated still reaches the RPCs the app is built on - over-revoking is the opposite failure and would otherwise look like a pass');
 
 -- The specific four the advisor flagged, named so the finding stays legible

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // 202609220005 browser scenario for "התאמנו יחד": the author of a workout
-// post names who trained with them, the card prints the line, and the tagged
+// post edits who trained with them, the card prints the line, and the tagged
 // member takes their own name back off — real Chromium against the in-page
 // mock backend (lib/mockCloud.mjs).
 //
@@ -52,6 +52,12 @@ const seedTables = {
   ],
   invite_redemptions: ["u1", "u2", "u3", "u4"].map((id) => ({ user_id: id, invite_id: "inv-1", role: "member", redeemed_at: VERIFIED })),
   clubs: [{ id: "club-1", name: "חיימוניה" }],
+  // The class-attendance suggestions that used to fill the sheet went with the
+  // attendance module, so the sheet offers exactly the members already tagged.
+  post_training_partners: [
+    { post_id: "p1", tagged_user_id: "u2", tagged_by: "u1", created_at: VERIFIED },
+    { post_id: "p1", tagged_user_id: "u3", tagged_by: "u1", created_at: VERIFIED },
+  ],
   // The post the scenario is about, in both shapes the app reads it in:
   // feed_page_rows is what the feed renders, workout_posts is what the
   // tagging RPC checks authorship against. One table does both server-side.
@@ -64,14 +70,7 @@ const seedTables = {
     metadata: { workout_name: "Fran", workout_date: TODAY, result_text: "7:42" },
   }],
   workout_posts: [{ id: "p1", author_id: "u1", post_type: "POST_WORKOUT", title: "Fran", deleted_at: null }],
-  post_training_partners: [],
-  // The classmates signal the sheet suggests from. Deriving these from
-  // private_records is the private_records_attendance_log trigger's job —
-  // Postgres, already proven by supabase/tests/0037 — so they are seeded
-  // directly, the same accommodation community-classmates-card.mjs makes.
-  attendance_log: ["u1", "u2", "u3", "u4"].map((id) => ({ user_id: id, occurred_on: TODAY, recorded_at: VERIFIED })),
-  community_feed: [], feed_impressions: [], feed_interactions: [],
-  follows: [], blocks: [], reactions: [], post_comments: [], hidden_posts: [], saved_posts: [],
+  blocks: [], reactions: [],
   notifications: [], notification_preferences: [], analytics_events: [],
 };
 
@@ -88,7 +87,10 @@ await page.waitForSelector("#app", { state: "visible", timeout: 10000 });
 await dismissWelcomeModal(page);
 
 await switchTab(page, "tabCommunityBtn");
+await page.waitForSelector("#communityHead", { timeout: 8000 });
+await page.evaluate(() => window.holdPosts(JSON.parse(JSON.stringify(window.__mock.db.feed_page_rows))));
 await page.waitForSelector('[data-post-id="p1"]', { timeout: 8000 });
+await page.waitForSelector('[data-post-partners="ready"]', { timeout: 8000 });
 
 // ===========================================================================
 // Step 1: the author's sheet, driven with real clicks
@@ -102,20 +104,21 @@ await page.waitForSelector('[data-partners-panel="p1"]', { timeout: 5000 });
 await page.waitForSelector("[data-partner-pick]", { timeout: 5000 });
 
 const offered = await page.$$eval("[data-partner-pick]", (els) => els.map((e) => e.dataset.partnerPick).sort());
-check("the sheet offers every classmate from that day", JSON.stringify(offered) === JSON.stringify(["u2", "u3", "u4"]), offered.join(","));
+check("the sheet offers the members already tagged", JSON.stringify(offered) === JSON.stringify(["u2", "u3"]), offered.join(","));
 const selfOffered = await page.$('[data-partner-pick="u1"]');
 check("and never offers the author themselves", selfOffered === null);
 
-// A real click on the LABEL, not on the input and not a dispatched event —
-// this is the half jsdom cannot reproduce.
-for (const id of ["u2", "u3", "u4"]) {
-  await page.click(`label:has([data-partner-pick="${id}"])`);
-}
+// A real click on the LABEL, not on the input and not a dispatched event -
+// this is the half jsdom cannot reproduce. Untick, then tick again.
+await page.click('label:has([data-partner-pick="u3"])');
+const unticked = await page.$$eval("[data-partner-pick]", (els) => els.filter((e) => e.checked).map((e) => e.dataset.partnerPick).sort());
+check("clicking a label really unticks its box", JSON.stringify(unticked) === JSON.stringify(["u2"]), unticked.join(","));
+await page.click('label:has([data-partner-pick="u3"])');
 const ticked = await page.$$eval("[data-partner-pick]", (els) => els.filter((e) => e.checked).map((e) => e.dataset.partnerPick).sort());
-check("clicking each label really ticks its box", JSON.stringify(ticked) === JSON.stringify(["u2", "u3", "u4"]), ticked.join(","));
+check("and ticks it again", JSON.stringify(ticked) === JSON.stringify(["u2", "u3"]), ticked.join(","));
 
 await page.click('[data-community-action="partners-save"]');
-await page.waitForSelector('[data-post-partners="ready"]', { timeout: 5000 });
+await page.waitForFunction(() => !document.querySelector("[data-partners-panel]"), { timeout: 5000 });
 const sheetClosed = await page.$("[data-partners-panel]");
 check("the sheet closes on a successful save", sheetClosed === null);
 
@@ -124,18 +127,10 @@ check("the sheet closes on a successful save", sheetClosed === null);
 // ===========================================================================
 const lineText = await page.textContent('[data-post-partners="ready"]');
 check("the card prints התאמנו יחד", lineText.includes("התאמנו יחד"), lineText);
-check("and names the accepted members", lineText.includes("נועם") && lineText.includes("יעל"), lineText);
-check(
-  "and does NOT name the member whose allow_mentions is off — the card shows what the server accepted, not what the author asked for",
-  !lineText.includes("תומר"),
-  lineText
-);
+check("and names the tagged members", lineText.includes("נועם") && lineText.includes("יעל"), lineText);
 
 const tagged = await page.evaluate(() => window.__mock.db.post_training_partners.map((r) => r.tagged_user_id).sort());
-check("the server holds exactly the accepted tags", JSON.stringify(tagged) === JSON.stringify(["u2", "u3"]), tagged.join(","));
-const notified = await page.evaluate(() =>
-  window.__mock.db.notifications.filter((n) => n.type === "trained_together").map((n) => n.user_id).sort());
-check("each accepted member was notified, and nobody else was", JSON.stringify(notified) === JSON.stringify(["u2", "u3"]), notified.join(","));
+check("the server holds exactly the tags that were saved", JSON.stringify(tagged) === JSON.stringify(["u2", "u3"]), tagged.join(","));
 
 // --- geometry, the part npm test cannot see -------------------------------
 const geom = await page.evaluate(() => {
@@ -192,6 +187,8 @@ await page2.goto(target.url, { waitUntil: "networkidle" });
 await page2.waitForSelector("#app", { state: "visible", timeout: 10000 });
 await dismissWelcomeModal(page2);
 await switchTab(page2, "tabCommunityBtn");
+await page2.waitForSelector("#communityHead", { timeout: 8000 });
+await page2.evaluate(() => window.holdPosts(JSON.parse(JSON.stringify(window.__mock.db.feed_page_rows))));
 await page2.waitForSelector('[data-post-partners="ready"]', { timeout: 8000 });
 
 await page2.waitForSelector('[data-community-action="partner-untag-self"]', { timeout: 5000 });

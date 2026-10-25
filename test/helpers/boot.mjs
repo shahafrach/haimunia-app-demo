@@ -31,7 +31,6 @@ const appSrcPaths = [
   path.join(root, "src", "db.js"),
   // Same position index.html loads it in: after the core src files and
   // before app.js, which calls into it from render() and from boot.
-  path.join(root, "src", "desktop-layout.js"),
 ];
 function readAppSrc() {
   return appSrcPaths.map((p) => readFileSync(p, "utf8")).join("\n") + "\n" + readFileSync(appJsPath, "utf8");
@@ -51,8 +50,6 @@ const platformSrcPaths = [
   path.join(root, "src", "shared", "safe-helpers.js"),
   path.join(root, "src", "eventbus.js"),
   path.join(root, "src", "analytics.js"),
-  path.join(root, "src", "realtime.js"),
-  path.join(root, "src", "image.js"),
   // The community write queue. Same position as index.html: before
   // cloud.js, which registers its handlers at load.
   path.join(root, "src", "outbox.js"),
@@ -228,6 +225,28 @@ export async function bootCommunity(mock, opts = {}) {
 // papering over it. A test that only needs "the signed-out gate is up" waits
 // for the gate; a test that genuinely exercises LOGGING IN opens the form
 // explicitly, which is exactly what a returning member now does.
+/**
+ * Put posts into the list of posts the client holds (state.feed.items) and
+ * repaint. The ranked feed that used to fill that list is gone (the circle
+ * screen will); the post cards, reactions and own-post controls that remain
+ * are drawn from it, so a test that wants to exercise them seeds it directly.
+ */
+export function holdPosts(window, posts) {
+  window.holdPosts(JSON.parse(JSON.stringify(posts)));
+}
+
+/**
+ * Boot the community layer on the Community tab, wait for its signed-in home,
+ * and hold the posts the mock was seeded with under feed_page_rows.
+ */
+export async function bootHeldPosts(mock, opts = {}) {
+  const window = await bootCommunity(mock, Object.assign({ syncEnabled: false }, opts));
+  window.document.getElementById("tabCommunityBtn").click();
+  await waitFor(() => !!window.document.getElementById("communityHead"), 4000);
+  holdPosts(window, (mock.db && mock.db.feed_page_rows) || []);
+  return window;
+}
+
 export async function waitForCommunityGate(window) {
   await waitFor(() => !!window.document.querySelector(
     '#content [data-community-action="start-signup"], #content #communityLogin'), 4000);

@@ -27,11 +27,10 @@ async function seedLift(window, name, category, weight, reps) {
   return movement;
 }
 
-async function progressScreen({ benchmarks }) {
+async function progressScreen() {
   const window = await bootApp();
   await seedLift(window, LIFTS[0], "Squat", 100, 5);
   await seedLift(window, LIFTS[1], "Deadlift", 140, 3);
-  window.setClubFeatureFlags({ benchmarks: { enabled: benchmarks, config: {} } });
   window.render();
   window.document.getElementById("tabHistoryBtn").click();
   const page = window.document.querySelector('[aria-labelledby="pageTitle-history"]');
@@ -41,9 +40,9 @@ async function progressScreen({ benchmarks }) {
 
 const occurrences = (text, needle) => text.split(needle).length - 1;
 
-for (const benchmarks of [true, false]) {
+for (const benchmarks of [true]) {
   test(`each lift appears exactly once on the progress screen (benchmarks ${benchmarks ? "on" : "off"})`, async () => {
-    const { window, page } = await progressScreen({ benchmarks });
+    const { window, page } = await progressScreen();
     if (benchmarks) assert.ok(window.document.getElementById("benchmarkArea").firstElementChild, "the benchmarks section is on screen");
     for (const name of LIFTS) {
       assert.equal(occurrences(page.textContent, name), 1, `"${name}" is on the progress screen once, not twice`);

@@ -96,7 +96,7 @@ const ctaEnabled = await page.evaluate(() => {
 });
 check("and it answers the question, so the save CTA unlocks", ctaEnabled);
 
-// ---- 2. The percentage chips, behind the club key ------------------------
+// ---- 2. The percentage chips ------------------------
 await switchTab(page, "tabAddBtn");
 await selectMovement(page, "Back Squat");
 // A logged set gives bestEst1RM() something to answer with; without one
@@ -110,16 +110,7 @@ await page.click('[data-action="save-set"]');
 await dismissFirstLogArrival(page);
 await dismissCelebrationIfOpen(page);
 
-const beforeKey = await page.evaluate(() => ({
-  chips: document.querySelectorAll('[data-action="set-weight-from-pct"]').length,
-  table: !!document.querySelector('[data-action="toggle-pct-table"]'),
-}));
-check("with no club_features row for the key, the chips are absent and the old table is untouched",
-  beforeKey.chips === 0 && beforeKey.table, JSON.stringify(beforeKey));
-
-await page.evaluate(() => {
-  window.setClubFeatureFlags({ strength_percentages: { enabled: true, config: {} } });
-});
+// The club_features switch is gone: the chips are always on.
 await page.waitForSelector('[data-action="set-weight-from-pct"]');
 
 const chipRow = await page.evaluate(() => {

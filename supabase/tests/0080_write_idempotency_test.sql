@@ -91,40 +91,6 @@ select is(
   'and their post was really created');
 
 -- =====================================================================
--- 3. chal_record_progress - the double-count case, which is the worst of
---    the four because the damage is silent and permanent
--- =====================================================================
-select tests.clear_auth();
-insert into public.challenges (id, title, description, challenge_type, metric_type, status, start_at, end_at, target_value, created_by)
-values ('40800000-0000-4000-8000-000000000001', 'Row 5000m', 'x', 'individual_target', 'meters', 'active',
-        now() - interval '1 day', now() + interval '7 days', 5000, tests.uid('coach'));
-insert into public.challenge_participants (challenge_id, user_id) values
-  ('40800000-0000-4000-8000-000000000001', tests.uid('m1'));
-
-select tests.set_auth(tests.uid('coach'));
-select lives_ok(
-  $$ select public.chal_record_progress('40800000-0000-4000-8000-000000000001', tests.uid('m1'), 100, 'first entry',
-                                        'e0800000-0000-4000-8000-000000000010') $$,
-  'a coach records +100 progress with a key');
-select is(
-  (select progress_value from public.challenge_participants
-   where challenge_id = '40800000-0000-4000-8000-000000000001' and user_id = tests.uid('m1')), 100::numeric,
-  'the participant total is 100');
-
-select lives_ok(
-  $$ select public.chal_record_progress('40800000-0000-4000-8000-000000000001', tests.uid('m1'), 100, 'first entry',
-                                        'e0800000-0000-4000-8000-000000000010') $$,
-  'the same call is retried after a dropped response...');
-select is(
-  (select progress_value from public.challenge_participants
-   where challenge_id = '40800000-0000-4000-8000-000000000001' and user_id = tests.uid('m1')), 100::numeric,
-  'THE FIX: the total is STILL 100, not 200 - before this migration the retry silently double-counted, and nothing downstream could tell that apart from two real contributions');
-select is(
-  (select count(*)::int from public.challenge_progress
-   where challenge_id = '40800000-0000-4000-8000-000000000001' and user_id = tests.uid('m1')), 1,
-  'and the append-only progress log holds one row, not two');
-
--- =====================================================================
 -- 4. toggle_reaction - converges instead of inverting
 -- =====================================================================
 select tests.clear_auth();
@@ -162,21 +128,6 @@ select is(
   'and the reaction is really gone');
 
 -- =====================================================================
--- 5. add_post_comment
--- =====================================================================
-select tests.set_auth(tests.uid('m1'));
-select is(
-  public.add_post_comment('40800000-0000-4000-8000-000000000002', 'nice work', null, null,
-                          'e0800000-0000-4000-8000-000000000030'),
-  public.add_post_comment('40800000-0000-4000-8000-000000000002', 'nice work', null, null,
-                          'e0800000-0000-4000-8000-000000000030'),
-  'THE FIX: two calls with one key return the same comment id');
-select is(
-  (select count(*)::int from public.post_comments
-   where post_id = '40800000-0000-4000-8000-000000000002' and body = 'nice work'), 1,
-  'and only one comment was created');
-
--- =====================================================================
 -- 6. The concurrency mechanism, asserted structurally
 -- =====================================================================
 -- Two simultaneous duplicates cannot be driven from one pgTAP session, so
@@ -206,23 +157,6 @@ select is(
 select isnt_empty(
   $$ select 1 from cron.job where jobname = 'idempotency-purge' $$,
   'and the purge is actually scheduled, not just defined - the mistake purge_due_accounts() shipped with');
-
--- =====================================================================
--- 8. event_rsvp - the fifth queued action
--- =====================================================================
--- Added by 202609060017 after curling real PostgREST revealed that
--- communityRpc() sends p_idempotency_key to all FIVE OUTBOX_ACTIONS while
--- only four functions accepted it. event_rsvp returned PGRST202 for every
--- call - RSVP was completely dead - and all three suites were green on it,
--- because none of them crossed the client's call shape against the
--- server's real signature.
-select has_function('public', 'event_rsvp', array['uuid','text','uuid'],
-  'event_rsvp accepts the idempotency key the client always sends');
-select is(
-  (select count(*)::int from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-    where n.nspname = 'public' and p.proname = 'event_rsvp'),
-  1,
-  'and exactly ONE event_rsvp exists - two overloads differing only by the optional key would make a named-argument call ambiguous');
 
 select * from finish();
 rollback;

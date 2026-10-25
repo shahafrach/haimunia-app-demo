@@ -188,17 +188,6 @@ select throws_ok(
   'P0001', 'recovery method required',
   'and neither can they share an achievement');
 
-select tests.clear_auth();
-insert into public.posting_restrictions (user_id, restriction_type, reason, moderator_id)
-values (tests.uid('m3'), 'permanent', 'test', tests.uid('admin'));
-insert into public.private_records (user_id, record_type, record_id, payload) values
-  (tests.uid('m3'), 'strength_entry', 'set-83-m3', '{"exerciseId":"mv-83","type":"reps","weight":50,"reps":5,"date":"2026-09-01","ts":10}');
-select tests.set_auth(tests.uid('m3'));
-select throws_ok(
-  $$ select public.pr_share('set-83-m3', 'x', '[]'::jsonb) $$,
-  'P0001', 'posting_restricted',
-  'a COMM-153 speech sanction covers sharing a PR, not just the composer - otherwise the restriction is trivially routed around');
-
 -- =====================================================================
 -- 6. ach_share
 -- =====================================================================

@@ -238,5 +238,7 @@ test("the club-facing name field still accepts the Hebrew its own placeholder su
   // field rejected, which is what sent the owner here asking "why?".
   clubNameInput.value = "דנה כהן";
   submit(window, "communityProfile");
-  await waitFor(() => !window.document.getElementById("communityProfile"), 3000);
+  // The profile gate hands over to the signed-in home (which has its own
+  // profile form), so the signal is the home's header, not the form going.
+  await waitFor(() => !!window.document.getElementById("communityHead"), 3000);
 });

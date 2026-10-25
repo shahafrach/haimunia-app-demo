@@ -39,10 +39,12 @@ select results_eq(
   'the four seeded attendance definitions are present and, since COMM-305 gave them a producer, enabled');
 
 select tests.set_auth(tests.uid('admin'));
-select lives_ok(
+select throws_ok(
   $$ insert into public.achievement_definitions (code, name, category, trigger_type)
      values ('admin_made', 'Fine', 'community', 'COMMENT_CREATED') $$,
-  'a real admin can insert an achievement definition');
+  '42501',
+  null,
+  'not even the is_admin flag writes a definition - definitions are seeded by migrations only');
 
 -- --- member_achievements ------------------------------------
 select tests.clear_auth();

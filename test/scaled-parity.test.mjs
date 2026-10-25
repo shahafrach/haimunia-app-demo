@@ -59,38 +59,3 @@ test("the two ladders are genuinely separate in the data, which is what makes th
     "bestWodScore must take rx, so an Rx best and a scaled best are tracked apart");
 });
 
-test("the club board already labels BOTH levels through one helper - the asymmetry the research assumed does not exist here", () => {
-  // WORTH RECORDING, because the research got this one wrong and the wrong
-  // version was briefly built. The recommendation was to split the board into
-  // Rx and scaled lanes, on the premise that it renders "one list where Rx
-  // rows carry a badge and the rest are bare". That premise is false for this
-  // codebase: renderClubWodResultRow pushes effortHtml(r.rx ? "rx" : "scaled")
-  // for EITHER value, and effortHtml renders both through identical markup.
-  // Both levels are already named with equal weight.
-  //
-  // Building the lanes anyway cost something real: it broke the board's
-  // deliberate promise to render in arrival order, which
-  // community-club-wod-board.test.mjs defends precisely because this surface
-  // was designed to be unable to become a leaderboard. Grouping is not
-  // ranking, but it is still reordering, and that guarantee is worth more than
-  // a fix to a problem that was not there.
-  const at = cloudJs.indexOf("function renderClubWodResultRow");
-  assert.ok(at > -1);
-  const row = cloudJs.slice(at, at + 900);
-  assert.match(row, /effortHtml\(r\.rx \? "rx" : "scaled"\)/,
-    "both levels go through the same call - neither is the unlabelled default");
-  const eh = cloudJs.indexOf("function effortHtml");
-  const body = cloudJs.slice(eh, eh + 500);
-  assert.match(body, /EFFORT_DISPLAY/, "and both resolve through one display map");
-  assert.ok(!/rx.*?danger|scaled.*?muted/i.test(body),
-    "with no weight difference between them in the markup");
-});
-
-test("the board still renders in arrival order - scaled parity must not cost the anti-leaderboard guarantee", () => {
-  const at = cloudJs.indexOf("function renderClubWodBoardBody");
-  const body = cloudJs.slice(at, at + 2500);
-  assert.match(body, /board\.results\.map\(\(r\) => renderClubWodResultRow\(r, board\.session_date\)\)/,
-    "one unsplit map over results, in the order they arrived");
-  assert.ok(!/rxRows|scaledRows/.test(body),
-    "no lane split - grouping is not ranking, but it is still reordering");
-});

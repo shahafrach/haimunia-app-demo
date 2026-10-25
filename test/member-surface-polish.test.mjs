@@ -51,16 +51,15 @@ function club(opts = {}) {
 
 async function openDirectory(window) {
   window.document.getElementById("tabCommunityBtn").click();
-  await waitFor(() => !!window.document.querySelector(".subtabbar"), 4000);
+  await waitFor(() => !!window.document.getElementById("communityHead"), 4000);
   window.document.querySelector('[data-community-action="set-tab"][data-tab="directory"]').click();
   await waitFor(() => window.document.querySelectorAll('[data-directory-group] [data-community-action="view-profile"]').length > 0, 4000);
 }
 
 async function openAccount(window) {
   window.document.getElementById("tabCommunityBtn").click();
-  await waitFor(() => !!window.document.querySelector(".subtabbar"), 4000);
-  window.document.querySelector('[data-community-action="set-tab"][data-tab="account"]').click();
-  await waitFor(() => !!notifPrefControl(window, "comment_on_post"), 4000);
+  await waitFor(() => !!window.document.getElementById("communityHead"), 4000);
+  await waitFor(() => !!notifPrefControl(window, "reactions"), 4000);
 }
 
 const directoryIds = (window) =>
@@ -70,51 +69,8 @@ const directoryIds = (window) =>
 // 1. A management account is not a clubmate
 // =====================================================================
 
-test("the members directory hides management accounts from a member, both kinds of them", async () => {
-  const mock = club();
-  const window = await bootCommunity(mock, { syncEnabled: false });
-  await openDirectory(window);
-  await waitFor(() => mock.callsTo("management_user_ids").length > 0, 4000);
-  await waitFor(() => directoryIds(window).length === 2, 4000);
 
-  const ids = directoryIds(window);
-  assert.deepEqual(ids.slice().sort(), ["u2", "u3"], "the two real clubmates, and only them");
-  assert.ok(!ids.includes("admin"), "the is_admin-flagged management account is gone");
-  assert.ok(!ids.includes("office"), "and so is the one that is management by role rank");
-  assert.ok(!ids.includes("u1"), "the caller's own row was already excluded and still is");
-});
 
-test("a coach still sees management accounts - the server decides, and the client never re-derives the staff rule", async () => {
-  // management_user_ids() applies the exemption itself, so what proves the
-  // client is not second-guessing it is that the SAME client code shows the
-  // rows once the server stops naming them.
-  const mock = club({ callerRole: "coach" });
-  const window = await bootCommunity(mock, { syncEnabled: false });
-  await openDirectory(window);
-  await waitFor(() => mock.callsTo("management_user_ids").length > 0, 4000);
-  await waitFor(() => directoryIds(window).length === 4, 4000);
-  const ids = directoryIds(window);
-  assert.ok(ids.includes("admin") && ids.includes("office"), "a colleague looking for a colleague finds them");
-});
-
-test("directory search cannot surface a management account either, through the server path or the client fallback", async () => {
-  const mock = club();
-  const window = await bootCommunity(mock, { syncEnabled: false });
-  await openDirectory(window);
-  await waitFor(() => mock.callsTo("management_user_ids").length > 0, 4000);
-
-  // The server path: community_search() drops the row before it is sent.
-  const res = await mock.client.rpc("community_search", { p_query: "ניהול", p_limit: 10 });
-  assert.deepEqual(res.data.members, [], "community_search returns nothing for a member");
-
-  // And the under-two-characters client fallback, which never reaches the
-  // server at all, filters the already-loaded page the same way.
-  const box = window.document.getElementById("communityDirectorySearch");
-  box.value = "נ";
-  box.dispatchEvent(new window.Event("input", { bubbles: true }));
-  await waitFor(() => directoryIds(window).length > 0, 4000);
-  assert.ok(!directoryIds(window).includes("admin"), "the one-character filter does not let it back in");
-});
 
 test("people_suggestions never offers a management account to a member", async () => {
   // A shared live challenge is the strongest signal there is, so an admin
@@ -135,77 +91,13 @@ test("people_suggestions never offers a management account to a member", async (
   assert.ok(!ids.includes("admin"), "the management account on the same challenge is not");
 });
 
-test("a failed management_user_ids load hides nobody rather than emptying the roster", async () => {
-  const mock = club();
-  mock.onRpc("management_user_ids", () => ({ data: null, error: { message: "boom" } }));
-  const window = await bootCommunity(mock, { syncEnabled: false });
-  await openDirectory(window);
-  await waitFor(() => directoryIds(window).length >= 2, 4000);
-  // Four rows, not zero: a transient RPC failure must not read as "this club
-  // has no members". The server-side halves of the rule are unaffected.
-  assert.ok(directoryIds(window).includes("u2"), "the roster still renders");
-});
 
 // =====================================================================
 // 2. Block lives behind the member card's three-dot menu
 // =====================================================================
 
-test("no member card offers חסימה as a chip, and every card carries the same ⋯ menu", async () => {
-  const mock = club();
-  const window = await bootCommunity(mock, { syncEnabled: false });
-  await openDirectory(window);
-  await waitFor(() => directoryIds(window).length === 2, 4000);
 
-  const rows = [...window.document.querySelectorAll('[data-directory-group] .log-row')];
-  assert.equal(rows.length, 2);
-  for (const row of rows) {
-    assert.equal(row.querySelector('.chip-row > [data-community-action="block"]'), null,
-      "block is not a peer of follow any more");
-    assert.ok(row.querySelector('[data-community-action="toggle-member-menu"]'),
-      "and every card ends in the same overflow menu, whatever the member's privacy settings");
-  }
 
-  // u3 has allow_follows off. Before this, that member's card was two chips
-  // where everyone else's was three - a privacy setting leaking as a layout
-  // difference. The follow chip is still withheld; the shape is not.
-  const u3 = rows.find((r) => r.querySelector('[data-community-action="view-profile"]').dataset.id === "u3");
-  assert.equal(u3.querySelector('[data-community-action="follow"]'), null, "follow is still withheld");
-  assert.ok(u3.querySelector('[data-community-action="toggle-member-menu"]'), "the menu is not");
-});
-
-test("opening the menu reveals חסימה, and choosing it opens the same confirm and writes the same block", async () => {
-  const mock = club();
-  const window = await bootCommunity(mock, { syncEnabled: false });
-  await openDirectory(window);
-  await waitFor(() => directoryIds(window).length === 2, 4000);
-
-  assert.equal(window.document.querySelector('[data-member-menu="u2"] [data-community-action="block"]'), null,
-    "closed to begin with");
-  window.document.querySelector('[data-community-action="toggle-member-menu"][data-id="u2"]').click();
-  await waitFor(() => !!window.document.querySelector('[data-member-menu="u2"] [data-community-action="block"]'), 4000);
-
-  window.document.querySelector('[data-member-menu="u2"] [data-community-action="block"]').click();
-  await waitFor(() => /לחסום את/.test(window.document.getElementById("content").textContent), 4000);
-  assert.equal(window.document.querySelector('[data-member-menu="u2"] .post-menu'), null,
-    "the menu closes behind the confirm rather than sitting under it");
-
-  window.document.querySelector('[data-community-action="confirm-yes"]').click();
-  await waitFor(() => mock.db.blocks.some((b) => b.blocker_id === "u1" && b.blocked_id === "u2"), 4000);
-});
-
-test("only one menu is ever open, because the member card reuses the post menu's single slot", async () => {
-  const mock = club();
-  const window = await bootCommunity(mock, { syncEnabled: false });
-  await openDirectory(window);
-  await waitFor(() => directoryIds(window).length === 2, 4000);
-
-  window.document.querySelector('[data-community-action="toggle-member-menu"][data-id="u2"]').click();
-  await waitFor(() => !!window.document.querySelector('[data-member-menu="u2"] .post-menu'), 4000);
-  window.document.querySelector('[data-community-action="toggle-member-menu"][data-id="u3"]').click();
-  await waitFor(() => !!window.document.querySelector('[data-member-menu="u3"] .post-menu'), 4000);
-  assert.equal(window.document.querySelector('[data-member-menu="u2"] .post-menu'), null,
-    "opening the second closed the first");
-});
 
 // =====================================================================
 // 2b / the twin: the overflow menu opens INTO the card, not off the screen
@@ -267,9 +159,7 @@ test("the log's inline share control draws the same stroke glyph, not an emoji",
   const src = fs.readFileSync(new URL("../cloud.js", import.meta.url), "utf8");
   const fn = src.slice(src.indexOf("window.renderShareControl"), src.indexOf("window.renderShareControl") + 1800);
   assert.doesNotMatch(fn, /📤/, "the share emoji is gone");
-  assert.doesNotMatch(fn, /📷/, "and the camera emoji beside it");
   assert.match(fn, /SHARE_ICONS\.club/, "it reads the one shared definition");
-  assert.match(fn, /SHARE_ICONS\.camera/);
 });
 
 // =====================================================================
@@ -348,7 +238,7 @@ test("each notification type is one row with one control offering the same three
   await openAccount(window);
 
   const selects = [...window.document.querySelectorAll("[data-notif-pref-select]")];
-  assert.ok(selects.length >= 10, "every member-visible type is listed");
+  assert.ok(selects.length >= 3, "every member-visible type is listed");
   assert.equal(window.document.querySelectorAll('[data-community-action="notif-pref"]').length, 0,
     "and none of them renders the old three-button row");
   for (const s of selects) {
@@ -363,22 +253,14 @@ test("changing the control writes the same own-row upsert the buttons did, and o
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openAccount(window);
 
-  pickNotifPref(window, "mentions", "off");
-  await waitFor(() => mock.db.notification_preferences.some((r) => r.type === "mentions" && r.channel === "off"), 4000);
-  assert.equal(mock.db.notification_preferences.filter((r) => r.type === "mentions").length, 1,
+  pickNotifPref(window, "trained_together", "off");
+  await waitFor(() => mock.db.notification_preferences.some((r) => r.type === "trained_together" && r.channel === "off"), 4000);
+  assert.equal(mock.db.notification_preferences.filter((r) => r.type === "trained_together").length, 1,
     "one row, not one per stacked listener - the handler is delegated, bound once for the document");
-  assert.equal(mock.db.notification_preferences.find((r) => r.type === "mentions").user_id, "u1");
-  await waitFor(() => notifPrefValue(window, "mentions") === "off", 4000);
+  assert.equal(mock.db.notification_preferences.find((r) => r.type === "trained_together").user_id, "u1");
+  await waitFor(() => notifPrefValue(window, "trained_together") === "off", 4000);
 });
 
-test("push stays omitted from the control entirely while the module is off", async () => {
-  const mock = club();
-  const window = await bootCommunity(mock, { syncEnabled: false, localStorage: { "haimunia-demo:notifPushFlag": "0" } });
-  await openAccount(window);
-  assert.equal(notifPrefOption(window, "mentions", "push"), null, "not disabled - absent");
-  assert.ok(notifPrefOption(window, "mentions", "in_app"));
-  assert.ok(notifPrefOption(window, "mentions", "off"));
-});
 
 // =====================================================================
 // 7. One checkbox, everywhere

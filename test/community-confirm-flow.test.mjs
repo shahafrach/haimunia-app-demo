@@ -52,34 +52,23 @@ test("block, delete-account, and migrate all route through askConfirm with a des
   assert.match(src, /askConfirm\(\{ title: "סנכרון היסטוריה".*action: "migrate" \}\)/);
 });
 
-test("deletePost is scoped to the caller's own post, and only the author sees a delete action (report otherwise)", () => {
-  // The author scoping is the security claim and it is unchanged: the row
-  // filter still carries author_id, so the query can only ever delete the
-  // caller's own post whatever the client is told to pass as an id.
-  // What moved is WHEN it runs - the write is now held for the undo window
-  // (deferCommunityDelete, cloud.js), so the query lives inside commit()
-  // rather than at the top of the function. Asserted as two separate facts
-  // rather than one long literal, so the next reader can tell which half
-  // they broke.
-  const deletePostFn = src.slice(src.indexOf("async function deletePost(postId) {"), src.indexOf("async function publishWorkout("));
-  assert.match(deletePostFn, /if \(!state\.user\) return;/, "a signed-out caller deletes nothing");
-  assert.match(deletePostFn, /await client\.from\("workout_posts"\)\.delete\(\)\.eq\("id", postId\)\.eq\("author_id", state\.user\.id\)/,
-    "the delete is still scoped to the caller's own post");
-  assert.match(deletePostFn, /deferCommunityDelete\(\{/, "and it goes out through the undo window, not straight from the tap");
-  // The delete control MOVED, and that is the point of this line rather than
-  // a weakening of it. It used to be an inline chip on the legacy (no
-  // post_type) feed card, sitting loose beside the reaction and comment
-  // buttons; the social feed pass put every destructive control on every card
-  // behind the one ⋯ menu, so what is pinned now is that the author - and
-  // only the author - is offered a delete there, and that everyone else is
-  // offered report instead. Same two branches, same two actions, one menu.
+test("post deletion goes through the post_delete RPC behind the undo window, and only the author is offered it (block otherwise)", () => {
+  // The legacy direct-table delete (deletePost, the no-post_type card's own
+  // "הסרת שיתוף") went with that card; what is left is the typed card's menu.
+  // The author scoping is enforced by post_delete() on the server.
+  const fn = src.slice(src.indexOf("async function postDeleteViaMenu("), src.indexOf("async function", src.indexOf("async function postDeleteViaMenu(") + 10));
+  assert.match(fn, /deferCommunityDelete\(\{/, "it goes out through the undo window, not straight from the tap");
+  assert.match(fn, /client\.rpc\("post_delete", \{ post_id: postId \}\)/, "and through the RPC that checks the caller");
   const menu = src.slice(src.indexOf("function postMenuHtml("), src.indexOf("function postActionsHtml("));
-  assert.match(menu, /if \(own\) \{/, "the menu still branches on whether the post is the caller's own");
+  assert.match(menu, /if \(own\) \{/, "the menu branches on whether the post is the caller's own");
   assert.match(menu, /mi\("post-delete", "מחיקה", post\.id, true\)/, "the author is offered delete, marked destructive");
-  assert.match(menu, /\} else \{[\s\S]*mi\("report", "דיווח", post\.id\)/, "and everyone else is offered report");
+  // Reports went with the moderation queue (docs/circles/decisions.md): what
+  // is left for everyone else is blocking the author.
+  assert.match(menu, /\} else \{[\s\S]*mi\("block", "חסימת החבר\/ה", post\.author_id, true\)/, "and everyone else is offered block, not delete");
+  assert.doesNotMatch(menu, /mi\("report"/, "no report action remains");
   assert.doesNotMatch(src, /<div class="chip-row post-actions">\s*<button class="chip-btn" data-community-action="delete-post"/,
     "no card may put a delete chip back into the action row");
-  assert.match(src, /askConfirm\(\{ title: "הסרת שיתוף".*action: "delete-post", payload: \{ postId: el\.dataset\.id \} \}\)/);
+  assert.match(src, /askConfirm\(\{ title: "מחיקת פוסט".*action: "post-delete-rpc", payload: \{ postId: el\.dataset\.id \} \}\)/);
 });
 
 test("COMM-234: renderConfirmSheet() is concatenated LAST in renderConfirmDialog(), so it stacks on top of every other .modal-overlay it can be nested inside", () => {
@@ -100,39 +89,11 @@ test("COMM-234: renderConfirmSheet() is concatenated LAST in renderConfirmDialog
   const body = src.slice(fnStart, fnEnd);
   const confirmIdx = body.indexOf("renderConfirmSheet()");
   assert.ok(confirmIdx > -1, "renderConfirmSheet() must still be called from renderConfirmDialog()");
-  for (const other of ["renderPostComposer()", "renderChallengeViewOverlay()", "renderEventViewOverlay()", "renderRecapViewOverlay()", "renderNotificationCenter()", "renderCommunityProfileOverlay()"]) {
+  for (const other of ["renderPrSharePrompt()", "renderAchievementUnlockCelebration()", "renderNotificationCenter()"]) {
     const otherIdx = body.indexOf(other);
     assert.ok(otherIdx > -1, `${other} must still be called from renderConfirmDialog()`);
     assert.ok(confirmIdx > otherIdx, `renderConfirmSheet() must be concatenated after ${other}, so it paints on top`);
   }
-});
-
-test("COMM-234: leaving a challenge through the real render path puts the confirm sheet's markup after the still-open challengeView overlay's markup in the DOM", async () => {
-  const mock = createMockSupabase({
-    profiles: [{ id: "u1", handle: "dana", display_name: "דנה", is_admin: false, recovery_verified_at: VERIFIED, visible_to_club: true, allow_follows: true, in_leaderboards: true }],
-    invite_redemptions: [{ user_id: "u1", invite_id: "inv-1", role: "member", redeemed_at: VERIFIED }],
-    clubs: [{ id: "club-1", name: "חיימוניה" }],
-    challenges: [{ id: "c1", challenge_type: "individual_target", title: "12 אימונים החודש", description: "", metric_type: "session_count", target_value: 12, start_at: iso(-5), end_at: iso(20), status: "active", join_mode: "open", visibility: "club", created_by: "u1", config: {} }],
-    challenge_participants: [{ challenge_id: "c1", user_id: "u1", club_id: "club-1", team_id: null, joined_at: iso(-1), status: "active", progress_value: 4, completed_at: null }],
-    challenge_progress: [], workout_posts: [], feed_page_rows: [], analytics_events: [], notifications: [], notification_preferences: [],
-  });
-  mock.setUser({ id: "u1", is_anonymous: false, email: "dana@members.haimuniya.invalid" });
-  const window = await bootCommunity(mock, { syncEnabled: false });
-  window.document.getElementById("tabCommunityBtn").click();
-  await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
-  window.document.querySelector('[data-community-action="set-tab"][data-tab="boards"]').click();
-  await waitFor(() => !!window.document.querySelector('[data-challenge-id="c1"]'), 3000);
-  window.document.querySelector('[data-challenge-id="c1"] [data-community-action="open-challenge"]').click();
-  await waitFor(() => !!window.document.querySelector('[data-community-action="leave-challenge"]'), 3000);
-  window.document.querySelector('[data-community-action="leave-challenge"]').click();
-  await waitFor(() => !!window.document.querySelector('[data-community-action="confirm-yes"]'), 3000);
-
-  const overlays = [...window.document.querySelectorAll(".modal-overlay.open")];
-  const challengeOverlay = overlays.find((o) => o.getAttribute("data-cloud-dialog") === "challengeView");
-  const confirmOverlay = overlays.find((o) => o.querySelector('[data-community-action="confirm-yes"]'));
-  assert.ok(challengeOverlay && confirmOverlay, "both overlays must be open at once, matching the real nested-confirm flow");
-  const position = challengeOverlay.compareDocumentPosition(confirmOverlay);
-  assert.ok(position & window.Node.DOCUMENT_POSITION_FOLLOWING, "the confirm overlay must be a later DOM sibling than challengeView, so it paints on top under the shared z-index");
 });
 
 test("the confirm dialog is exposed globally (not just inside the Community tab's own output) and reset on sign-out", () => {

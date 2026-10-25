@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// COMM-234 browser scenario: open the notification center and see a
-// challenge and an event notification, real Chromium against the in-page
-// mock backend (lib/mockCloud.mjs).
+// COMM-234 browser scenario: open the notification center and see a batched
+// reaction group and an immediate achievement notification, real Chromium
+// against the in-page mock backend (lib/mockCloud.mjs).
 import { chromium } from "playwright";
 import { resolveLocalOnlyTarget } from "./lib/target.mjs";
 import { switchTab, consoleErrorCollector, dismissWelcomeModal } from "./lib/actions.mjs";
@@ -28,8 +28,8 @@ const seedTables = {
   invite_redemptions: [{ user_id: "u1", invite_id: "inv-1", role: "member", redeemed_at: VERIFIED }],
   clubs: [{ id: "club-1", name: "חיימוניה" }],
   notifications: [
-    notif(1, { type: "challenge_update", category: "challenges", title: "עדכון באתגר", body: "התקדמות חדשה נרשמה", deep_link: "/community/feed?challenge=c1" }),
-    notif(2, { type: "event_cancelled", category: "events", title: "אירוע בוטל", body: "סדנת הגמישות בוטלה", deep_link: "/community/feed?event=e1" }),
+    notif(1, { type: "reaction", category: "community", title: "עידודים חדשים", body: "התקדמות חדשה נרשמה", source_type: "post", source_id: "p1", deep_link: "/community/feed?post=p1" }),
+    notif(2, { type: "achievement_unlocked", category: "training", title: "פתחת הישג חדש", body: "100 אימונים", deep_link: "/community/achievements" }),
   ],
   notification_preferences: [],
   feed_page_rows: [], follows: [], hidden_posts: [], saved_posts: [],
@@ -49,7 +49,7 @@ await page.waitForSelector("#app", { state: "visible", timeout: 10000 });
 await dismissWelcomeModal(page);
 
 await switchTab(page, "tabCommunityBtn");
-await page.waitForSelector("#communityClubTop", { timeout: 5000 });
+await page.waitForSelector("#communityHead", { timeout: 5000 });
 await page.click('[data-community-action="feed-notifications"]');
 await page.waitForSelector("[data-notif-center]", { timeout: 5000 });
 await page.waitForFunction(() => {
@@ -58,15 +58,14 @@ await page.waitForFunction(() => {
 }, { timeout: 5000 });
 
 const text = await page.textContent("[data-notif-center]");
-// challenge_update is a batched type (COMM-142) — it collapses into one
-// group using the type's own generic heading, not the seeded row's title,
-// until expanded.
-check("the notification center shows a challenge-update group", text.includes("עדכונים באתגר"));
-check("the notification center shows the event notification", text.includes("אירוע בוטל"));
+// reaction is a batched type (COMM-142) — it collapses into one group using
+// the type's own generic heading, not the seeded row's title, until expanded.
+check("the notification center shows a reactions group", text.includes("עידודים חדשים על הפוסט שלך"));
+check("the notification center shows the achievement notification", text.includes("פתחת הישג חדש"));
 
-await page.click('[data-community-action="notif-toggle-group"][data-key^="challenge_update"]');
+await page.click('[data-community-action="notif-toggle-group"][data-key^="reaction"]');
 await page.waitForFunction(() => document.querySelector("[data-notif-center]").textContent.includes("התקדמות חדשה נרשמה"), { timeout: 5000 });
-check("expanding the challenge group reveals the individual notification's own body", true);
+check("expanding the reactions group reveals the individual notification's own body", true);
 
 const dialogAttrs = await page.evaluate(() => {
   const dlg = document.querySelector("[data-notif-center]");

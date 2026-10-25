@@ -21,7 +21,7 @@
 // regression in the shared layer fails one obvious test.
 import { test } from "node:test";
 import assert from "node:assert";
-import { bootCommunity, waitFor, seedAdminStepUp, unlockAdminPanel } from "./helpers/boot.mjs";
+import { bootCommunity, waitFor } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
 
 const VERIFIED = new Date().toISOString();
@@ -78,7 +78,7 @@ async function openCommunity(window) {
   // its own, rather than letting it race a Phase 1 dialog's own focus-in.
   await new Promise((resolve) => setTimeout(resolve, 150));
   window.document.getElementById("tabCommunityBtn").click();
-  await waitFor(() => !!window.document.querySelector(".subtabbar"), 4000);
+  await waitFor(() => !!window.document.getElementById("communityHead"), 4000);
 }
 
 // The full shared contract for one open dialog. `opener` is either the
@@ -124,28 +124,6 @@ async function assertDialogContract(window, key, opener, close) {
   assert.ok(!window.document.querySelector(sel), `${key}: a click on the backdrop closes the dialog`);
 }
 
-// ===== post composer ================================================
-
-test("post composer: focus-in, trap, Escape restores focus, backdrop closes", async () => {
-  const mock = createMockSupabase({
-    profiles: [{ id: "u1", handle: "dana", display_name: "דנה", is_admin: false, recovery_verified_at: VERIFIED, visible_to_club: true }],
-    invite_redemptions: [{ user_id: "u1", invite_id: "inv-1", role: "member", redeemed_at: VERIFIED }],
-    community_feed: [],
-  });
-  mock.setUser({ id: "u1", is_anonymous: false, email: "dana@members.haimuniya.invalid" });
-  seedAdminStepUp(mock, "u1", "dana@members.haimuniya.invalid");
-  const window = await bootCommunity(mock, { syncEnabled: false });
-  await openCommunity(window);
-
-  const opener = makeOpener(window, { communityAction: "open-composer" });
-  opener.click();
-  await waitFor(() => !!window.document.querySelector('[data-cloud-dialog="composer"]'), 3000);
-
-  await assertDialogContract(window, "composer", opener, async () => {
-    opener.click();
-  });
-});
-
 // ===== PR share prompt ==============================================
 
 test("PR share prompt: focus-in, trap, Escape restores focus, backdrop closes", async () => {
@@ -155,7 +133,6 @@ test("PR share prompt: focus-in, trap, Escape restores focus, backdrop closes", 
     community_feed: [],
   });
   mock.setUser({ id: "u1", is_anonymous: false, email: "dana@members.haimuniya.invalid" });
-  seedAdminStepUp(mock, "u1", "dana@members.haimuniya.invalid");
   mock.onRpc("pr_share", () => ({ data: "pr-post-1", error: null }));
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openCommunity(window);
@@ -202,7 +179,6 @@ test("achievement celebration: focus-in, trap, Escape restores focus, backdrop c
     member_achievements: [],
   });
   mock.setUser({ id: "u1", is_anonymous: false, email: "dana@members.haimuniya.invalid" });
-  seedAdminStepUp(mock, "u1", "dana@members.haimuniya.invalid");
   mock.onRpc("ach_share", () => ({ data: "ach-post-1", error: null }));
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openCommunity(window);
@@ -219,34 +195,6 @@ test("achievement celebration: focus-in, trap, Escape restores focus, backdrop c
       : null;
     // re-open the same celebration through the public unlock consumer
     window.HaimuniaEvents.emit(window.PRODUCT_EVENTS.ACHIEVEMENT_UNLOCKED, { code: "first_pr", member_achievement_id: "ma-1", visibility: "club" });
-  });
-});
-
-// ===== member profile overlay ======================================
-
-test("profile overlay: focus-in, trap, Escape restores focus, backdrop closes", async () => {
-  const mock = createMockSupabase({
-    profiles: [{ id: "u1", handle: "dana", display_name: "דנה", is_admin: false, recovery_verified_at: VERIFIED, visible_to_club: true }],
-    invite_redemptions: [{ user_id: "u1", invite_id: "inv-1", role: "member", redeemed_at: VERIFIED }],
-    community_feed: [],
-  });
-  mock.setUser({ id: "u1", is_anonymous: false, email: "dana@members.haimuniya.invalid" });
-  seedAdminStepUp(mock, "u1", "dana@members.haimuniya.invalid");
-  mock.onRpc("community_profile", () => ({
-    data: { display_name: "רון לוי", role: "member", member_since: "2023-04-01", training_frequency: "3 בשבוע" },
-    error: null,
-  }));
-  const window = await bootCommunity(mock, { syncEnabled: false });
-  await openCommunity(window);
-
-  const opener = makeOpener(window, { communityAction: "view-profile", id: "u2" });
-  opener.click();
-  await waitFor(() => !!window.document.querySelector('[data-cloud-dialog="profileView"]'), 3000);
-  await waitFor(() => !/טוען פרופיל/.test(window.document.querySelector('[data-cloud-dialog="profileView"]').textContent), 3000);
-
-  await assertDialogContract(window, "profileView", opener, async () => {
-    opener.click();
-    await waitFor(() => !/טוען פרופיל/.test(window.document.querySelector('[data-cloud-dialog="profileView"]').textContent), 3000);
   });
 });
 
@@ -271,7 +219,6 @@ test("notification centre: focus-in, trap, Escape restores focus, backdrop close
     follows: [], hidden_posts: [], saved_posts: [],
   });
   mock.setUser({ id: "u1", is_anonymous: false, email: "dana@members.haimuniya.invalid" });
-  seedAdminStepUp(mock, "u1", "dana@members.haimuniya.invalid");
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openCommunity(window);
 
@@ -305,319 +252,41 @@ test("notification centre: focus-in, trap, Escape restores focus, backdrop close
   );
 });
 
-// ===== report sheet ================================================
-
-test("report sheet: focus-in, trap, Escape restores focus, backdrop closes", async () => {
-  const mock = createMockSupabase({
-    profiles: [{ id: "u1", handle: "dana", display_name: "דנה", is_admin: false, recovery_verified_at: VERIFIED, visible_to_club: true }],
-    invite_redemptions: [{ user_id: "u1", invite_id: "inv-1", role: "member", redeemed_at: VERIFIED }],
-    community_feed: [],
-    reports: [],
-  });
-  mock.setUser({ id: "u1", is_anonymous: false, email: "dana@members.haimuniya.invalid" });
-  seedAdminStepUp(mock, "u1", "dana@members.haimuniya.invalid");
-  const window = await bootCommunity(mock, { syncEnabled: false });
-  await openCommunity(window);
-
-  const opener = makeOpener(window, { communityAction: "report", id: "post-1" });
-  opener.click();
-  await waitFor(() => !!window.document.querySelector('[data-cloud-dialog="reportSheet"]'), 3000);
-
-  await assertDialogContract(window, "reportSheet", opener, async () => {
-    opener.click();
-  });
-});
-
-// ===== moderation review sheet + context sheet =====================
-
-function modMock() {
-  const mock = createMockSupabase({
-    profiles: [
-      { id: "mod-1", handle: "mod", display_name: "מודרטור", is_admin: false, recovery_verified_at: VERIFIED, visible_to_club: true },
-      { id: "author-1", handle: "kobi", display_name: "קובי", is_admin: false, recovery_verified_at: VERIFIED, visible_to_club: true },
-      { id: "reporter-1", handle: "noa", display_name: "נועה", is_admin: false, recovery_verified_at: VERIFIED, visible_to_club: true },
-    ],
-    invite_redemptions: [
-      { user_id: "mod-1", invite_id: "i1", role: "head_coach", redeemed_at: VERIFIED },
-      { user_id: "author-1", invite_id: "i2", role: "member", redeemed_at: VERIFIED },
-      { user_id: "reporter-1", invite_id: "i3", role: "member", redeemed_at: VERIFIED },
-    ],
-    clubs: [{ id: "club-1", name: "חיימוניה" }],
-    workout_posts: [{ id: "post-1", author_id: "author-1", post_type: "POST_TEXT", body: "תוכן שדווח", status: "active", created_at: VERIFIED, published_at: VERIFIED }],
-    post_comments: [],
-    reports: [{ id: "rep-1", reporter_id: "reporter-1", target_type: "post", target_id: "post-1", reason: "harassment", note: "", status: "open", created_at: VERIFIED }],
-    admin_actions: [],
-    pins: [],
-    posting_restrictions: [],
-    feed_page_rows: [{ id: "post-1", author_id: "author-1", post_type: "POST_TEXT", body: "תוכן שדווח", created_at: VERIFIED }],
-    follows: [], hidden_posts: [], saved_posts: [], notifications: [],
-  });
-  mock.setUser({ id: "mod-1", is_anonymous: false, email: "mod@members.haimuniya.invalid" });
-  seedAdminStepUp(mock, "mod-1", "mod@members.haimuniya.invalid");
-  return mock;
-}
-
-// Redesign, Phase 1: renderModeration() moved from Community's "account"
-// sub-tab to the Manage tab's own "moderation" sub-tab.
-async function openQueue(window) {
-  await waitFor(() => !!window.document.getElementById("tabClubManageBtn"), 4000);
-  // tabClubManageBtn, not tabManageBtn. Moderation is a CLUB surface, and
-  // since both rows are now always present (management is a separate
-  // identity, so the rows cannot be chosen by the signed-in member's flags)
-  // tabManageBtn is unambiguously the APP panel - which a head coach is
-  // rightly refused. The two panels are disjoint jobs.
-  window.document.getElementById("tabClubManageBtn").click();
-  // The club panel is behind a management login - submit the real gate rather
-  // than bypassing it.
-  await unlockAdminPanel(window);
-  await waitFor(() => !!window.document.querySelector('[data-community-action="set-manage-tab"][data-tab="moderation"]'), 4000);
-  window.document.querySelector('[data-community-action="set-manage-tab"][data-tab="moderation"]').click();
-  await waitFor(() => !!window.document.querySelector('[data-community-action="mod-action"]'), 4000);
-  // Let the club panel's own lazy loaders land BEFORE any dialog opens.
-  // Otherwise one resolves mid-dialog, rerenders, and rebuilds the sheet's
-  // DOM under the node references these tests captured - see settle().
-  await settle(window);
-}
-
 test("a background rerender does not throw the member back to the top of an open dialog", async () => {
   // Live bug hunt, fresh round 1 (2026-09-15). A loader resolving while a
   // modal is open rerenders and REBUILDS the dialog's DOM. The node holding
   // focus stops existing, document.activeElement falls back to <body>, and
   // syncCloudDialogFocus's "focus is no longer inside" branch sent it to the
-  // FIRST control - so a keyboard or screen-reader user who had tabbed down
-  // to "confirm" was silently returned to the top of the sheet with the
-  // button they were about to press no longer under them.
-  //
-  // Invisible to a mouse user, which is why it survived ten rounds of
-  // hunting; it only surfaced when a corrected permission fixture let the
-  // club panel load analytics mid-dialog for the first time.
-  const window = await bootCommunity(modMock(), { syncEnabled: false });
-  await openQueue(window);
-  window.document.querySelector('[data-community-action="mod-action"][data-decision="warn"]').click();
-  await waitFor(() => !!window.document.querySelector('[data-cloud-dialog="modAction"]'), 3000);
+  // FIRST control - so a keyboard user who had tabbed down was silently
+  // returned to the top of the sheet. Exercised on the notification centre.
+  const mock = createMockSupabase({
+    profiles: [{ id: "u1", handle: "dana", display_name: "דנה", is_admin: false, recovery_verified_at: VERIFIED, visible_to_club: true }],
+    invite_redemptions: [{ user_id: "u1", invite_id: "inv-1", role: "member", redeemed_at: VERIFIED }],
+    clubs: [{ id: "club-1", name: "חיימוניה" }],
+    notifications: [{ id: "n1", user_id: "u1", type: "achievement_unlocked", category: "training", title: "הישג", body: "גוף", deep_link: null, source_type: null, source_id: null, read_at: null, created_at: new Date().toISOString() }],
+    notification_preferences: [],
+  });
+  mock.setUser({ id: "u1", is_anonymous: false, email: "dana@members.haimuniya.invalid" });
+  const window = await bootCommunity(mock, { syncEnabled: false });
+  await openCommunity(window);
+  window.document.querySelector('[data-community-action="feed-notifications"]').click();
+  await waitFor(() => !!window.document.querySelector('[data-cloud-dialog="notifCenter"]'), 3000);
+  await settle(window);
 
-  const dlg = window.document.querySelector('[data-cloud-dialog="modAction"]');
-  const before = focusables(dlg);
+  const before = focusables(window.document.querySelector('[data-cloud-dialog="notifCenter"]'));
   assert.ok(before.length >= 2, "the sheet has somewhere to move focus to");
   const wantedIndex = before.length - 1;
   before[wantedIndex].focus();
   assert.equal(window.document.activeElement, before[wantedIndex], "focus starts on the last control");
 
-  // Exactly what a loader landing does: a full re-render underneath the
-  // still-open dialog.
   window.render();
   await new Promise((r) => setTimeout(r, 30));
 
-  const after = focusables(window.document.querySelector('[data-cloud-dialog="modAction"]'));
+  const after = focusables(window.document.querySelector('[data-cloud-dialog="notifCenter"]'));
   assert.equal(after.length, before.length, "the sheet rebuilt with the same controls");
   assert.equal(window.document.activeElement, after[wantedIndex],
     "focus is restored to where the member left it, not to the first control");
-  // The control: before the fix this was after[0], which is a different node
-  // whenever the sheet has more than one focusable.
-  assert.notEqual(window.document.activeElement, after[0],
-    "and specifically not back at the top");
-});
-
-test("moderation review sheet: focus-in, trap, Escape restores focus, backdrop closes", async () => {
-  const window = await bootCommunity(modMock(), { syncEnabled: false });
-  await openQueue(window);
-
-  const opener = window.document.querySelector('[data-community-action="mod-action"][data-decision="warn"]');
-  assert.ok(opener, "the warn action button is offered on the queue row");
-  opener.focus();
-  opener.click();
-  await waitFor(() => !!window.document.querySelector('[data-cloud-dialog="modAction"]'), 3000);
-
-  const sel = '[data-cloud-dialog="modAction"]';
-  const dlg = window.document.querySelector(sel);
-  assert.equal(dlg.getAttribute("role"), "dialog");
-  assert.equal(dlg.getAttribute("aria-modal"), "true");
-  await waitFor(() => dlg.contains(window.document.activeElement), 3000);
-
-  const f = focusables(dlg);
-  assert.ok(f.length >= 2, `modAction: at least two focusables (${f.length})`);
-  f[f.length - 1].focus();
-  tab(window, false);
-  assert.equal(window.document.activeElement, f[0], "modAction: Tab wraps to first");
-  f[0].focus();
-  tab(window, true);
-  assert.equal(window.document.activeElement, f[f.length - 1], "modAction: Shift+Tab wraps to last");
-
-  escape(window);
-  await waitFor(() => !window.document.querySelector(sel), 3000);
-  await waitFor(() => window.document.activeElement === window.document.querySelector('[data-community-action="mod-action"][data-decision="warn"]'), 3000);
-
-  // backdrop
-  window.document.querySelector('[data-community-action="mod-action"][data-decision="warn"]').click();
-  await waitFor(() => !!window.document.querySelector(sel), 3000);
-  window.document.querySelector(sel).dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
-  await waitFor(() => !window.document.querySelector(sel), 3000);
-  assert.ok(!window.document.querySelector(sel), "modAction: backdrop click closes");
-});
-
-test("moderation context sheet: focus-in, trap, Escape restores focus, backdrop closes", async () => {
-  const window = await bootCommunity(modMock(), { syncEnabled: false });
-  await openQueue(window);
-
-  const opener = window.document.querySelector('[data-community-action="mod-context"]');
-  assert.ok(opener, "the view-context button is offered on the queue row");
-  opener.focus();
-  opener.click();
-  await waitFor(() => !!window.document.querySelector('[data-cloud-dialog="modContext"]'), 3000);
-
-  const sel = '[data-cloud-dialog="modContext"]';
-  const dlg = window.document.querySelector(sel);
-  assert.equal(dlg.getAttribute("role"), "dialog");
-  await waitFor(() => dlg.contains(window.document.activeElement), 3000);
-
-  const f = focusables(dlg);
-  assert.ok(f.length >= 2, `modContext: at least two focusables (${f.length})`);
-  f[f.length - 1].focus();
-  tab(window, false);
-  assert.equal(window.document.activeElement, f[0], "modContext: Tab wraps to first");
-  f[0].focus();
-  tab(window, true);
-  assert.equal(window.document.activeElement, f[f.length - 1], "modContext: Shift+Tab wraps to last");
-
-  escape(window);
-  await waitFor(() => !window.document.querySelector(sel), 3000);
-  await waitFor(() => window.document.activeElement === window.document.querySelector('[data-community-action="mod-context"]'), 3000);
-
-  window.document.querySelector('[data-community-action="mod-context"]').click();
-  await waitFor(() => !!window.document.querySelector(sel), 3000);
-  window.document.querySelector(sel).dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
-  await waitFor(() => !window.document.querySelector(sel), 3000);
-  assert.ok(!window.document.querySelector(sel), "modContext: backdrop click closes");
-});
-
-// ===== COMM-234: the three real Phase 2 modal dialogs =================
-//
-// challengeView, eventView and recapView are wired into the exact same
-// CLOUD_DIALOGS registry every dialog above uses (see cloud.js, "Shared
-// Phase 1 dialog focus + keyboard management") but had never had the
-// contract itself pinned. These are the actual new modal-overlay dialogs
-// Phase 2 shipped.
-//
-// COMM-234's own acceptance criteria instead names five different dialogs
-// -"challenge create/edit, event create/edit, directory filter panel, push
-// permission prompt, coach Congratulate confirm" - as needing this same
-// contract. None of the five are wired into CLOUD_DIALOGS or render as a
-// .modal-overlay at all:
-//   - challenge create/edit (renderChallengeForm) and event create/edit
-//     (renderEventForm) are inline <form class="chart-card admin-card">
-//     cards in the normal document flow, not overlays - see cloud.js.
-//   - there is no directory filter panel anywhere in the shipped Directory
-//     screen (COMM-231); it is a search box plus a staff/members split, no
-//     separate filter UI exists to test.
-//   - the "push permission prompt" is the native
-//     Notification.requestPermission() browser chrome (COMM-229's
-//     enableNotifPush()), entirely outside the DOM - there is no app markup
-//     to trap focus inside.
-//   - Congratulate (COMM-225) is deliberately one-tap-is-confirmation, no
-//     confirm dialog at all (see congratulateCelebrateItem()'s own comment
-//     in cloud.js and the disabled-after-send/no-second-send coverage in
-//     test/community-coach-tools.test.mjs).
-// This is a real mismatch between COMM-234's acceptance-criteria wording
-// and what the five features actually shipped as, not a coverage gap this
-// sweep can close by writing tests against markup that does not exist -
-// flagged back rather than papered over, per the standing qa rule. The
-// three tests below are the real, actionable half of that criterion.
-function seededChallengeEventRecap(extra) {
-  return createMockSupabase(Object.assign({
-    profiles: [{ id: "u1", handle: "dana", display_name: "דנה", is_admin: false, recovery_verified_at: VERIFIED, visible_to_club: true }],
-    invite_redemptions: [{ user_id: "u1", invite_id: "inv-1", role: "member", redeemed_at: VERIFIED }],
-    clubs: [{ id: "club-1", name: "חיימוניה" }],
-    challenges: [], challenge_participants: [], challenge_teams: [], challenge_progress: [],
-    events: [], event_attendees: [], post_comments: [],
-    weekly_recaps: [], onboarding_progress: [{ user_id: "u1", welcomed_at: VERIFIED, first_week_shown_at: VERIFIED, first_month_shown_at: VERIFIED }],
-    workout_posts: [], feed_page_rows: [], analytics_events: [], notifications: [], notification_preferences: [],
-  }, extra || {}));
-}
-
-test("challengeView: focus-in, trap, Escape restores focus, backdrop closes", async () => {
-  const NOW = Date.now();
-  const iso = (d) => new Date(NOW + d * 86400000).toISOString();
-  const mock = seededChallengeEventRecap({
-    challenges: [{ id: "c1", challenge_type: "individual_target", title: "12 אימונים החודש", description: "", metric_type: "session_count", target_value: 12, start_at: iso(-5), end_at: iso(20), status: "active", join_mode: "open", visibility: "club", created_by: "u1", config: {} }],
-    challenge_participants: [{ challenge_id: "c1", user_id: "u1", club_id: "club-1", team_id: null, joined_at: iso(-1), status: "active", progress_value: 4, completed_at: null }],
-  });
-  mock.setUser({ id: "u1", is_anonymous: false, email: "dana@members.haimuniya.invalid" });
-  seedAdminStepUp(mock, "u1", "dana@members.haimuniya.invalid");
-  const window = await bootCommunity(mock, { syncEnabled: false });
-  await openCommunity(window);
-  window.document.querySelector('[data-community-action="set-tab"][data-tab="boards"]').click();
-  await waitFor(() => !!window.document.querySelector('[data-challenge-id="c1"]'), 3000);
-
-  // The real opener is the card's own "open-challenge" button inside
-  // #content, not a synthetic one appended to <body>: cloud.js's focus
-  // restore re-resolves a CSS selector built from the clicked element's own
-  // data-* attributes (see cloudOpenerSelector's own comment - the real
-  // control lives inside #content and does not survive the re-render its
-  // own click triggers), and a synthetic opener sharing the same
-  // data-community-action/data-id would resolve to whichever DOM node that
-  // selector matches first - the real card, not the synthetic stand-in -
-  // so the getter below re-queries the live card, the same "notification
-  // bell" pattern the notifCenter test above already uses.
-  const getOpener = () => window.document.querySelector('[data-challenge-id="c1"] [data-community-action="open-challenge"]');
-  getOpener().focus();
-  getOpener().click();
-  await waitFor(() => !!window.document.querySelector('[data-community-action="leave-challenge"]'), 3000);
-
-  await assertDialogContract(window, "challengeView", getOpener, async () => { getOpener().click(); });
-});
-
-test("eventView: focus-in, trap, Escape restores focus, backdrop closes", async () => {
-  const NOW = Date.now();
-  const iso = (h) => new Date(NOW + h * 3600000).toISOString();
-  const mock = seededChallengeEventRecap({
-    events: [{ id: "e1", event_type: "workshop", title: "סדנת גמישות", description: "", status: "published", start_at: iso(24), end_at: null, location: "אולם 1", capacity: null, registration_deadline: null, created_by: "u1" }],
-  });
-  mock.setUser({ id: "u1", is_anonymous: false, email: "dana@members.haimuniya.invalid" });
-  seedAdminStepUp(mock, "u1", "dana@members.haimuniya.invalid");
-  const window = await bootCommunity(mock, { syncEnabled: false });
-  await openCommunity(window);
-  window.document.querySelector('[data-community-action="set-tab"][data-tab="boards"]').click();
-  await waitFor(() => !!window.document.querySelector('[data-event-id="e1"]'), 3000);
-
-  // Same reasoning as challengeView above: re-resolve the real card's own
-  // opener button by selector rather than using a synthetic stand-in.
-  const getOpener = () => window.document.querySelector('[data-event-id="e1"] [data-community-action="open-event"]');
-  getOpener().focus();
-  getOpener().click();
-  await waitFor(() => !!window.document.querySelector('[data-cloud-dialog="eventView"]'), 3000);
-  // let the async detail load settle so the RSVP controls (real focusables
-  // beyond the close button) are actually in the DOM.
-  await waitFor(() => !!window.document.querySelector('[data-cloud-dialog="eventView"] [data-community-action="event-rsvp"]'), 3000);
-
-  await assertDialogContract(window, "eventView", getOpener, async () => { getOpener().click(); });
-});
-
-test("recapView: focus-in, trap, Escape restores focus, backdrop closes", async () => {
-  const mock = seededChallengeEventRecap({
-    weekly_recaps: [{
-      id: "wr-1", user_id: "u1", week_start: "2026-08-17",
-      sessions_completed: 5, streak: 2, prs: [], achievements: [],
-      challenge_progress: [], club_challenge_progress: {}, upcoming_event: null,
-      generated_at: VERIFIED,
-    }],
-  });
-  mock.setUser({ id: "u1", is_anonymous: false, email: "dana@members.haimuniya.invalid" });
-  seedAdminStepUp(mock, "u1", "dana@members.haimuniya.invalid");
-  const window = await bootCommunity(mock, { syncEnabled: false });
-  await openCommunity(window);
-  window.document.querySelector('[data-community-action="set-tab"][data-tab="account"]').click();
-  await waitFor(() => window.document.body.textContent.includes("הסיכום השבועי שלי"), 3000);
-
-  // Same reasoning as challengeView above: re-resolve the real "View Week"
-  // control by selector rather than using a synthetic stand-in, since the
-  // Account tab it lives on re-renders too.
-  const getOpener = () => window.document.querySelector('[data-community-action="open-recap"]');
-  getOpener().focus();
-  getOpener().click();
-  await waitFor(() => !!window.document.querySelector('[data-cloud-dialog="recapView"]'), 3000);
-  await waitFor(() => !!window.document.querySelector('[data-cloud-dialog="recapView"] [data-community-action="share-recap"]'), 3000);
-
-  await assertDialogContract(window, "recapView", getOpener, async () => { getOpener().click(); });
+  assert.notEqual(window.document.activeElement, after[0], "and specifically not back at the top");
 });
 
 // ===== confirm sheet (launch-readiness audit, finding A3) ==========
@@ -638,13 +307,17 @@ test("confirm sheet: focus-in, trap, Escape restores focus, backdrop closes", as
     community_feed: [],
   });
   mock.setUser({ id: "u1", is_anonymous: false, email: "dana@members.haimuniya.invalid" });
-  seedAdminStepUp(mock, "u1", "dana@members.haimuniya.invalid");
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openCommunity(window);
 
-  const opener = makeOpener(window, { communityAction: "delete-account" });
+  // The signed-in home carries the real delete-account control; it is the
+  // opener, so the restore target resolves to it rather than to a stand-in.
+  const opener = window.document.querySelector('[data-community-action="delete-account"]');
+  opener.focus();
   opener.click();
   await waitFor(() => !!window.document.querySelector('[data-cloud-dialog="confirmSheet"]'), 3000);
 
-  await assertDialogContract(window, "confirmSheet", opener, async () => { opener.click(); });
+  // The home re-renders on every state change, so the opener is re-resolved.
+  const live = () => window.document.querySelector('[data-community-action="delete-account"]');
+  await assertDialogContract(window, "confirmSheet", live, async () => { live().click(); });
 });

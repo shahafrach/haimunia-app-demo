@@ -1,5 +1,5 @@
-// COMM-108. The per-post action menu. Own post: edit caption, change
-// visibility, delete. Other member's post: save, hide, report, block. Save
+// COMM-108. The per-post action menu. Own post: edit caption and
+// delete. Other member's post: block.
 // and hide are direct own-row RLS writes; caption, visibility and delete go
 // through post_edit_caption / post_set_visibility / post_delete.
 //
@@ -15,7 +15,7 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import fs from "node:fs";
-import { bootCommunity, waitFor } from "./helpers/boot.mjs";
+import { bootCommunity, waitFor, holdPosts } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
 
 const VERIFIED = new Date().toISOString();
@@ -24,7 +24,7 @@ function seeded() {
   const mock = createMockSupabase({
     profiles: [{ id: "u1", handle: "dana", display_name: "דנה", is_admin: false, recovery_verified_at: VERIFIED, visible_to_club: true }],
     invite_redemptions: [{ user_id: "u1", invite_id: "inv-1", role: "member", redeemed_at: VERIFIED }],
-    community_feed: [
+    feed_page_rows: [
       { id: "own1", post_type: "POST_TEXT", author_id: "u1", display_name: "דנה", body: "פוסט שלי", visibility: "club", published_at: new Date(Date.now() - 60000).toISOString() },
       { id: "other1", post_type: "POST_TEXT", author_id: "u2", display_name: "רון", body: "פוסט של רון", published_at: new Date(Date.now() - 120000).toISOString() },
     ],
@@ -38,8 +38,10 @@ function seeded() {
   return mock;
 }
 
-async function openFeed(window) {
+async function openFeed(window, mock) {
   window.document.getElementById("tabCommunityBtn").click();
+  await waitFor(() => !!window.document.getElementById("communityHead"), 3000);
+  holdPosts(window, mock.db.feed_page_rows);
   // COMM-331: feed data now loads lazily behind ensureCommunityDataLoaded(),
   // so a plain ".post-card" count briefly matches the loading skeleton
   // (also .post-card, no data-post-id) before the real posts replace it -
@@ -51,61 +53,32 @@ function openMenu(window, postId) {
   window.document.querySelector(`[data-post-id="${postId}"] [data-community-action="toggle-post-menu"]`).click();
 }
 
-test("own post menu offers edit caption, change visibility and delete; others' does not", async () => {
-  const window = await bootCommunity(seeded(), { syncEnabled: false });
-  await openFeed(window);
+
+
+
+
+test("own post menu offers edit caption and delete; another member's offers block only", async () => {
+  const mock = seeded();
+  const window = await bootCommunity(mock, { syncEnabled: false });
+  await openFeed(window, mock);
   openMenu(window, "own1");
   await waitFor(() => !!window.document.querySelector('[data-post-id="own1"] .post-menu'), 3000);
   const own = window.document.querySelector('[data-post-id="own1"] .post-menu');
   assert.ok(own.querySelector('[data-community-action="post-edit-caption"]'));
-  assert.ok(own.querySelector('[data-community-action="post-change-visibility"]'));
   assert.ok(own.querySelector('[data-community-action="post-delete"]'));
-  assert.equal(own.querySelector('[data-community-action="post-save"]'), null);
-});
-
-test("other member's post menu offers save, hide, report and block", async () => {
-  const window = await bootCommunity(seeded(), { syncEnabled: false });
-  await openFeed(window);
+  assert.equal(own.querySelector('[data-community-action="block"]'), null, "you cannot block yourself");
   openMenu(window, "other1");
   await waitFor(() => !!window.document.querySelector('[data-post-id="other1"] .post-menu'), 3000);
   const menu = window.document.querySelector('[data-post-id="other1"] .post-menu');
-  assert.ok(menu.querySelector('[data-community-action="post-save"]'));
-  assert.ok(menu.querySelector('[data-community-action="post-hide"]'));
-  assert.ok(menu.querySelector('[data-community-action="report"]'));
   assert.ok(menu.querySelector('[data-community-action="block"][data-id="u2"]'), "block targets the author, not the post");
-});
-
-test("save toggles a saved_posts row on then off", async () => {
-  const mock = seeded();
-  const window = await bootCommunity(mock, { syncEnabled: false });
-  await openFeed(window);
-  openMenu(window, "other1");
-  await waitFor(() => !!window.document.querySelector('[data-post-id="other1"] .post-menu'), 3000);
-  window.document.querySelector('[data-community-action="post-save"]').click();
-  await waitFor(() => mock.db.saved_posts.length === 1, 3000);
-  assert.deepEqual(mock.db.saved_posts[0], { user_id: "u1", post_id: "other1" });
-
-  openMenu(window, "other1");
-  await waitFor(() => !!window.document.querySelector('[data-post-id="other1"] .post-menu'), 3000);
-  window.document.querySelector('[data-community-action="post-save"]').click();
-  await waitFor(() => mock.db.saved_posts.length === 0, 3000);
-});
-
-test("hide writes a hidden_posts row and removes the card immediately", async () => {
-  const mock = seeded();
-  const window = await bootCommunity(mock, { syncEnabled: false });
-  await openFeed(window);
-  openMenu(window, "other1");
-  await waitFor(() => !!window.document.querySelector('[data-post-id="other1"] .post-menu'), 3000);
-  window.document.querySelector('[data-community-action="post-hide"]').click();
-  await waitFor(() => window.document.querySelector('[data-post-id="other1"]') === null, 3000);
-  assert.deepEqual(mock.db.hidden_posts[0], { user_id: "u1", post_id: "other1" });
+  assert.equal(menu.querySelector('[data-community-action="post-edit-caption"]'), null);
+  assert.equal(menu.querySelector('[data-community-action="post-delete"]'), null);
 });
 
 test("edit caption updates only the body through post_edit_caption", async () => {
   const mock = seeded();
   const window = await bootCommunity(mock, { syncEnabled: false });
-  await openFeed(window);
+  await openFeed(window, mock);
   openMenu(window, "own1");
   await waitFor(() => !!window.document.querySelector('[data-post-id="own1"] .post-menu'), 3000);
   window.document.querySelector('[data-community-action="post-edit-caption"]').click();
@@ -119,18 +92,6 @@ test("edit caption updates only the body through post_edit_caption", async () =>
   await waitFor(() => /כיתוב מעודכן/.test(window.document.querySelector('[data-post-id="own1"]').textContent), 3000);
 });
 
-test("change visibility calls post_set_visibility with the picked label", async () => {
-  const mock = seeded();
-  const window = await bootCommunity(mock, { syncEnabled: false });
-  await openFeed(window);
-  openMenu(window, "own1");
-  await waitFor(() => !!window.document.querySelector('[data-post-id="own1"] .post-menu'), 3000);
-  window.document.querySelector('[data-community-action="post-change-visibility"]').click();
-  await waitFor(() => !!window.document.querySelector('[data-community-action="visibility-pick"][data-value="friends"]'), 3000);
-  window.document.querySelector('[data-community-action="visibility-pick"][data-value="friends"]').click();
-  await waitFor(() => !!mock.db.__setVis, 3000);
-  assert.deepEqual(mock.db.__setVis, { post_id: "own1", visibility: "friends" });
-});
 
 // The card still leaves on the confirm and post_delete still carries the
 // right id - what changed is the ORDER. The RPC is held for the undo window
@@ -142,7 +103,7 @@ test("change visibility calls post_set_visibility with the picked label", async 
 test("delete goes through the single confirm dialog then post_delete, and removes the card", async () => {
   const mock = seeded();
   const window = await bootCommunity(mock, { syncEnabled: false });
-  await openFeed(window);
+  await openFeed(window, mock);
   openMenu(window, "own1");
   await waitFor(() => !!window.document.querySelector('[data-post-id="own1"] .post-menu'), 3000);
   window.document.querySelector('[data-community-action="post-delete"]').click();

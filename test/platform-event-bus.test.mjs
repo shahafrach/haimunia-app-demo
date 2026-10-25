@@ -206,7 +206,7 @@ const root = new URL("../", import.meta.url);
 const html = fs.readFileSync(new URL("index.html", root), "utf8");
 const boot = fs.readFileSync(new URL("test/helpers/boot.mjs", root), "utf8");
 
-const PLATFORM_FILES = ["./src/eventbus.js", "./src/analytics.js", "./src/realtime.js", "./src/image.js"];
+const PLATFORM_FILES = ["./src/eventbus.js", "./src/analytics.js"];
 
 test("every platform module is loaded by index.html before cloud.js and app.js", () => {
   const scripts = [...html.matchAll(/<script(?: defer)? src="([^"]+)"><\/script>/g)].map((m) => m[1]);

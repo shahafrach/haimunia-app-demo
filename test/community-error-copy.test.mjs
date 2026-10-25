@@ -105,7 +105,7 @@ async function failedBanner(message, action = "post_create") {
   const mock = seeded();
   const window = await bootCommunity(mock, { syncEnabled: false });
   window.document.getElementById("tabCommunityBtn").click();
-  await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
+  await waitFor(() => !!window.document.getElementById("communityHead"), 3000);
 
   mock.onRpc(action, () => ({ data: null, error: { message } }));
   await window.HaimuniaOutbox.enqueue(action, { body: "בוקר טוב" });
@@ -219,7 +219,7 @@ test("an op queued by a retired app version names neither its English action id 
   const mock = seeded();
   const window = await bootCommunity(mock, { syncEnabled: false });
   window.document.getElementById("tabCommunityBtn").click();
-  await waitFor(() => !!window.document.querySelector(".subtabbar"), 3000);
+  await waitFor(() => !!window.document.getElementById("communityHead"), 3000);
   // src/outbox.js writes "unsupported action: <action>" for a row whose
   // handler no longer exists, and the banner's action label used to fall
   // back to the raw action id - so this row leaked English twice over.

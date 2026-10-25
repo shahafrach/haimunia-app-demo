@@ -1,6 +1,7 @@
 -- Production-readiness audit, 2026-09-06 (202609060015).
--- DB-M3 (FK indexes), SEC-019 (staff impersonation), FEAT-004 / FEAT-010
--- (the two dormant scheduled jobs).
+-- DB-M3 (FK indexes) and scheduled_job_health()'s per-job staleness window.
+-- The staff-impersonation and dormant-job sections went with their features
+-- in 202610250001.
 
 \set rls_helpers_included true
 create extension if not exists pgtap with schema extensions;
@@ -38,62 +39,6 @@ select is(
 select ok(
   (select count(*)::int from public.clubs) = 1,
   'and club_id stays unindexed on purpose because exactly one club row exists - the invariant clubs_guard_single_row() enforces');
-
--- =====================================================================
--- 2. SEC-019 - display_name may not claim a staff role
--- =====================================================================
-select tests.set_auth(tests.uid('m1'));
-select throws_ok(
-  $$ update public.profiles set display_name = 'מאמן דני' where id = tests.uid('m1') $$,
-  'P0001', 'display name may not claim a staff role',
-  'THE FIX: a plain member cannot rename themselves to claim coach status');
-select throws_ok(
-  $$ update public.profiles set display_name = 'Club Admin' where id = tests.uid('m1') $$,
-  'P0001', 'display name may not claim a staff role',
-  'and the English staff words are covered too');
-
--- An ordinary rename is untouched. This is the assertion that keeps the
--- guard from being a blunt instrument.
-select lives_ok(
-  $$ update public.profiles set display_name = 'דנה כהן' where id = tests.uid('m1') $$,
-  'an ordinary display name still saves');
-select tests.clear_auth();
-select is(
-  (select display_name from public.profiles where id = tests.uid('m1')), 'דנה כהן',
-  'and really changed');
-
--- A real coach may of course call themselves a coach.
-select tests.set_auth(tests.uid('coach'));
-select lives_ok(
-  $$ update public.profiles set display_name = 'מאמן יואב' where id = tests.uid('coach') $$,
-  'a REAL coach is exempt - the guard blocks claiming a role you do not hold, not the word itself');
-select tests.set_auth(tests.uid('admin'));
-select lives_ok(
-  $$ update public.profiles set display_name = 'Admin Noa' where id = tests.uid('admin') $$,
-  'and so is a real admin');
-
--- The service role / dashboard path is out of scope, same as every other
--- guard trigger in this module.
-select tests.clear_auth();
-select lives_ok(
-  $$ update public.profiles set display_name = 'מאמן שלא באמת' where id = tests.uid('m2') $$,
-  'a non-authenticated session (service role, dashboard, backfill) is unaffected');
-
--- =====================================================================
--- 3. FEAT-004 / FEAT-010 - the two dormant jobs
--- =====================================================================
-select isnt_empty(
-  $$ select 1 from cron.job where jobname = 'community-health' $$,
-  'FEAT-004 THE FIX: community_health_generate() finally has a producer - it was defined, correct, and called by absolutely nothing, so community_health_scores was permanently empty');
-
-select is_empty(
-  $$ select 1 from cron.job where jobname = 'feed-weights-recompute' $$,
-  'FEAT-010 THE FIX: the weekly job that ran a deliberate no-op stub is unscheduled - a green cron row for an unbuilt feature is worse than no row, because it reads as "personalized ranking works"');
-
--- And the stub itself is still there, still a no-op, ready for whoever
--- builds the derivation. Removing the function was NOT the fix.
-select has_function('public', 'recompute_feed_weights', array['integer'],
-  'the stub function itself is retained - only its misleading schedule was removed');
 
 -- =====================================================================
 -- 4. scheduled_job_health()'s staleness window follows each job's cadence

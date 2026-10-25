@@ -26,20 +26,6 @@ test("a render failure shows a generic message, not the raw internal exception t
   }
 });
 
-test("event map_link is only rendered as a clickable link when it actually starts http(s):// - a second, render-site gate independent of the submit-time check and the DB constraint", async () => {
-  const src = cloudSource();
-  // Source-text assertion (cloud.js has no jsdom-executable community-driven
-  // render path in bootApp() alone - see community-*.test.mjs for the
-  // bootCommunity-driven equivalents this fix's sibling checks already use).
-  // This pins the actual gate exists, matching the exact regex
-  // submitEventForm() already uses for the same field, so both checks can
-  // never silently drift out of sync with each other.
-  assert.ok(src.includes('const mapLinkSafe = e.map_link && /^https?:\\/\\//i.test(e.map_link);'),
-    "the render-site gate must exist and use the same http(s):// regex submitEventForm() uses");
-  assert.match(src, /\$\{mapLinkSafe \? ` · <a class="link-btn" href="\$\{esc\(e\.map_link\)\}"/,
-    "the map link is only rendered as an <a href> when mapLinkSafe is true");
-});
-
 test("navigateToNotifTarget builds its post-id selector through the shared cssSel() helper, not a naive manual escape", async () => {
   const src = cloudSource();
   // `var` since cloud.js stopped being an IIFE - src/constants.js declares

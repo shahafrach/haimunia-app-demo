@@ -24,17 +24,14 @@ import { test } from "node:test";
 import assert from "node:assert";
 import { bootApp, answerWodRx, waitFor } from "./helpers/boot.mjs";
 
-const FEATURE_KEY = "benchmarks";
-const CACHE_KEY = "haimunia-demo:clubFeatures";
 // The eight, in the order the section renders them. Spelled out rather than
 // read off app.js: this list is the product decision, and a test that derives
 // it from the source cannot notice the source changing.
 const THE_EIGHT = ["fran", "grace", "helen", "diane", "cindy", "murph", "isabel", "karen"];
 
 function turnKeyOn(window) {
-  // The shape cloud.js's loadClubFeatures() hands over - the { enabled, config }
-  // row club_features selects, not a bare boolean.
-  window.setClubFeatureFlags({ [FEATURE_KEY]: { enabled: true, config: {} } });
+  // The benchmarks section has no admin switch any more (the club_features
+  // table went with the staff); it is always on, so this only repaints.
   window.render();
 }
 function openProgress(window) {
@@ -298,80 +295,19 @@ test("the reminder is in the app and nowhere else - it never becomes a push", as
 });
 
 // ===========================================================================
-// 4. The toggle off
+// 4. Offline
 // ===========================================================================
 
-test("with the key off - which is every club until an admin turns it on - the section does not exist", async () => {
-  const window = await bootApp();
-  await seedWod(window, "fran", daysAgo(window, 120), 320);
-  await seedLift(window, "Test Bench Off", daysAgo(window, 200), 100, 5);
-  openProgress(window);
-
-  // No setClubFeatureFlags call at all: 202609190002 seeds the row disabled,
-  // so this is the live state for every club, not a contrived one.
-  assert.equal(rows(window).length, 0, "no rows");
-  assert.equal(area(window).innerHTML, "", "not an empty heading either - the section is absent");
-  assert.equal(area(window).textContent.includes("בנצ'מרקים"), false);
-  // Including the reminder, which is the part that would otherwise leak: both
-  // of those attempts are well past 90 days.
-  assert.equal(window.document.body.textContent.includes("לבדיקה מחדש"), false,
-    "a module that is off does not get to nag");
-  // And the progress screen that shipped before is untouched underneath it.
-  assert.ok(window.document.getElementById("historyListArea"), "the all-time records list is still there");
-  assert.ok(window.document.getElementById("bodyweightArea"));
-  assert.ok(window.document.getElementById("measureArea"));
-});
-
-test("an explicit false, and a map that never mentions this key, are both off", async () => {
-  const window = await bootApp();
-  await seedWod(window, "fran", daysAgo(window, 120), 320);
-  openProgress(window);
-
-  window.setClubFeatureFlags({ [FEATURE_KEY]: { enabled: false, config: {} } });
-  window.render();
-  assert.equal(rows(window).length, 0, "an explicitly disabled module is off");
-
-  // The shape a cache written before this key existed has. Answering about
-  // other modules is not answering about this one.
-  window.setClubFeatureFlags({ feed: { enabled: true, config: {} }, club_wod: { enabled: true, config: {} } });
-  window.render();
-  assert.equal(rows(window).length, 0, "a missing key is not permission");
-
-  turnKeyOn(window);
-  assert.equal(rows(window).length, 8, "and on is on");
-});
-
-test("switching the key off mid-session takes the section away again", async () => {
-  const window = await bootApp();
-  await seedWod(window, "murph", daysAgo(window, 10), 3600);
-  turnKeyOn(window);
-  openProgress(window);
-  rowFor(window, "wod:murph").click();
-  assert.ok(area(window).querySelector(".chart-card"), "open, with a chart");
-
-  window.setClubFeatureFlags({ [FEATURE_KEY]: { enabled: false, config: {} } });
-  window.render();
-  assert.equal(area(window).innerHTML, "", "an admin switching it off is not something a member has to reload for");
-});
-
-test("the section works offline, from the cached answer, with no session and no network", async () => {
+test("the section works offline, with no session and no network", async () => {
   const window = await bootApp();
   await seedWod(window, "diane", daysAgo(window, 7), 210);
   openProgress(window);
 
-  // A cache written by a previous session, hydrated by the loader boot() calls
-  // before the first render. cloud.js is not loaded in this window at all, so
-  // if the section renders, it rendered off the disk.
-  await window.dbSetSetting(CACHE_KEY, { [FEATURE_KEY]: true });
-  await window.loadCachedClubFeatures();
+  // cloud.js is not loaded in this window at all, so if the section renders,
+  // it rendered off the disk.
   window.render();
   assert.equal(rows(window).length, 8, "a member who signed in once keeps the section in a basement gym");
   assert.match(rowFor(window, "wod:diane").textContent, /3:30/, "with their own results, which were always local");
-
-  await window.dbSetSetting(CACHE_KEY, { [FEATURE_KEY]: false });
-  await window.loadCachedClubFeatures();
-  window.render();
-  assert.equal(rows(window).length, 0, "and the same path with it cached off");
 });
 
 // ===========================================================================

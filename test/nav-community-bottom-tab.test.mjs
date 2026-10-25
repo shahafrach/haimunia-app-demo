@@ -26,8 +26,3 @@ test("tapping the bottom-bar Community tab switches to it like any other main ta
   assert.equal(window.document.getElementById("tabCommunityBtn").closest("#bottomTabBar") !== null, true);
 });
 
-test("the desktop sidebar still lists Community alongside the other 4 tabs, unaffected", async () => {
-  const window = await bootApp();
-  const sidebarLabels = Array.from(window.document.querySelectorAll("#desktopSidebar .navrow .nav-label")).map((el) => el.textContent);
-  assert.ok(sidebarLabels.includes("קהילה"), "Community still appears in the always-visible desktop sidebar");
-});

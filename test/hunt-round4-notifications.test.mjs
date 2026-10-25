@@ -11,6 +11,8 @@ import { test } from "node:test";
 import assert from "node:assert";
 import fs from "node:fs";
 import { cloudSource } from "./helpers/community-src.mjs";
+const appJs = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
+const indexHtml = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
 
 // The community layer, not one file of it: cloud.js is being split into
 // src/community/*.js, and what this test asserts is a property of the layer.
@@ -23,28 +25,7 @@ function navBody() {
   return cloudJs.slice(at, at + 6000);
 }
 
-test("a weekly recap with one classmate uses a singular verb", () => {
-  // "נועם התאמנו איתכם השבוע" - a single name with the plural "they trained".
-  // For a club of thirty, exactly one shared classmate in a week is an
-  // ordinary outcome, not an edge case.
-  assert.match(cloudJs, /classmatesList\.length === 1 \? "התאמן\/ה" : "התאמנו"/,
-    "the verb agrees with the number of classmates");
-  assert.ok(!/\}\)\.join\(", "\)\} התאמנו איתכם השבוע/.test(cloudJs),
-    "the hardcoded plural verb must be gone");
-});
 
-test("a notification pointing at a deleted announcement says so", () => {
-  const body = navBody();
-  const at = body.indexOf("target.announcement");
-  const branch = body.slice(at, body.indexOf("target.achievement", at));
-  assert.match(branch, /if \(!node\) setMessage\("ההודעה הזו כבר לא זמינה"\);/,
-    "a missing announcement anchor must tell the member, not silently do nothing");
-  // Keyed on the node being ABSENT, never on whether it can be scrolled to -
-  // my first version wrote this as `else` on the scrollIntoView test, which
-  // would report a present-but-unscrollable node as deleted.
-  assert.match(branch, /else if \(node\.scrollIntoView\)/,
-    "scrollability is a separate question from existence");
-});
 
 test("a notification pointing at a revoked medal says so", () => {
   const body = navBody();
@@ -56,20 +37,6 @@ test("a notification pointing at a revoked medal says so", () => {
     "and a present one is scrolled to, not reported missing");
 });
 
-test("the post branch that these two were modelled on still has its own fallback", () => {
-  // The three should not drift apart again. The post branch got this on
-  // 2026-09-11 and is the reason the shape was recognisable at all.
-  const body = navBody();
-  const branch = body.slice(body.indexOf("target.post"), body.indexOf("target.event"));
-  assert.match(branch, /setMessage\("התוכן הזה לא נטען בפיד כרגע/,
-    "the original fallback is intact");
-});
-
-// ===========================================================================
-// Accessibility and Hebrew correctness, round 4
-// ===========================================================================
-const appJs = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
-const indexHtml = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
 
 test("closing a nested dialog returns focus to the control that opened IT", () => {
   // HIGH. The opener-restore path only ran when EVERY dialog closed. Close a
@@ -92,22 +59,7 @@ test("closing a nested dialog returns focus to the control that opened IT", () =
   assert.match(branch, /cloudOpenDialogKey = openKey;/, "the parent becomes current");
 });
 
-test("no invalid gendered slash form survives, including the one I introduced", () => {
-  // אחד -> אחת is irregular: the ד BECOMES ת, so "אחד/ת" spells a non-word -
-  // exactly the class this project already bans for ברוך/ה. I introduced it
-  // hours earlier in this same session while fixing "1 חברי מועדון", which is
-  // why the rule below now covers it by name.
-  // The blanket ban lives in hebrew-copy-rules.test.mjs alongside ברוך/ה,
-  // which is the canonical list and deliberately a plain substring check.
-  // This test only pins the call site's own phrasing.
-  assert.match(cloudJs, /count === 1 \? "חבר\/ה במועדון"/,
-    "a club of one is phrased without the gendered numeral, not patched around it");
-});
 
-test("a one-week streak on the coach picker does not say '1 שבועות'", () => {
-  assert.match(cloudJs, /=== 1 \? "שבוע אחד" : `\$\{Number\(d\.streak_weeks\) \|\| 0\} שבועות`/,
-    "the coach's member-of-week detail agrees with its own number");
-});
 
 test("the WOD-builder call to action uses the text-safe accent, not the fill", () => {
   // --energy as TEXT on the dark surface is 3.75:1, under the 4.5 required at

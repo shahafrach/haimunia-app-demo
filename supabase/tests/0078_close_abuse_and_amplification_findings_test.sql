@@ -47,14 +47,6 @@ select throws_ok(
   'THE FIX: the 21st direct insert in the window is refused by workout_posts_guard_insert_rate_limit_trigger - before this migration nothing counted these at all');
 
 -- =====================================================================
--- 2. SEC-006 - avatar-photos gets a 3-object cap, post-photos keeps its 20
--- =====================================================================
-select tests.clear_auth();
-select is(
-  (select prosrc ~ '< 3' from pg_proc where proname = 'can_write_own_avatar'), true,
-  'THE FIX: can_write_own_avatar() now carries an object-count cap (previously none at all)');
-
--- =====================================================================
 -- 3. SEC-007 - size/rate/count caps on the three previously-unbounded paths
 -- =====================================================================
 select tests.set_auth(tests.uid('m1'));
@@ -130,29 +122,6 @@ select throws_ok(
   'P0001',
   null,
   'THE FIX: inserting a second clubs row is refused with an explicit error - before this migration it would have silently made every unfiltered read policy cross-tenant');
-
--- =====================================================================
--- 5. SEC-011 rate-limit half - admin_check_password_reset_rate_limit()
--- =====================================================================
-select tests.set_auth(tests.uid('m1'));
-select throws_ok(
-  $$ select public.admin_check_password_reset_rate_limit() $$,
-  'P0001', 'not authorized',
-  'a plain member cannot call the reset rate-limit check at all');
-
-select tests.clear_auth();
-delete from public.rate_limits where user_id = tests.uid('admin') and action = 'admin_password_reset';
-select tests.set_auth(tests.uid('admin'));
-do $$
-begin
-  for i in 1..5 loop
-    perform public.admin_check_password_reset_rate_limit();
-  end loop;
-end $$;
-select throws_ok(
-  $$ select public.admin_check_password_reset_rate_limit() $$,
-  'P0001', 'rate_limited',
-  'THE FIX: a 6th password-reset check within the hour is refused - before this migration the Edge Function called check_rate_limit nowhere at all, so a compromised admin session could reset every account in a loop');
 
 select * from finish();
 rollback;

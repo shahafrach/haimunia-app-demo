@@ -97,23 +97,3 @@ test("Hebrew abbreviations use gershayim, not an ASCII double quote", () => {
   }
 });
 
-// ---------------------------------------------------------------------------
-// 5. A destructive confirm names what it does
-// ---------------------------------------------------------------------------
-// A primary button reading "אישור" on a destructive sheet makes the member
-// re-read the title to learn what they are confirming, at the moment they are
-// deciding whether to. The sibling ghost-reclaim sheet already repeats its
-// title verb; the moderation sheet did not.
-test("the moderation action sheet's primary repeats its title, and its dismissal is unambiguous", () => {
-  const src = cloudSource();
-  const at = src.indexOf('data-community-action="mod-action-run"');
-  assert.ok(at > -1, "the moderation run button should exist");
-  const btn = src.slice(at, at + 200);
-  assert.ok(!/"אישור"/.test(btn), 'the destructive primary must not be labelled "אישור"');
-  assert.match(btn, /esc\(def\.label\)/, "it should repeat the sheet's own title verb+noun");
-  // "ביטול" collides with "ביטול ההגבלה" (revoke the restriction) in the
-  // panel beside this one, so the dismissal says חזרה here specifically.
-  const cancel = src.slice(src.indexOf('data-community-action="mod-action-cancel"'), at);
-  assert.ok(/חזרה/.test(cancel),
-    'the dismissal should read חזרה, not ביטול - ביטול means "revoke the restriction" in this domain');
-});

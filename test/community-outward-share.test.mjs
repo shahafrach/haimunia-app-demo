@@ -18,7 +18,7 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import fs from "node:fs";
-import { bootCommunity, waitFor } from "./helpers/boot.mjs";
+import { bootCommunity, waitFor, holdPosts } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
 
 import { cloudSource, communityFile } from "./helpers/community-src.mjs";
@@ -497,7 +497,8 @@ test("the own-post menu opens the sheet for a workout post, and offers nothing o
   ];
   const window = await bootReady(mock);
   window.document.getElementById("tabCommunityBtn").click();
-  // Wait for the real cards, not the skeletons - which also carry .post-card.
+  await waitFor(() => !!window.document.getElementById("communityHead"), 4000);
+  holdPosts(window, mock.db.community_feed);
   await waitFor(() => window.document.querySelectorAll("[data-post-id]").length >= 2, 4000);
 
   window.document.querySelector('.post-card[data-post-id="w2"] [data-community-action="toggle-post-menu"]').click();
@@ -529,7 +530,7 @@ test("an only_me achievement offers no outward control, matching the club contro
   const section = src.slice(src.indexOf("function renderMyAchievements()"), src.indexOf("// ---- Member profile community section"));
   assert.match(section, /const outward = r\.visibility === "only_me"\s*\n\s*\? ""/);
   const celebration = src.slice(src.indexOf("function renderAchievementUnlockCelebration()"), src.indexOf("function renderMyAchievements()"));
-  assert.match(celebration, /\$\{canShare && isModuleEnabled\("outward_share"\) \? `<button class="chip-btn" data-community-action="outward-ach">/);
+  assert.match(celebration, /\$\{canShare \? `<button class="chip-btn" data-community-action="outward-ach">/);
 });
 
 // ===== the guarantees that are easier to assert on the source ============

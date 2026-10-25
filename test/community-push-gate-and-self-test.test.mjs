@@ -85,16 +85,15 @@ function stubPush(window, opts = {}) {
 
 async function openAccount(window) {
   window.document.getElementById("tabCommunityBtn").click();
-  await waitFor(() => !!window.document.querySelector(".subtabbar"), 4000);
-  window.document.querySelector('[data-community-action="set-tab"][data-tab="account"]').click();
-  await waitFor(() => !!notifPrefControl(window, "mentions"), 4000);
+  await waitFor(() => !!window.document.getElementById("communityHead"), 4000);
+  await waitFor(() => !!notifPrefControl(window, "trained_together"), 4000);
 }
 
 // The push CHOICE, since the preference rows became one <select> each -
 // picking it is what used to be a click on the push button. Both halves of
 // the old control are still reachable: the option's existence (it is omitted
 // entirely while the module flag is off) and choosing it.
-const choosePush = (window, type = "mentions") => pickNotifPref(window, type, "push");
+const choosePush = (window, type = "trained_together") => pickNotifPref(window, type, "push");
 
 // ===== the gate =======================================================
 
@@ -212,8 +211,8 @@ test("a grant is recorded once per distinct status, so a re-render of the panel 
   const before = events(mock, "push_permission").length;
   // A second type routed through the same device re-renders the whole panel
   // and does not re-prompt; it must not re-record either.
-  choosePush(window, "comment_on_post");
-  await waitFor(() => mock.db.notification_preferences.some((r) => r.type === "comment_on_post" && r.channel === "push"), 4000);
+  choosePush(window, "reactions");
+  await waitFor(() => mock.db.notification_preferences.some((r) => r.type === "reactions" && r.channel === "push"), 4000);
   assert.equal(events(mock, "push_permission").length, before, "same status, same source, no second row");
 });
 
@@ -233,9 +232,8 @@ test("app_opened carries display_mode and platform, once per page load, and neve
   // Opening the Community tab and moving around does not write a second one:
   // this is a session, not a navigation.
   window.document.getElementById("tabCommunityBtn").click();
-  await waitFor(() => !!window.document.querySelector(".subtabbar"), 4000);
-  window.document.querySelector('[data-community-action="set-tab"][data-tab="account"]').click();
-  await waitFor(() => !!notifPrefControl(window, "mentions"), 4000);
+  await waitFor(() => !!window.document.getElementById("communityHead"), 4000);
+  await waitFor(() => !!notifPrefControl(window, "trained_together"), 4000);
   assert.equal(events(mock, "app_opened").length, 1);
 });
 

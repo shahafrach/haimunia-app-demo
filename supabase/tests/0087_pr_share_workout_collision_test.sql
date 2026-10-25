@@ -92,12 +92,8 @@ select is(
   'the legacy workout share lands as a POST_WORKOUT, holding this record''s only slot');
 
 -- Step 3 of the reachable sequence: the member taps "שיתוף" on the PR prompt.
--- The storage path is interpolated because enforce_post_media_ownership()
--- requires its first segment to be the post author's own uuid.
 select lives_ok(
-  format($$ select public.pr_share('set-87-collide', 'שיא חדש אחרי חצי שנה',
-       '[{"storage_path":"%s/pr87.jpg","alt_text":"סקוואט","position":0}]'::jsonb) $$,
-    tests.uid('m1')),
+  $$ select public.pr_share('set-87-collide', 'שיא חדש אחרי חצי שנה', '[]'::jsonb) $$,
   'sharing the PR for a record that was already shared as a workout succeeds');
 
 -- THE REGRESSION GUARD. Before 202609060025 this was 0.
@@ -119,13 +115,6 @@ select is(
     where author_id = tests.uid('m1') and source_record_id = 'set-87-collide'),
   'שיא חדש אחרי חצי שנה',
   'the note the member typed into the PR prompt is actually published - it used to be silently thrown away');
-
-select is(
-  (select count(*)::int from public.post_media pm
-     join public.workout_posts p on p.id = pm.post_id
-    where p.author_id = tests.uid('m1') and p.source_record_id = 'set-87-collide'),
-  1,
-  'and so is the photo they attached');
 
 select is(
   (select p.metadata ->> 'improvement' from public.workout_posts p
@@ -191,17 +180,14 @@ select is(
   'and still no second post');
 
 -- =====================================================================
--- 4. REACTIONS AND COMMENTS SURVIVE THE UPGRADE
+-- 4. REACTIONS SURVIVE THE UPGRADE
 -- =====================================================================
--- The card is still the card for that set, so the cheers and comments people
+-- The card is still the card for that set, so the cheers people
 -- left on it stay attached. A considered consequence, pinned so it is a
 -- decision rather than an accident.
 select tests.clear_auth();
 insert into public.reactions (post_id, user_id)
 select id, tests.uid('m2') from public.workout_posts
- where author_id = tests.uid('m1') and source_record_id = 'set-87-collide';
-insert into public.post_comments (post_id, author_id, body)
-select id, tests.uid('m2'), 'כל הכבוד!' from public.workout_posts
  where author_id = tests.uid('m1') and source_record_id = 'set-87-collide';
 select tests.set_auth(tests.uid('m1'));
 

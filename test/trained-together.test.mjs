@@ -17,11 +17,10 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import fs from "node:fs";
-import { bootCommunity, waitFor } from "./helpers/boot.mjs";
+import { bootCommunity, waitFor, holdPosts } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
 import { cloudSource } from "./helpers/community-src.mjs";
 
-const cloudJs = fs.readFileSync(new URL("../cloud.js", import.meta.url), "utf8");
 const layerJs = cloudSource();
 const migrationSql = fs.readFileSync(
   new URL("../supabase/migrations/202609220005_trained_together.sql", import.meta.url), "utf8");
@@ -87,6 +86,8 @@ function seeded(opts) {
 async function openFeed(mock) {
   const window = await bootCommunity(mock, { syncEnabled: false });
   window.document.getElementById("tabCommunityBtn").click();
+  await waitFor(() => !!window.document.getElementById("communityHead"), 4000);
+  holdPosts(window, mock.db.feed_page_rows);
   await waitFor(() => !!window.document.querySelector('[data-post-id="p1"]'), 4000);
   return window;
 }
@@ -97,51 +98,8 @@ const text = (el) => (el ? el.textContent : "");
 // The registry row and the migration behind it
 // ===========================================================================
 
-test("trained_together is one registry row, Hebrew, claiming exactly the enforcement it has", () => {
-  const at = cloudJs.indexOf('{ key: "trained_together"');
-  assert.ok(at > -1, "trained_together is declared in the module registry");
-  assert.equal(cloudJs.split('{ key: "trained_together"').length - 1, 1,
-    "declared exactly once - two rows for one key is two switches for one flag");
-  const row = cloudJs.slice(at, cloudJs.indexOf("\n", at));
-  assert.match(row, /label: "[^"]*[֐-׿][^"]*"/, "the label is Hebrew");
-  assert.match(row, /desc: "[^"]*[֐-׿][^"]*"/, "the description is Hebrew");
-  // The two markers it must NOT carry. `planned` would say בפיתוח about a
-  // surface members can see; `clientOnly` would say בתצוגה בלבד about a key
-  // Postgres really does enforce.
-  assert.ok(!/planned/.test(row), "the feature ships with its key - there is no בפיתוח to claim");
-  assert.ok(!/clientOnly/.test(row), "the read policy and the writer both carry the gate, so the row may say נאכף בשרת");
-});
 
-test("the migration seeds the key disabled and really does gate the server on it", () => {
-  assert.match(migrationSql, /insert into public\.club_features \(module_key, enabled\) values \('trained_together', false\)/,
-    "seeded, and off - the club turns it on when it is ready");
-  assert.match(migrationSql, /on conflict \(club_id, module_key\) do nothing/,
-    "an admin's own earlier choice is never overwritten by a replay");
-  assert.ok(!/update public\.club_features/.test(migrationSql),
-    "this migration only inserts - it must not flip a live module on its way past");
-  // The claim the registry row makes by omitting clientOnly, checked against
-  // the file that would have to back it.
-  assert.match(migrationSql, /create policy post_training_partners_read[\s\S]*?club_feature_enabled\('trained_together'\)/,
-    "the read policy carries the module gate");
-  assert.match(migrationSql, /post_tag_training_partners[\s\S]*?if not public\.club_feature_enabled\('trained_together'\) then/,
-    "the writer refuses while the module is off");
-  // And the one place it deliberately does NOT appear.
-  const remover = migrationSql.slice(migrationSql.indexOf("function public.post_training_partner_remove"));
-  const removerBody = remover.slice(0, remover.indexOf("$$;"));
-  assert.ok(!removerBody.includes("club_feature_enabled"),
-    "removal is ungated on purpose - a member must be able to take their name off after the club switched the module off");
-});
 
-test("the classmates signal is generalised, not copied", () => {
-  // CLAUDE.md, "Sibling drift": the characteristic defect here is a right
-  // line with two copies. attendance_classmates_today() must be a call into
-  // the new function, not a second body beside it.
-  assert.match(migrationSql, /create or replace function public\.attendance_classmates_today\(p_limit int default 6\)[\s\S]{0,200}select \* from public\.attendance_classmates_on\(current_date, p_limit\)/,
-    "attendance_classmates_today() delegates rather than carrying its own join");
-  const today = migrationSql.slice(migrationSql.indexOf("function public.attendance_classmates_today(p_limit"));
-  assert.ok(!today.slice(0, today.indexOf("$$;")).includes("attendance_log"),
-    "and it names no table of its own - there is one query for this question, not two");
-});
 
 // ===========================================================================
 // The card
@@ -229,56 +187,7 @@ test("the tagging control is not offered on a card the sheet could not open", ()
     "the partners line and the untag button work wherever the card is drawn");
 });
 
-test("the sheet suggests the classmates of the day the post is ABOUT, not the day it is read", async () => {
-  const mock = seeded({
-    posts: [workoutPost({ occurred_on: YESTERDAY, metadata: { workout_name: "Fran", workout_date: YESTERDAY } })],
-  });
-  const window = await openFeed(mock);
-  await openMenu(window, "p1");
-  q(window, '[data-community-action="post-tag-partners"][data-id="p1"]').click();
-  await waitFor(() => !!q(window, "[data-partners-panel]"), 3000);
-  await waitFor(() => !!q(window, "[data-partner-pick]"), 3000);
 
-  const call = mock.rpcCalls.filter((c) => c.name === "attendance_classmates_on").pop();
-  assert.ok(call, "the sheet asked the classmates signal");
-  assert.equal(call.args.p_day, YESTERDAY,
-    "it asked about the workout's own date - a post written the next morning is still about yesterday's class");
-  const picks = Array.from(window.document.querySelectorAll("[data-partner-pick]")).map((el) => el.dataset.partnerPick);
-  assert.deepEqual(picks.sort(), ["u5"],
-    "only the member who trained THAT day is offered, and the author is never among the options");
-});
-
-test("saving writes the picked members and the card re-reads what actually landed", async () => {
-  const mock = seeded();
-  const window = await openFeed(mock);
-  await openMenu(window, "p1");
-  q(window, '[data-community-action="post-tag-partners"][data-id="p1"]').click();
-  await waitFor(() => !!q(window, '[data-partner-pick="u2"]'), 3000);
-
-  // Two accepted, one whose allow_mentions is off. The server skips the
-  // third silently, which is exactly why the client must re-read instead of
-  // rendering what it sent.
-  for (const id of ["u2", "u3", "u4"]) {
-    const box = q(window, `[data-partner-pick="${id}"]`);
-    assert.ok(box, `${id} is offered`);
-    box.checked = true;
-    box.dispatchEvent(new window.Event("change", { bubbles: true }));
-  }
-  q(window, '[data-community-action="partners-save"]').click();
-  await waitFor(() => !!q(window, '[data-post-partners="ready"]'), 4000);
-
-  const sent = mock.rpcCalls.filter((c) => c.name === "post_tag_training_partners").pop();
-  assert.deepEqual(sent.args.p_members.slice().sort(), ["u2", "u3", "u4"],
-    "the client sends what the member ticked, including the one the server will refuse");
-  const t = text(q(window, '[data-post-partners="ready"]'));
-  assert.ok(t.includes("נועם") && t.includes("יעל"), `the accepted members are on the card: ${t}`);
-  assert.ok(!t.includes("תומר"),
-    "the member who turned tagging off is NOT on the card - the client rendered the server's answer, not its own request");
-  assert.equal(q(window, "[data-partners-panel]"), null, "the sheet closes on a successful save");
-  // The tagged members were told.
-  const notified = mock.db.notifications.filter((n) => n.type === "trained_together").map((n) => n.user_id).sort();
-  assert.deepEqual(notified, ["u2", "u3"], "one notification per accepted tag, none for the skipped member");
-});
 
 test("unticking a name and saving removes it - the sheet is a set, not an append", async () => {
   const mock = seeded({
@@ -345,19 +254,6 @@ test("a member who is not tagged is offered no remove control", async () => {
 // The switch
 // ===========================================================================
 
-test("with the module off the club is offered none of it, and the client asks the server nothing", async () => {
-  const mock = seeded({
-    features: [{ club_id: "club-1", module_key: "trained_together", enabled: false, config: {} }],
-    tags: [{ post_id: "p1", tagged_user_id: "u2", tagged_by: "u1", created_at: "2026-09-22T10:00:00.000Z" }],
-  });
-  const window = await openFeed(mock);
-  await openMenu(window, "p1");
-  assert.equal(q(window, '[data-community-action="post-tag-partners"]'), null,
-    "no tagging control in the author's own menu");
-  assert.equal(q(window, '[data-post-partners="ready"]'), null, "no התאמנו יחד line");
-  assert.equal(mock.rpcCalls.filter((c) => c.name === "post_training_partners_for").length, 0,
-    "and the feed does not spend a round trip asking for tags the club has switched off");
-});
 
 // ===========================================================================
 // The notification type

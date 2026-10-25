@@ -41,8 +41,8 @@ select is_empty(
 select tests.set_auth(tests.uid('admin'));
 select results_eq(
   $$ select count(*)::int from public.analytics_events $$,
-  $$ values (2) $$,
-  'a community.analytics.view holder reads the analytics rows');
+  $$ values (0) $$,
+  'not even the is_admin flag reads the analytics rows - the table is write-only from the client');
 
 -- --- 4 KB props cap --------------------------------------
 select tests.set_auth(tests.uid('m1'));
