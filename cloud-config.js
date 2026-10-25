@@ -10,8 +10,8 @@
 // safe to ship when every exposed table is protected by RLS. Never put a
 // Supabase secret/service-role key in this repository.
 window.HAIMUNIA_CONFIG = Object.freeze({
-  supabaseUrl: "https://jajmlyrjlkhclgphbfbb.supabase.co",
-  supabasePublishableKey: "sb_publishable_DBnlKZMDKGR83DUtk-4VAA_nFlOdDI4",
+  supabaseUrl: "https://hvwakffluwvegedefoth.supabase.co",
+  supabasePublishableKey: "sb_publishable_MRSX0PLMZjoDIX4iuDbI2g_G2EdMRu6",
   // VAPID public key, base64url, the uncompressed EC point (0x04 || X || Y)
   // `PushManager.subscribe({applicationServerKey})` expects. A VAPID public
   // key is MEANT to be exposed to the browser - it is the half that proves,
@@ -72,7 +72,7 @@ window.HAIMUNIA_CONFIG = Object.freeze({
   // leaving a free identity factory running.
   //
   // The site key below is Cloudflare Turnstile, Managed mode, scoped to the
-  // hostname haimunia-app.pages.dev. A CUSTOM DOMAIN WOULD NEED ADDING TO
+  // hostname box-log.pages.dev. A CUSTOM DOMAIN WOULD NEED ADDING TO
   // THAT WIDGET'S HOSTNAME LIST - the same third place a new origin has to
   // be registered, alongside the CSP in index.html and ALLOWED_ORIGINS in
   // admin_reset_password.

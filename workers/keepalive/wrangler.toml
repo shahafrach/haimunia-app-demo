@@ -36,5 +36,5 @@ crons = ["14 7 */2 * *"]
 # call, and nothing about it needs more. src/index.js refuses to run if the
 # key it is handed looks like a secret key, so this cannot drift quietly.
 [vars]
-SUPABASE_URL = "https://jajmlyrjlkhclgphbfbb.supabase.co"
-SUPABASE_PUBLISHABLE_KEY = "sb_publishable_DBnlKZMDKGR83DUtk-4VAA_nFlOdDI4"
+SUPABASE_URL = "https://hvwakffluwvegedefoth.supabase.co"
+SUPABASE_PUBLISHABLE_KEY = "sb_publishable_MRSX0PLMZjoDIX4iuDbI2g_G2EdMRu6"

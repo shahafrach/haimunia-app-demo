@@ -38,7 +38,7 @@ const mw = await import(new URL("functions/_middleware.js", root).href);
 async function serve(pathname) {
   let passedThrough = false;
   const res = await mw.onRequest({
-    request: new Request("https://haimunia-app.pages.dev" + pathname),
+    request: new Request("https://box-log.pages.dev" + pathname),
     next: async () => { passedThrough = true; return new Response("asset", { status: 200 }); },
   });
   return { status: res.status, passedThrough };

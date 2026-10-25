@@ -144,6 +144,6 @@ test("the invite UI handles invalid and rate-limited results", () => {
 
 test("CSP allows only the configured Supabase project and permits signed post images", () => {
   assert.doesNotMatch(indexHtml, /https:\/\/\*\.supabase\.co/);
-  assert.match(indexHtml, /img-src[^;]*https:\/\/jajmlyrjlkhclgphbfbb\.supabase\.co/);
-  assert.match(indexHtml, /connect-src[^;]*https:\/\/jajmlyrjlkhclgphbfbb\.supabase\.co[^;]*wss:\/\/jajmlyrjlkhclgphbfbb\.supabase\.co/);
+  assert.match(indexHtml, /img-src[^;]*https:\/\/hvwakffluwvegedefoth\.supabase\.co/);
+  assert.match(indexHtml, /connect-src[^;]*https:\/\/hvwakffluwvegedefoth\.supabase\.co[^;]*wss:\/\/hvwakffluwvegedefoth\.supabase\.co/);
 });
