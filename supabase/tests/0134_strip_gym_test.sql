@@ -60,21 +60,14 @@ select is_empty(
   'and no storage policy still names one');
 
 -- =====================================================================
--- 4. The three permission stubs are inert and closed to anon
+-- 4. The three permission stubs are gone (replaced by the circle helpers in
+--    202610250003)
 -- =====================================================================
-select tests.set_auth(tests.uid('m1'));
-select is(public.is_staff(), false, 'is_staff() is false for a member');
-select is(public.is_admin(), false, 'is_admin() is false for a member');
-select is(public.has_perm('anything'), false, 'has_perm() is false for a member');
-select tests.set_auth(tests.uid('admin'));
-select is(public.is_admin(), false, 'and is_admin() is false even for a profile still carrying is_admin');
-select is(public.is_staff(), false, 'and is_staff() is false even for a profile redeemed at a staff rank');
-select tests.clear_auth();
-select ok(
-  not has_function_privilege('anon', 'public.is_staff()', 'execute')
-  and not has_function_privilege('anon', 'public.is_admin()', 'execute')
-  and not has_function_privilege('anon', 'public.has_perm(text)', 'execute'),
-  'none of the three is executable by anon');
+select is_empty(
+  $$ select proname::text from pg_proc
+      where pronamespace = 'public'::regnamespace
+        and proname in ('is_staff', 'is_admin', 'has_perm') $$,
+  'is_staff, is_admin and has_perm no longer exist');
 
 -- =====================================================================
 -- 5. The scheduled jobs that served dropped features are unscheduled
