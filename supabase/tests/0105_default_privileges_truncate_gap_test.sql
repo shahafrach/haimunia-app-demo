@@ -45,7 +45,7 @@ select throws_ok(
   $$ truncate table public.private_records $$,
   '42501',
   null,
-  'authenticated can no longer truncate every member's private records');
+  'authenticated can no longer truncate the members private records');
 
 select tests.clear_auth();
 set local role anon;
