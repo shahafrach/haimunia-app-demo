@@ -51,12 +51,13 @@ test("the heartbeat runs at least every three days, well inside the seven-day pa
     `the worker cron must fire at least every 3 days, got "${cron}"`);
 });
 
-test("the Actions fallback stays disabled until the minutes reset", () => {
-  // It is a fallback on purpose: enabling it before 2026-10-01 spends minutes
-  // that do not exist. This asserts the schedule is commented, NOT that it
-  // must stay that way forever - uncommenting it is the documented step, and
-  // this test is then updated in the same change.
-  assert.match(wf, /^\s*#\s*schedule:/m, "the schedule block is commented out");
-  assert.ok(!/^\s{2}schedule:/m.test(wf), "no active schedule trigger yet");
-  assert.match(wf, /^\s{2}workflow_dispatch:/m, "but it can still be run by hand");
+test("the Actions heartbeat is scheduled at least every three days", () => {
+  // Since 2026-10-25 the workflow is the primary heartbeat: the repository is
+  // public (free minutes) and the Worker is not deployed.
+  const m = wf.match(/^\s{2}schedule:\s*\n(?:\s*#.*\n)*\s*-\s*cron:\s*"([^"]+)"/m);
+  assert.ok(m, "the schedule trigger is active");
+  const dom = m[1].split(/\s+/)[2];
+  const everyN = dom.startsWith("*/") ? Number(dom.slice(2)) : null;
+  assert.ok(everyN !== null && everyN <= 3, `the workflow cron must fire at least every 3 days, got "${m[1]}"`);
+  assert.match(wf, /^\s{2}workflow_dispatch:/m, "and it can still be run by hand");
 });
