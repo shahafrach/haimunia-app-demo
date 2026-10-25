@@ -21,6 +21,8 @@ name: keepalive
 # REST call every day or so against a seven-day pause threshold, which is the
 # margin you want, not waste.
 on:
+  # Re-enable after the new Supabase project exists (the old project was
+  # deleted 2026-10-25). The schedule block below stays commented out.
   # schedule:
   #   # 07:44 UTC every two days - half a day offset from the Worker's 07:14,
   #   # so the two paths do not both depend on the same half-hour being fine.
