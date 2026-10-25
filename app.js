@@ -92,10 +92,7 @@ var bidiUnit = SAFE.bidiUnit;
 var bidiUnitHtml = SAFE.bidiUnitHtml;
 // ---------- State ----------
 let entries = [];
-// staffhome is a valid id but not a reachable destination on its own:
-// render() sends it back to "add" unless the staff desktop shell is on, so
-// a ?tab=staffhome link opened on a phone lands on the log.
-const VALID_TABS = ["add", "history", "calendar", "wod", "community", "manage", "staffhome"];
+const VALID_TABS = ["add", "history", "calendar", "wod", "community"];
 const urlTab = new URLSearchParams(location.search).get("tab");
 let tab = VALID_TABS.includes(urlTab) ? urlTab : "add";
 
@@ -162,96 +159,15 @@ const PAGE_SCENES = Object.freeze({
 // cross-file reference, so it has to be assigned explicitly.
 window.PAGE_SCENES = PAGE_SCENES;
 function getNavItems() {
-  // `group` is read by ONE surface: the desktop staff sidebar, which shows
-  // these same destinations under three headings instead of as one list of
-  // eight. Additive on purpose - the bottom bar and the hamburger never look
-  // at it, so grouping the registry cannot change either of them. One
-  // registry, three renderings.
   const items = [
-    { id: "add", tab: "add", rowId: "tabAddBtn", label: "רישום", tint: "energy", icon: ICONS.logIcon, main: true, group: "mine" },
-    { id: "history", tab: "history", rowId: "tabHistoryBtn", label: "התקדמות", tint: "blue", icon: ICONS.chartIcon, main: true, group: "mine" },
-    { id: "calendar", tab: "calendar", rowId: "tabCalendarBtn", label: "לוח שנה", tint: "yellow", icon: ICONS.calendarIcon, main: true, group: "mine" },
-    { id: "wod", tab: "wod", rowId: "tabWodBtn", label: "אימונים", tint: "purple", icon: ICONS.stopwatchIcon, main: true, group: "mine" },
-    { id: "community", tab: "community", rowId: "tabCommunityBtn", label: "קהילה", tint: "teal", icon: ICONS.communityIcon, main: true, group: "community" },
+    { id: "add", tab: "add", rowId: "tabAddBtn", label: "רישום", tint: "energy", icon: ICONS.logIcon, main: true },
+    { id: "history", tab: "history", rowId: "tabHistoryBtn", label: "התקדמות", tint: "blue", icon: ICONS.chartIcon, main: true },
+    { id: "calendar", tab: "calendar", rowId: "tabCalendarBtn", label: "לוח שנה", tint: "yellow", icon: ICONS.calendarIcon, main: true },
+    { id: "wod", tab: "wod", rowId: "tabWodBtn", label: "אימונים", tint: "purple", icon: ICONS.stopwatchIcon, main: true },
+    { id: "community", tab: "community", rowId: "tabCommunityBtn", label: "קהילה", tint: "teal", icon: ICONS.communityIcon, main: true },
   ];
-  // THE ONE DESTINATION THIS FEATURE ADDS, and it is one rather than five.
-  //
-  // The three-column staff shell needs a screen to be the middle column of.
-  // It could have been a sixth hard-coded surface with its own navigation,
-  // which is what the previous attempt did; instead it is one more row in
-  // the registry every other nav surface already reads, so the sidebar, the
-  // click delegator and the ?tab= parser all pick it up with no new
-  // mechanism.
-  //
-  // Gated on the staff shell being ON, so it never reaches a phone, never
-  // reaches a member, and never appears in the bottom bar (main:false says
-  // the same thing a second way). render()'s own guard sends the tab back to
-  // the log if the shell turns off underneath it.
-  if (typeof applyDesktopLayout === "function" && document.documentElement.getAttribute("data-staff") === "1") {
-    items.unshift({ id: "staffhome", tab: "staffhome", label: "לוח המכון", tint: "steel", icon: ICONS.manageTabIcon, main: false, group: "staff" });
-  }
-  // SPLIT INTO TWO DESTINATIONS, BOTH HAMBURGER-ONLY (2026-09-15).
-  //
-  // Two changes, both requested directly. First, admin and head coach are
-  // separate screens for separate people rather than one shared "ניהול" with
-  // half of it inert - see cloud.js's renderManagePanel(). Second, both are
-  // main:false, which is what puts them in the hamburger: this registry feeds
-  // BOTH the bottom bar (main:true only) and the hamburger
-  // (renderNavRows(true, true), non-main only), so flipping the flag moves
-  // them from one to the other with no second navigation mechanism. That also
-  // hands the 6th bottom slot back to the five member tabs, which is where a
-  // phone-sized bottom bar wants to be.
-  //
-  // WHY THESE TWO ROWS ARE NOT GATED ON WHO IS SIGNED IN (2026-09-15, third
-  // revision). They used to appear only for a member whose own account was
-  // staff. That stopped being possible when management became a SEPARATE
-  // IDENTITY - "no, i want it to be seperate from the regular user". The
-  // owner trains on an account that deliberately holds no admin power, so a
-  // staff check against the signed-in member now hides these rows from
-  // exactly the person they exist for, and there is no other way in.
-  //
-  // Showing them to everyone gives nothing away and grants nothing. Each row
-  // lands on a locked gate that wants a management email and password, and
-  // every RPC behind that gate is RLS-enforced server-side against the
-  // management account's own JWT - a member who taps through sees a login
-  // form and stops there. The alternative, some hidden gesture only the owner
-  // knows, would be a secret that protects nothing while being impossible to
-  // hand to a new head coach. A visible, locked door is the honest shape.
-  //
-  // The moderation badge is deliberately NOT on these rows any more: it
-  // counted a queue the signed-in member could see, and a member cannot see
-  // that queue. A count rendered for everyone would be both meaningless and a
-  // small leak of club state to people with no part in it.
-  //
-  // UNCONDITIONAL, including when nobody is signed in at all (2026-09-15,
-  // corrected). A previous version required a community session on the device,
-  // on the reasoning that two management doors are clutter for someone who has
-  // never joined the club. That reasoning was wrong, and the way it was wrong
-  // is the whole point of this design:
-  //
-  //   "I want a sign in option only to admin and head coach - they are not
-  //    related to the actual user using app, it's different."
-  //
-  // Management is not a privilege some member holds. It is a SEPARATE LOGIN,
-  // and the person who needs it may well not be a member of this club on this
-  // device at all - the owner, signed out, on a phone that has just been
-  // wiped, is exactly the case. Requiring a member session first made the
-  // management door reachable only by first becoming the thing management is
-  // deliberately not.
-  //
-  // Nothing is given away by showing them. Each opens onto a gate that wants
-  // management credentials, and every RPC behind it is RLS-enforced against
-  // the management account's own JWT.
-  items.push({ id: "manage", tab: "manage", rowId: "tabManageBtn", label: "ניהול מערכת", tint: "steel", icon: ICONS.manageTabIcon, main: false, group: "staff" });
-  items.push({ id: "clubmanage", tab: "clubmanage", rowId: "tabClubManageBtn", label: "ניהול המועדון", tint: "teal", icon: ICONS.communityIcon, main: false, group: "staff" });
   return items;
 }
-// The fixed bottom tab bar (#bottomTabBar, index.html) - one tap to any of
-// the 5 main tabs. Bare icon + label, matching Noam's .tabbtn treatment,
-// not the icon-chip/list-row look renderNavRows below uses for the
-// hamburger menu and desktop sidebar. Regenerated on every render() call,
-// same "always regenerated, just glued into a fixed container" treatment
-// renderNavMenuList/renderSettingsBody already rely on.
 function renderBottomTabBar() {
   return getNavItems().filter((item) => item.main).map((item) => {
     const isActive = tab === item.tab;
@@ -338,50 +254,13 @@ function renderNavWho() {
 function navChevronHtml() {
   return `<span style="transform:scaleX(-1); display:inline-flex; color:var(--steel); flex-shrink:0;" aria-hidden="true">${ICONS.chevron}</span>`;
 }
-// Shared by the mobile nav menu and the desktop sidebar (renderNavMenuList/
-// renderDesktopSidebar below) - one pass over getNavItems(), one place that
-// knows about Community's sub-nav preview. withIds carries the real
-// tabAddBtn/tabHistoryBtn/etc ids (and, riding along with them, the
-// "tabbtn" class cloud.js's Community-tab-left detector needs - see the
-// comment inline below); the desktop copy renders withIds=false so the two
-// surfaces never produce duplicate DOM ids, using data-tab alone for the
-// click delegator, which already reads it independent of id. onlyOther
-// restricts the list to the non-main items - the mobile hamburger menu
-// uses this now that all 5 tabs live in the fixed bottom tab bar instead
-// (renderBottomTabBar), so their ids aren't duplicated between the two;
-// now that Community is `main: true` too, onlyOther's list on mobile is
-// empty and the Community `.subnav` preview branch below never fires
-// there - it's real dead weight on that path, kept only because the
-// desktop sidebar still passes onlyOther=false and shows every item
-// (including the preview) regardless, since it has no bottom bar to split
-// against.
-// `pick` (optional) narrows the registry further, after onlyOther. It exists
-// for the staff sidebar, which renders these same rows under three headings;
-// a caller that passes nothing gets exactly what this function always gave.
-function renderNavRows(withIds, onlyOther, pick) {
-  const communitySignedIn = typeof window.isCommunitySignedIn === "function" && window.isCommunitySignedIn();
-  let items = onlyOther ? getNavItems().filter((item) => !item.main) : getNavItems();
-  if (typeof pick === "function") items = items.filter(pick);
+// The nav menu's rows: one pass over getNavItems(). withIds carries the real
+// tabAddBtn/tabHistoryBtn/etc ids and the "tabbtn" class. onlyOther restricts
+// the list to the non-main items (the five main ones live in the bottom bar).
+function renderNavRows(withIds, onlyOther) {
+  const items = onlyOther ? getNavItems().filter((item) => !item.main) : getNavItems();
   return items.map((item) => {
     const isActive = tab === item.tab;
-    let sub = "";
-    if (item.id === "community" && communitySignedIn && typeof window.getCommunityNavPreview === "function") {
-      const subItems = window.getCommunityNavPreview();
-      sub = `<div class="subnav">${subItems.map((s) => `
-        <button class="subitem" data-action="switch-tab-community-sub" data-subtab="${esc(s.id)}">
-          <span>${esc(s.label)}</span>
-          ${s.badge ? `<span class="nav-badge">${s.badge}</span>` : ""}
-        </button>`).join("")}</div>`;
-    }
-    // The "tabbtn" class here is load-bearing, not styling (its visual
-    // rules are neutralized for .navrow.tabbtn in index.html's CSS):
-    // cloud.js has its own capture-phase click listener that detects
-    // "left the Community tab" by e.target.closest(".tabbtn") - not by
-    // id or data-action - to know when to reset the club_tab_viewed
-    // dedupe. Drop this class and re-entering Community stops counting
-    // as a new view. Only the withIds (mobile) copy carries it - only one
-    // of the two copies is ever visible/clickable at a given viewport
-    // width, so there's no ambiguity about which one a real click means.
     const idAttr = withIds ? ` id="${item.rowId}"` : "";
     const tabbtnClass = withIds ? " tabbtn" : "";
     return `
@@ -389,52 +268,11 @@ function renderNavRows(withIds, onlyOther, pick) {
         <span class="icon-chip icon-chip-${item.tint}">${item.icon}</span>
         <span class="nav-label">${esc(item.label)}</span>
         ${navChevronHtml()}
-      </button>${sub}`;
+      </button>`;
   }).join("");
 }
-// Phase 6: a small page-title at the top of each of the 4 solo tabs' own
-// content, reading its label straight from the same getNavItems() registry
-// the nav menu/sidebar use - one name for a tab, defined once. Additive
-// above whatever the tab already rendered; nothing existing is replaced.
-function renderTabHeader(navId) {
-  const item = getNavItems().find((i) => i.id === navId);
-  if (!item) return "";
-  return `<h1 class="page-title">${esc(item.label)}</h1>`;
-}
-// Direction 06 "Club Balance" handoff (README1.md/CLAUDE_CODE_PROMPT.md).
-// One shared real-photo header - the crop/overlay/lazy-load rules live here
-// exactly once rather than being re-decided per screen; each render function
-// only picks which asset per README1's photo-mapping table. assetPath is
-// root-relative (e.g. "assets/photos/club-rig-wide.jpeg"), sized 960x260 to
-// match the .photo-header aspect-ratio exactly (index.html) - explicit
-// width/height reserves the box before the file loads, avoiding layout
-// shift. opts.eager skips loading="lazy" for the one screen that is already
-// on screen at first paint (the Add tab); every other screen is reached by
-// navigating there, so lazy-loading them costs nothing a member would
-// notice and keeps first paint from waiting on decorative photography.
-// A plain top-level function (not IIFE-scoped), so it becomes a window
-// property like every other cross-file shared helper here - cloud.js reaches
-// it as window.photoHeaderHtml(), the same way it reaches every other
-// platform module, per that file's own documented convention.
-function photoHeaderHtml(assetPath, altText, opts) {
-  opts = opts || {};
-  const loading = opts.eager ? "eager" : "lazy";
-  return `<div class="photo-header"><img src="${esc(assetPath)}" alt="${esc(altText)}" width="960" height="260" loading="${loading}"></div>`;
-}
-// Redesign, Phase 3 fix: cloud.js's setCommunityTab() is Community's own
-// internal sub-tab switch - every existing caller assumed the top-level
-// `tab` here was already "community" (true whenever the click came from
-// inside a Community-rendered element). Once Manage became a separate
-// top-level tab, two cross-tab callers in cloud.js (a moderation-context
-// "open in feed" button, and a push-notification/deep-link tap) could fire
-// setCommunityTab() while `tab` was "manage" - state.ui.tab changed and
-// setCommunityTab's own rerender() ran, but render() still read
-// tab === "manage" and re-rendered Manage, so the button/notification
-// silently did nothing. Exposed so cloud.js can correct the top-level tab
-// first; the very next render() (triggered by setCommunityTab's own
-// rerender() right after) then actually shows Community. No render() call
-// here on purpose - firing one before state.ui.tab is updated would just
-// be a wasted extra render.
+// Exposed so cloud.js can correct the top-level tab before it re-renders (a
+// push-notification or deep-link tap can fire while another tab is up).
 window.switchToCommunityTopTab = function () { tab = "community"; };
 function renderNavSettingsRow() {
   // Fresh-eyes audit: on the desktop sidebar (renderDesktopSidebar below)
@@ -484,49 +322,9 @@ function renderNavMenuList() {
   // link + a full screen of empty navy below it - not a bug, but not a
   // finished screen either. A footer line gives the space a reason to be
   // there without inventing a duplicate action Settings already owns.
-  return renderNavWho() + `<div class="nav-destinations" role="tablist" aria-label="מסכים נוספים">${renderNavRows(true, true)}</div>` + renderNavSettingsRow()
+  const extraRows = renderNavRows(true, true);
+  return renderNavWho() + (extraRows ? `<div class="nav-destinations" role="tablist" aria-label="מסכים נוספים">${extraRows}</div>` : "") + renderNavSettingsRow()
     + `<div class="footer-note" style="text-align:center; margin-top:auto; padding-top:24px;">${esc(brandName())} · v${APP_VERSION}</div>`;
-}
-// Desktop / wide-viewport sidebar (Phase 4) - same registry, same rows,
-// same settings entry, just without the mobile-only ids (see renderNavRows
-// above) and mounted into #desktopSidebar instead of the overlay. Shows
-// every item (onlyOther=false) - there's no separate bottom bar at this
-// width for the main tabs to split against (COMM-327).
-// THE THREE GROUPS, in the order a coach reads them: the club first, because
-// that is what they opened a laptop for; then the community; then their own
-// training, which is the phone's job and is here only so the desktop is not a
-// dead end. Labels and order live here, memberships live on the registry
-// rows themselves (getNavItems), so adding a destination is one property.
-const NAV_GROUPS = [
-  { key: "staff", label: "צוות" },
-  { key: "community", label: "קהילה" },
-  { key: "mine", label: "האימון שלי" },
-];
-function renderDesktopSidebar() {
-  // GROUPED ONLY UNDER THE STAFF SHELL. A member at a laptop gets the exact
-  // sidebar they had - one ungrouped list, same rows, same order, same
-  // markup - because the grouped branch is the only thing that changed and
-  // it cannot run for them. Verified by hashing the rendered HTML on both
-  // sides in test/desktop-staff-shell.test.mjs.
-  const staffShell = document.documentElement.getAttribute("data-staff") === "1";
-  if (!staffShell) {
-    return renderNavWho() + `<div class="nav-destinations" role="tablist" aria-label="מסכי האפליקציה" aria-orientation="vertical">${renderNavRows(false, false)}</div>` + renderNavSettingsRow();
-  }
-  const groups = NAV_GROUPS.map((g) => {
-    const rows = renderNavRows(false, false, (item) => item.group === g.key);
-    if (!rows) return "";
-    const headId = `navGroup-${g.key}`;
-    return `<div class="nav-group">
-      <div class="nav-group-head" id="${headId}">${esc(g.label)}</div>
-      <div class="nav-destinations" role="tablist" aria-labelledby="${headId}" aria-orientation="vertical">${rows}</div>
-    </div>`;
-  }).join("");
-  // Anything the registry grows later without a group still renders, rather
-  // than silently disappearing from the one nav surface staff use.
-  const ungrouped = renderNavRows(false, false, (item) => !NAV_GROUPS.some((g) => g.key === item.group));
-  return renderNavWho() + groups
-    + (ungrouped ? `<div class="nav-destinations" role="tablist" aria-label="מסכים נוספים" aria-orientation="vertical">${ungrouped}</div>` : "")
-    + renderNavSettingsRow();
 }
 // COMM-229. sw.js's notificationclick handler opens a fresh window at
 // ?notif=<deep link> when no app window was already open to focus (see
@@ -632,29 +430,6 @@ let calView = "calendar";
 // WOD tab state
 let wodEntries = [];
 let customWods = [];
-// The club's shared WOD catalogue (202609060028), kept beside customWods
-// rather than inside it and NEVER written to CUSTOMWODSTORE. Two separate
-// reasons, both load-bearing:
-//
-//   * CUSTOMWODSTORE is what buildBackupPayload() exports and what the
-//     backup sync pushes up as this member's own private `custom_wod`
-//     records. Merging the club catalogue into it would make every member
-//     silently re-publish the whole box's programming as their own private
-//     data, which is both wrong and a privacy leak the sync model is built
-//     to prevent.
-//   * customWods is the member's own data and deleteCustomWod() may remove
-//     from it; the club catalogue is read-only here.
-//
-// It IS cached (see CLUB_WODS_CACHE_KEY / loadCachedClubWods) in the settings
-// store, which is neither exported nor synced.
-let clubWods = [];
-// 202609080002. Today's club WOD boards, exactly as cloud.js received them
-// from club_wod_boards(). NOT cached and NOT persisted, unlike clubWods
-// above: a board is one club-day and a stale one would offer to attach to a
-// session that has closed. Empty until cloud.js calls setClubWodSessions,
-// and empty again the moment the member signs out, so every affordance built
-// on it disappears with the session rather than lingering as a dead control.
-let clubWodSessions = [];
 let wodSubTab = "log";
 // COMM-360: null (not WOD_LIBRARY[0].id/"Fran") until the user actually
 // picks one, unlike selectedId - there's no internal logic depending on
@@ -722,11 +497,6 @@ function noteStorageError(e) {
 let bodyweightEntries = [];
 let bwWeight = 70;
 let bodyweightExpanded = false;
-// Whether the percentage table under the 1RM estimate is open. Module-level
-// like bodyweightExpanded, because this screen re-renders by replacing its
-// own innerHTML - a <details> element would spring shut on every keystroke
-// in the weight field.
-let pctTableExpanded = false;
 
 // Body measurements (custom types the user defines, e.g. waist/chest — cm)
 let measureTypes = [];
@@ -3781,7 +3551,6 @@ async function importDataFromFile(file) {
   // assigned until the import commits.
   const knownWodIds = new Set(
     WOD_LIBRARY.map((w) => w.id)
-      .concat(clubWods.map((w) => w.id))
       .concat((clean.customWods || []).map((w) => w && w.id))
   );
   const orphanWodEntries = (clean.wodEntries || []).filter((e) => e && !knownWodIds.has(e.wodId));
@@ -3928,12 +3697,6 @@ async function clearAllData() {
     if (window.HaimuniaOutbox) await window.HaimuniaOutbox.clearAll().catch(() => {});
     // "delete everything" must also drop the stored name and export marker.
     await dbClearSettings();
-    // ...but the club's shared catalogue is not this member's data to delete,
-    // and it stays in memory (the picker keeps offering it). Re-persisting
-    // keeps the cache and memory agreeing — otherwise this device would show
-    // club WODs now and lose them on the next offline start, with nothing
-    // having changed about the club.
-    if (clubWods.length) await dbSetSetting(CLUB_WODS_CACHE_KEY, clubWods).catch(() => {});
     try { localStorage.removeItem(USER_NAME_KEY); localStorage.removeItem(LAST_EXPORT_KEY); } catch (e) {}
     userName = null;
     boxStartDate = null;
@@ -4007,209 +3770,10 @@ async function clearAllData() {
   if (userName === null) { closeSettings(); openWelcomeModal(); }
 }
 
-// ---------- WOD helpers & actions ----------
-// The club catalogue is cached in SETTINGSTORE, not CUSTOMWODSTORE — see the
-// `clubWods` declaration for why that distinction is not cosmetic. The
-// settings store is the one store that is neither exported by
-// buildBackupPayload() nor synced as private_records, which is exactly the
-// property needed here.
-const CLUB_WODS_CACHE_KEY = "haimunia-demo:clubWods";
-// Called by cloud.js once club_wods_list() answers. Re-sanitized on the way
-// in like everything else that crosses into this file, through
-// sanitizeClubWod — which is what MAKES a record a club WOD. The category is
-// never read off the payload (see src/sanitize.js): this call site and
-// loadCachedClubWods() below are the only two that may mint "Club", because
-// they are the only two whose input came from club_wods_list().
-window.setClubWods = function (list) {
-  clubWods = sanitizeList(list, sanitizeClubWod);
-  // Best-effort: a member with no storage quota still gets the catalogue for
-  // this session, they just do not get it offline next time.
-  dbSetSetting(CLUB_WODS_CACHE_KEY, clubWods).catch(() => {});
-};
-// Hydrated at boot, BEFORE the first render and before cloud.js's network
-// read can answer. Without this a member who logged a club WOD and opens the
-// app offline gets wodById() === undefined for it, and their own history
-// renders as an unknown workout — the exact failure the catalogue's
-// retire-never-delete rule exists to prevent, reached by a different route.
-async function loadCachedClubWods() {
-  try {
-    const cached = await dbGetSetting(CLUB_WODS_CACHE_KEY);
-    if (Array.isArray(cached)) clubWods = sanitizeList(cached, sanitizeClubWod);
-  } catch (e) { /* no cache is a cold start, not an error */ }
-}
 
-// ---------- The club's feature switches, read offline ----------
-//
-// club_features is the community layer's table and cloud.js owns reading it
-// (loadClubFeatures). This is a second, much smaller reader of the same map,
-// and it exists for two reasons that isModuleEnabled() cannot serve:
-//
-//  1. OFFLINE, AND WITH NO SESSION AT ALL. What it gates here is on the LOG
-//     screen - the one surface that has to work on a phone in a basement gym
-//     with no signal and, for a member who never joined the community layer,
-//     no session either. So the map is cached in SETTINGSTORE and hydrated
-//     before the first render, exactly like CLUB_WODS_CACHE_KEY above, and
-//     everything downstream reads this file's own copy rather than reaching
-//     into cloud.js's state for a value that may never arrive.
-//
-//  2. A MISSING KEY MEANS OFF. isModuleEnabled() defaults an unknown key to
-//     TRUE, which is right for what it guards: a shipped module whose real
-//     backstop is RLS, where showing a section for 300ms during load beats
-//     hiding one the club is paying for. It is wrong for a key that does not
-//     exist in the table yet. The `strength_percentages` row is being added
-//     on another branch; until it lands, every member reads no row at all,
-//     and no row must mean "nobody has turned this on", never "on for
-//     everybody". Same reasoning after it lands, for any member whose cache
-//     predates it.
-//
-// So: enabled ONLY on an explicit enabled=true. Unknown key, no cache, a
-// member who never signed into the community, a stale cache from before the
-// key existed - all off.
-const CLUB_FEATURES_CACHE_KEY = "haimunia-demo:clubFeatures";
-let clubFeatureFlags = {};
-function sanitizeClubFeatureFlags(map) {
-  const out = {};
-  if (!map || typeof map !== "object") return out;
-  for (const key of Object.keys(map)) {
-    if (typeof key !== "string" || !key) continue;
-    const row = map[key];
-    // Accepts both shapes cloud.js could hand over - the bare boolean and the
-    // { enabled, config } row club_features actually selects - so this bridge
-    // does not have to be kept in step with which one the caller happens to
-    // pass. Anything else is not an answer and is dropped, which reads as off.
-    if (typeof row === "boolean") out[key] = row;
-    else if (row && typeof row === "object" && typeof row.enabled === "boolean") out[key] = row.enabled;
-  }
-  return out;
-}
-// Called by cloud.js once club_features answers, the same way setClubWods()
-// is called once club_wods_list() does.
-window.setClubFeatureFlags = function (map) {
-  clubFeatureFlags = sanitizeClubFeatureFlags(map);
-  // Best-effort, like setClubWods(): a member with no storage quota still
-  // gets the right switches for this session, they just do not get them
-  // offline next time - and "not offline next time" resolves to off, which
-  // is the safe direction.
-  dbSetSetting(CLUB_FEATURES_CACHE_KEY, clubFeatureFlags).catch(() => {});
-  // The log screen may be on screen when this lands, mid-session, the first
-  // time a member signs into the community - repaint it rather than leaving
-  // the chips missing until the next navigation.
-  //
-  // "add", not "log": the screen is called the log screen everywhere in this
-  // file and renderLogTab() draws it, but its tab id has always been `add`.
-  // Written as `tab === "log"` first, and the browser scenario caught it -
-  // the chips never appeared without a navigation, which is the whole
-  // failure this line exists to prevent.
-  if (tab === "add") render();
-  // The wall screen follows the switch too: on shows it, off hands the page
-  // back to the app even with ?display=1 in the URL (src/community/gym-display.js).
-  if (typeof window.gymDisplaySync === "function") window.gymDisplaySync();
-};
-async function loadCachedClubFeatures() {
-  try {
-    const cached = await dbGetSetting(CLUB_FEATURES_CACHE_KEY);
-    if (cached) clubFeatureFlags = sanitizeClubFeatureFlags(cached);
-  } catch (e) { /* no cache is a cold start, not an error */ }
-  if (typeof window.gymDisplaySync === "function") window.gymDisplaySync();
-}
-function clubFeatureOn(key) { return clubFeatureFlags[key] === true; }
-// The one call site's name for the one key, so a typo in the string is a
-// typo in one place. Read by renderLogTab and by nothing else.
-function strengthPercentagesOn() { return clubFeatureOn("strength_percentages"); }
-// Same shape, same key-lives-in-one-place reason, for the benchmark tracker on
-// the progress screen (club_features.benchmarks, seeded disabled by
-// 202609190002). Read by renderBenchmarkArea() and by nothing else.
-//
-// Through clubFeatureOn() rather than the community layer's isModuleEnabled()
-// deliberately, for both reasons the block above gives: the progress screen is
-// a member's own training data and has to render offline with no session, and
-// an unknown key here means OFF - which is what every member reads until an
-// admin switches this on.
-function benchmarksOn() { return clubFeatureOn("benchmarks"); }
 
-// ---------- The club's board for today (202609080002) ----------
-// THE DIVISION OF LABOUR, and the reason these three bridges exist at all:
-// the SERVER owns the board and every rule about it, and cloud.js owns
-// talking to the server — but the one fact neither of them can know is
-// whether THIS member has logged this WOD. The training log is local-first
-// and cloud backup is opt-OUT, so private_records may simply not hold the
-// entry. So the board's viewer.attached answers "is your result on the
-// board", never "did you do it", and the decision to OFFER the attach
-// control is made here, from this file's own log.
-//
-// Nothing below ever attaches anything by itself. A logged entry that
-// happens to match today's date and today's WOD is still only an OFFER —
-// inferring participation from a matching log is the central rejection in
-// the migration's decision 2, and this is the file that would have been in
-// a position to make it.
-
-// Called by cloud.js after every board read and after every board write.
-window.setClubWodSessions = function (list) {
-  clubWodSessions = Array.isArray(list) ? list : [];
-  // The אימונים tab may be on screen with the log form open when a board
-  // changes underneath it (a coach publishes; another device attaches), and
-  // renderWodContent() is the narrow repaint that owns that form.
-  if (tab === "wod" && wodSubTab === "log" && document.getElementById("wodContent")) renderWodContent();
-};
-// The open, uncancelled session for one WOD, or null. `viewer` is the
-// SERVER's answer about what this member may do and is passed through
-// untouched — this file does not re-derive can_attach from dates either.
-function clubWodSessionForWod(wodId) {
-  if (!wodId) return null;
-  return clubWodSessions.find((b) => b && b.wod && b.wod.id === wodId && !b.cancelled_at) || null;
-}
-// This member's own logged entries for one WOD, newest first — the fact the
-// server cannot have. Formatted here because formatWodEntry() is the only
-// definition of what a WOD result looks like and it lives in this file.
-window.communityWodLogFor = function (wodId) {
-  if (!wodId) return [];
-  // Another member's log on this device: offer them nothing to publish. See
-  // LOG_OWNER_KEY - this is the club-facing half, gated; their own History and
-  // stats are untouched.
-  if (logOwnedByOther) return [];
-  return wodEntriesFor(wodId).slice()
-    .sort((a, b) => (b.ts || 0) - (a.ts || 0))
-    .slice(0, 5)
-    // `!== false`, not `e.rx`: club_wod_results.rx is a boolean column and
-    // Rx+ publishes as Rx. See WOD_EFFORT_PLUS.
-    .map((e) => ({ id: e.id, date: e.date, resultText: formatWodEntry(e), rx: e.rx !== false }));
-};
-// The raw entry behind one record id, for club_wod_attach_result's p_entry.
-// Re-sanitized on the way out like everything else that crosses out of this
-// file: the server clamps it again anyway, and sending a shape sanitizeWodEntry
-// would reject is a bug worth catching on this side of the wire.
-window.communityWodEntryForAttach = function (recordId) {
-  if (!recordId) return null;
-  // Belt and braces: communityWodLogFor() already offers no buttons when the
-  // log belongs to someone else, so this path should be unreachable - but it is
-  // the one that actually WRITES to the club board, so it re-checks rather than
-  // trusting a caller to have checked.
-  if (logOwnedByOther) return null;
-  const entry = wodEntries.find((e) => e.id === recordId);
-  if (!entry) return null;
-  const out = sanitizeWodEntry(entry);
-  // The third bridge, coerced for the same reason as the two above: this one
-  // is club_wod_attach_result's p_entry, and its rx lands in a boolean column.
-  if (out) out.rx = out.rx !== false;
-  return out;
-};
-// THE CLUB COPY WINS ON AN ID COLLISION, and that is the whole point rather
-// than a tie-break detail.
-//
-// The publishing coach still holds the same customwod-<uuid> in their own
-// customWods (publishing reuses their id — it does not mint a new one, so
-// their already-logged entries and already-published posts match the
-// challenge from day one). Exactly one of the two definitions has to win on
-// their device, and it has to be the club copy: a club WOD is a SNAPSHOT
-// taken at publish time, so a coach who afterwards edits their local
-// scoreType would otherwise build `wod:<id>:<their new type>:rx` while every
-// other member in the box builds `wod:<id>:<the published type>:rx` — a
-// comparison key that differs from everybody else's, which is precisely the
-// unresolvable-key failure this catalogue removes. Their local row is left
-// untouched on disk; it is only shadowed.
 function allWods() {
-  const clubIds = new Set(clubWods.map((w) => w.id));
-  return WOD_LIBRARY.concat(clubWods, customWods.filter((w) => !clubIds.has(w.id)));
+  return WOD_LIBRARY.concat(customWods);
 }
 function wodById(id) { return allWods().find((w) => w.id === id); }
 function wodEntriesFor(id, excludeId) { return wodEntries.filter((e) => e.wodId === id && e.id !== excludeId); }
@@ -5049,30 +4613,6 @@ const ICONS = {
   manageTabIcon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
 };
 
-// ---------- Rendering ----------
-// The percentage surface, in its two forms. renderLogTab decides only WHETHER
-// to show one (`est && !isDuration` - no estimate and no percentages, a hold
-// has no 1RM to take a percentage of); these two decide what it looks like.
-//
-// The collapsed table is what shipped before club_features.strength_percentages
-// existed and is what every member still sees until their club turns the key
-// on. Untouched, deliberately, down to its 2.5 kg rounding note.
-function renderPctTable(est) {
-  return `
-    <div style="margin-bottom:12px;">
-      <button data-action="toggle-pct-table" class="movement-btn ${pctTableExpanded ? "active" : ""}" aria-expanded="${pctTableExpanded}" style="width:100%; display:flex; align-items:center; justify-content:space-between; gap:8px;">
-        <span>אחוזים לאימון הבא</span>
-        <span style="display:inline-flex; transition:transform .2s; transform:rotate(${pctTableExpanded ? "90deg" : "180deg"});">${ICONS.chevron}</span>
-      </button>
-      ${pctTableExpanded ? `<div class="chart-card" style="margin-top:8px;">
-        <div class="footer-note" style="margin:0 0 10px;">מחושב מ־1RM משוער (${est} ק״ג) — הערכה מהסטים שרשמתם, לא מקס שנבדק. נקודת פתיחה להתאמה.</div>
-        <div class="log-list">
-          ${PCT_STEPS.map((pct) => `<div class="log-row"><span style="color:var(--steel); font-weight:700;">${pct}%</span><span class="mono" style="font-weight:700; color:var(--brass);">${bidiUnit(`${formatPlateKg(roundToPlate(est * pct / 100))} ק״ג`)}</span></div>`).join("")}
-        </div>
-        <div class="footer-note" style="margin:10px 0 0;">מעוגל ל־2.5 ק״ג — הקפיצה הקטנה ביותר שאפשר להעמיס על המוט.</div>
-      </div>` : ""}
-    </div>`;
-}
 // The chips, behind the key. Every chip is a BUTTON that fills the weight
 // stepper, for the same reason the "last 14 days" chips below became buttons:
 // a number the member has to read and then dial in by hand is ~22 taps of a
@@ -5420,7 +4960,7 @@ function renderLogTab() {
       </button>` : ""}
     </div>` : ""}
 
-    ${est && !isDuration ? `${strengthPercentagesOn() ? renderStrengthPctChips(est) : renderPctTable(est)}` : ""}
+    ${est && !isDuration ? renderStrengthPctChips(est) : ""}
 
     ${(() => {
       const recent = recentEntriesFor(selectedId);
@@ -6462,7 +6002,7 @@ function renderBenchmarkArea() {
   // Off - which is every club until an admin switches it on, and every member
   // who has never signed into the community layer at all - and this section
   // does not exist rather than rendering an empty heading.
-  el.innerHTML = benchmarksOn() ? benchmarkSectionHtml() : "";
+  el.innerHTML = benchmarkSectionHtml();
   if (el.firstElementChild) { el.setAttribute("role", "region"); el.setAttribute("aria-label", "בנצ'מרקים"); }
   else { el.removeAttribute("role"); el.removeAttribute("aria-label"); }
 }
@@ -6916,34 +6456,10 @@ function render() {
   // Set before the dispatch below, so it is already correct for the render
   // pass it describes as well as for the after-render and click handlers that
   // follow it.
-  // WHICH LAYOUT THIS RENDER IS FOR (src/desktop-layout.js). Written on every
-  // render rather than only when the media query flips, because the other
-  // input - whether the viewer is staff - arrives asynchronously from
-  // cloud.js. typeof-guarded like every other cross-file call in this file;
-  // without that module <html> carries neither attribute and not one desktop
-  // rule matches, which is exactly today's phone layout.
-  const staffShell = typeof applyDesktopLayout === "function" ? applyDesktopLayout() : false;
-  // THE ROUTE GUARD. staffhome is only a destination while the staff shell is
-  // on. A phone, a member, a coach who dragged the window narrow with it
-  // open, a forwarded ?tab=staffhome link - all land on the log. `tab` itself
-  // is rewritten rather than only the rendered content, so the sidebar, the
-  // bottom bar and the next render all agree.
-  //
-  // Navigation, not authorisation: the server refuses a member's reads and
-  // writes on its own, which is what lets this be a layout question.
-  if (tab === "staffhome" && !staffShell) tab = "add";
-  // Published AFTER the guard, not before it. cloud.js reads this to decide
-  // WHOSE permissions a render is about (inMgmtContext), so announcing a tab
-  // the guard has just refused would describe a screen that is not on the
-  // page - and would leave window.haimuniaActiveTab reading "staffhome" on a
-  // phone that is showing the log.
+  // Published for cloud.js, which reads it to decide whose screen a render is.
   window.haimuniaActiveTab = tab;
   try {
-    if (tab === "staffhome") {
-      content = typeof renderStaffHome === "function"
-        ? renderStaffHome()
-        : `<div class="empty">בטעינה</div>`;
-    } else if (tab === "add") {
+    if (tab === "add") {
       const selected = movementById(selectedId);
       content = renderLogTab();
       // COMM-360: only name the save action once a movement is actually
@@ -6971,10 +6487,6 @@ function render() {
     } else if (tab === "wod") {
       content = renderWodTab();
       syncWodSaveCta(wodSubTab === "log" ? wodById(selectedWodId) : null);
-    } else if (tab === "manage") {
-      content = typeof renderManageApp === "function" ? renderManageApp() : `<div class="empty">בטעינה</div>`;
-    } else if (tab === "clubmanage") {
-      content = typeof renderClubManageApp === "function" ? renderClubManageApp() : `<div class="empty">בטעינה</div>`;
     } else {
       content = typeof renderCommunityApp === "function" ? renderCommunityApp() : `<div class="empty">הקהילה בטעינה</div>`;
       // Signed-out, loading and recovery branches share the same scene as
@@ -7015,39 +6527,6 @@ function render() {
   if (settingsBodyEl) {
     try { settingsBodyEl.innerHTML = renderSettingsBody(); }
     catch (err) { console.error("settings render error:", err); }
-  }
-  const desktopSidebarEl = document.getElementById("desktopSidebar");
-  if (desktopSidebarEl) {
-    try { desktopSidebarEl.innerHTML = renderDesktopSidebar(); }
-    catch (err) { console.error("desktop sidebar render error:", err); }
-  }
-  // THE THIRD COLUMN. #contextCol has been a mount point with no writer
-  // since Phase 4 - the CSS that reveals it is gated on it having an element
-  // child precisely so it could never render as an empty box. This is its
-  // first writer, and it writes only under the staff shell: for a member the
-  // column stays empty, so that gate still holds and their layout is
-  // untouched. Own try/catch, like every other region above.
-  //
-  // NOT ON THE TWO MANAGEMENT TABS, and this is not a preference. The ≥1200
-  // block above widens #app to the ~940px table area on ניהול with the
-  // selector `.app-shell:not(:has(> .context-col > *)) #app:has(...)` - it is
-  // conditional on the context column being EMPTY, deliberately, so that the
-  // moment a third column exists #app goes back to sharing the row instead of
-  // claiming 940px of it. Filling this column on those tabs therefore
-  // collapsed the moderation queue, the member roster and the audit log from
-  // 940px back to 560px. Caught by scripts/browser-check/desktop-layout.mjs,
-  // which measures that exact number, not by reading the rule.
-  //
-  // Skipping those two tabs is also the right product answer: the rail is a
-  // to-do list for a coach on the floor, and the management panels are a
-  // different person's screen with tables that want the width.
-  const contextColEl = document.getElementById("contextCol");
-  if (contextColEl) {
-    const railAllowed = staffShell && tab !== "manage" && tab !== "clubmanage";
-    try {
-      contextColEl.innerHTML = (railAllowed && typeof renderStaffContextColumn === "function")
-        ? renderStaffContextColumn() : "";
-    } catch (err) { console.error("context column render error:", err); contextColEl.innerHTML = ""; }
   }
   const bottomTabBarEl = document.getElementById("bottomTabBar");
   if (bottomTabBarEl) {
@@ -7161,16 +6640,7 @@ function render() {
     if (tab === "calendar") renderCalendarGrid();
     if (tab === "wod") renderWodContent();
     if (tab === "community" && typeof afterRenderCommunity === "function") afterRenderCommunity();
-    // The staff home's own lazy loads, in the same shape: fetched the first
-    // time a coach actually lands on the screen, never on a session that
-    // does not open it. Also fired for the context column, which renders on
-    // every staff tab and reads the same three coach loads.
-    if (staffShell && typeof staffHomeAfterRender === "function") staffHomeAfterRender();
-    // Redesign, Phase 1: the Manage tab's own after-render hook, same
-    // "runs once per actual render of this tab" convention as Community's
-    // above - see afterRenderManage()'s own comment in cloud.js.
-    if ((tab === "manage" || tab === "clubmanage") && typeof afterRenderManage === "function") afterRenderManage();
-    // COMM-190. The composer and PR/achievement prompts render in the global
+    // COMM-190. The PR/achievement prompts render in the global
     // cloud overlay and can show on any tab, so their focus management runs
     // after every render, not only Community's.
     if (tab !== "community" && typeof window.syncCloudDialogFocus === "function") window.syncCloudDialogFocus();
@@ -7209,138 +6679,7 @@ function render() {
   }
 }
 
-// ---------- WOD tab ----------
-// The one door into the club catalogue (202609060028). Offered only on a
-// member's OWN custom WOD, and only to staff — the box owner asked for this
-// because a coach's own programming is exactly what they want to run a club
-// challenge on, and until the catalogue existed a challenge keyed to it was
-// invisible and unscoreable for everybody else in the box.
-//
-// The gate here is a UI affordance, not the boundary: club_wod_publish()
-// checks has_perm('community.challenge.create') server-side and a member who
-// forges the click is refused there. What this check buys is that a member
-// who cannot publish is never shown a button that will only fail.
-//
-// A club WOD never shows it: once published, the club copy shadows the
-// coach's local row in allWods() (see there), so `w` arrives here already
-// carrying category "Club" and the affordance retires itself.
-function renderClubPublishAffordance(w) {
-  if (!w || w.category !== "Custom") return "";
-  if (typeof window.communityIsStaff !== "function" || !window.communityIsStaff()) return "";
-  if (typeof window.publishClubWod !== "function") return "";
-  return `
-    <div style="margin-bottom:12px;">
-      <button class="link-btn" data-action="publish-club-wod" data-id="${esc(w.id)}"
-              aria-label="פרסום ${esc(w.name)} לקטלוג המועדון" style="min-height:44px;">
-        פרסום לקטלוג המועדון
-      </button>
-      <div style="color:var(--steel); font-size:12px; line-height:1.5;">כל חברי המועדון יוכלו לרשום את האימון הזה, ואפשר יהיה לקבוע עליו אתגר שבועי.</div>
-    </div>`;
-}
 
-// THE ATTACH CONTROL, and the reason it lives HERE rather than in the
-// community tab.
-//
-// The whole premise of this feature is that ATTACHING MUST COST LESS THAN
-// COMPOSING. A member who has just filled in this form has already done the
-// only work involved; asking them to leave it, find the feed, find the card
-// and open the board would put the community layer back where it started —
-// competing with a WhatsApp message that takes one thumb. So the board comes
-// to the form.
-//
-// WHAT IT WILL NOT DO. It renders only when THIS member has an entry for
-// THIS WOD in their own log — that is the fact the server cannot know, since
-// the log is local-first and backup is opt-out — and it renders as an OFFER
-// with the member's own logged results on it, never as a completed act. A
-// logged entry that matches today and matches the WOD is still not
-// participation until the member says so.
-//
-// EVERY "may I" QUESTION IS THE SERVER'S. can_attach / can_detach /
-// closed_reason are read off the board's `viewer` and are never re-derived
-// from session_date or cancelled_at here, so this control and the RPC that
-// backs it cannot drift apart.
-function renderClubWodAttachAffordance(w) {
-  if (!w || typeof window.attachClubWodResult !== "function") return "";
-  const board = clubWodSessionForWod(w.id);
-  if (!board) return "";
-  const viewer = board.viewer || {};
-  const sid = esc(board.session_id);
-  const head = `<div style="color:var(--brass); font-weight:800; font-size:13px; margin-bottom:6px;">${esc(clubWodSessionHeadline(board))}</div>`;
-  const openBoard = `<button class="link-btn" data-action="open-club-wod-board" data-id="${sid}" style="min-height:44px;">צפייה בלוח של המועדון</button>`;
-
-  if (viewer.attached) {
-    // THE HIDDEN-FIGURE HINT. It states what the club can see and LINKS to
-    // the privacy screen. It does not offer to change the setting, and this
-    // file has no code that could: show_workout_results defaults false on
-    // purpose and flipping it on a member's behalf — or nudging them to —
-    // is the one thing this feature is not allowed to do.
-    const shows = typeof window.communityShowsWorkoutResults === "function" ? window.communityShowsWorkoutResults() : null;
-    const hidden = viewer.result_text && shows === false
-      ? `<div class="footer-note" style="margin:4px 0 0;">חברי המועדון רואים שהשתתפת, אבל לא את התוצאה עצמה. <button class="link-btn" data-action="open-community-privacy" style="min-height:44px;">להגדרות הפרטיות</button></div>`
-      : "";
-    return `<div style="background:rgba(232,185,138,.12); border:1px solid var(--brass); border-radius:14px; padding:12px 14px; margin-bottom:12px;">
-      ${head}
-      <div style="font-size:13px;">התוצאה שלך על הלוח${viewer.result_text ? `: <span class="mono" style="font-weight:800;">${bidiUnit(viewer.result_text)}</span>` : ""}</div>
-      ${viewer.can_detach ? `<button class="link-btn" data-action="detach-club-wod-result" data-id="${sid}" style="min-height:44px;">הסרת התוצאה שלי מהלוח</button>` : ""}
-      ${openBoard}
-      ${hidden}
-    </div>`;
-  }
-
-  if (!viewer.can_attach) {
-    // closed_reason, so the form SAYS why instead of hiding a control.
-    // 202609080004 added the first two. They are the member's own standing,
-    // not the board's, and they are worded as such: a restriction is a
-    // moderation decision the member can already read in full on the account
-    // screen, so this says the board is affected and does not restate it or
-    // explain itself. The other three are facts about the session.
-    const why = { restricted: "בזמן הגבלת הפרסום אי אפשר לצרף תוצאה ללוח המועדון.",
-                  not_permitted: "לחשבון שלך אין הרשאה לפרסם תוכן במועדון.",
-                  future: "אפשר יהיה לצרף תוצאה מהיום שהאימון נקבע אליו.",
-                  expired: "הלוח נסגר לצירוף תוצאות אחרי 14 יום.",
-                  cancelled: "האימון בוטל, ולכן הלוח סגור." }[viewer.closed_reason] || "";
-    if (!why) return "";
-    return `<div style="border:1px solid var(--border); border-radius:14px; padding:12px 14px; margin-bottom:12px;">
-      ${head}<div style="color:var(--steel); font-size:12px;">${esc(why)}</div>${openBoard}</div>`;
-  }
-
-  // Open, not attached. The offer — one button per logged result, so a member
-  // with two attempts chooses which one the club sees rather than having the
-  // newest assumed for them.
-  const mine = typeof window.communityWodLogFor === "function" ? window.communityWodLogFor(w.id) : [];
-  if (!mine.length) {
-    // Two different reasons for an empty offer, and saying which one is the
-    // whole point: "log it and you can attach it" is encouraging and correct
-    // for a member with nothing logged yet, and actively misleading for a
-    // member holding a phone whose log belongs to somebody else - they would
-    // log a workout and still be offered nothing, with no idea why.
-    const notMine = typeof window.haimuniaLogIsOwnedByAnotherMember === "function"
-      && window.haimuniaLogIsOwnedByAnotherMember();
-    const why = notMine
-      ? "הרישומים במכשיר הזה שייכים לחשבון אחר, ולכן אי אפשר לצרף אותם ללוח בשמכם. כדי לצרף תוצאה, השתמשו במכשיר שבו אתם רושמים את האימונים שלכם."
-      : "אחרי שתרשמו את האימון כאן אפשר יהיה לצרף את התוצאה ללוח של המועדון בלחיצה אחת.";
-    return `<div style="border:1px solid var(--border); border-radius:14px; padding:12px 14px; margin-bottom:12px;">
-      ${head}
-      <div style="color:var(--steel); font-size:12px; line-height:1.5;">${esc(why)}</div>
-      ${openBoard}
-    </div>`;
-  }
-  const buttons = mine.map((e) => `<button class="chip-btn" data-action="attach-club-wod-result" data-id="${sid}" data-record="${esc(e.id)}" style="background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:8px 12px; min-height:44px; font-size:12.5px; font-weight:700;">${esc(fmtDate(e.date))}${e.resultText ? " · " + esc(e.resultText) : ""}</button>`).join("");
-  return `<div style="background:rgba(232,185,138,.12); border:1px solid var(--brass); border-radius:14px; padding:12px 14px; margin-bottom:12px;">
-    ${head}
-    <div style="font-size:13px; margin-bottom:6px;">${mine.length === 1 ? "לצרף את הרישום שלך ללוח של המועדון?" : "איזה מהרישומים שלך לצרף ללוח של המועדון?"}</div>
-    <div class="flex wrap gap-8">${buttons}</div>
-    ${openBoard}
-  </div>`;
-}
-// "האימון של היום במועדון", or the day it was actually programmed for when
-// that is not today — a member logging Thursday's WOD on Saturday must not
-// be told Thursday's session is today's.
-function clubWodSessionHeadline(board) {
-  const d = String((board && board.session_date) || "").slice(0, 10);
-  if (!d || d === todayISO()) return "האימון של היום במועדון";
-  return `האימון של המועדון — ${fmtDate(d)}`;
-}
 // The אימונים save CTA, in one place. Two call sites set it - the full
 // render() and renderWodContent()'s partial sub-tab update - and they had
 // drifted into two copies of the same three lines. Design spec §3.6 adds a
@@ -7496,9 +6835,6 @@ function renderWodLogSection() {
       </div>
       <span class="flex items-center gap-6" style="color:var(--steel); font-size:12px; font-weight:600;">שינוי${ICONS.chevronsLeft}</span>
     </button>
-
-    ${renderClubPublishAffordance(w)}
-    ${renderClubWodAttachAffordance(w)}
 
     <div class="flex items-center gap-8" style="margin-bottom:12px;">
       <input type="date" id="wodLogDateInput" value="${esc(wodLogDate)}" max="${todayISO()}" aria-label="תאריך רישום האימון" style="flex:1; min-width:0; background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:12px 14px; color:var(--chalk); font-size:14px; font-weight:700; font-family:inherit;" />
@@ -7735,8 +7071,8 @@ function renderWodHistorySection() {
 // whiteboard. A benchmark GROUP heading is not movement vocabulary; the six
 // movement categories are, and they are untouched.
 const WOD_LIBRARY_CATEGORY_LABELS = { Girls: "בנות", Heroes: "גיבורים" };
-// The WOD picker also lists Club and Custom, which are not benchmark groups
-// and have no Hebrew name of their own - they fall through to catLabel(), so
+// The WOD picker also lists Custom, which is not a benchmark group
+// and has no Hebrew name of its own - they fall through to catLabel(), so
 // this is the library's table where it has an answer and the shared one
 // everywhere else.
 function wodCatLabel(cat) {
@@ -8251,16 +7587,7 @@ function closeWodPicker() {
 }
 function renderWodPickerList(query) {
   const q = query.toLowerCase();
-  // A RETIRED club WOD is still in allWods() — it has to be, or the member's
-  // own logged history of it would render as an unknown workout and any
-  // challenge or feed post still referencing the id would stop resolving.
-  // What retirement means is that the box has stopped programming it, so it
-  // leaves the picker for NEW logs. The exception is a member who has
-  // actually done it: for them the row is the doorway to their own history
-  // and to logging it again, so hiding it would take away data they own.
-  const filtered = allWods().filter((w) =>
-    w.name.toLowerCase().includes(q)
-    && !(w.category === "Club" && w.retiredAt && wodEntriesFor(w.id).length === 0));
+  const filtered = allWods().filter((w) => w.name.toLowerCase().includes(q));
   const exactMatch = allWods().some((w) => w.name.toLowerCase() === q);
   const byCategory = bag();
   filtered.forEach((w) => { (byCategory[w.category] = byCategory[w.category] || []).push(w); });
@@ -8276,9 +7603,7 @@ function renderWodPickerList(query) {
     list.innerHTML = addRow + `<div style="color:var(--steel); text-align:center; padding:16px 0; font-size:13px;">לא נמצא אימון</div>`;
     return;
   }
-  // Club sits between the benchmarks and the member's own: it is the box's
-  // programming, so it outranks a private WOD but not Fran.
-  const order = ["Girls", "Heroes", "Club", "Custom"];
+  const order = ["Girls", "Heroes", "Custom"];
   const cats = Object.keys(byCategory).sort((a, b) => order.indexOf(a) - order.indexOf(b));
   list.innerHTML = addRow + `<div style="height:12px;"></div>` + cats.map((cat) => `
     <div class="cat-group">
@@ -8517,13 +7842,6 @@ document.addEventListener("click", (e) => {
   else if (action === "dismiss-install-hint") { dismissInstallBanner(); }
   else if (action === "dismiss-ios-install-hint") { dismissIOSInstallBanner(); }
   else if (action === "switch-tab") { tab = el.dataset.tab; closeNavMenu(); render(); window.scrollTo(0, 0); }
-  else if (action === "switch-tab-community-sub") {
-    tab = "community";
-    closeNavMenu();
-    if (typeof window.setCommunityTab === "function") window.setCommunityTab(el.dataset.subtab);
-    else render();
-    window.scrollTo(0, 0);
-  }
   else if (action === "open-nav-menu") { openNavMenu(); }
   else if (action === "close-nav-menu") {
     if (el.id === "navMenuOverlay" && e.target !== el) return;
@@ -8679,39 +7997,6 @@ document.addEventListener("click", (e) => {
   }
   else if (action === "focus-wod-builder-search") { document.getElementById("wodBuilderMoveSearch").focus(); }
   else if (action === "create-wod") { createWodFromBuilder(); }
-  else if (action === "publish-club-wod") {
-    // The whole WOD definition is handed over, not just the id: publishing is
-    // a SNAPSHOT taken from this call, and the server deliberately does not
-    // read it back out of private_records — cloud backup is opt-out, so a
-    // coach who has it switched off (or whose outbox has not flushed yet)
-    // has no server copy for it to read.
-    const wod = customWods.find((item) => item.id === el.dataset.id);
-    if (wod && typeof window.publishClubWod === "function") window.publishClubWod(wod);
-  }
-  // ---- The club's board for today (202609080002) ----
-  // Thin on purpose: cloud.js owns the RPC, the error copy and the board's
-  // state. This only says WHICH session and WHICH of the member's own logged
-  // records, both of which are facts this file holds.
-  else if (action === "attach-club-wod-result") {
-    if (typeof window.attachClubWodResult === "function") {
-      // The entry travels with the call as p_entry, for the same reason
-      // publish-club-wod hands over the whole WOD: cloud backup is opt-out,
-      // so a member who has it switched off has no server copy for the RPC
-      // to read, and without this they would land on the board with no
-      // figure at all. The server still prefers its own copy when it has
-      // one and re-formats either source itself.
-      const entry = window.communityWodEntryForAttach(el.dataset.record);
-      window.attachClubWodResult(el.dataset.id, el.dataset.record, entry);
-    }
-  }
-  else if (action === "detach-club-wod-result") {
-    if (typeof window.detachClubWodResult === "function") window.detachClubWodResult(el.dataset.id);
-  }
-  else if (action === "open-club-wod-board") {
-    if (typeof window.switchToCommunityTopTab === "function") window.switchToCommunityTopTab();
-    if (typeof window.openClubWodBoard === "function") window.openClubWodBoard(el.dataset.id);
-    render();
-  }
   // A LINK to the privacy screen, never a toggle: show_workout_results
   // defaults false and stays the member's own decision.
   else if (action === "open-community-privacy") {
@@ -8720,7 +8005,6 @@ document.addEventListener("click", (e) => {
   }
   else if (action === "save-bw") { saveBodyweight(); }
   else if (action === "toggle-bodyweight") { bodyweightExpanded = !bodyweightExpanded; renderBodyweightArea(); }
-  else if (action === "toggle-pct-table") { pctTableExpanded = !pctTableExpanded; render(); }
   else if (action === "set-weight-from-pct") {
     // Exactly what prefill-from-recent does, for the same reason and with the
     // same named toast: a chip that silently changes a number somewhere above
@@ -8836,15 +8120,6 @@ document.addEventListener("click", (e) => {
   // tapping it to read the changelog must not land in Community's
   // notification center just because they happen to have unread there.
   else if (action === "open-release-notes") { openNotifications(); }
-  // Same three steps the "switch-tab" branch below performs, rather than a
-  // second tab-switching mechanism: set `tab`, close the menu, rerender at
-  // the top. Written out because these two rows carry an extra action
-  // afterwards and are not plain destinations.
-  else if (action === "open-coach-board") {
-    tab = "community"; closeNavMenu();
-    if (typeof window.communityOpenCoachBoard === "function") window.communityOpenCoachBoard();
-    render(); window.scrollTo(0, 0);
-  }
   else if (action === "prefill-from-recent") {
     const w = Number(el.dataset.weight), r = Number(el.dataset.reps), st = Number(el.dataset.sets);
     if (isFinite(w)) applyFieldValue("step", "weight", w);
@@ -9016,14 +8291,12 @@ async function init() {
   // Before the first render, and before cloud.js has a session to read the
   // live catalogue with — see loadCachedClubWods() for why the offline case
   // is the one that matters.
-  await loadCachedClubWods();
   await loadUserName();
   await loadLastExport();
   await loadBarWeight();
   await loadPctIncrement();
   // Before the first render, for the same reason loadCachedClubWods() above
   // is: the log screen is drawn from the cached answer or from none at all.
-  await loadCachedClubFeatures();
   await loadWodRxDefault();
   await loadBoxStartDate();
   await loadSeenAchievements();
@@ -9090,7 +8363,6 @@ async function init() {
   // screen is painted - otherwise a staff laptop paints the phone layout and
   // snaps a frame later. render() is the callback, because which columns
   // exist is a render-level question, not only a stylesheet one.
-  if (typeof startDesktopLayoutWatch === "function") startDesktopLayoutWatch(render);
   render();
   maybeShowIOSInstallBanner();
 

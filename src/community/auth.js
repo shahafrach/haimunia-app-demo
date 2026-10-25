@@ -62,20 +62,7 @@
       // (notif_unread_count), not the ~15-call bundle PERF-1 deliberately
       // keeps deferred, so promoting only this one call here does not
       // reopen that tradeoff.
-      await Promise.all([loadProfile(), loadChallenges(), loadClubFeatures(), loadNotifUnread()]);
-      // Live bug hunt (2026-09-11): loadNotifUnread() (just above) gives the
-      // header badge a correct COUNT from first paint, but arming the
-      // realtime subscription that keeps it LIVE only happened later, inside
-      // ensureCommunityDataLoaded()'s deferred batch - gated on the member
-      // actually visiting Community or Manage. A member who opens the app,
-      // logs a workout, and never taps either tab that session saw a header
-      // badge that could go stale for the whole session (it does self-heal
-      // on focus/visibilitychange, which is why this read as "annoying" not
-      // "broken forever" - confirmed live). Same reasoning as
-      // loadNotifUnread()'s own promotion above: cheap, self-contained
-      // (state.user/client/window.HaimuniaRealtime only, no Community data
-      // dependency), idempotent, so promoting it here is safe.
-      ensureNotifRealtime();
+      await Promise.all([loadProfile(), loadNotifUnread()]);
       // Push pending local edits before pulling the remote copy - without
       // this, reopening the app with an unflushed outbox (e.g. a set
       // logged offline seconds ago) pulls the still-stale server record
@@ -90,7 +77,6 @@
       // reopening the app is the most common moment connectivity returns.
       await flushCommunityOutbox();
       await pullPrivateRecords();
-      await pingActivity();
       // COMM-130. Claim any non-attendance milestone this device already
       // crossed before the member joined the community.
       if (typeof window.syncCommunityMilestones === "function") window.syncCommunityMilestones();
@@ -104,7 +90,7 @@
   // recovery_verified_at drives the COMM-016 gate; the privacy columns
   // (COMM-018) drive the Account > Privacy panel and are read straight off
   // state.profile, so they have to be selected here too.
-  const PROFILE_COLUMNS = "id,handle,display_name,bio,avatar_url,is_admin,recovery_verified_at,visible_to_club,show_workout_results,show_prs,show_achievements,show_attendance,show_upcoming_booking,show_in_attendee_lists,in_leaderboards,allow_follows,allow_mentions";
+  const PROFILE_COLUMNS = "id,handle,display_name,bio,is_admin,recovery_verified_at,visible_to_club,show_workout_results,show_prs,show_achievements,show_attendance,show_upcoming_booking,show_in_attendee_lists,in_leaderboards,allow_follows,allow_mentions";
   // Launch-readiness audit, CQ-006. loadProfile()/loadRedemption() used to
   // drop `error` and collapse "the fetch failed" into "the row doesn't
   // exist" (`data || null`, unconditionally). The join funnel below reads
@@ -280,33 +266,6 @@
       state.ui.redeemingCode = false;
       rerender();
     }
-  }
-  // One row per user per day they had the app open — the raw dates stay
-  // private (activity_pings RLS is self-only); this only ever records
-  // today, so a missed day just isn't there rather than being backfilled.
-  async function pingActivity() {
-    // state.profile, not just state.user: "start-signup" opens an ANONYMOUS
-    // session before the member has redeemed a code, and activity_pings'
-    // user_id references profiles - so pinging on that session raised a 409
-    // foreign-key violation on every fresh signup. Both callers load the
-    // profile before reaching here, so a real member is never skipped. Same
-    // condition window.isCommunitySignedIn() already uses for "is actually
-    // a member yet".
-    if (!client || !state.user || !state.profile) return;
-    // Found in the post-Phase-3 front-end review, against a real Supabase
-    // client rather than the mock: .catch() chained directly on a
-    // PostgrestFilterBuilder throws "is not a function" synchronously,
-    // BEFORE the builder's own .then() ever fires the request - so this
-    // upsert has never actually reached the server. Invisible to every
-    // Node test, because mockSupabase.mjs's chain() object happens to
-    // implement .catch() itself, which the real client's builder does not.
-    // Real impact: activity_pings feeds coach_inactive_members(),
-    // coach_new_members() and admin_search_members()'s last-activity
-    // column (202608270005/011) - all three have likely been reading an
-    // empty table since this shipped. try/catch, matching this file's own
-    // established "swallow a non-critical side effect" shape one line
-    // above (window.HaimuniaEvents.emit).
-    try { await client.from("activity_pings").upsert({ user_id: state.user.id, activity_date: todayIso() }, { onConflict: "user_id,activity_date", ignoreDuplicates: true }); } catch (e) {}
   }
 
   // No real email is ever collected or sent - a synthetic, RFC 2606
@@ -903,7 +862,6 @@
     // that the tab persists; it is that it persisted across a change of
     // PERSON. Completing a first profile is the one moment that is
     // unambiguously a new member.
-    if (isFirstProfile) state.ui.tab = "feed";
     // The member has just told us their name. Do not ask again.
     //
     // app.js keeps its own userName for the offline log and community signup

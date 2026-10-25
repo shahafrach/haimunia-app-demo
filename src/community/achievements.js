@@ -16,13 +16,13 @@
 
   async function publishAchievement(achievementId, title, rule) {
     if (!state.user || !state.profile) return setMessage("התחברו לקהילה כדי לשתף מדליה");
-    const payload = { author_id: state.user.id, source_type: "achievement", source_record_id: achievementId, visibility: "followers", title: String(title || "מדליה חדשה").slice(0, 120), result_text: String(rule || "מדליה חדשה נפתחה").slice(0, 240), occurred_on: todayIso() };
+    const payload = { author_id: state.user.id, source_type: "achievement", source_record_id: achievementId, visibility: "club", title: String(title || "מדליה חדשה").slice(0, 120), result_text: String(rule || "מדליה חדשה נפתחה").slice(0, 240), occurred_on: todayIso() };
     const { error } = await client.from("workout_posts").upsert(payload, { onConflict: "author_id,source_type,source_record_id" });
     if (error) return setMessage(failText("שיתוף המדליה נכשל", error));
     // COMM-170. The app.js entry point (window.shareAchievementToCommunity),
     // distinct from the unlock sheet below and never both in one action.
     track(A.ACHIEVEMENT_SHARED, { member_achievement_id: null, code: null, source: "app_share_button" });
-    await loadFeed(); setMessage("המדליה שותפה לעוקבים שלכם"); rerender();
+    setMessage("המדליה שותפה"); rerender();
   }
 
   // Hebrew display copy for the celebration, keyed by definition code. The
@@ -243,7 +243,7 @@
                   decoration to mean "private". It defaults to "club", so
                   honouring it costs the feature nothing and is the reading
                   the audit's privacy note asks for. */ ""}
-            ${canShare && isModuleEnabled("outward_share") ? `<button class="chip-btn" data-community-action="outward-ach">שיתוף מחוץ לאפליקציה</button>` : ""}
+            ${canShare ? `<button class="chip-btn" data-community-action="outward-ach">שיתוף מחוץ לאפליקציה</button>` : ""}
             ${canShare && !a.showNote ? `<button class="chip-btn" data-community-action="ach-add-note">הוספת הערה</button>` : ""}
             <button class="chip-btn" data-community-action="ach-not-now">לא עכשיו</button>
           </div>
@@ -253,11 +253,6 @@
   }
   function renderMyAchievements() {
     if (!state.user || !state.profile) return "";
-    // COMM-321. member_achievements_read already empties this to nothing
-    // queryable once the module is off (including the caller's own past
-    // unlocks, on purpose) - this keeps the section shell/header from
-    // showing beside an always-empty list.
-    if (!isModuleEnabled("achievements")) return "";
     const list = Array.isArray(state.achievements.mine) ? state.achievements.mine : [];
     const rowsHtml = list.map((r) => {
       const code = achCodeOf(r);
@@ -288,7 +283,7 @@
       // and withheld for only_me, matching the club control beside it.
       const outward = r.visibility === "only_me"
         ? ""
-        : (isModuleEnabled("outward_share") ? `<button class="chip-btn" data-community-action="outward-ach-earned" data-id="${esc(r.id)}" data-code="${esc(code)}">${SHARE_ICONS.outward} שיתוף מחוץ לאפליקציה</button>` : "");
+        : `<button class="chip-btn" data-community-action="outward-ach-earned" data-id="${esc(r.id)}" data-code="${esc(code)}">${SHARE_ICONS.outward} שיתוף מחוץ לאפליקציה</button>`;
       // data-achievement-id: the anchor a `target.achievement` notification
       // tap (navigateToNotifTarget) scrolls to and briefly highlights - the
       // same scrollIntoView pattern the `target.post` branch already uses

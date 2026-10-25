@@ -1,170 +1,17 @@
 "use strict";
-// ---- Community: posts and the composer (COMM-101..108, COMM-180) ----------
-//
-// How a post is made and how it is drawn: the composer with its multi-photo
-// upload and alt text, the per-type card renderers, the one dispatch table
-// that picks between them, the owner's edit and delete controls, photo and
-// avatar upload with their signed-URL cache, and the Share This PR prompt.
-//
-// Moved out of cloud.js unchanged — every line byte-identical to what it was
-// there. Classic <script>, no IIFE, loaded before cloud.js; see
-// src/community/events.js's header for why each of those matters.
-//
-// POST_CARD_RENDERERS IS THE ONE DISPATCH, and it is built at this file's
-// evaluation time out of direct references to the renderers. All thirteen
-// live here for that reason — including renderEventLinkCard and
-// renderChallengeLinkCard, which stayed behind when events and challenges
-// moved out. Pulling one renderer away from the table that dispatches it is
-// how the fourteenth card type gets a second dispatch.
-//
-// The one exception is renderClubWodPostCard, which is in
-// src/community/club.js: the club WOD board owns it, and the ORDER of the
-// <script> tags in index.html is what keeps that reference resolvable —
-// club.js loads before this file. Read the POST_CLUB_WOD comment in the
-// table below before reordering anything.
 
-  async function uploadPostPhoto(file) {
-    if (!file || !state.user) return null;
-    const ext = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
-    const path = `${state.user.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-    const { error } = await client.storage.from("post-photos").upload(path, file, { contentType: file.type, upsert: false });
-    return error ? null : path;
-  }
-  // COMM-318 / 202609060003. The avatar half of the pattern below. Reads the
-  // cache only - avatarHtml() runs during render and must never await.
-  function avatarSignedUrl(storedUrl) {
-    return storedUrl ? signedCacheGet(avatarUrlCache, storedUrl) : null;
-  }
-  // Launch-readiness audit, CQ-004. Both caches used to store a bare URL
-  // string with no timestamp, and re-entry was short-circuited on a cache
-  // hit - so an entry was never refreshed. The signature these URLs carry
-  // expires after SIGNED_URL_TTL_S, and this is an installed PWA whose
-  // sessions routinely outlive that: after an hour every avatar and every
-  // feed photo already scrolled past rendered as a broken image, with no
-  // retry and no fallback to the initials badge (that path is only taken
-  // when the cache is EMPTY, not when it holds a stale URL).
-  //
-  // Entries are now { url, expiresAt } and a read within SIGNED_URL_SKEW_MS
-  // of expiry is treated as a miss, so the next render re-signs. The skew
-  // matters: an entry that expires while the member is looking at it would
-  // otherwise still be served once.
-  const SIGNED_URL_TTL_S = 3600;
-  const SIGNED_URL_SKEW_MS = 5 * 60 * 1000;
-  function signedCacheGet(cache, key) {
-    const hit = cache[key];
-    if (!hit) return null;
-    if (typeof hit === "string") return hit; // legacy shape, pre-CQ-004
-    if (hit.expiresAt - SIGNED_URL_SKEW_MS <= Date.now()) { delete cache[key]; return null; }
-    return hit.url;
-  }
-  function signedCachePut(cache, key, url) {
-    cache[key] = { url, expiresAt: Date.now() + SIGNED_URL_TTL_S * 1000 };
-  }
-  // A signature that expired between render and load (or an object that
-  // vanished) evicts its entry so the next render re-signs instead of
-  // showing a permanently broken image.
-  // An avatar re-signs on the next render by itself (resolveAvatarUrl is
-  // asked from the renderer). A feed photo is only signed when the feed
-  // page loads, so it is re-signed here - once per path per session, so an
-  // image that fails even freshly signed (offline, a bad object) cannot
-  // loop error -> sign -> error.
-  const resignedPhotoPaths = new Set();
-  function evictSignedUrl(kind, key) {
-    if (!key) return;
-    const cache = kind === "avatar" ? avatarUrlCache : photoUrlCache;
-    delete cache[key];
-    rerender();
-    if (kind === "photo" && !resignedPhotoPaths.has(key)) {
-      resignedPhotoPaths.add(key);
-      resolvePhotoUrl(key);
-    }
-  }
-  // Launch-readiness S1. This used to be an inline onerror="" attribute, and
-  // the CSP (script-src 'self', no 'unsafe-inline') blocks every inline
-  // handler, so it never ran and an expired photo stayed broken for good.
-  // One delegated listener instead: an <img data-evict="photo|avatar"
-  // data-k="<storage path>"> opts in. `error` does not bubble, hence capture.
-  document.addEventListener("error", (event) => {
-    const img = event.target;
-    if (!img || img.tagName !== "IMG" || !img.dataset || !img.dataset.evict) return;
-    evictSignedUrl(img.dataset.evict, img.dataset.k);
-  }, true);
-  // Fire-and-forget, exactly like resolvePhotoUrl. A failure (a member who
-  // hid from the club, a block edge, an object that was removed) is left
-  // uncached on purpose: the initials badge is a correct answer for "you may
-  // not see this face", so there is nothing to report and nothing to retry
-  // until the next render decides to ask again.
-  async function resolveAvatarUrl(storedUrl) {
-    // signedCacheGet() rather than a bare truthiness check, so an entry
-    // that is present but expiring is treated as a miss and re-signed
-    // (CQ-004).
-    if (!storedUrl || signedCacheGet(avatarUrlCache, storedUrl) || avatarInFlight[storedUrl]) return;
-    const path = avatarPathFromUrl(storedUrl);
-    if (!path) return;
-    avatarInFlight[storedUrl] = true;
-    const { data, error } = await client.storage.from("avatar-photos").createSignedUrl(path, SIGNED_URL_TTL_S);
-    delete avatarInFlight[storedUrl];
-    if (!error && data && data.signedUrl) { signedCachePut(avatarUrlCache, storedUrl, data.signedUrl); scheduleRerender(); }
-  }
-  async function resolvePhotoUrl(path) {
-    if (!path || signedCacheGet(photoUrlCache, path)) return;
-    const { data, error } = await client.storage.from("post-photos").createSignedUrl(path, SIGNED_URL_TTL_S);
-    if (!error && data) { signedCachePut(photoUrlCache, path, data.signedUrl); scheduleRerender(); }
-  }
-
-  // THE TWIN, named here so the next reader does not fix one of them. This
-  // is the legacy card's own "הסרת שיתוף" (a direct delete on
-  // workout_posts, author-scoped in the query); postDeleteViaMenu() below is
-  // the typed card's "מחיקה" through the post_delete() RPC. Two rows in the
-  // same table, two call sites, and until now two different promises about
-  // whether a member could take it back. Both run through
-  // deferCommunityDelete() (cloud.js) and both say the same thing in their
-  // confirm sheet.
-  async function deletePost(postId) {
-    if (!state.user) return;
-    const snapshot = Array.isArray(state.feed.items) ? state.feed.items.slice() : null;
-    deferCommunityDelete({
-      label: "השיתוף הוסר",
-      remove: () => { if (snapshot) state.feed.items = state.feed.items.filter((p) => p && p.id !== postId); },
-      restore: () => { if (snapshot) state.feed.items = snapshot; },
-      commit: async () => {
-        const { error } = await client.from("workout_posts").delete().eq("id", postId).eq("author_id", state.user.id);
-        // A failed write puts the post back on screen. It was only ever
-        // hidden optimistically, so the row is still there and the member
-        // has to be told the removal did not happen.
-        if (error) { if (snapshot) state.feed.items = snapshot; rerender(); return setMessage(failText("הסרת השיתוף נכשלה", error)); }
-        await loadFeed();
-      },
-    });
-  }
-  async function publishWorkout(type, id, visibility, photoFile) {
+  async function publishWorkout(type, id, visibility) {
     if (!state.user || !state.profile || typeof window.communityShareCandidateFor !== "function") return;
     // communityShareCandidateFor looks up any entry by id regardless of
-    // age - unlike the old recency-limited list, sharing can now be
-    // triggered from Calendar or Progress, which show results from any
-    // date, not just the last few.
+    // age: sharing can be triggered from Calendar or Progress, which show
+    // results from any date.
     const item = window.communityShareCandidateFor(type, id);
     if (!item) return setMessage("לא ניתן למצוא את התוצאה במכשיר");
-    let photoPath = null;
-    if (photoFile) {
-      // Was uploadPostPhoto(photoFile) directly on the raw File - every
-      // other upload path (composerAddPhoto, avatar, PR prompt) goes
-      // through prepareImage first, which strips EXIF/GPS and compresses.
-      // This was the one path that shipped a member's raw photo, metadata
-      // and all, straight to storage.
-      try {
-        const prepared = await window.HaimuniaImage.prepareImage(photoFile);
-        photoPath = await uploadPreparedPhoto(prepared);
-      } catch (e) {
-        photoPath = null;
-      }
-      if (!photoPath) return setMessage("העלאת התמונה נכשלה, אפשר לנסות שוב בלי תמונה");
-    }
-    const { queued, error } = await shareWorkoutRecord(item, visibility, photoPath);
+    const { queued, error } = await shareWorkoutRecord(item, visibility);
     if (error) return setMessage(failText("שיתוף התוצאה נכשל", error));
     delete state.posts.openShare[shareKey(type, id)];
     if (queued) return setMessage("התוצאה תישלח למועדון כשהחיבור יחזור");
-    await loadFeed(); setMessage("התוצאה שותפה בלי הערות, מדדים או פרטים אישיים");
+    setMessage("התוצאה שותפה בלי הערות, מדדים או פרטים אישיים");
   }
   // ---- The one workout-share write in the app --------------------------
   //
@@ -177,9 +24,8 @@
   // and because the on-conflict target IS rule 4 of the share prompt ("one
   // record, one post"): a second definition that omitted it would publish a
   // duplicate card for every re-share.
-  function workoutSharePayload(item, visibility, photoPath) {
-    const payload = { author_id: state.user.id, source_type: item.type, source_record_id: item.id, visibility: visibility === "public" ? "public" : "followers", title: item.title, result_text: item.resultText, comparison_key: item.comparisonKey, score_value: item.scoreValue, score_direction: item.scoreDirection, rx: item.rx, occurred_on: item.occurredOn };
-    if (photoPath) payload.photo_path = photoPath;
+  function workoutSharePayload(item, visibility) {
+    const payload = { author_id: state.user.id, source_type: item.type, source_record_id: item.id, visibility: visibility === "public" ? "public" : "club", title: item.title, result_text: item.resultText, comparison_key: item.comparisonKey, score_value: item.scoreValue, score_direction: item.scoreDirection, rx: item.rx, occurred_on: item.occurredOn };
     return payload;
   }
   // THE on-conflict target. workout_posts(author_id, source_type,
@@ -238,10 +84,10 @@
   // one - and a QUEUED share is, because it is a member action that will
   // land. This path predates the composer and emits no POST_CREATED, so
   // workout_shared is the only record of it.
-  async function shareWorkoutRecord(item, visibility, photoPath) {
-    const payload = workoutSharePayload(item, visibility, photoPath);
+  async function shareWorkoutRecord(item, visibility) {
+    const payload = workoutSharePayload(item, visibility);
     const result = await writeWorkoutSharePost(payload);
-    if (!result.error) track(A.WORKOUT_SHARED, { source_type: item.type, visibility: payload.visibility, has_photo: !!photoPath });
+    if (!result.error) track(A.WORKOUT_SHARED, { source_type: item.type, visibility: payload.visibility });
     return result;
   }
   // Collapsed to one small icon by default wherever a result actually
@@ -256,32 +102,7 @@
     rerender();
   }
 
-  // The five visibility labels the schema keeps (contracts.md "Phase 0 schema
-  // notes"). club / friends / only_me is the model going forward; public and
-  // followers are legacy read aliases the current client still writes.
-  // Post-Phase-3 Hebrew copy fix: "עוקבים" (followed), matching
-  // visibilityLabel()'s own "followers" -> עוקבים mapping two lines below -
-  // "חברים" was the same homonym collision LEADERBOARD_SCOPES had (this app
-  // uses חברים everywhere else to mean club membership, not "who follows
-  // me").
-  const POST_VISIBILITY_OPTIONS = [
-    { value: "club", label: "כל המועדון" },
-    { value: "friends", label: "עוקבים" },
-    { value: "only_me", label: "רק אני" },
-  ];
-  function normalizeVisibility(v) { return v === "public" ? "club" : v === "followers" ? "friends" : (v || "club"); }
-  function visibilityLabel(v) {
-    if (v === "followers") return "עוקבים";
-    const opt = POST_VISIBILITY_OPTIONS.find((o) => o.value === normalizeVisibility(v));
-    return opt ? opt.label : "כל המועדון";
-  }
   const POST_BODY_MAX = 1000;
-  const POST_MEDIA_MAX = 4;
-  const ALT_TEXT_MAX = 200;
-  // Real device feedback: the announcements archive below the feed used to
-  // render every live announcement in full with no cap. Recent ones stay
-  // visible; older ones move behind a <details> disclosure instead.
-  const ANNOUNCEMENTS_ARCHIVE_VISIBLE = 3;
   // COMM-102 "control characters stripped, leading and trailing whitespace
   // trimmed". The server re-trims to POST_BODY_MAX, this is only the client
   // guard and the counter source.
@@ -293,6 +114,9 @@
       .slice(0, POST_BODY_MAX);
   }
 
+  // Posts the client holds. Nothing loads them in this build: the ranked feed
+  // that filled this list is gone, and the circle screen will fill it.
+  function findFeedPost(id) { return Array.isArray(state.posts.held) ? state.posts.held.find((p) => p && p.id === id) : null; }
   function postIsOwn(post) {
     return !!(post && post.author_id && state.user && post.author_id === state.user.id);
   }
@@ -305,7 +129,6 @@
   function postTimestamp(post) {
     return (post && (post.created_at || post.published_at || post.occurred_on)) || null;
   }
-  function findFeedPost(id) { return Array.isArray(state.feed.items) ? state.feed.items.find((p) => p && p.id === id) : null; }
   // Authorless posts render the club mark, never a broken avatar (COMM-107).
   const CLUB_MARK_HTML = `<span aria-hidden="true" class="avatar-badge" style="width:40px;height:40px;font-size:16px;background:var(--brass);">ח</span>`;
 
@@ -324,10 +147,9 @@
       // just this one call site (the main feed card's own head), not every
       // other 36px avatar in the app (comments, directory rows, etc. keep
       // their own deliberate, smaller-context sizing).
-      : authorless ? CLUB_MARK_HTML : avatarHtml(name, 40, post && post.author ? post.author.avatar_url : (post && post.avatar_url));
+      : authorless ? CLUB_MARK_HTML : avatarHtml(name, 40);
     const authorId = !authorless && post && post.author_id;
-    // COMM-160. Same coach badge the comments carry, on the post author.
-    const roleBadge = authorId ? coachBadgeHtml(memberRole(authorId)) : "";
+    const roleBadge = "";
     // THE NAME AND THE BADGE ARE SIBLINGS NOW, not a badge nested inside the
     // name. Measured on a 390px phone: the badge was inside the name's own
     // <button>, so "מאמן/ת ראשי/ת" wrapped to a second line WITH the name and
@@ -363,15 +185,8 @@
     POST_TEXT: "",
     POST_PHOTO: "תמונה",
     POST_WORKOUT: "אימון",
-    POST_CLUB_WOD: "אימון המועדון",
     POST_PR: "שיא אישי",
     POST_ACHIEVEMENT: "הישג",
-    POST_ATTENDANCE_MILESTONE: "אבן דרך",
-    POST_CHALLENGE: "אתגר",
-    POST_EVENT: "אירוע",
-    POST_ANNOUNCEMENT: "הודעת מועדון",
-    POST_NEW_MEMBER: "חבר/ה חדש/ה",
-    POST_COACH: "מאמן/ת",
     POST_SYSTEM: "מהמועדון",
   };
   function postTypeLabel(post, opts) {
@@ -396,7 +211,7 @@
   // layouts while scrolling past them. `result` is the only thing a renderer
   // still decides, and it is always last.
   function postCardBody(post, result) {
-    return postMediaHtml(post) + postBodyHtml(post) + (result || "");
+    return postBodyHtml(post) + (result || "");
   }
 
   function postMenuHtml(post) {
@@ -417,21 +232,9 @@
       // post_tag_training_partners() enforces.
       if (postCanTagPartners(post)) items += mi("post-tag-partners", "מי התאמן/ה איתי", post.id);
       items += mi("post-edit-caption", "עריכת כיתוב", post.id);
-      items += mi("post-change-visibility", "שינוי נראוּת", post.id);
       items += mi("post-delete", "מחיקה", post.id, true);
     } else {
-      const saved = !!(state.posts.savedIds && state.posts.savedIds[post.id]);
-      items += mi("post-save", saved ? "הסרה מהשמורים" : "שמירה", post.id);
-      items += mi("post-hide", "הסתרת הפוסט", post.id);
-      items += mi("report", "דיווח", post.id);
       if (post.author_id) items += mi("block", "חסימת החבר/ה", post.author_id, true);
-    }
-    // Real bug found by a role-coverage audit: content.pin covers posts too
-    // (pinTargetLabel() has always listed "post"), but until now no post
-    // surface offered a pin control at all - see isPinnedTarget()'s comment.
-    if (hasPerm(PERM.CONTENT_PIN)) {
-      const pinned = isPinnedTarget("post", post.id);
-      items += `<button class="post-menu-item" role="menuitem" data-community-action="${pinned ? "unpin" : "pin"}" data-type="post" data-id="${id}">${pinned ? "ביטול הצמדה" : "הצמדה למעלה"}</button>`;
     }
     // aria-haspopup="menu", not "true": "true" is the legacy alias for
     // "menu" and says nothing about WHICH pattern opens, and this one really
@@ -460,7 +263,6 @@
     opts = opts || {};
     const id = esc(post && post.id);
     const reactions = Number((post && (post.reaction_count != null ? post.reaction_count : post.cheer_count)) || 0);
-    const comments = Number((post && post.comment_count) || 0);
     const mine = !!(state.engagement.reactions[post && post.id] && state.engagement.reactions[post && post.id].mine);
     // ONE REACTION PER MEMBER, unchanged: this is still toggle_reaction on
     // the same `cheer` kind, and the pill is pressed or not pressed. What is
@@ -470,7 +272,6 @@
     return `<div class="chip-row post-actions">
       <button class="chip-btn reaction-pill${mine ? " is-mine" : ""}" data-community-action="cheer" data-id="${id}" aria-pressed="${mine ? "true" : "false"}" aria-label="עידוד, ${reactions} עידודים">${DUMBBELL_ICON}<span class="reaction-count">${reactions}</span></button>
       ${typeof reactionSummaryHtml === "function" ? reactionSummaryHtml(post) : ""}
-      ${isModuleEnabled("comments") ? `<button class="chip-btn comment-pill" data-community-action="toggle-comments" data-id="${id}" aria-label="תגובות, ${comments}">${FEED_ICONS.comment}<span class="reaction-count">${comments}</span></button>` : ""}
       ${opts.extra || ""}
     </div>`;
   }
@@ -479,22 +280,6 @@
     const body = post && post.body;
     if (!body) return "";
     return `<div class="post-body" style="white-space:pre-wrap;line-height:1.6;">${bidiText(String(body).slice(0, POST_BODY_MAX))}</div>`;
-  }
-  function postMediaHtml(post) {
-    const media = (post && post.media) || [];
-    if (!media.length) return "";
-    const items = media.slice(0, POST_MEDIA_MAX).map((m) => {
-      let url = m.url || "";
-      if (!url && m.storage_path) {
-        const cached = signedCacheGet(photoUrlCache, m.storage_path);
-        if (cached) url = cached;
-        else resolvePhotoUrl(m.storage_path);
-      }
-      const alt = m.decorative ? "" : esc(m.alt_text || "");
-      if (!url) return `<div class="post-photo" aria-hidden="true" style="background:var(--border);min-height:120px;"></div>`;
-      return `<img src="${esc(url)}" alt="${alt}" class="post-photo"/>`;
-    }).join("");
-    return media.length > 1 ? `<div class="post-media-grid">${items}</div>` : items;
   }
 
   function captionEditPanel() {
@@ -513,17 +298,7 @@
   function captionSaveBlocked() {
     const e = state.posts.captionEdit;
     if (!e) return true;
-    const post = findFeedPost(e.postId);
-    const hasPhoto = !!(post && Array.isArray(post.media) && post.media.length);
-    return !cleanPostBody(e.body) && !hasPhoto;
-  }
-  function visibilityEditPanel() {
-    const e = state.posts.visibilityEdit;
-    return `<div class="post-inline-edit" style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px;">
-      <div class="field-label" style="margin-bottom:6px;">מי רואה את הפוסט</div>
-      <div class="chip-row">${POST_VISIBILITY_OPTIONS.map((o) => `<button class="chip-btn${e.visibility === o.value ? " selected" : ""}" data-community-action="visibility-pick" data-value="${o.value}">${o.label}</button>`).join("")}</div>
-      <button class="link-btn" data-community-action="visibility-cancel" style="margin-top:6px;display:inline-block;">ביטול</button>
-    </div>`;
+    return !cleanPostBody(e.body);
   }
 
   // ---- "התאמנו יחד": training partners on a workout post (202609220005) ---
@@ -539,10 +314,6 @@
   // The server's own cap, restated so the sheet can stop the member at ten
   // rather than letting the RPC raise after they have ticked eleven.
   const TRAINING_PARTNERS_MAX = 10;
-  // Suggestions come from the classmates signal, whose own clamp is 1..20.
-  // Twelve is "everyone who was plausibly in that class" without turning the
-  // sheet into a club directory - a CrossFit class is rarely larger.
-  const TRAINING_PARTNER_SUGGEST_LIMIT = 12;
 
   // The tags a card should print. An ABSENT entry and an EMPTY one are
   // different answers and the difference is load-bearing: absent means this
@@ -576,7 +347,7 @@
   // condition and the one that is about this codebase rather than about the
   // feature. renderPostCard() is called from two places: the feed, and the
   // Posts tab of a profile (directory.js). findFeedPost() only ever looks in
-  // state.feed.items, so a card drawn on the profile tab cannot be resolved
+  // state.posts.held, so a card drawn on the profile tab cannot be resolved
   // back to its row. The three older own-post controls share that lookup and
   // degrade quietly there - postStartCaptionEdit opens with an empty body,
   // postStartVisibilityEdit with the default scope - which is a pre-existing
@@ -587,7 +358,6 @@
   // remove button both work on the profile tab, and directory.js loads the
   // tags for it.
   function postCanTagPartners(post) {
-    if (!isModuleEnabled("trained_together")) return false;
     if (!post || post.post_type !== "POST_WORKOUT") return false;
     if (!postIsOwn(post)) return false;
     return !!findFeedPost(post.id);
@@ -601,7 +371,6 @@
   // doubting it.
   async function loadTrainingPartners(postIds) {
     if (!state.user || !client) return;
-    if (!isModuleEnabled("trained_together")) return;
     const ids = (postIds || []).filter((id) => !!id);
     if (!ids.length) return;
     const { data, error } = await client.rpc("post_training_partners_for", { p_post_ids: ids });
@@ -617,7 +386,7 @@
       if (!r || !r.post_id) continue;
       if (!state.posts.partners[r.post_id]) state.posts.partners[r.post_id] = [];
       state.posts.partners[r.post_id].push({
-        user_id: r.user_id, display_name: r.display_name, handle: r.handle, avatar_url: r.avatar_url,
+        user_id: r.user_id, display_name: r.display_name, handle: r.handle,
       });
     }
   }
@@ -632,7 +401,6 @@
   // post_training_partners_for() orders by created_at then name then id, a
   // total order, so two names never swap between renders.
   function trainingPartnersHtml(post) {
-    if (!isModuleEnabled("trained_together")) return "";
     const loaded = postTrainingPartners(post);
     // The same second net the classmates card carries (blockFilteredList in
     // directory.js), applied for the same reason and not because the server
@@ -657,8 +425,8 @@
     </div>`;
   }
 
-  // The author's sheet. Inline under the card, the shape captionEditPanel and
-  // visibilityEditPanel already use, rather than a modal - it is a short list
+  // The author's sheet. Inline under the card, the shape captionEditPanel
+  // already uses, rather than a modal - it is a short list
   // of checkboxes and the post it is about is the context.
   function trainingPartnersPanel(post) {
     const p = state.posts.partnersPanel;
@@ -684,10 +452,10 @@
         // member deliberately opened: here an empty list has to say why, or
         // it reads as broken. The two real causes are named, because one of
         // them is the member's own setting and they can change it.
-        : `<div class="empty">לא נמצאו חברים שהתאמנו באותו יום. התיוג מסתמך על דיווח נוכחות, ועל כך שגם אתם וגם הם בחרו להציג נוכחות בפרופיל.</div>`;
+        : `<div class="empty">אין כרגע חברים להצעה.</div>`;
     return `<div class="post-inline-edit" data-partners-panel="${esc(post.id)}" style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px;">
       <div class="field-label" style="margin-bottom:6px;">מי התאמן/ה איתכם?</div>
-      <div style="color:var(--steel);font-size:12px;margin-bottom:8px;">מוצעים חברים שדיווחו על אימון ב-${esc(shortHebDate(p.day))}. מי שתסמנו יקבל/ת התראה ויוכל/תוכל להסיר את התיוג.</div>
+      <div style="color:var(--steel);font-size:12px;margin-bottom:8px;">מי שתסמנו יקבל/ת התראה ויוכל/תוכל להסיר את התיוג.</div>
       ${body}
       ${atCap ? `<div style="color:var(--steel);font-size:12px;margin-top:6px;">אפשר לתייג עד ${TRAINING_PARTNERS_MAX} חברים.</div>` : ""}
       ${p.error ? `<div class="field-error" role="alert" style="margin-top:8px;">${esc(p.error)}</div>` : ""}
@@ -711,29 +479,12 @@
       loading: true, saving: false, error: "",
     };
     rerender();
-    const { data, error } = await client.rpc("attendance_classmates_on", {
-      p_day: day, p_limit: TRAINING_PARTNER_SUGGEST_LIMIT,
-    });
+    // The class-attendance suggestions that used to fill this list went with
+    // the attendance module; the circle's member list replaces them. Until
+    // then the sheet offers the members already tagged.
     const p = state.posts.partnersPanel;
-    // Moved on while this was in flight - closed the sheet, opened another
-    // post's. Same guard every other loader in this layer carries.
     if (!p || p.postId !== postId) return;
     p.loading = false;
-    if (error) {
-      p.error = failText("לא ניתן לטעון הצעות כרגע", error);
-      return rerender();
-    }
-    const rows = Array.isArray(data) ? data : (data ? [data] : []);
-    // Already-tagged first, in the order the card prints them, then the
-    // suggestions that are not already on the post. One entry per member.
-    const seen = {};
-    const options = [];
-    for (const r of p.options.concat(rows)) {
-      if (!r || !r.user_id || seen[r.user_id]) continue;
-      seen[r.user_id] = true;
-      options.push(r);
-    }
-    p.options = options;
     rerender();
   }
   function closeTrainingPartners() {
@@ -803,9 +554,8 @@
       ${trainingPartnersHtml(post)}
       ${opts.engagementDisabled ? "" : postActionsHtml(post, opts)}
       ${state.posts.captionEdit && pid && state.posts.captionEdit.postId === pid ? captionEditPanel() : ""}
-      ${state.posts.visibilityEdit && pid && state.posts.visibilityEdit.postId === pid ? visibilityEditPanel() : ""}
       ${partnersPanelOpen ? trainingPartnersPanel(post) : ""}
-      ${!opts.engagementDisabled && pid && typeof renderComments === "function" ? renderComments(post) : ""}
+      ${!opts.engagementDisabled && pid && typeof reactionStripHtml === "function" ? reactionStripHtml(post) : ""}
     </article>`;
   }
 
@@ -884,124 +634,9 @@
     return postCardShell(post, postCardBody(post, result));
   }
 
-  // COMM-101: the renderer exists so the dispatch is total, but attendance
-  // milestones are parked until an attendance source lands, so the feed never
-  // actually produces one yet.
-  function renderAttendanceMilestonePostCard(post) {
-    const m = post.metadata || {};
-    const label = m.milestone_label || post.title || "אבן דרך בנוכחות";
-    const result = `<div class="post-result-block"><div class="post-title">🎯 ${bidiText(label)}</div>${m.count != null ? `<div class="mono post-result">${esc(m.count)}</div>` : ""}</div>`;
-    return postCardShell(post, postCardBody(post, result));
-  }
 
-  // COMM-201/203/207: a real challenge card, not the COMM-101 fallback link
-  // card. `renderPostCard` never has to know whether a POST_CHALLENGE row is
-  // the authorless cooperative-milestone post `challenge_progress_apply`
-  // writes (metadata carries milestone/club_total/target_value, no author)
-  // or a member's own Share Progress post (metadata carries the type-shaped
-  // snapshot buildChallengeShareMetadata() took at share time) - both read
-  // through the same fields, each rendered only when present.
-  function renderChallengeLinkCard(post) {
-    const m = post.metadata || {};
-    const rows = [];
-    if (m.milestone != null) {
-      rows.push(`<div class="mono post-result" style="color:var(--brass);">${bidiUnit(`${m.milestone}% מהיעד הושלמו`)}</div>`);
-      if (m.club_total != null && m.target_value != null) rows.push(`<div style="color:var(--steel);font-size:12px;">${esc(m.club_total)} מתוך ${esc(m.target_value)}</div>`);
-    } else if (m.my_progress != null) {
-      const pct = m.target_value ? Math.min(100, Math.round((Number(m.my_progress) / Number(m.target_value)) * 100)) : null;
-      rows.push(`<div class="mono post-result" style="color:var(--brass);">${esc(m.my_progress)}${m.target_value != null ? ` / ${esc(m.target_value)}` : ""}</div>`);
-      if (pct != null) rows.push(`<div class="progress-track"><div style="width:${pct}%;"></div></div>`);
-    }
-    const result = `<div class="post-result-block"><div class="post-title">🏆 ${bidiText(m.challenge_title || post.title || "אתגר")}</div>
-      ${rows.join("")}
-      <div class="chip-row"><button class="chip-btn" data-community-action="open-challenge" data-id="${esc(m.challenge_id || post.source_id || "")}">פתיחת האתגר</button></div></div>`;
-    return postCardShell(post, postCardBody(post, result), { authorless: !postAuthorName(post) });
-  }
-  // COMM-213: upgraded from the COMM-101 fallback link card to a real event
-  // card, once the events cluster's own state.events.byId has the live row
-  // (it is loaded in the same Promise.all as the feed, so this is the
-  // common case). Falls back to the original metadata-only link card when
-  // the event is not in cache yet (a cold feed load racing loadEvents()) or
-  // no longer exists - a truthful degrade, never a broken render.
-  function renderEventLinkCard(post) {
-    const m = post.metadata || {};
-    const ev = m.event_id ? state.events.byId[m.event_id] : null;
-    if (ev) {
-      const going = eventGoingCount(ev.id);
-      const meta = [eventTypeBadge(ev.event_type), formatEventDate(ev.start_at), formatEventTime(ev.start_at)];
-      if (ev.location) meta.push(ev.location);
-      meta.push(participantsLabel(going));
-      if (ev.status === "cancelled") meta.push("בוטל");
-      const image = ev.image_url ? `<img src="${esc(ev.image_url)}" alt="" style="width:100%;max-height:160px;object-fit:cover;border-radius:10px;margin-top:6px;"/>` : "";
-      // The event image is this card's MEDIA and keeps its place at the top,
-      // ahead of the body, exactly as a post photo does - it is the same
-      // "media first when present" rule, just media the events module owns.
-      const result = `<div class="post-result-block"><div class="post-title">📅 ${bidiText(ev.title)}</div>
-        <div style="color:var(--steel);font-size:12px;">${meta.map(bidiText).join(" · ")}</div>
-        <div class="chip-row"><button class="chip-btn" data-community-action="open-event" data-id="${esc(ev.id)}">פתיחת האירוע</button></div></div>`;
-      return postCardShell(post, image + postCardBody(post, result), { authorless: !postAuthorName(post) });
-    }
-    const when = m.starts_at ? String(m.starts_at).slice(0, 16).replace("T", " ") : "";
-    const result = `<div class="post-result-block"><div class="post-title">📅 ${bidiText(m.event_title || post.title || "אירוע")}</div>
-      ${when ? `<div style="color:var(--steel);font-size:12px;">${esc(when)}</div>` : ""}
-      <div class="chip-row"><button class="chip-btn" data-community-action="open-event" data-id="${esc(m.event_id || post.source_id || "")}">פתיחת האירוע</button></div></div>`;
-    return postCardShell(post, postCardBody(post, result), { authorless: !postAuthorName(post) });
-  }
 
-  // HOISTED OUT OF feedTab (2026-09-18), byte-for-byte, so the staff desktop
-  // column can render the same archive the feed does instead of growing a
-  // second, drifting copy of it. Same inputs, same markup, same
-  // ANNOUNCEMENTS_ARCHIVE_VISIBLE cap and the same <details> disclosure past
-  // it; `hasPinned` is the one thing the caller has to tell it, because "no
-  // announcements" and "the only one is pinned above you" are different empty
-  // states and only the caller knows which it is looking at.
-  // `source` is the third argument the analytics pass added, and it is the
-  // only thing the two callers disagree about: the member feed and the
-  // desktop staff home render the identical archive from the identical rows.
-  // Passed down onto the wrapper as a data attribute rather than held in a
-  // variable, because the thing that records the view (noteAnnouncementsView,
-  // cloud.js) learns the archive exists by finding it in the DOM - the same
-  // "only this hook can see it is actually on screen" shape
-  // noteClassmatesCardView already uses.
-  function renderAnnouncementsArchive(otherAnnouncements, hasPinned, source) {
-    const announcementRow = (a) => `<div class="log-row" data-announcement-id="${esc(a.id)}" style="align-items:flex-start;flex-direction:column;gap:4px;${announcementAccentStyle(a)}"><div style="font-weight:700;display:flex;align-items:center;flex-wrap:wrap;gap:6px;">${bidiText(a.title)}${announcementPriorityBadge(a)}</div><div style="color:var(--steel);font-size:13px;">${bidiText(a.body)}</div><div style="color:var(--steel);font-size:11px;">${esc(a.profiles ? (a.profiles.display_name || "@" + a.profiles.handle) : "")}</div>${pinToggleHtml("announcement", a.id, a.title)}</div>`;
-    const visibleAnnouncements = otherAnnouncements.slice(0, ANNOUNCEMENTS_ARCHIVE_VISIBLE);
-    const restAnnouncements = otherAnnouncements.slice(ANNOUNCEMENTS_ARCHIVE_VISIBLE);
-    return otherAnnouncements.length
-      ? `<div data-announcements-archive="ready" data-announcements-rows="${otherAnnouncements.length}" data-announcements-source="${esc(source || "feed")}"><div class="log-list">${visibleAnnouncements.map(announcementRow).join("")}</div>${restAnnouncements.length ? `<details style="margin-top:8px;"><summary class="link-btn" style="cursor:pointer;">עוד הודעות (${restAnnouncements.length})</summary><div class="log-list" style="margin-top:8px;">${restAnnouncements.map(announcementRow).join("")}</div></details>` : ""}</div>`
-      : (hasPinned ? "" : `<div class="empty">אין הודעות חדשות</div>`);
-  }
-  function renderAnnouncementPostCard(post) {
-    const m = post.metadata || {};
-    const title = m.title || post.title || "";
-    const inner = postMediaHtml(post) + `${title ? `<div class="post-title" style="color:var(--brass);">${bidiText(title)}</div>` : ""}` + postBodyHtml(post);
-    // data-post-type="POST_ANNOUNCEMENT" (postCardShell, unchanged) is what
-    // the card-level tint/border in index.html keys off - markIcon here only
-    // replaces the head's own avatar mark, the two together are what makes a
-    // club notice actually read as one at a glance instead of just another
-    // .chart-card with an emoji typed into its title.
-    return postCardShell(post, inner, { badge: "הודעת מועדון", authorless: !postAuthorName(post), markIcon: "📣" });
-  }
-  function renderCoachPostCard(post) {
-    return postCardShell(post, postCardBody(post), { badge: "מאמן/ת" });
-  }
 
-  function renderNewMemberPostCard(post) {
-    const m = post.metadata || {};
-    const memberId = m.member_id || post.author_id || "";
-    const memberName = m.member_name || postAuthorName(post) || "חבר/ה חדש/ה";
-    const joined = m.joined_on || post.occurred_on || postTimestamp(post);
-    const result = `<div class="post-result-block"><div class="post-title">👋 שמחים שהגעת למועדון</div>
-      <div class="flex gap-10" style="align-items:center;margin-top:6px;">
-        ${/* COMM-318: no avatar_url available here on purpose - post_new_member_on_join's metadata is stamped at redemption time, before the profile row usually even exists, so a photo could never be threaded through without a second live lookup for a rarely-seen card. Initials only, matching the club-logo exception. */ avatarHtml(memberName, 40)}
-        <div>
-          ${memberId ? `<button class="link-btn" data-community-action="view-profile" data-id="${esc(memberId)}" style="padding:0;font-weight:800;color:inherit;">${esc(memberName)}</button>` : `<div style="font-weight:800;">${esc(memberName)}</div>`}
-          ${joined ? `<div style="color:var(--steel);font-size:12px;">${esc(String(joined).slice(0, 10))}</div>` : ""}
-        </div>
-      </div></div>`;
-    const extra = `${memberId ? followButtonHtml(memberId) : ""}<button class="chip-btn" data-community-action="welcome-member" data-id="${esc(post.id)}">ברכה</button>`;
-    return postCardShell(post, postCardBody(post, result), { extra, authorless: true, clubName: "המועדון", hideMenu: true });
-  }
 
   // COMM-107: system notices read as club voice. No profile link, muted, no
   // More menu, reactions and comments disabled.
@@ -1013,10 +648,8 @@
     return postCardShell(post, postCardBody(post), { unknown: true });
   }
   function renderErrorPostCard(post) {
-    const authorId = post && post.author_id;
     return `<article class="chart-card post-card" data-post-type="${esc((post && post.post_type) || "UNKNOWN")}" data-post-error="1">
       <div class="empty">לא ניתן להציג את הפוסט הזה</div>
-      ${authorId ? `<div class="chip-row"><button class="chip-btn" data-community-action="view-profile" data-id="${esc(authorId)}">מעבר לפרופיל</button></div>` : ""}
     </article>`;
   }
   // The loading card. Shaped like the card it stands in for - avatar, name,
@@ -1035,21 +668,6 @@
     POST_WORKOUT: renderWorkoutPostCard,
     POST_PR: renderPrPostCard,
     POST_ACHIEVEMENT: renderAchievementPostCard,
-    POST_ATTENDANCE_MILESTONE: renderAttendanceMilestonePostCard,
-    // 202609080001. Registered HERE, in the one dispatch, which is what makes
-    // renderPostCard branch on this type BEFORE renderWorkoutPostCard can see
-    // it. That ordering is load-bearing rather than tidy: POST_CLUB_WOD rows
-    // carry source_type and source_id NULL on purpose, and
-    // renderWorkoutPostCard's deep link defaults a missing source_type to
-    // "workout" - so a club-programming card that fell through to it would
-    // render an "open the workout" button pointing at nothing. This card
-    // opens the BOARD instead, off metadata.club_wod_session_id.
-    POST_CLUB_WOD: renderClubWodPostCard,
-    POST_CHALLENGE: renderChallengeLinkCard,
-    POST_EVENT: renderEventLinkCard,
-    POST_ANNOUNCEMENT: renderAnnouncementPostCard,
-    POST_NEW_MEMBER: renderNewMemberPostCard,
-    POST_COACH: renderCoachPostCard,
     POST_SYSTEM: renderSystemPostCard,
   };
   // COMM-101. One dispatch. Unknown type -> a minimal safe text card plus a
@@ -1070,405 +688,6 @@
   }
   window.renderPostCard = renderPostCard;
 
-  // ---- Composer (COMM-102, COMM-103) --------------------------------------
-  // `withPhoto` is the feed composer row's camera button and nothing else: it
-  // opens the SAME composer, through the same state, and then reaches for the
-  // photo control the composer already has. No second upload path, no second
-  // file input - composerAddPhoto/prepareImage/uploadPreparedPhoto are
-  // untouched, which is the whole point of routing the button here rather
-  // than giving the feed row a file input of its own that would have to
-  // re-do EXIF stripping, the failed-tile retry and the alt-text field.
-  function openComposer(triggerEl, withPhoto) {
-    state.posts.composerTrigger = triggerEl || null;
-    state.posts.composer = { body: "", visibility: "club", photos: [], links: {}, error: "", publishing: false };
-    state.posts.openMenu = null;
-    rerender();
-    setTimeout(() => {
-      if (withPhoto) {
-        // The picker, not the textarea: a member who tapped the camera asked
-        // for a photo first. Wrapped because a browser that refuses the
-        // synthetic click (no transient activation left) must still leave a
-        // usable composer open rather than throw on the way out - the
-        // "הוספת תמונה" control is right there either way.
-        const f = document.querySelector("[data-composer-file]");
-        if (f && f.click) { try { f.click(); } catch (e) { /* activation expired; the visible control still works */ } }
-      }
-      const t = document.querySelector("[data-composer-body]");
-      if (t && t.focus) t.focus();
-    }, 0);
-  }
-  window.openPostComposer = openComposer;
-  function closeComposer() {
-    const trigger = state.posts.composerTrigger;
-    state.posts.composer = null;
-    state.posts.composerTrigger = null;
-    rerender();
-    if (trigger && trigger.focus) setTimeout(() => trigger.focus(), 0);
-  }
-  function tryCloseComposer() {
-    if (state.posts.composer && (cleanPostBody(state.posts.composer.body) || state.posts.composer.photos.length)) {
-      askConfirm({ title: "לבטל את הפוסט?", message: "מה שכתבתם לא יישמר.", confirmLabel: "ביטול הפוסט", destructive: true, action: "composer-discard" });
-    } else {
-      closeComposer();
-    }
-  }
-  function composerSetBody(v) {
-    if (!state.posts.composer) return;
-    state.posts.composer.body = v;
-    const dlg = document.getElementById("postComposer");
-    if (!dlg) return;
-    const btn = dlg.querySelector('[data-community-action="composer-publish"]');
-    if (btn) btn.disabled = !composerCanPublish();
-    const c = dlg.querySelector("[data-composer-counter]");
-    if (c) { const n = cleanPostBody(v).length; c.textContent = n >= 900 ? `${n}/${POST_BODY_MAX}` : ""; }
-  }
-  function composerSetAlt(id, v) {
-    if (!state.posts.composer) return;
-    const p = state.posts.composer.photos.find((x) => x.id === id);
-    if (p) p.altText = v;
-    const dlg = document.getElementById("postComposer");
-    if (dlg) { const btn = dlg.querySelector('[data-community-action="composer-publish"]'); if (btn) btn.disabled = !composerCanPublish(); }
-  }
-  function composerToggleDecorative(id, checked) {
-    if (!state.posts.composer) return;
-    const p = state.posts.composer.photos.find((x) => x.id === id);
-    if (p) { p.decorative = !!checked; if (checked) p.altText = ""; }
-    rerender();
-  }
-  function composerSetVisibility(v) {
-    if (state.posts.composer && POST_VISIBILITY_OPTIONS.some((o) => o.value === v)) state.posts.composer.visibility = v;
-  }
-  function composerRemovePhoto(id) {
-    if (!state.posts.composer) return;
-    state.posts.composer.photos = state.posts.composer.photos.filter((p) => p.id !== id);
-    rerender();
-  }
-  function composerRetryPhoto(id) {
-    if (!state.posts.composer) return;
-    const p = state.posts.composer.photos.find((x) => x.id === id);
-    const file = p && p._file;
-    composerRemovePhoto(id);
-    if (file) composerAddPhoto(file);
-  }
-  // COMM-103. Every photo goes through prepareImage (COMM-015) before upload.
-  async function composerAddPhoto(file) {
-    if (!state.posts.composer) return;
-    if (state.posts.composer.photos.length >= POST_MEDIA_MAX) { state.posts.composer.error = `אפשר לצרף עד ${POST_MEDIA_MAX} תמונות`; return rerender(); }
-    const id = "ph" + Date.now() + Math.random().toString(36).slice(2, 6);
-    const photo = { id, status: "processing", altText: "", decorative: false, storagePath: null, previewUrl: null, error: null, width: null, height: null, _file: file };
-    state.posts.composer.photos.push(photo);
-    state.posts.composer.error = "";
-    rerender();
-    try {
-      const prepared = await window.HaimuniaImage.prepareImage(file);
-      try {
-        if (prepared.thumbnail && prepared.thumbnail.blob && typeof URL !== "undefined" && URL.createObjectURL) photo.previewUrl = URL.createObjectURL(prepared.thumbnail.blob);
-      } catch (e) { photo.previewUrl = null; }
-      const path = await uploadPreparedPhoto(prepared);
-      if (!path) throw new Error("upload_failed");
-      photo.storagePath = path;
-      photo.width = (prepared.render && prepared.render.width) || null;
-      photo.height = (prepared.render && prepared.render.height) || null;
-      photo.status = "ready";
-      // The post_photos module's one event, and the reason it is HERE rather
-      // than at the publish: post_created already carries has_media, so the
-      // question this answers is the one that prop cannot - how often a member
-      // starts attaching a photo at all, including the drafts that are never
-      // published and the uploads that fail. Recorded on the ready branch
-      // only, so a failed upload is not counted as an attached photo.
-      //
-      // photo_count is the number of photos on the draft once this one landed,
-      // which is how "do members use the multi-photo composer or just the one"
-      // gets answered without a second name. Never the storage path, never the
-      // alt text a member typed.
-      track(A.POST_PHOTO_ATTACHED, { source: "composer", photo_count: state.posts.composer ? state.posts.composer.photos.length : 1 });
-    } catch (err) {
-      photo.status = "failed";
-      photo.error = err && err.code === "not_an_image" ? "הקובץ אינו תמונה" : "העלאת התמונה נכשלה";
-    }
-    rerender();
-  }
-  async function uploadPreparedPhoto(prepared) {
-    if (!state.user || !prepared || !prepared.render || !prepared.render.blob) return null;
-    const type = prepared.render.type || "image/webp";
-    const ext = type === "image/png" ? "png" : type === "image/jpeg" ? "jpg" : "webp";
-    const path = `${state.user.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-    const { error } = await client.storage.from("post-photos").upload(path, prepared.render.blob, { contentType: type, upsert: false });
-    return error ? null : path;
-  }
-  // COMM-318. Extracts the storage path ({uid}/avatar.{ext}) from a stored,
-  // cache-busted avatar_url so a re-upload can best-effort remove the old
-  // object when the resolved extension changed. Best-effort only: a parse
-  // miss (unfamiliar URL shape, no match) is not an error, it just skips
-  // the cleanup - the new upload has already succeeded either way.
-  function avatarPathFromUrl(url) {
-    const m = /\/avatar-photos\/([^?]+)/.exec(String(url || ""));
-    return m ? m[1] : null;
-  }
-  // Avatar-sized, not the composer's 1600px feed-photo default: maxEdge 320,
-  // no separate thumbnail (thumbEdges:[] - the render itself is already
-  // small), a 60KB target with a 300KB hard cap. Deterministic overwrite
-  // path (upsert:true) rather than post-photos' unique-per-upload pattern -
-  // an avatar is one-per-member by convention, nothing accumulates.
-  async function uploadAvatarPhoto(file) {
-    if (!state.user) return null;
-    const prepared = await window.HaimuniaImage.prepareImage(file, {
-      maxEdge: 320, thumbEdges: [], targetBytes: 60 * 1024, hardCapBytes: 300 * 1024,
-    });
-    if (!prepared || !prepared.render || !prepared.render.blob) return null;
-    const type = prepared.render.type || "image/webp";
-    const ext = type === "image/png" ? "png" : type === "image/jpeg" ? "jpg" : "webp";
-    const prevPath = state.profile ? avatarPathFromUrl(state.profile.avatar_url) : null;
-    const path = `${state.user.id}/avatar.${ext}`;
-    const { error } = await client.storage.from("avatar-photos").upload(path, prepared.render.blob, { contentType: type, upsert: true });
-    if (error) return null;
-    // Best-effort: only reached when the extension actually changed (a
-    // same-extension re-upload already overwrote the object in place via
-    // upsert:true above, there is nothing stale to remove).
-    if (prevPath && prevPath !== path) client.storage.from("avatar-photos").remove([prevPath]).catch(() => {});
-    const { data } = client.storage.from("avatar-photos").getPublicUrl(path);
-    // Still getPublicUrl(), on a bucket that has been PRIVATE since
-    // 202609060003. That is deliberate and is not a leftover: this string is
-    // now an IDENTIFIER for the object, not a fetchable URL. Hitting it
-    // directly 400s, which is the entire point of the bucket flip; the bytes
-    // are served through a short-lived signed URL that avatarHtml() resolves
-    // at render time. Keeping this exact shape means every already-stored
-    // row stays valid, avatarPathFromUrl() keeps parsing, and the column
-    // keeps satisfying its ^https?:// CHECK (202609060006). getPublicUrl()
-    // makes no network call - it only formats.
-    //
-    // Cache-busting belongs on the STORED url, not the bare getPublicUrl()
-    // result - overwriting the same storage path means a re-upload could
-    // otherwise silently fail to visibly update anywhere without it. It is
-    // also what keys the signed-URL cache, so the stamp is what makes a
-    // re-upload resolve to fresh bytes rather than the previous signature.
-    return (data && data.publicUrl) ? `${data.publicUrl}?t=${Date.now()}` : null;
-  }
-  // Fires immediately on upload success or remove, matching
-  // savePrivacyField's immediate-save pattern (a photo change is already a
-  // committed action the moment the bytes are in Storage) rather than
-  // saveProfile's bundled-into-form-submit pattern.
-  // UPDATE, NOT UPSERT - and that is the whole bug this once had.
-  //
-  // Saving an avatar used to .upsert() this row. The row always already
-  // exists here (the function returns early without state.profile), so the
-  // insert half was never needed - but Postgres still evaluates the INSERT
-  // policy's WITH CHECK on the proposed tuple for an INSERT ... ON CONFLICT.
-  // profiles_insert_self (202608280003:214) requires `recovery_verified_at is
-  // null` - it exists to stop a member re-creating a verified profile row -
-  // so the policy that protects account recovery was refusing photo uploads
-  // for exactly the members who had completed recovery. Reported from a real
-  // device as "can't add profile pic", with only "שמירת התמונה נכשלה" to go
-  // on. An update touches one column and needs only profiles_update_self.
-  //
-  // The error is now REPORTED rather than swallowed. The old message named
-  // the failure and not its cause, which is why this took a screenshot from
-  // production to find at all: serverErrorText() turns a Postgres error into
-  // something a member can act on, and anything it does not recognise still
-  // beats a dead end.
-  async function saveAvatarUrl(url) {
-    if (!state.user || !state.profile) return false;
-    const prev = state.profile.avatar_url;
-    state.profile.avatar_url = url || null;
-    rerender();
-    const { error } = await client.from("profiles").update({ avatar_url: url || null }).eq("id", state.user.id);
-    if (error) {
-      state.profile.avatar_url = prev;
-      setMessage(serverErrorText(error) || "שמירת התמונה נכשלה");
-      rerender();
-      return false;
-    }
-    return true;
-  }
-  async function avatarPhotoSelected(file) {
-    if (!file || !state.user) return;
-    state.avatarUpload = { status: "processing", error: "" };
-    rerender();
-    let url;
-    try {
-      url = await uploadAvatarPhoto(file);
-    } catch (err) {
-      state.avatarUpload = { status: "idle", error: (err && err.code === "not_an_image") ? "הקובץ אינו תמונה" : "העלאת התמונה נכשלה" };
-      return rerender();
-    }
-    if (!url) { state.avatarUpload = { status: "idle", error: "העלאת התמונה נכשלה" }; return rerender(); }
-    const ok = await saveAvatarUrl(url);
-    state.avatarUpload = { status: "idle", error: ok ? "" : "" };
-    rerender();
-  }
-  async function removeAvatarPhoto() {
-    if (!state.user || !state.profile || !state.profile.avatar_url || state.avatarUpload.status === "processing") return;
-    const path = avatarPathFromUrl(state.profile.avatar_url);
-    state.avatarUpload = { status: "processing", error: "" };
-    rerender();
-    const ok = await saveAvatarUrl(null);
-    if (ok && path) client.storage.from("avatar-photos").remove([path]).catch(() => {});
-    state.avatarUpload = { status: "idle", error: "" };
-    rerender();
-  }
-  function composerReadyPhotos() { return state.posts.composer ? state.posts.composer.photos.filter((p) => p.status === "ready") : []; }
-  function composerCanPublish() {
-    const c = state.posts.composer;
-    if (!c || c.publishing) return false;
-    if (c.photos.some((p) => p.status === "processing" || p.status === "failed")) return false;
-    if (c.photos.length > POST_MEDIA_MAX) return false;
-    const ready = composerReadyPhotos();
-    const hasText = cleanPostBody(c.body).length > 0;
-    if (!hasText && ready.length === 0) return false;
-    if (ready.some((p) => !p.decorative && !String(p.altText || "").trim())) return false;
-    return true;
-  }
-  function composerBlockReason() {
-    const c = state.posts.composer;
-    if (!c) return "";
-    if (c.photos.some((p) => p.status === "processing")) return "יש להמתין לסיום עיבוד התמונות";
-    if (c.photos.some((p) => p.status === "failed")) return "יש להסיר או לנסות שוב תמונה שנכשלה";
-    if (composerReadyPhotos().some((p) => !p.decorative && !String(p.altText || "").trim())) return "יש להוסיף תיאור לכל תמונה או לסמן אותה כדקורטיבית";
-    return "צריך טקסט או לפחות תמונה אחת";
-  }
-  async function publishComposer() {
-    const c = state.posts.composer;
-    if (!c || c.publishing) return;
-    if (!composerCanPublish()) { c.error = composerBlockReason(); return rerender(); }
-    c.publishing = true;
-    c.error = "";
-    rerender();
-    const body = cleanPostBody(c.body);
-    const media = composerReadyPhotos().map((p, i) => ({
-      storage_path: p.storagePath,
-      alt_text: p.decorative ? "" : String(p.altText || "").slice(0, ALT_TEXT_MAX),
-      decorative: !!p.decorative,
-      position: i,
-      width: p.width || null,
-      height: p.height || null,
-    }));
-    const links = {};
-    if (c.links) {
-      if (c.links.workout_id) links.workout_id = c.links.workout_id;
-      if (c.links.achievement_id) links.achievement_id = c.links.achievement_id;
-      if (c.links.event_id) links.event_id = c.links.event_id;
-    }
-    const { data, error, queued } = await communityRpc("post_create", {
-      body,
-      visibility: c.visibility,
-      media,
-      links: Object.keys(links).length ? links : null,
-    });
-    if (queued) {
-      // Offline: the post is persisted in the community outbox with its own
-      // idempotency key and will go out on reconnect. Close the composer as
-      // if it had published - the member's text is safe, which is the thing
-      // that used to be lost here - and say plainly that it is waiting.
-      c.publishing = false;
-      closeComposer();
-      await refreshOutboxState();
-      setMessage("אין חיבור — הפוסט יפורסם כשהחיבור יחזור");
-      return rerender();
-    }
-    if (error || !data) {
-      c.publishing = false;
-      // SAY WHY, when the server said why. Live bug hunt, fresh round 8
-      // (2026-09-15) - HIGH.
-      //
-      // This ignored `error` entirely and always said "failed, you can try
-      // again". For a member the club had restricted from posting, that is
-      // both wrong and cruel: the restriction does not lift on retry, and the
-      // app was telling them to keep trying. rate_limited and every content
-      // refusal were flattened the same way.
-      //
-      // The comment box beside it already maps the identical server strings
-      // through commentErrorMessage(), and the offline outbox banner shows
-      // the right text for THIS RPC when the write is queued instead. The
-      // header above SERVER_ERROR_TEXT documents this exact failure - "how a
-      // moderated member found out they had been sanctioned" - as the reason
-      // that table exists. This path simply never called it.
-      //
-      // failText() keeps the domain sentence for anything unrecognised, so an
-      // unknown server error still reads as a post that failed rather than as
-      // a bare English string.
-      c.error = failText("פרסום הפוסט נכשל, אפשר לנסות שוב", error);
-      return rerender();
-    }
-    // COMM-102 optimistic insert. feed_page (COMM-110) is authoritative on the
-    // next refresh; the legacy community_feed view does not carry post_type,
-    // so we do not reload it here.
-    const optimistic = {
-      id: data,
-      post_type: media.length && !body ? "POST_PHOTO" : "POST_TEXT",
-      author_id: state.user.id,
-      author: { display_name: state.profile && state.profile.display_name, handle: state.profile && state.profile.handle, avatar_url: state.profile && state.profile.avatar_url },
-      body,
-      visibility: c.visibility,
-      created_at: new Date().toISOString(),
-      media: media.map((m) => ({ ...m, url: null })),
-      reaction_count: 0,
-      comment_count: 0,
-    };
-    if (Array.isArray(state.feed.items)) state.feed.items.unshift(optimistic);
-    state.posts.composer = null;
-    state.posts.composerTrigger = null;
-    setMessage("הפוסט פורסם");
-    if (window.HaimuniaEvents && window.PRODUCT_EVENTS && window.PRODUCT_EVENTS.POST_CREATED) {
-      try { window.HaimuniaEvents.emit(window.PRODUCT_EVENTS.POST_CREATED, { post_id: data, post_type: optimistic.post_type }); } catch (e) {}
-    }
-    rerender();
-  }
-  function renderPostComposer() {
-    const c = state.posts.composer;
-    if (!c) return "";
-    const bodyLen = cleanPostBody(c.body).length;
-    const canPublish = composerCanPublish();
-    // Five-persona UX audit, defect 5, as re-scoped by QA. Filed as "an
-    // unstyled checkbox", which it was not: index.html:1014 sets
-    // `input[type="checkbox"]{ accent-color: var(--energy) }` as a BARE
-    // ELEMENT selector, so every checkbox in the app is styled and none of
-    // them can individually miss it.
-    //
-    // The real outlier was LAYOUT. The "image is decorative" row below was
-    // the one checkbox label in this file on `class="flex gap-6"` WITHOUT
-    // the shared `field` wrapper every other one uses, carrying bare text
-    // after the input where its siblings carry a <span>. Missing `field`
-    // cost it `.field + .field{margin-top:10px}` - it hand-rolled
-    // margin-top:4px instead - so it sat a half-step tighter and a half-step
-    // out of line against the alt-text field directly above it inside the
-    // same tile. Now the same shape as all four of its siblings: the two
-    // publishNow rows, teamAuto and pinToday.
-    const tiles = c.photos.map((p) => `
-      <div class="composer-photo-tile" data-photo-id="${esc(p.id)}" style="border:1px solid var(--border);border-radius:12px;padding:8px;margin-bottom:8px;">
-        <div class="flex" style="justify-content:space-between;align-items:center;gap:8px;">
-          <span style="font-size:12px;color:var(--steel);">${p.status === "processing" ? "מעבד תמונה…" : p.status === "failed" ? esc(p.error || "נכשל") : "תמונה מוכנה"}</span>
-          <button class="link-btn" data-community-action="composer-remove-photo" data-id="${esc(p.id)}" aria-label="הסרת תמונה">הסרה</button>
-        </div>
-        ${p.previewUrl ? `<img src="${esc(p.previewUrl)}" alt="" style="max-width:100%;border-radius:8px;margin:6px 0;"/>` : ""}
-        ${p.status === "failed" ? `<button class="chip-btn" data-community-action="composer-retry-photo" data-id="${esc(p.id)}">ניסיון חוזר</button>` : ""}
-        <label class="field" style="margin-top:6px;"><span class="field-label">תיאור לקורא מסך</span>
-          <input class="text-input" type="text" maxlength="${ALT_TEXT_MAX}" data-composer-alt="${esc(p.id)}" value="${esc(p.altText || "")}"${p.decorative ? " disabled" : ""} placeholder="תיאור קצר של התמונה"/></label>
-        <label class="field flex gap-6" style="align-items:center;"><input type="checkbox" data-composer-decorative="${esc(p.id)}"${p.decorative ? " checked" : ""}/><span style="font-size:12.5px;color:var(--steel);">התמונה דקורטיבית, אין צורך בתיאור</span></label>
-      </div>`).join("");
-    return `<div class="modal-overlay open" role="dialog" aria-modal="true" aria-labelledby="postComposerTitle" data-composer-overlay data-cloud-dialog="composer" style="align-items:center;padding:0 16px;">
-      <div class="modal-sheet" id="postComposer" style="border-radius:22px;max-height:90vh;overflow:auto;">
-        <div style="padding:22px 20px calc(env(safe-area-inset-bottom,0px) + 18px);">
-          <h2 id="postComposerTitle" style="margin-top:0;color:var(--chalk);font-weight:800;font-size:17px;margin-bottom:12px;">פוסט חדש</h2>
-          <label class="field"><span class="field-label">מה תרצו לשתף?</span>
-            <textarea class="text-input" data-composer-body maxlength="${POST_BODY_MAX}" rows="4" placeholder="כתבו משהו לקהילה" aria-describedby="postComposerCounter">${esc(c.body || "")}</textarea></label>
-          <div id="postComposerCounter" data-composer-counter style="text-align:left;font-size:11px;color:var(--steel);min-height:14px;">${bodyLen >= 900 ? `${bodyLen}/${POST_BODY_MAX}` : ""}</div>
-          <div style="margin-top:8px;">${tiles}</div>
-          ${c.photos.length < POST_MEDIA_MAX
-            ? (isModuleEnabled("post_photos") ? `<label class="chip-btn" style="cursor:pointer;display:inline-block;">הוספת תמונה<input type="file" accept="image/*" data-composer-file class="file-input-hidden"/></label>` : "")
-            : `<div style="font-size:12px;color:var(--steel);">הגעתם למקסימום ${POST_MEDIA_MAX} תמונות</div>`}
-          <label class="field" style="margin-top:12px;"><span class="field-label">מי רואה את הפוסט</span>
-            <select class="text-input" data-composer-visibility>
-              ${POST_VISIBILITY_OPTIONS.map((o) => `<option value="${o.value}"${c.visibility === o.value ? " selected" : ""}>${o.label}</option>`).join("")}
-            </select></label>
-          ${c.error ? `<div class="field-error" role="alert" style="margin-top:8px;">${esc(c.error)}</div>` : ""}
-          <div class="chip-row" style="margin-top:16px;">
-            <button class="chip-btn" data-community-action="composer-cancel">ביטול</button>
-            <button class="chip-btn primary" data-community-action="composer-publish"${canPublish ? "" : " disabled"}>${c.publishing ? "מפרסם…" : "פרסום"}</button>
-          </div>
-        </div>
-      </div>
-    </div>`;
-  }
 
   // ---- Per-post action menu (COMM-108) ----------------------------------
   // FOCUS IS PART OF THE MENU, not an extra.
@@ -1528,39 +747,10 @@
     try { items[next].focus(); } catch (err) { /* not focusable in this engine */ }
     return true;
   }
-  async function postSaveToggle(postId) {
-    if (!state.user) return;
-    state.posts.openMenu = null;
-    state.posts.savedIds = state.posts.savedIds || {};
-    const wasSaved = !!state.posts.savedIds[postId];
-    if (wasSaved) {
-      delete state.posts.savedIds[postId];
-      rerender();
-      const { error } = await client.from("saved_posts").delete().eq("user_id", state.user.id).eq("post_id", postId);
-      if (error) { state.posts.savedIds[postId] = true; setMessage(failText("לא ניתן לעדכן את השמורים", error)); rerender(); }
-      else setMessage("הוסר מהשמורים");
-    } else {
-      state.posts.savedIds[postId] = true;
-      rerender();
-      const { error } = await client.from("saved_posts").insert({ user_id: state.user.id, post_id: postId });
-      if (error && error.code !== "23505") { delete state.posts.savedIds[postId]; setMessage("לא ניתן לשמור את הפוסט"); rerender(); }
-      else setMessage("הפוסט נשמר");
-    }
-  }
-  async function postHide(postId) {
-    if (!state.user) return;
-    state.posts.openMenu = null;
-    if (Array.isArray(state.feed.items)) state.feed.items = state.feed.items.filter((p) => p && p.id !== postId);
-    rerender();
-    const { error } = await client.from("hidden_posts").insert({ user_id: state.user.id, post_id: postId });
-    if (error && error.code !== "23505") setMessage("לא ניתן להסתיר את הפוסט");
-    else setMessage("הפוסט הוסתר מהפיד שלך");
-  }
   function postStartCaptionEdit(postId) {
     state.posts.openMenu = null;
     const post = findFeedPost(postId);
     state.posts.captionEdit = { postId, body: (post && post.body) || "" };
-    state.posts.visibilityEdit = null;
     rerender();
   }
   async function postSaveCaption() {
@@ -1591,83 +781,22 @@
     setMessage("הכיתוב עודכן");
     rerender();
   }
-  function postStartVisibilityEdit(postId) {
-    state.posts.openMenu = null;
-    const post = findFeedPost(postId);
-    state.posts.visibilityEdit = { postId, visibility: normalizeVisibility(post && post.visibility) };
-    state.posts.captionEdit = null;
-    rerender();
-  }
-  async function postApplyVisibility(visibility) {
-    const e = state.posts.visibilityEdit;
-    if (!e || !POST_VISIBILITY_OPTIONS.some((o) => o.value === visibility)) return;
-    const { error } = await client.rpc("post_set_visibility", { post_id: e.postId, visibility });
-    if (error) { setMessage(failText("שינוי הנראוּת נכשל", error)); return; }
-    const post = findFeedPost(e.postId);
-    if (post) post.visibility = visibility;
-    state.posts.visibilityEdit = null;
-    setMessage("הנראוּת עודכנה");
-    rerender();
-  }
   // The second half of the twin deletePost() names above. The optimistic
   // hide was already here — it just ran AFTER the RPC returned, so there was
   // nothing to undo by the time the post left the screen. It now runs first
   // and the RPC is what waits.
   async function postDeleteViaMenu(postId) {
-    const snapshot = Array.isArray(state.feed.items) ? state.feed.items.slice() : null;
+    const snapshot = Array.isArray(state.posts.held) ? state.posts.held.slice() : null;
     deferCommunityDelete({
       label: "הפוסט נמחק",
-      remove: () => { if (snapshot) state.feed.items = state.feed.items.filter((p) => p && p.id !== postId); },
-      restore: () => { if (snapshot) state.feed.items = snapshot; },
+      remove: () => { if (snapshot) state.posts.held = state.posts.held.filter((p) => p && p.id !== postId); },
+      restore: () => { if (snapshot) state.posts.held = snapshot; },
       commit: async () => {
         const { error } = await client.rpc("post_delete", { post_id: postId });
-        if (error) { if (snapshot) state.feed.items = snapshot; rerender(); return setMessage(failText("מחיקת הפוסט נכשלה", error)); }
+        if (error) { if (snapshot) state.posts.held = snapshot; rerender(); return setMessage(failText("מחיקת הפוסט נכשלה", error)); }
         rerender();
       },
     });
-  }
-  const WELCOME_TEMPLATE_BODY = "שמחים שהגעת למועדון! 💪";
-  // Live bug hunt (2026-09-11): two entry points share this write
-  // (coachWelcomeMember() below, from the coach dashboard; and the direct
-  // "welcome-member" tap on a new-member feed card) and NEITHER guarded
-  // against a duplicate send - the dashboard's own busy flag only covered
-  // one in-flight call, not "already sent, ever", and the feed-card path
-  // had no guard at all. A coach could spam unlimited duplicate welcome
-  // comments on the same member. The check belongs here, in the one shared
-  // write path, so both callers are covered rather than fixing one and
-  // leaving the other exactly as broken. welcomeBusy is keyed by postId,
-  // same in-flight-guard shape as reactionBusy/followBusy elsewhere.
-  // Returns true when the post ends this call in a "welcomed" state
-  // (already was, or just now succeeded) so coachWelcomeMember() can update
-  // its own proactive welcomed map; false on a real failure.
-  const welcomeBusy = {};
-  async function welcomeNewMember(postId, welcomeSource) {
-    if (!state.user || welcomeBusy[postId]) return false;
-    welcomeBusy[postId] = true;
-    const already = await client.from("post_comments").select("id").eq("post_id", postId).eq("body", WELCOME_TEMPLATE_BODY).limit(1);
-    if (already.data && already.data.length) {
-      delete welcomeBusy[postId];
-      return true;
-    }
-    const { error } = await client.rpc("add_post_comment", { p_post_id: postId, p_body: WELCOME_TEMPLATE_BODY });
-    delete welcomeBusy[postId];
-    // The welcome_flow module's one event. AFTER the write, like every other
-    // write-backed name, so a failed welcome is never counted as one - and
-    // only on the branch that actually wrote: the already-welcomed early
-    // return above leaves this unreached, which is what keeps the count at
-    // one welcome per new member rather than one per tap.
-    //
-    // It counts for WCAM. This path writes a real comment and bypasses the
-    // composer, so no COMMENT_CREATED bus event is emitted for it - without
-    // this line a coach whose only community act that week was welcoming
-    // three newcomers was not an active member of their own club.
-    //
-    // `source` is the only prop. Never the welcomed member's id: who was
-    // greeted is the newcomer's business, and the count of greetings is
-    // what the module switch is judged on.
-    if (!error) track(A.WELCOME_SENT, { source: welcomeSource || "feed_card" });
-    if (!error && typeof loadCommentsFor === "function") loadCommentsFor(postId);
-    return !error;
   }
 
   // ---- PR share prompt (COMM-105) --------------------------------------
@@ -1754,7 +883,7 @@
       // is what stops the second of two PRs in one session from asking again.
       if (prPromptDismissedSet().has(String(recordId))) return false;
       if (prPromptOnCooldownFor(record.movement)) return false;
-      state.posts.prPrompt = { record: Object.assign({}, record, { record_id: recordId }), note: "", showNote: false, photo: null, publishing: false, error: "" };
+      state.posts.prPrompt = { record: Object.assign({}, record, { record_id: recordId }), note: "", showNote: false, publishing: false, error: "" };
       rememberPrPromptShownForMovement(record.movement);
       rerender();
       return true;
@@ -1766,46 +895,19 @@
     rerender();
     sharePromptClosed();
   }
-  async function prPromptAddPhoto(file) {
-    const p = state.posts.prPrompt;
-    if (!p) return;
-    p.photo = { status: "processing", altText: "", decorative: false, storagePath: null, error: null, width: null, height: null, _file: file };
-    rerender();
-    try {
-      const prepared = await window.HaimuniaImage.prepareImage(file);
-      const path = await uploadPreparedPhoto(prepared);
-      if (!path) throw new Error("upload_failed");
-      p.photo.storagePath = path;
-      p.photo.width = (prepared.render && prepared.render.width) || null;
-      p.photo.height = (prepared.render && prepared.render.height) || null;
-      p.photo.status = "ready";
-      // The second of the two composers that can attach a photo (posts.js
-      // renders both; the module toggle hides both). Same name, different
-      // source - one photo is all this one holds, hence the literal 1.
-      track(A.POST_PHOTO_ATTACHED, { source: "pr_prompt", photo_count: 1 });
-    } catch (err) {
-      p.photo.status = "failed";
-      p.photo.error = err && err.code === "not_an_image" ? "הקובץ אינו תמונה" : "העלאת התמונה נכשלה";
-    }
-    rerender();
-  }
   async function sharePrPrompt() {
     const p = state.posts.prPrompt;
     if (!p || p.publishing) return;
-    if (p.photo && p.photo.status === "processing") return;
     p.publishing = true;
     p.error = "";
     rerender();
-    const media = p.photo && p.photo.status === "ready" && p.photo.storagePath
-      ? [{ storage_path: p.photo.storagePath, alt_text: p.photo.decorative ? "" : String(p.photo.altText || "").slice(0, ALT_TEXT_MAX), decorative: !!p.photo.decorative, position: 0, width: p.photo.width || null, height: p.photo.height || null }]
-      : [];
     // communityRpc(), not client.rpc(): pr_share is in OUTBOX_ACTIONS now, so
     // a share tapped with no connection is persisted in IndexedDB with its own
     // idempotency key and sent on reconnect instead of failing in front of a
     // member who has just finished training in a basement. The key is what
     // makes the retry safe; the server (202609060014) answers a repeated key
     // with the original post id rather than writing twice.
-    const { queued, data, error } = await communityRpc("pr_share", { record_id: p.record.record_id, note: cleanPostBody(p.note), media });
+    const { queued, data, error } = await communityRpc("pr_share", { record_id: p.record.record_id, note: cleanPostBody(p.note), media: [] });
     if (error || (!queued && !data)) { p.publishing = false; p.error = "השיתוף נכשל, אפשר לנסות שוב"; return rerender(); }
     rememberPrDismissed(p.record.record_id);
     state.posts.prPrompt = null;
@@ -1834,8 +936,6 @@
           ${line("תוצאה חדשה", r.new_result || r.new_value)}
           ${line("תוצאה קודמת", r.previous_result || r.previous_value)}
           ${line("שיפור", r.improvement)}
-          ${p.photo ? `<div style="font-size:12px;color:var(--steel);margin-top:6px;">${p.photo.status === "ready" ? "תמונה צורפה" : p.photo.status === "processing" ? "מעבד תמונה…" : esc(p.photo.error || "העלאת התמונה נכשלה")}</div>` : ""}
-          ${p.photo && p.photo.status === "ready" && !p.photo.decorative ? `<label class="field" style="margin-top:6px;"><span class="field-label">תיאור התמונה לקורא מסך</span><input class="text-input" data-pr-alt maxlength="${ALT_TEXT_MAX}" value="${esc(p.photo.altText || "")}"/></label>` : ""}
           ${p.showNote ? `<label class="field" style="margin-top:8px;"><span class="field-label">הערה</span><textarea class="text-input" data-pr-note maxlength="${POST_BODY_MAX}" rows="3">${esc(p.note || "")}</textarea></label>` : ""}
           ${/* Sibling: feed_page redacts a POST_PR's figures under exactly the
                 same show_workout_results rule it redacts a POST_WORKOUT's
@@ -1846,9 +946,8 @@
           ${sharePromptPrivacyNoteHtml()}
           ${p.error ? `<div class="field-error" role="alert" style="margin-top:8px;">${esc(p.error)}</div>` : ""}
           <div class="chip-row" style="margin-top:14px;">
-            <button class="chip-btn primary" data-community-action="pr-share"${p.publishing || (p.photo && p.photo.status === "processing") ? " disabled" : ""}>${p.publishing ? "משתף…" : "שיתוף למועדון"}</button>
-            ${isModuleEnabled("outward_share") ? `<button class="chip-btn" data-community-action="outward-pr">שיתוף מחוץ לאפליקציה</button>` : ""}
-            ${(p.photo || !isModuleEnabled("post_photos")) ? "" : `<label class="chip-btn" style="cursor:pointer;">הוספת תמונה<input type="file" accept="image/*" data-pr-file class="file-input-hidden"/></label>`}
+            <button class="chip-btn primary" data-community-action="pr-share"${p.publishing ? " disabled" : ""}>${p.publishing ? "משתף…" : "שיתוף למועדון"}</button>
+            <button class="chip-btn" data-community-action="outward-pr">שיתוף מחוץ לאפליקציה</button>
             ${p.showNote ? "" : `<button class="chip-btn" data-community-action="pr-add-note">הוספת הערה</button>`}
             <button class="chip-btn" data-community-action="pr-not-now">לא עכשיו</button>
           </div>

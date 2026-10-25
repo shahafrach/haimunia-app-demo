@@ -36,7 +36,6 @@ const REQUIRED_ASSETS = [
   // Required, not optional: app.js calls applyDesktopLayout() on every
   // render. A miss would leave a staff laptop on the phone layout with
   // no signal that anything had gone wrong.
-  "./src/desktop-layout.js",
 ];
 // Optional: everything the core offline training log tolerates being absent
 // (a font falls back, an icon is missing, the Community tab shows its own
@@ -47,27 +46,17 @@ const REQUIRED_ASSETS = [
 // wrap `bus.emit(...)` in a try/catch), so a failed fetch of any of these
 // must not take down offline support for the training log too.
 const OPTIONAL_ASSETS = [
-  "./src/community/events.js",
   "./src/community/outward.js",
   "./src/community/achievements.js",
   "./src/community/notifications.js",
-  "./src/community/challenges.js",
-  "./src/community/coach-tools.js",
-  "./src/community/club.js",
-  "./src/community/feed.js",
-  "./src/community/comments.js",
-  "./src/community/boards.js",
-  "./src/community/directory.js",
+  "./src/community/reactions.js",
+  "./src/community/privacy.js",
   "./src/community/posts.js",
   "./src/community/share-prompt.js",
   "./src/community/auth.js",
-  "./src/community/admin.js",
-  "./src/community/gym-display.js",
   "./cloud.js",
   "./src/eventbus.js",
   "./src/analytics.js",
-  "./src/realtime.js",
-  "./src/image.js",
   "./src/dormancy.js",
   "./src/outbox.js",
   "./vendor/supabase.js",
