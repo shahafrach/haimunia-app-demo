@@ -13,6 +13,8 @@ private circles for friends. It is not a gym app and not a product.
 
 ## Product
 
+- The app is named **BOX-LOG** (with the letter O). The rename happens in the Rebrand session.
+
 - Free, for friends. No payments, no public sign-up, no paid services. Chat stays in WhatsApp.
 - Own repository (personal account) and a new Supabase project. `training_log_usage` is not needed and is dropped.
 - A circle is a `clubs` row. Membership is `circle_members(club_id, user_id, role, joined_at, share_defaults)`. Up to 10 circles per user.
