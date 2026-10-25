@@ -81,7 +81,7 @@ insert into public.post_training_partners (post_id, tagged_user_id, tagged_by) v
 insert into public.private_records (user_id, record_type, record_id, payload) values (tests.uid('m3'), 'session_note', 'leak-probe', '{}'::jsonb);
 insert into public.push_subscriptions (user_id, endpoint, keys) values (tests.uid('m3'), 'https://example.test/leak', '{"p256dh":"k","auth":"a"}'::jsonb);
 insert into public.rate_limits (user_id, action) values (tests.uid('m3'), 'leak_probe');
-insert into public.reactions (post_id, user_id, kind) values ('b1000000-0000-4000-8000-000000000001', tests.uid('owner'), 'cheer');
+insert into public.reactions (post_id, user_id, kind) values ('b1000000-0000-4000-8000-000000000001', tests.uid('owner'), 'fist_bump');
 insert into public.request_idempotency (user_id, action, idempotency_key) values (tests.uid('m3'), 'leak_probe', gen_random_uuid());
 
 -- Positive controls: the victim rows exist, so a count of zero below means something.
@@ -304,7 +304,7 @@ select tests.set_auth(tests.uid('m1'));
 select is(tests.leak_count('reactions', 'post_id = ''b1000000-0000-4000-8000-000000000001'''), 0::bigint, 'reactions: select sees zero rows of circle B');
 select is(tests.leak_dml('update public.reactions set kind = kind where post_id = ''b1000000-0000-4000-8000-000000000001'''), 0, 'reactions: update touches zero rows of circle B');
 select is(tests.leak_dml('delete from public.reactions where post_id = ''b1000000-0000-4000-8000-000000000001'''), 0, 'reactions: delete removes zero rows of circle B');
-select is(tests.leak_dml('insert into public.reactions (post_id, user_id, kind) values (''b1000000-0000-4000-8000-000000000001'', tests.uid(''m1''), ''cheer'')'), 0, 'reactions: insert into circle B is refused');
+select is(tests.leak_dml('insert into public.reactions (post_id, user_id, kind) values (''b1000000-0000-4000-8000-000000000001'', tests.uid(''m1''), ''fist_bump'')'), 0, 'reactions: insert into circle B is refused');
 
 -- request_idempotency
 select tests.set_auth(tests.uid('m1'));

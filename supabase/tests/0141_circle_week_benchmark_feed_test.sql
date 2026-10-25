@@ -187,9 +187,9 @@ insert into public.workout_posts (id, author_id, club_id, post_type, title, stat
 insert into public.workout_posts (id, author_id, club_id, post_type, title, status, published_at)
 values ('f2000000-0000-4000-8000-000000000001', tests.uid('owner'), 'b0000000-0000-4000-8000-00000000000b', 'POST_PR', 'B old PR', 'active', now() - interval '40 hours');
 insert into public.reactions (post_id, user_id, kind) values
-  ('f1000000-0000-4000-8000-000000000002', tests.uid('m3'), 'cheer'),
+  ('f1000000-0000-4000-8000-000000000002', tests.uid('m3'), 'fist_bump'),
   ('f1000000-0000-4000-8000-000000000002', tests.uid('m1'), 'fire'),
-  ('f1000000-0000-4000-8000-000000000005', tests.uid('m2'), 'cheer');
+  ('f1000000-0000-4000-8000-000000000005', tests.uid('m2'), 'fist_bump');
 
 select tests.set_auth(tests.uid('m1'));
 select is((select array_agg(title order by published_at desc) from public.circle_feed('a0000000-0000-4000-8000-00000000000a')),
@@ -200,7 +200,7 @@ select is((select unreacted_pr from public.circle_feed('a0000000-0000-4000-8000-
 select is((select unreacted_pr from public.circle_feed('a0000000-0000-4000-8000-00000000000a') where title = 'new PR, no reactions'), false, 'a PR under a day old is not');
 select is((select unreacted_pr from public.circle_feed('a0000000-0000-4000-8000-00000000000a') where title = 'old workout, no reactions'), false, 'a post that is not a PR is not');
 select is((select unreacted_pr from public.circle_feed('a0000000-0000-4000-8000-00000000000a') where title = 'old PR, only self-reacted'), true, 'the author''s own reaction does not count as the circle''s');
-select is((select reaction_counts from public.circle_feed('a0000000-0000-4000-8000-00000000000a') where title = 'old PR, reacted'), '{"cheer":1,"fire":1}'::jsonb, 'reaction counts by kind');
+select is((select reaction_counts from public.circle_feed('a0000000-0000-4000-8000-00000000000a') where title = 'old PR, reacted'), '{"fist_bump":1,"fire":1}'::jsonb, 'reaction counts by kind');
 select is((select my_reactions from public.circle_feed('a0000000-0000-4000-8000-00000000000a') where title = 'old PR, reacted'), array['fire'], 'and which of them are mine');
 
 select is((select count(*)::int from public.circle_feed('a0000000-0000-4000-8000-00000000000a', null, 3)), 3, 'the page size is honoured');

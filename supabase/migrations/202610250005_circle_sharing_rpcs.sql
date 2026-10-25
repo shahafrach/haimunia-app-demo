@@ -17,31 +17,16 @@ alter table public.workout_posts
   add constraint workout_posts_author_club_source_key
     unique (author_id, club_id, source_type, source_record_id);
 
--- 2. Reactions: the fist bump plus at most two others -------------------------
--- 'cheer' is the fist bump. The other four are the fixed set a member picks
--- their (at most two) extras from.
+-- 2. Reactions: exactly three kinds ------------------------------------------
+-- The fist bump first, then fire and clap (decisions.md: Sharing). The fist
+-- bump was stored as 'cheer'; it is renamed, rows and default included. With
+-- three kinds a member can hold all of them on a post, so there is no cap to
+-- enforce beyond the set itself.
+alter table public.reactions drop constraint reactions_kind_check;
+update public.reactions set kind = 'fist_bump' where kind = 'cheer';
 alter table public.reactions
-  drop constraint reactions_kind_check,
-  add constraint reactions_kind_check
-    check (kind in ('cheer', 'fire', 'strong', 'clap', 'heart'));
-
--- The cap is a property of the row, not of one RPC: reactions_insert_self still
--- lets a member insert directly.
-create or replace function public.reactions_guard_cap()
-returns trigger language plpgsql set search_path = '' as $$
-begin
-  if new.kind <> 'cheer' and (
-    select count(*) from public.reactions r
-     where r.post_id = new.post_id and r.user_id = new.user_id and r.kind <> 'cheer'
-  ) >= 2 then
-    raise exception 'reaction_limit';
-  end if;
-  return new;
-end $$;
-revoke all on function public.reactions_guard_cap() from public, anon;
-create trigger reactions_guard_cap_trigger
-  before insert on public.reactions
-  for each row execute function public.reactions_guard_cap();
+  alter column kind set default 'fist_bump',
+  add constraint reactions_kind_check check (kind in ('fist_bump', 'fire', 'clap'));
 
 -- 3. Trained together: a tag is pending until the tagged member confirms ------
 alter table public.post_training_partners add column confirmed_at timestamptz;
@@ -182,7 +167,7 @@ end $$;
 -- 4. Reactions ----------------------------------------------------------------
 drop function public.toggle_reaction(uuid, uuid);
 create or replace function public.toggle_reaction(
-  p_post_id uuid, p_idempotency_key uuid default null, p_kind text default 'cheer')
+  p_post_id uuid, p_idempotency_key uuid default null, p_kind text default 'fist_bump')
 returns boolean language plpgsql security definer set search_path = '' as $$
 declare
   v_uid uuid := auth.uid();
@@ -194,8 +179,8 @@ begin
   if v_uid is null then raise exception 'not authorized'; end if;
   -- No kind means the fist bump. The key stays the second argument, so a caller
   -- that never learned about kinds (toggle_reaction(post, key)) still works.
-  p_kind := coalesce(p_kind, 'cheer');
-  if p_kind not in ('cheer', 'fire', 'strong', 'clap', 'heart') then
+  p_kind := coalesce(p_kind, 'fist_bump');
+  if p_kind not in ('fist_bump', 'fire', 'clap') then
     raise exception 'unknown reaction';
   end if;
 
@@ -220,7 +205,6 @@ begin
   end if;
   if not public.check_rate_limit('reaction', 60, 10) then raise exception 'rate_limited'; end if;
 
-  -- reactions_guard_cap raises reaction_limit past two non-fist-bump kinds.
   insert into public.reactions (post_id, user_id, kind) values (p_post_id, v_uid, p_kind);
   perform public.idem_complete('toggle_reaction', p_idempotency_key, to_jsonb(true));
   return true;

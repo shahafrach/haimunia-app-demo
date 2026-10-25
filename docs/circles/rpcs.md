@@ -22,7 +22,7 @@ stated; `join_circle` returns a status instead of raising, on purpose.
 | `post_create(p_club_id, body, p_idempotency_key)` | member | text post; one call per circle |
 | `pr_share(p_club_id, record_id, note, p_weight, p_idempotency_key)` | member | send `p_weight` **only** if the member chose to show weights; otherwise the post carries the lift and `+x.x%` |
 | `ach_share(p_club_id, member_achievement_id, caption, p_idempotency_key)` | member | |
-| `toggle_reaction(p_post_id, p_idempotency_key, p_kind default 'cheer')` → bool | member of the post's circle | kinds `cheer` (fist bump) `fire` `strong` `clap` `heart`; at most two kinds besides `cheer` per post (`reaction_limit`) |
+| `toggle_reaction(p_post_id, p_idempotency_key, p_kind default 'fist_bump')` → bool | member of the post's circle | exactly three kinds: `fist_bump`, `fire`, `clap`; a member may hold all three on a post; anything else is `unknown reaction` |
 | `post_tag_training_partners(p_post_id, p_members)` | post author | creates **pending** tags for members of the post's circle |
 | `confirm_trained_together(p_post_id)` | the tagged member | only then does it count in `circle_week` and show on the card |
 | `post_training_partner_remove(p_post_id, p_user_id default null)` | author, or the tagged member for themselves | |
@@ -46,7 +46,7 @@ For the Circles client session. None of these was edited here.
   `src/community/achievements.js:20`) use `onConflict:
   "author_id,source_type,source_record_id"`. The key is now
   `author_id,club_id,source_type,source_record_id`, and the rows need a `club_id`.
-- `toggle_reaction`: still works unchanged; pass `p_kind` for the extra emoji.
+- `toggle_reaction`: still works unchanged (the default kind is the fist bump); pass `p_kind` for `fire` or `clap`. The fist bump is now stored as `fist_bump`, not `cheer`: `src/community/reactions.js:32` filters `kind = 'cheer'` and must change.
 - `post_tag_training_partners` now creates pending tags; the client needs a
   confirm button (`confirm_trained_together`) and a tags query.
 - `create_member_invite` is gone (replaced by `create_circle_invite`);

@@ -425,5 +425,20 @@ select is((select count(*)::int from public.circle_members where club_id = 'b000
 select is((select count(*)::int from public.workout_posts where club_id = 'b0000000-0000-4000-8000-00000000000b'), 1, 'and its post');
 select is((select name from public.clubs where id = 'b0000000-0000-4000-8000-00000000000b'), 'Circle B', 'and its name');
 
+-- =====================================================================
+-- 7. purge_abandoned_profiles skips anyone in a circle
+-- =====================================================================
+insert into auth.users (instance_id, id, aud, role, email, is_anonymous, created_at, updated_at)
+values ('00000000-0000-0000-0000-000000000000', 'eeeeeeee-0000-4000-8000-0000000000f1', 'authenticated', 'authenticated', null, true, now() - interval '60 days', now() - interval '60 days'),
+       ('00000000-0000-0000-0000-000000000000', 'eeeeeeee-0000-4000-8000-0000000000f2', 'authenticated', 'authenticated', null, true, now() - interval '60 days', now() - interval '60 days');
+insert into public.profiles (id, handle, display_name) values
+  ('eeeeeeee-0000-4000-8000-0000000000f1', 'old_member', 'Old member'),
+  ('eeeeeeee-0000-4000-8000-0000000000f2', 'old_drifter', 'Old drifter');
+insert into public.circle_members (club_id, user_id) values ('b0000000-0000-4000-8000-00000000000b', 'eeeeeeee-0000-4000-8000-0000000000f1');
+select lives_ok($$ select public.purge_abandoned_profiles(30) $$, 'the purge runs');
+select is((select count(*)::int from auth.users where id = 'eeeeeeee-0000-4000-8000-0000000000f1'), 1, 'an old anonymous account that is in a circle is NOT purged');
+select is((select count(*)::int from public.circle_members where user_id = 'eeeeeeee-0000-4000-8000-0000000000f1'), 1, 'and keeps its membership');
+select is((select count(*)::int from auth.users where id = 'eeeeeeee-0000-4000-8000-0000000000f2'), 0, 'while an equally old anonymous account in no circle still is');
+
 select * from finish();
 rollback;

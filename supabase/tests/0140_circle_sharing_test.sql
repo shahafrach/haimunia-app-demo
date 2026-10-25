@@ -128,19 +128,18 @@ select is((select count(*)::int from public.workout_posts where source_type = 'a
 -- =====================================================================
 select tests.set_auth(tests.uid('m3'));
 select is(public.toggle_reaction('a1000000-0000-4000-8000-000000000001'), true, 'the fist bump (default kind)');
-select is(public.toggle_reaction('a1000000-0000-4000-8000-000000000001', null, 'fire'), true, 'a second kind');
-select is(public.toggle_reaction('a1000000-0000-4000-8000-000000000001', null, 'strong'), true, 'a third kind: the fist bump plus two others');
-select throws_ok($$ select public.toggle_reaction('a1000000-0000-4000-8000-000000000001', null, 'clap') $$, 'P0001', 'reaction_limit', 'a fourth is refused: at most two others');
-select throws_ok($$ select public.toggle_reaction('a1000000-0000-4000-8000-000000000001', null, 'poo') $$, 'P0001', 'unknown reaction', 'a kind outside the fixed set is refused');
+select is(public.toggle_reaction('a1000000-0000-4000-8000-000000000001', null, 'fire'), true, 'fire');
+select is(public.toggle_reaction('a1000000-0000-4000-8000-000000000001', null, 'clap'), true, 'clap: all three kinds can be held on one post');
+select throws_ok($$ select public.toggle_reaction('a1000000-0000-4000-8000-000000000001', null, 'heart') $$, 'P0001', 'unknown reaction', 'a fourth kind is refused: exactly three exist');
+select throws_ok($$ select public.toggle_reaction('a1000000-0000-4000-8000-000000000001', null, 'cheer') $$, 'P0001', 'unknown reaction', 'and the old name of the fist bump is gone');
+select is(public.toggle_reaction('a1000000-0000-4000-8000-000000000001', null, 'fire'), false, 'toggling again takes a kind back');
 select is(has_table_privilege('authenticated', 'public.reactions', 'insert'), false, 'a client has no direct INSERT on reactions: toggle_reaction is the only way in');
-select is(public.toggle_reaction('a1000000-0000-4000-8000-000000000001', null, 'fire'), false, 'toggling again takes it back');
-select is(public.toggle_reaction('a1000000-0000-4000-8000-000000000001', null, 'clap'), true, 'which frees a slot');
 select throws_ok($$ select public.toggle_reaction('b1000000-0000-4000-8000-000000000001') $$, 'P0001', 'not authorized', 'CROSS-CIRCLE: a member of A cannot react to a post in B');
 select throws_ok($$ select public.toggle_reaction('00000000-0000-4000-8000-0000000000ff') $$, 'P0001', 'not authorized', 'and a post that does not exist is the same answer');
 select tests.clear_auth();
-select throws_ok($$ insert into public.reactions (post_id, user_id, kind) values ('a1000000-0000-4000-8000-000000000001', tests.uid('m3'), 'heart') $$, 'P0001', 'reaction_limit', 'and the cap is also a property of the row, so any other writer meets it too');
+select throws_ok($$ insert into public.reactions (post_id, user_id, kind) values ('a1000000-0000-4000-8000-000000000001', tests.uid('m3'), 'heart') $$, '23514', null, 'the set of kinds is also a constraint on the row');
 select is((select count(*)::int from public.reactions where post_id = 'b1000000-0000-4000-8000-000000000001'), 0, 'B''s post has no reactions');
-select is((select count(*)::int from public.reactions where user_id = tests.uid('m3')), 3, 'm3 holds three reactions: cheer, strong, clap');
+select is((select string_agg(kind, ',' order by kind) from public.reactions where user_id = tests.uid('m3')), 'clap,fist_bump', 'm3 holds a fist bump and a clap');
 
 -- =====================================================================
 -- 5. Trained together

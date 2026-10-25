@@ -30,7 +30,7 @@ private circles for friends. It is not a gym app and not a product.
 
 - Logging is sharing by circle defaults. No compose step. One tap skips one workout.
 - A post belongs to exactly one circle. Sharing to several circles creates one post each.
-- Reactions: fist bump first, at most two others. No text comments, no mentions.
+- Reactions: exactly three kinds, stored as `fist_bump`, `fire`, `clap`; a member may hold all three on a post. No text comments, no mentions.
 - A PR with no reaction after a day moves to the top of the circle screen. No notification.
 - "Trained together": tag a circle member. It counts for them only after they confirm.
 
@@ -100,3 +100,7 @@ reversed too (no email, no SMTP).
 
 The same day, "Anonymous sign-ins are off" (Auth) was reversed: they stay on,
 behind Turnstile and the no-circle-sees-nothing rule above.
+
+Also 2026-10-25 (Circles RPCs review): reactions are exactly three kinds, the
+fist bump (`fist_bump`, formerly `cheer`), `fire` and `clap`; and
+`purge_abandoned_profiles` skips anyone who is a member of at least one circle.

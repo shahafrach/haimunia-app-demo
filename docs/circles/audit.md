@@ -410,8 +410,6 @@ Opened by the Circles RPCs session (2026-10-25), for the Circles client session 
 | # | Question |
 |---|---|
 | O14 | Turnstile is enforced by Supabase Auth only once the secret is set in the new project's dashboard (`COMMUNITY_SETUP.md`, the dashboard step), and `captchaSiteKey` in `cloud-config.js` is still `""`. Both belong to the repo-split session; until then sign-up is not CAPTCHA-protected. |
-| O15 | The five reaction kinds are `cheer` (fist bump), `fire`, `strong`, `clap`, `heart`. Change the extras? |
 | O16 | `member_targets` is one row per person, so a weekly target is the same in every circle although `decisions.md` lists it under per-circle member settings. Make it per circle? |
-| O17 | `purge_abandoned_profiles` still deletes anonymous accounts older than 30 days with no recovery stamp, circle members included. Exclude circle members? |
 
 Everything else from the original questions is settled.

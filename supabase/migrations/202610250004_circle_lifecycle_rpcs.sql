@@ -595,6 +595,59 @@ begin
   on conflict (user_id) do update set paused_until = excluded.paused_until;
 end $$;
 
+-- 7b. The abandoned-profile purge leaves circle members alone ------------------
+-- purge_abandoned_profiles deletes anonymous accounts that never redeemed an
+-- invite or verified a recovery method. Joining a circle with join_circle
+-- writes neither, so a member who joined and never upgraded looked abandoned
+-- after the retention window and was deleted with their circle membership.
+-- Anyone who is a member of at least one circle is skipped. Otherwise the body
+-- is the one from 202609070001, unchanged.
+create or replace function public.purge_abandoned_profiles(p_retention_days integer default 30)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+  v_checked integer := 0;
+  v_success integer := 0;
+  v_failure integer := 0;
+  v_retained integer := 0;
+  v_id uuid;
+  v_has_data boolean;
+  v_cutoff timestamptz;
+begin
+  v_cutoff := now() - (greatest(coalesce(p_retention_days, 30), 0) || ' days')::interval;
+
+  for v_id, v_has_data in
+    select u.id, public.account_holds_training_data(u.id)
+    from auth.users u
+    where u.is_anonymous = true
+      and greatest(u.created_at, coalesce(u.last_sign_in_at, u.created_at)) <= v_cutoff
+      and not exists (select 1 from public.invite_redemptions ir where ir.user_id = u.id)
+      and not exists (select 1 from public.circle_members m where m.user_id = u.id)
+      and not exists (
+        select 1 from public.profiles p
+        where p.id = u.id and p.recovery_verified_at is not null
+      )
+  loop
+    if v_has_data then
+      v_retained := v_retained + 1;
+      continue;
+    end if;
+
+    v_checked := v_checked + 1;
+    begin
+      delete from auth.users where id = v_id;
+      v_success := v_success + 1;
+    exception when others then
+      v_failure := v_failure + 1;
+    end;
+  end loop;
+
+  return jsonb_build_object(
+    'checked', v_checked,
+    'success', v_success,
+    'failure', v_failure,
+    'retained_with_data', v_retained);
+end $$;
+
 -- 8. Grants: explicit, authenticated only -------------------------------------
 do $$
 declare f text;
