@@ -22,6 +22,7 @@ private circles for friends. It is not a gym app and not a product.
 - Circle settings, owner only: name, emoji, mode (together or weekly competition), benchmark of the month on or off, who invites, welcome line.
 - Member settings, per circle: what I share, show absolute weights, weekly target, pause, notifications.
 - A member's privacy setting always wins. Hidden data is never sent to the server.
+- Profile is display name and emoji only, the same in every circle. No other profile fields; `visible_to_club` is dropped. No avatars: the `avatar-photos` bucket is dropped, emoji instead.
 
 ## Sharing
 
@@ -38,7 +39,7 @@ private circles for friends. It is not a gym app and not a product.
 - Pause mode: the circle sees "paused", no percent.
 - PRs show the lift and percent improvement. Absolute weight only if the member chose it. Body weight never leaves the device.
 - Estimated 1RM only from sets of 10 reps or fewer, labeled "estimated". Celebrate only real rep-max PRs.
-- Benchmark of the month, optional: Rx and scaled in separate lists, results visible only after you log yours, enforced in the database.
+- Benchmark of the month, optional: Rx and scaled in separate lists, results visible only after you log yours, enforced in the database. The circle owner picks it from the fixed list of eight named benchmarks the app already has.
 
 ## Logging
 
@@ -63,17 +64,19 @@ private circles for friends. It is not a gym app and not a product.
 - Keep invite-based sign-up with a recovery method. No email, no SMTP.
 - An invite joins one circle: 32-byte random token, only its hash stored, 7-day expiry, a use limit, the token after `#` in the URL, joined only through `join_circle` with rate limits.
 - Anonymous sign-ins are off.
+- Keep the existing recovery mechanism. No passkeys for now.
+- Rate limits: `join_circle` 10 attempts per user per hour; invite creation 20 per circle per day.
 
 ## Security
 
 - Every `SECURITY DEFINER` function: empty `search_path`, execute revoked from `public` and `anon`, listed in a reviewed-functions table checked by a pgTAP guard over `pg_proc`.
 - Every circle table has a cross-circle leak test.
-- The `post-photos` bucket is dropped. No third-party scripts.
+- The `post-photos` and `avatar-photos` buckets are dropped, and the `sanitize_upload` edge function with them. `purge_abandoned_profiles` and `notif_push_send` stay. No third-party scripts.
 - Short docs: a security procedure, a database definition (Israel Privacy Protection Law, Amendment 13), and a Hebrew privacy page.
 
 ## Drop and keep
 
-**Drop:** all gym, staff, coach, Arbox and gym-display features; text comments, mentions, saved and hidden posts, pins, announcements, member of the week, monthly recaps, search, follows and friends, absolute leaderboards, feed ranking and weights, reports and posting restrictions, events, the `post-photos` bucket, `training_log_usage`.
+**Drop:** all gym, staff, coach, Arbox and gym-display features; text comments, mentions, saved and hidden posts, pins, announcements, member of the week, monthly recaps, search, follows and friends, absolute leaderboards, feed ranking and weights, reports and posting restrictions, events, the `post-photos` and `avatar-photos` buckets, `sanitize_upload`, `training_log_usage`.
 
 **Keep:** reactions, private records, per-user achievements, notifications and push subscriptions, account deletion, self-export, rate limits, request idempotency, `client_error`.
 
@@ -81,6 +84,7 @@ private circles for friends. It is not a gym app and not a product.
 
 - Supabase free plan. Keepalive and an encrypted backup are required once the project exists. No Realtime.
 - CI runs only on pull requests and relevant paths.
+- Remove the Realtime code; do not gate it.
 - Stay buildless. New circles modules start with `// @ts-check`. Database types come from `supabase gen types` into a `.d.ts` referenced from JSDoc.
 
 ## Superseded

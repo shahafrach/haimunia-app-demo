@@ -363,25 +363,27 @@ No conflict found in `functions/_middleware.js` or `test/public-surface.test.mjs
 
 ## 5. Session order
 
-Each session ends with a closing session (reconcile docs, version bump, full
-suites, merge-result check) before the next wave. Only one open branch adds a
-migration at a time, so the schema-touching sessions run strictly in sequence.
+A closing session (reconcile docs, version bump, full suites, merge-result
+check) follows each wave. Only one open branch adds a migration at a time, so
+the schema-touching sessions run strictly in sequence.
 
 | # | Session | Scope |
 |---|---|---|
-| 1 | Repo split (after the new project exists) | New Supabase and Cloudflare Pages projects wired in, `cloud-config.js` repointed, scheduled workflows re-enabled, keepalive and encrypted backup running. |
-| 2 | Strip gym | Remove all DROP features (client, edge functions, tables, functions, cron jobs, `post-photos`, `training_log_usage`), their tests and precache entries; stub `is_staff()`-style helpers until the schema session. |
-| 3 | Definer guard | pgTAP guard over `pg_proc` plus the reviewed-functions table: empty `search_path`, execute revoked from public and anon, no unreviewed definer. |
-| 4 | Circles schema | `circle_members`, types and limits, `share_defaults`, hash-only invite table, `clubs` single-row guard removed, anonymous sign-ins off, cross-circle leak tests per table. |
-| 5 | Circles RPCs | `join_circle` with rate limits, create/leave/remove/ownership handoff, last-member delete, per-circle post sharing, targets and weekly counts, benchmark-of-month visibility rule. |
-| 6a | Circles client (parallel with 6b) | Circle switcher, create/settings screens, first-run and empty-circle screens, logging prefill, percent-of-target views, privacy-first sharing on device. |
-| 6b | Share cards (parallel with 6a) | Canvas cards on device, Hebrew RTL, PR card and weekly circle card, Web Share file with download fallback. |
-| 7 | Sharing pipeline | Logging as sharing by circle defaults, one-tap skip, reactions, "trained together" confirmation, unreacted-PR surfacing. |
-| 8 | Notifications | Two opt-in notifications, quiet hours, weekly card readiness Saturday night Asia/Jerusalem. |
-| 9 | Rebrand | Name, icons, copy, README, remove gym language everywhere. |
-| 10 | Pilot readiness | Invite page (in-app browser detection, Add to Home Screen step), security procedure, database definition, Hebrew privacy page, account deletion and export checks. |
+| 1 | Secret scan | Scan the full git history for secrets, emails, phone numbers and the gym name. Report only; no rewrite. |
+| 2 | CI for pgTAP | `test.yml` runs `supabase test db` on every PR that touches `supabase/`. |
+| 3 | Strip gym | Remove all DROP features (client, edge functions including `sanitize_upload`, tables, functions, cron jobs, `post-photos`, `avatar-photos`, `training_log_usage`, Realtime code), their tests and precache entries; stub staff-style helpers until the schema session. |
+| 4 | Definer guard | pgTAP guard over `pg_proc` plus the reviewed-functions table: empty `search_path`, execute revoked from public and anon, no unreviewed definer. |
+| 5 | Circles schema | `circle_members`, types and limits, `share_defaults`, hash-only invite table, `clubs` single-row guard removed, anonymous sign-ins off, profile reduced to display name and emoji, cross-circle leak tests per table. |
+| 6 | Circles RPCs | `join_circle` and invite creation with rate limits, create/leave/remove/ownership handoff, last-member delete, per-circle post sharing, targets and weekly counts, benchmark-of-month visibility rule. |
+| 7a | Circles client (parallel with 7b) | Circle switcher, create/settings screens, first-run and empty-circle screens, logging prefill, percent-of-target views, privacy-first sharing on device. |
+| 7b | Share cards (parallel with 7a) | Canvas cards on device, Hebrew RTL, PR card and weekly circle card, Web Share file with download fallback. |
+| 8 | Sharing pipeline | Logging as sharing by circle defaults, one-tap skip, reactions, "trained together" confirmation, unreacted-PR surfacing. |
+| 9 | Repo split | New Supabase and Cloudflare Pages projects, repoint config, re-enable scheduled workflows (keepalive, encrypted backup, job alert). |
+| 10 | Notifications | Two opt-in notifications, quiet hours, weekly card readiness Saturday night Asia/Jerusalem. |
+| 11 | Rebrand | Name, icons, copy, README, remove gym language everywhere. |
+| 12 | Pilot readiness | Invite page (in-app browser detection, Add to Home Screen step), security procedure, database definition, Hebrew privacy page, account deletion and export checks. |
 
-Sessions 6a and 6b touch different files and add no migration, so they can run in parallel.
+Sessions 7a and 7b touch different files and add no migration, so they can run in parallel.
 
 ## 6. Open questions
 
@@ -395,15 +397,12 @@ Resolved by the 2026-10-25 decisions:
 | O5 | Abuse handling without staff | No reports or posting restrictions. A circle is invite-only among friends: the owner removes members, anyone can leave, account deletion exists. |
 | O6 | Search | Dropped. People are added by invite link only. |
 | O7 | Limits | 10 circles per user, 2 members (Couple) or 20 (Friends) per circle, invites 7-day expiry with a use limit. Invite rate limits are set in `join_circle` (value open, see below). |
+| O4 | Profile is display name and emoji only, the same in every circle. No other profile fields; `visible_to_club` is dropped. |
+| O8 | Keep the existing recovery mechanism. No passkeys for now. |
+| O9 | `join_circle`: 10 attempts per user per hour. Invite creation: 20 per circle per day. |
+| O10 | Drop avatars and the `avatar-photos` bucket. Emoji instead. |
+| O11 | Keep `purge_abandoned_profiles` and `notif_push_send`. Drop `sanitize_upload`. |
+| O12 | Remove the Realtime code; do not gate it. |
+| O13 | The circle owner picks the benchmark from the fixed list of eight named benchmarks the app already has. |
 
-Still open:
-
-| # | Question | Needed by |
-|---|---|---|
-| O4 | Profile fields (`visible_to_club`, per-field privacy toggles): the decisions give per-circle sharing settings but do not say which profile fields (name, avatar) are shown and whether they can differ per circle. | Session 4 |
-| O8 | Recovery method for sign-up with no email: recovery code, passkey, or both. | Session 4 |
-| O9 | Numeric rate limits for `join_circle` and invite creation. | Session 5 |
-| O10 | Avatars: `avatar-photos` bucket is not on the drop list. Keep (with circle-scoped read) or drop? | Session 2 |
-| O11 | Edge functions `purge_abandoned_profiles`, `notif_push_send`, `sanitize_upload`: keep as listed in section 3 unless the strip shows otherwise; `sanitize_upload` is only needed if avatars stay. | Session 2 |
-| O12 | Realtime is off, but `cloud.js` uses per-circle channels (section 5 of the old plan). Confirm all of that code is removed rather than gated. | Session 6a |
-| O13 | Benchmark of the month: who chooses the benchmark, owner or a fixed list. | Session 5 |
+Nothing is open.
