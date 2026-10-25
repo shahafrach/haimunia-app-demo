@@ -26,7 +26,7 @@ function notif(i, extra) {
 const seedTables = {
   profiles: [{ id: "u1", handle: "dana", display_name: "דנה", is_admin: false, recovery_verified_at: VERIFIED, visible_to_club: true }],
   invite_redemptions: [{ user_id: "u1", invite_id: "inv-1", role: "member", redeemed_at: VERIFIED }],
-  clubs: [{ id: "club-1", name: "חיימוניה" }],
+  clubs: [{ id: "club-1", name: "מעגל הדגמה" }],
   notifications: [
     notif(1, { type: "reaction", category: "community", title: "עידודים חדשים", body: "התקדמות חדשה נרשמה", source_type: "post", source_id: "p1", deep_link: "/community/feed?post=p1" }),
     notif(2, { type: "achievement_unlocked", category: "training", title: "פתחת הישג חדש", body: "100 אימונים", deep_link: "/community/achievements" }),

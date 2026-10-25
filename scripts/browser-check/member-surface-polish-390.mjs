@@ -57,7 +57,7 @@ const seedTables = {
     { user_id: "admin", invite_id: "inv-1", role: "admin", redeemed_at: VERIFIED },
     { user_id: "office", invite_id: "inv-1", role: "staff", redeemed_at: VERIFIED },
   ],
-  clubs: [{ id: "club-1", name: "חיימוניה" }],
+  clubs: [{ id: "club-1", name: "מעגל הדגמה" }],
   achievement_definitions: [
     { id: "ad1", code: "first_workout", name: "האימון הראשון", icon: "🏅", category: "milestone" },
   ],

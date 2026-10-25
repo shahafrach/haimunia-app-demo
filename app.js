@@ -324,7 +324,8 @@ function renderNavMenuList() {
   // there without inventing a duplicate action Settings already owns.
   const extraRows = renderNavRows(true, true);
   return renderNavWho() + (extraRows ? `<div class="nav-destinations" role="tablist" aria-label="מסכים נוספים">${extraRows}</div>` : "") + renderNavSettingsRow()
-    + `<div class="footer-note" style="text-align:center; margin-top:auto; padding-top:24px;">${esc(brandName())} · v${APP_VERSION}</div>`;
+    + `<div class="footer-note" style="text-align:center; margin-top:auto; padding-top:24px;">${esc(brandName())} · v${APP_VERSION}</div>`
+    + `<div class="footer-note" dir="ltr" style="text-align:center;">&copy; Shahaf Rachmany, all rights reserved</div>`;
 }
 // COMM-229. sw.js's notificationclick handler opens a fresh window at
 // ?notif=<deep link> when no app window was already open to focus (see
@@ -705,9 +706,9 @@ const PR_TIERS = [{ tier: "bronze", need: 3 }, { tier: "silver", need: 5 }, { ti
 const STREAK_TIERS = [{ tier: "bronze", need: 4 }, { tier: "silver", need: 12 }, { tier: "gold", need: 26 }];
 const SESSION_MILESTONES = [10, 50, 100, 365];
 const TENURE_MILESTONES = [
-  { id: "month1", days: 30, label: "חודש בבוקס" },
-  { id: "month6", days: 182, label: "חצי שנה בבוקס" },
-  { id: "year1", days: 365, label: "שנה בבוקס" },
+  { id: "month1", days: 30, label: "חודש במעקב" },
+  { id: "month6", days: 182, label: "חצי שנה במעקב" },
+  { id: "year1", days: 365, label: "שנה במעקב" },
 ];
 const TIER_LABELS = { bronze: "ברונזה", silver: "כסף", gold: "זהב" };
 
@@ -1052,7 +1053,7 @@ function renderAchievementsContent() {
 
   const boxStartPrompt = boxStartDate ? "" : `
     <button data-action="open-profile-from-achievements" class="card flex items-center justify-between gap-10" style="width:100%; text-align:right; margin-bottom:12px;">
-      <span style="font-size:12.5px; color:var(--chalk); font-weight:600;">הוסיפו תאריך התחלה בבוקס כדי לפתוח את מדליות הוותק</span>
+      <span style="font-size:12.5px; color:var(--chalk); font-weight:600;">הוסיפו תאריך התחלה כדי לפתוח את מדליות הוותק</span>
       <span style="color:var(--steel); flex-shrink:0;">${ICONS.chevronsLeft}</span>
     </button>`;
 
@@ -1745,7 +1746,7 @@ function renderSupportContent() {
   // cannot work must not be on screen (the same rule the disabled-control
   // fixes earlier today were about).
   const clubInbox = typeof window.cloudSyncActive === "function" && window.cloudSyncActive();
-  if (clubInbox) routes.push(`<button class="chip-btn primary" data-action="support-send-club">שליחה לצוות המועדון</button>`);
+  if (clubInbox) routes.push(`<button class="chip-btn primary" data-action="support-send-club">שליחה למפעיל/ת האפליקציה</button>`);
   if (cfg.whatsapp) routes.push(`<button class="chip-btn${clubInbox ? "" : " primary"}" data-action="support-send-whatsapp">שליחה בוואטסאפ</button>`);
   if (cfg.email) routes.push(`<button class="chip-btn" data-action="support-send-email">שליחה במייל</button>`);
   routes.push(`<button class="chip-btn" data-action="support-copy">העתקת הדיווח</button>`);
@@ -1818,7 +1819,7 @@ async function supportSendToClub() {
   if (ok) {
     const field = document.getElementById("supportMessage");
     if (field) field.value = "";
-    supportNote("הדיווח נשלח לצוות המועדון. תודה! אפשר לעקוב אחרי הסטטוס שלו מול הצוות.");
+    supportNote("הדיווח נשלח למפעיל/ת האפליקציה. תודה! אפשר לעקוב אחרי הסטטוס שלו מולו/ה.");
     return;
   }
   supportNote("לא הצלחנו לשלוח לצוות כרגע. אפשר לשלוח את הדיווח בוואטסאפ, במייל, או להעתיק אותו.");
@@ -3103,7 +3104,7 @@ function openWelcomeModal(editing) {
   const subtitle = document.getElementById("welcomeSubtitle");
   const saveLabel = document.getElementById("welcomeSaveLabel");
   const skipBtn = document.getElementById("welcomeSkipBtn");
-  if (title) title.textContent = welcomeEditing ? "עריכת פרופיל" : "ברוכים הבאים לאימוניה";
+  if (title) title.textContent = welcomeEditing ? "עריכת פרופיל" : "ברוכים הבאים ל-BOX-LOG";
   if (subtitle) subtitle.textContent = "איך נקרא לך?";
   // Design spec §1.2 S1. The rule this enforces: no two consecutive primary
   // buttons in a flow may carry the same label. The explainer's primary
@@ -6142,7 +6143,7 @@ function renderSettingsBody() {
         </button>`}
         <button class="exercise-row" data-action="edit-box-start-date" style="margin-bottom:8px;">
           <div style="text-align:right;">
-            <div style="font-weight:700; font-size:13.5px;">מתי התחלתי להתאמן בבוקס</div>
+            <div style="font-weight:700; font-size:13.5px;">מתי התחלתי להתאמן</div>
             <div style="color:var(--steel); font-size:12px; margin-top:2px;">${boxStartDate ? esc(fmtDate(boxStartDate)) : "לא הוגדר — פותח את מדליות הוותק"}</div>
           </div>
           <span style="color:var(--steel); flex-shrink:0;">${ICONS.chevronsLeft}</span>
@@ -6189,6 +6190,7 @@ function renderSettingsBody() {
       <div class="settings-block">
         <div class="settings-block-title">משפטי</div>
         <div class="flex items-center justify-center gap-8"><a class="link-btn" href="./privacy.html" target="_blank" rel="noopener">פרטיות</a><span aria-hidden="true">·</span><a class="link-btn" href="./terms.html" target="_blank" rel="noopener">כללי קהילה</a></div>
+        <div class="footer-note" dir="ltr" style="text-align:center; margin-top:10px;">&copy; Shahaf Rachmany, all rights reserved</div>
       </div>
 
       <div class="settings-block">
@@ -6761,7 +6763,7 @@ function renderWodLogSection() {
     <div class="flex col items-center" style="padding:32px 20px; gap:10px; text-align:center;">
       <span style="display:inline-flex; width:28px; height:28px; color:var(--steel);">${ICONS.stopwatchIcon}</span>
       <h2 style="font-size:15px; font-weight:700; color:var(--chalk);">בחרו אימון ונרשום אותו</h2>
-      <div style="font-size:13px; color:var(--steel);">אימונים מוכרים מהמועדון, או אימון משלכם.</div>
+      <div style="font-size:13px; color:var(--steel);">אימונים מוכרים, או אימון משלכם.</div>
       <button class="exercise-select" data-action="open-wod-picker" style="width:100%; min-height:56px; margin-top:4px;">
         <span style="font-weight:800; font-size:16px;">בחירת אימון</span>
         <span class="flex items-center gap-6" style="color:var(--steel); font-size:12px; font-weight:600;">${ICONS.chevronsLeft}</span>

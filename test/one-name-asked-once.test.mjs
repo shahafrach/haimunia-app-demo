@@ -33,7 +33,7 @@ function seeded(extra) {
   const mock = createMockSupabase(Object.assign({
     profiles: [],
     invite_redemptions: [{ user_id: "u1", invite_id: "inv-1", role: "member", redeemed_at: VERIFIED }],
-    clubs: [{ id: "club-1", name: "חיימוניה" }],
+    clubs: [{ id: "club-1", name: "מעגל הדגמה" }],
   }, extra || {}));
   mock.setUser({ id: "u1", is_anonymous: false, email: "owner@members.haimuniya.invalid" });
   return mock;

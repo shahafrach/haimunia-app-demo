@@ -43,7 +43,7 @@ const seedTables = {
     { user_id: ME, invite_id: "inv-1", role: "member", redeemed_at: VERIFIED },
     { user_id: OTHER, invite_id: "inv-2", role: "member", redeemed_at: VERIFIED },
   ],
-  clubs: [{ id: "club-1", name: "חיימוניה" }],
+  clubs: [{ id: "club-1", name: "מעגל הדגמה" }],
   private_records: [
     { user_id: ME, record_type: "entry", record_id: "e-mine", payload: { reps: 5 }, deleted_at: null, created_at: "2026-09-01", updated_at: "2026-09-01" },
     { user_id: OTHER, record_type: "entry", record_id: "e-theirs", payload: { reps: 9 }, deleted_at: null, created_at: "2026-09-01", updated_at: "2026-09-01" },
@@ -102,7 +102,7 @@ check("the member signs in with their username and password", true);
 // Reads one download to JSON, and asserts everything the file promises.
 async function verifyDownload(download, where) {
   check(`${where}: the file is named as the member's data export`,
-    /^haimuniya-my-data-\d{4}-\d{2}-\d{2}\.json$/.test(download.suggestedFilename()), download.suggestedFilename());
+    /^box-log-my-data-\d{4}-\d{2}-\d{2}\.json$/.test(download.suggestedFilename()), download.suggestedFilename());
   const text = readFileSync(await download.path(), "utf8");
   let out = null;
   try { out = JSON.parse(text); } catch (e) { /* reported below */ }
@@ -111,7 +111,7 @@ async function verifyDownload(download, where) {
   const d = out.data || {};
   const ids = (rows, key) => (rows || []).map((r) => r[key]);
   check(`${where}: it is the account export, for this member`,
-    out.kind === "haimuniya-account-export" && out.user_id === ME, `${out.kind} / ${out.user_id}`);
+    out.kind === "box-log-account-export" && out.user_id === ME, `${out.kind} / ${out.user_id}`);
   check(`${where}: the profile is the member's own and only theirs`,
     JSON.stringify(ids(d.profile, "id")) === JSON.stringify([ME]), JSON.stringify(ids(d.profile, "id")));
   check(`${where}: training records are the member's own only`,

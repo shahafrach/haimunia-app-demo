@@ -175,7 +175,7 @@ test("the share text carries no URL, no club and no other member", async () => {
   assert.doesNotMatch(text, /https?:\/\//, "V1 has no public post page - a link would point at a login wall");
   assert.match(text, /שיא אישי חדש/);
   assert.match(text, /Deadlift/);
-  assert.match(text, /האימוניה/);
+  assert.match(text, /BOX-LOG/);
 });
 
 // ===== rule 4: mixed script ==============================================
@@ -270,7 +270,7 @@ test("the card paints the app's own dark navy ground and orange accent, whatever
   assert.equal(ground.w, api.CARD.WIDTH);
   assert.equal(ground.h, api.CARD.HEIGHT);
   assert.ok(rects.some((r) => r.fillStyle === "#E85D3D"), "the energy accent must appear on the card");
-  assert.ok(texts(ctx).includes("האימוניה"), "the wordmark is the only branding, and there is no URL");
+  assert.ok(texts(ctx).includes("BOX-LOG"), "the wordmark is the only branding, and there is no URL");
 });
 
 test("an achievement card draws the bumper-plate medal, in the tier the code earns", async () => {

@@ -50,7 +50,7 @@ function seeded(rows, opts) {
       { id: "u2", handle: "noam", display_name: "נועם", is_admin: false, recovery_verified_at: VERIFIED, visible_to_club: true, allow_follows: true, allow_mentions: true },
     ],
     invite_redemptions: [{ user_id: "u1", invite_id: "inv-1", role: "member", redeemed_at: VERIFIED }],
-    clubs: [{ id: "club-1", name: "חיימוניה" }],
+    clubs: [{ id: "club-1", name: "מעגל הדגמה" }],
     feed_page_rows: rows || [],
     analytics_events: [],
     feed_impressions: [], feed_interactions: [],

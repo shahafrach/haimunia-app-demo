@@ -302,7 +302,7 @@ async function runCloudMemberDialogs(browser) {
       { user_id: "u2", invite_id: "inv-1", role: "member", redeemed_at: VERIFIED },
       { user_id: "author-1", invite_id: "inv-1", role: "member", redeemed_at: VERIFIED },
     ],
-    clubs: [{ id: "club-1", name: "חיימוניה" }],
+    clubs: [{ id: "club-1", name: "מעגל הדגמה" }],
     achievement_definitions: [{
       id: "d-first_pr", code: "first_pr", name: "השיא הראשון", description: "", category: "performance",
       trigger_type: "PR_CREATED", threshold: 1, repeatable: false, visibility: "club", icon: "⭐",

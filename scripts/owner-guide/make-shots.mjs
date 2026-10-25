@@ -48,7 +48,7 @@ const SEED = {
     { user_id: "u3", invite_id: "i3", role: "member", redeemed_at: iso(-9) },
     { user_id: "u4", invite_id: "i4", role: "member", redeemed_at: iso(-3) },
   ],
-  clubs: [{ id: "club-1", name: "האימוניה" }],
+  clubs: [{ id: "club-1", name: "מעגל הדגמה" }],
   club_features: [],
   community_streaks: [{ user_id: "u1", current_streak: 4, longest_streak: 11 }],
   workout_posts: [

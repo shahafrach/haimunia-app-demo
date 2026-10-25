@@ -54,7 +54,7 @@ test("S11: /.claude/ and /mockups/ are not public, in any case", async () => {
 });
 
 test("S11: the new prefixes do not swallow app assets with a similar name", async () => {
-  for (const p of ["/assets/photos/club-stripe-wall-wide.jpeg", "/assets/club-photos/add-stripe-wall.jpg", "/app.js"]) {
+  for (const p of ["/assets/mark.svg", "/assets/logo-full.svg", "/app.js"]) {
     assert.equal((await serve(p)).status, 200, `${p} must still be served`);
   }
 });

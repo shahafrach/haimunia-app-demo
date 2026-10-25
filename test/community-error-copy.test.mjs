@@ -87,7 +87,7 @@ function seeded() {
       { id: "u1", handle: "dana", display_name: "דנה", is_admin: false, recovery_verified_at: VERIFIED, visible_to_club: true },
     ],
     invite_redemptions: [{ user_id: "u1", invite_id: "inv-1", role: "member", redeemed_at: VERIFIED }],
-    clubs: [{ id: "club-1", name: "חיימוניה" }],
+    clubs: [{ id: "club-1", name: "מעגל הדגמה" }],
     community_streaks: [], workout_posts: [], feed_page_rows: [], member_contact_log: [],
     coach_engagement_flags: [], analytics_events: [], notifications: [], notification_preferences: [],
     monthly_club_recaps: [], reports: [], challenges: [], onboarding_step_content: [],
@@ -152,7 +152,7 @@ test("THE DEFECT: a moderated member gets a Hebrew explanation, never the enum '
   // promise the app can keep.
   assert.match(text, /לקרוא את הפיד ולעודד/, "and bounds the sanction instead of implying the whole app is gone");
   // Who can lift it - the only actionable next step there is.
-  assert.match(text, /לפנות למאמן\/ת/, "and routes the member to the people who can lift it");
+  assert.match(text, /לפנות לבעל\/ת המעגל/, "and routes the member to the people who can lift it");
 });
 
 test("...and offers no retry button, because a restriction cannot be retried away", async () => {
@@ -281,7 +281,7 @@ test("the account security screen states what actually happens, not browse-only"
   const mock = createMockSupabase({
     profiles: [{ id: "u1", handle: "dana", display_name: "דנה", is_admin: false, recovery_verified_at: null, visible_to_club: true }],
     invite_redemptions: [{ user_id: "u1", invite_id: "inv-1", role: "member", redeemed_at: VERIFIED }],
-    clubs: [{ id: "club-1", name: "חיימוניה" }],
+    clubs: [{ id: "club-1", name: "מעגל הדגמה" }],
     community_streaks: [], workout_posts: [], feed_page_rows: [], member_contact_log: [],
     coach_engagement_flags: [], analytics_events: [], notifications: [], notification_preferences: [],
     monthly_club_recaps: [], reports: [], challenges: [], onboarding_step_content: [],

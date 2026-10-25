@@ -74,7 +74,7 @@ test("the invite-code screen's own reassurance moves UP to the gate verbatim, be
   // stops a nervous member concluding she has done something wrong. They
   // existed already - one screen further in, where the panic had already
   // happened.
-  assert.match(text, /הכניסה עם קוד הזמנה שמקבלים מהמאמן\/ת/);
+  assert.match(text, /הכניסה עם קוד הזמנה שמקבלים מחבר\/ה במעגל/);
   assert.match(text, /הקוד לא נוגע לרישום האימונים שלכם/,
     "the sentence that bounds the invite code - it does not touch your workout log - must be on the FIRST screen");
   // And a plain statement of what the tab even is, which the old gate never

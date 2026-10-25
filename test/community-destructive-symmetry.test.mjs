@@ -37,7 +37,7 @@ function mockWithPost(authorName) {
       { user_id: "u1", invite_id: "i1", role: "member", redeemed_at: VERIFIED },
       { user_id: "mem-1", invite_id: "i3", role: "member", redeemed_at: VERIFIED },
     ],
-    clubs: [{ id: "club-1", name: "חיימוניה" }],
+    clubs: [{ id: "club-1", name: "מעגל הדגמה" }],
     workout_posts: [{ id: "post-1", author_id: "mem-1", post_type: "POST_TEXT", body: "שלום", status: "active", created_at: VERIFIED, published_at: VERIFIED }],
     feed_page_rows: [{ id: "post-1", author_id: "mem-1", post_type: "POST_TEXT", body: "שלום", created_at: VERIFIED, published_at: VERIFIED, author: { display_name: authorName, handle: "kobi" }, reaction_count: 0, comment_count: 0, media: [], metadata: {} }],
     notifications: [],

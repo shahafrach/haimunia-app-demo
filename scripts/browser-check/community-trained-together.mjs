@@ -51,7 +51,7 @@ const seedTables = {
     { id: "u4", handle: "tomer", display_name: "תומר", is_admin: false, recovery_verified_at: VERIFIED, visible_to_club: true, show_attendance: true, allow_mentions: false, allow_follows: true },
   ],
   invite_redemptions: ["u1", "u2", "u3", "u4"].map((id) => ({ user_id: id, invite_id: "inv-1", role: "member", redeemed_at: VERIFIED })),
-  clubs: [{ id: "club-1", name: "חיימוניה" }],
+  clubs: [{ id: "club-1", name: "מעגל הדגמה" }],
   // The class-attendance suggestions that used to fill the sheet went with the
   // attendance module, so the sheet offers exactly the members already tagged.
   post_training_partners: [

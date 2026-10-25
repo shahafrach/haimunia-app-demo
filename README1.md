@@ -1,4 +1,4 @@
-# האימוניה, Direction 06 design handoff
+# BOX-LOG, Direction 06 design handoff
 
 This package defines the approved Club Balance design for the complete app.
 

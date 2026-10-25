@@ -1,8 +1,8 @@
 {
   "id": "./",
-  "name": "האימוניה",
-  "short_name": "האימוניה",
-  "description": "הבית שלך לאימונים",
+  "name": "BOX-LOG",
+  "short_name": "BOX-LOG",
+  "description": "יומן אימונים פרטי למעגלי חברים",
   "lang": "he",
   "dir": "rtl",
   "start_url": "./index.html",

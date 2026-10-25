@@ -35,9 +35,8 @@
       cross-origin-opener-policy: same-origin
   That closes SEC-014, which every earlier version of this comment described
   as unfixable on the host of the day. Verified directly
-  against the live production app (COMM-334, 2026-09-03: both the raw HTTP
-  response headers and the served HTML of
-  https://haimuniya.github.io/haimunia-app/) rather than assumed: production
+  against the earlier production sibling app (COMM-334, 2026-09-03: both the
+  raw HTTP response headers and its served HTML) rather than assumed: production
   ships the same kind of meta-tag CSP as this demo, on the same
   no-real-headers host, and its meta tag already lists frame-ancestors
   'none' too (as inertly as it does here) — it is not "no CSP at all" as an
@@ -91,12 +90,12 @@
      top of whatever input just opened the keyboard. See Noam's CHANGES.md
      for the real-device repro this fixed there. -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
-<title>האימוניה</title>
+<title>BOX-LOG</title>
 <meta name="theme-color" content="#152342" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<meta name="apple-mobile-web-app-title" content="האימוניה" />
+<meta name="apple-mobile-web-app-title" content="BOX-LOG" />
 <link rel="manifest" href="./manifest.json" />
 <link rel="apple-touch-icon" href="./icon-192.png" />
 <link rel="icon" href="./icon-192.png" />
@@ -615,20 +614,22 @@
      visible architectural crop is viewport-sized; its navy base continues
      beneath the opaque sheet without tying the crop to the number of rows. */
   .scene-page__media{ position:absolute; z-index:-3; inset:0; background-size:cover; background-repeat:no-repeat; background-position:var(--scene-position, center top); background-image:var(--scene-image); }
-  .scene-page--add{ --scene-image:url('./assets/club-photos/add-stripe-wall.jpg'); }
+  /* BOX-LOG scene background: pure CSS, no photograph. Built from the existing
+     tokens (navy ground, a coral glow, faint diagonal rules), so it needs no
+     light/dark twin - the scrim and the sheet above it own the theme. */
+  :root{ --scene-image:
+    radial-gradient(120% 70% at 85% 8%, color-mix(in srgb, var(--club-coral) 38%, transparent), transparent 62%),
+    repeating-linear-gradient(135deg, rgba(255,255,255,.045) 0 2px, transparent 2px 22px),
+    linear-gradient(160deg, var(--club-navy-2), var(--club-navy)); }
+  .scene-page__media::after{ display:none; }
   /* 32% vertical, not the default "center top": the source photo's
      recognizable content (stripe wall, blue pillars, rowers) sits in a
      band roughly 20-55% down the original frame - "top" showed ceiling
      vents on a real render, checked by viewing the source file directly
      rather than assumed from the filename. */
-  .scene-page--history{ --scene-image:url('./assets/club-photos/history-open-floor.jpg'); --scene-position:44% 20%; }
   /* center 18%: keeps the rings + rig crossbar in frame (checked against
      the source file - they sit roughly 10-55% down) instead of the ceiling
      AC units at the very top. */
-  .scene-page--progress{ --scene-image:url('./assets/club-photos/progress-blue-rig.jpg'); --scene-position:center 18%; }
-  .scene-page--library{ --scene-image:url('./assets/club-photos/library-equipment.jpg'); }
-  .scene-page--community{ --scene-image:url('./assets/club-photos/community-logo-wall.jpg'); }
-  .scene-page--achievements{ --scene-image:url('./assets/club-photos/achievements-plates.jpg'); }
   .scene-page__scrim{ position:absolute; z-index:-2; inset:0; pointer-events:none;
     background:linear-gradient(180deg, rgba(3,10,20,.24) 0, rgba(3,10,20,.08) 25%, rgba(3,10,20,.54) 47%, rgba(3,10,20,.76) 100%); }
   :root[data-theme="dark"] .scene-page__scrim{ background:linear-gradient(180deg, rgba(3,10,20,.34) 0, rgba(3,10,20,.14) 25%, rgba(3,10,20,.64) 47%, rgba(3,10,20,.86) 100%); }
@@ -2121,30 +2122,6 @@
 
   .scene-page__media::after{background-color:transparent;}
   .scene-page--achievements .scene-page__media::after{background-size:100% auto;}
-  /* COMMUNITY IS FRAMED BELOW THE WORDMARK ON THE WALL.
-     The club's logo wall is the right photo for this tab and the wrong crop
-     for it: the painted "האימוניה" sits 12-22% down the frame, which the
-     shared crop below put at y=54-100 on a 390x844 phone - directly under
-     the fixed header's own ./assets/logo-full.png at y=20-50. Two wordmarks,
-     60px apart, one of them the club's actual wall (measured in Chromium,
-     not inferred). So Community takes its own framing of the same
-     photograph: the same wall, its baseboard, the wooden floor and the
-     barbell on the mat, starting below the paint.
-     --community-scene-crop is the rendered height of the photo, and the
-     negative offset is that height times the fraction of the source frame
-     skipped - one number in two places, so zooming further cannot silently
-     stop clearing the text. 0.3 is the measured floor: the wordmark's
-     tagline ends at ~0.25 of the source height, and the rest is margin.
-     The photo has to be tall enough that what is left after the offset
-     still fills the visible band (--scene-photo-height, 42svh+16px), which
-     is what the max() floor is for on a short viewport.
-     No colour here, so no duplicate in either dark block - the scrim and
-     the sheet above it keep owning the theme. */
-  .scene-page--community{ --community-scene-crop:max(720px, 86svh); }
-  .scene-page--community .scene-page__media::after{
-    background-size:auto var(--community-scene-crop);
-    background-position:50% calc(var(--community-scene-crop) * -0.3);
-  }
   #achievementsOverlay{align-items:stretch; padding:0;}
   #achievementsOverlay .modal-sheet{height:100svh; max-height:100svh; border-radius:0;}
   #achievementsOverlay .modal-title{color:#fff;}
@@ -2177,7 +2154,6 @@
   .scene-page--add .steppers .stepper:last-child:nth-child(3){grid-column:1/-1;}
   .scene-page--add .stepper-val,.scene-page--add .stepper-btn{min-width:44px; min-height:44px;}
   @media(min-width:900px){.scene-page--add .steppers{grid-template-columns:repeat(3,minmax(0,1fr));}.scene-page--add .steppers .stepper:last-child:nth-child(3){grid-column:auto;}}
-  .scene-page--gymnastics{--scene-image:url('./assets/club-photos/library-rings.jpg');}
   body[data-scene] .cal-cell.today .cal-daynum{text-decoration:underline; text-underline-offset:4px;}
 
   :root .scene-page > .scene-sheet{background:var(--club-paper);}
@@ -2189,7 +2165,7 @@
   /* THE MEDALS SHEET STOPS BEING TRANSLUCENT. Real-phone report: "the medals
      screen uses a dark mustard background with grey text that is hard to
      read". Neither half is a colour choice anybody made - the "mustard" is
-     assets/club-photos/achievements-plates.jpg (a wall of bronze and gold
+     the then-photographic scene background (a wall of bronze and gold
      plates) showing through, because the medals overlay renders a
      .scene-page inside the modal while body[data-scene] is still set by
      whichever tab is behind it, so it picks up
@@ -2391,7 +2367,7 @@
      same reasoning as the .scene-sheet/body dvh fix earlier - this
      instance was missed then because it isn't a scene page. -->
 <div id="loading" role="status" aria-live="polite" style="min-height:100svh; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px;">
-  <img src="./assets/mark.png" alt="" width="40" height="46" style="opacity:.85;" />
+  <img src="./assets/mark.svg" alt="" width="40" height="46" style="opacity:.85;" />
   <div style="color:var(--steel); font-size:13px; font-weight:700;">טוען את היומן שלך…</div>
 </div>
 
@@ -2402,7 +2378,7 @@
       <button id="navMenuBtn" data-action="open-nav-menu" aria-label="תפריט" aria-haspopup="dialog" aria-controls="navMenuOverlay" class="icon-chip icon-chip-steel" style="flex-shrink:0;">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
       </button>
-      <img src="./assets/logo-full.png" alt="האימוניה" class="header-logo" width="900" height="323" />
+      <img src="./assets/logo-full.svg" alt="BOX-LOG" class="header-logo" width="312" height="64" />
       <!-- Live report: "I want a medal icon... I can't see any change" - the
            header's own achievements link (userGreeting button + the "לכל
            המדליות וההישגים שלי" line below it) already exists, but both live
@@ -2509,10 +2485,10 @@
     <div class="install-dock-card">
       <div class="flex items-center gap-10" style="margin-bottom:14px;">
         <div style="width:52px; height:52px; border-radius:16px; background:var(--surface2); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; flex-shrink:0; overflow:hidden; box-shadow:var(--shadow-card);">
-          <img src="./assets/mark.png" alt="" style="width:30px; height:auto;" />
+          <img src="./assets/mark.svg" alt="" style="width:30px; height:auto;" />
         </div>
         <div>
-          <div style="font-weight:800; font-size:15px; color:var(--chalk);">התקינו את האימוניה</div>
+          <div style="font-weight:800; font-size:15px; color:var(--chalk);">התקינו את BOX-LOG</div>
           <div style="font-weight:600; font-size:14px; color:var(--steel);">גישה מהירה ישירות ממסך הבית</div>
         </div>
       </div>
@@ -2535,7 +2511,7 @@
     <div class="install-dock-card">
       <div class="flex items-center gap-10" style="margin-bottom:12px;">
         <div style="width:52px; height:52px; border-radius:16px; background:var(--surface2); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; flex-shrink:0; overflow:hidden; box-shadow:var(--shadow-card);">
-          <img src="./assets/mark.png" alt="" style="width:30px; height:auto;" />
+          <img src="./assets/mark.svg" alt="" style="width:30px; height:auto;" />
         </div>
         <div>
           <div style="font-weight:800; font-size:15px; color:var(--chalk);">כדי שהנתונים לא יימחקו</div>
@@ -2794,7 +2770,7 @@
         </div>
         <div class="flex items-center gap-10">
           <span class="icon-chip icon-chip-brass"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M2 20c0-3.5 3-6 7-6s7 2.5 7 6"/><circle cx="17" cy="7" r="2.4"/><path d="M16.5 12.2c2.7.3 4.5 2.4 4.5 5.3"/></svg></span>
-          <div><div style="font-weight:700; font-size:14px;">קהילה</div><div style="color:var(--steel); font-size:12.5px;">פיד, עידודים ולוחות תוצאות עם חברי המועדון — צריך קוד הזמנה מהמאמן/ת</div></div>
+          <div><div style="font-weight:700; font-size:14px;">קהילה</div><div style="color:var(--steel); font-size:12.5px;">פיד, עידודים ולוחות תוצאות עם חברי המועדון — צריך קוד הזמנה מחבר/ה במעגל</div></div>
         </div>
       </div>
       <button data-action="close-onboarding" class="save-btn" style="max-width:none;">בואו נתחיל</button>
@@ -2836,7 +2812,7 @@
     <div class="scene-sheet" style="text-align:center;">
       <div id="welcomeSubtitle" style="color:var(--steel); font-size:13px; margin-bottom:18px;">איך נקרא לך?</div>
       <input id="welcomeNameInput" class="text-input" dir="auto" maxlength="80" autocomplete="off" placeholder="השם שלך" aria-labelledby="welcomeSubtitle" style="margin-bottom:16px; text-align:center;" />
-      <div style="color:var(--steel); font-size:12px; margin-bottom:6px;" id="welcomeBoxStartLabel">מתי התחלתם להתאמן בבוקס? (לא חובה — פותח את עיטורי הוותק)</div>
+      <div style="color:var(--steel); font-size:12px; margin-bottom:6px;" id="welcomeBoxStartLabel">מתי התחלתם להתאמן? (לא חובה — פותח את עיטורי הוותק)</div>
       <input id="welcomeBoxStartInput" type="date" class="text-input" aria-labelledby="welcomeBoxStartLabel" style="margin-bottom:16px; text-align:center;" />
       <button data-action="save-user-name" class="save-btn" style="max-width:none; margin-bottom:10px;"><span id="welcomeSaveLabel">בואו נתחיל</span></button>
       <button id="welcomeSkipBtn" data-action="skip-user-name" class="link-btn">דלג</button>

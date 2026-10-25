@@ -73,7 +73,7 @@ function seededAdmin() {
   const mock = createMockSupabase({
     profiles: [{ id: "u1", handle: "dana", display_name: "דנה", is_admin: true, recovery_verified_at: VERIFIED, visible_to_club: true }],
     invite_redemptions: [{ user_id: "u1", invite_id: "inv-1", role: "member", redeemed_at: VERIFIED }],
-    clubs: [{ id: "club-1", name: "חיימוניה" }],
+    clubs: [{ id: "club-1", name: "מעגל הדגמה" }],
     community_streaks: [], workout_posts: [], feed_page_rows: [], member_contact_log: [],
     coach_engagement_flags: [], analytics_events: [], notifications: [], notification_preferences: [],
     monthly_club_recaps: [], reports: [], challenges: [], onboarding_step_content: [],
