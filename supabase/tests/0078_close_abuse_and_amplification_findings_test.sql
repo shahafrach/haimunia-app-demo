@@ -18,7 +18,7 @@ select * from no_plan();
 -- =====================================================================
 select tests.set_auth(tests.uid('m1'));
 select lives_ok(
-  $$ select public.post_create('hello from post_create', 'club', '[]'::jsonb, '{}'::jsonb) $$,
+  $$ select public.post_create(tests.circle(), 'hello from post_create') $$,
   'post_create() still works after gaining the insert pin');
 
 select is(

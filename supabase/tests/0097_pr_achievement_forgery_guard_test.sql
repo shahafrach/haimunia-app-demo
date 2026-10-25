@@ -115,7 +115,7 @@ insert into public.member_achievements (id, user_id, achievement_id, visibility,
 select tests.set_auth(tests.uid('m2'));
 
 select isnt_empty(
-  format($$ select public.pr_share(%L) $$, 'set-97-real'),
+  format($$ select public.pr_share(tests.circle(), %L) $$, 'set-97-real'),
   'pr_share() - the legitimate path - still creates a real POST_PR, unaffected by the new guard');
 select results_eq(
   $$ select post_type::text from public.workout_posts where author_id = tests.uid('m2') and source_record_id = 'set-97-real' $$,
@@ -123,7 +123,7 @@ select results_eq(
   'and the row really is POST_PR');
 
 select isnt_empty(
-  format($$ select public.ach_share(%L) $$, 'b0970000-0000-4000-8000-000000000001'::text),
+  format($$ select public.ach_share(tests.circle(), %L) $$, 'b0970000-0000-4000-8000-000000000001'::text),
   'ach_share() also still works');
 select results_eq(
   $$ select post_type::text from public.workout_posts where author_id = tests.uid('m2') and source_type = 'achievement' $$,

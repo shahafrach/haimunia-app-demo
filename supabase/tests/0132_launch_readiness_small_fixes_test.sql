@@ -25,7 +25,7 @@ values (tests.uid('m1'), 'strength_entry', 'pr0132-builtin',
         jsonb_build_object('exerciseId', 'back-squat', 'weight', 100, 'reps', 1,
                            'ts', extract(epoch from now()) * 1000));
 
-select lives_ok($$ select public.pr_share('pr0132-builtin', '', '[]'::jsonb, null) $$,
+select lives_ok($$ select public.pr_share(tests.circle(), 'pr0132-builtin', '') $$,
   'a PR on a built-in lift shares');
 
 select is(
