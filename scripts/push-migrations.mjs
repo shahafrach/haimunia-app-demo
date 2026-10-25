@@ -140,6 +140,24 @@ async function main() {
   say("push:prod — the gate that stands in for CI until 2026-10-01");
   say("");
 
+  // ---- 0. the linked project must be THIS repository's project ----
+  // supabase/PROJECT_REF names the one project this repository deploys to.
+  // `supabase link` records the linked ref in supabase/.temp/project-ref. A
+  // mismatch means the CLI points at some other project (another app on the
+  // same account), and pushing there would apply this schema to it.
+  say("Project:");
+  const expectedRef = readFileSync(path.join(root, "supabase", "PROJECT_REF"), "utf8").trim();
+  let linkedRef = "";
+  try {
+    linkedRef = readFileSync(path.join(root, "supabase", ".temp", "project-ref"), "utf8").trim();
+  } catch { /* not linked */ }
+  if (linkedRef !== expectedRef) {
+    die(1, `  REFUSED: linked project is "${linkedRef || "none"}", expected "${expectedRef}".`, "",
+        `Run: supabase link --project-ref ${expectedRef}`);
+  }
+  say(`  ${expectedRef}`);
+  say("");
+
   // ---- 1. the code being pushed must be merged code ----
   say("Revision:");
   // WHAT IS ACTUALLY BEING CHECKED, and why it is not the branch name.

@@ -140,8 +140,8 @@ test("the CSP allows exactly those provider hosts and does not widen connect-src
     "'self'",
     "https://api.hcaptcha.com",
     "https://challenges.cloudflare.com",
-    "https://jajmlyrjlkhclgphbfbb.supabase.co",
-    "wss://jajmlyrjlkhclgphbfbb.supabase.co",
+    "https://hvwakffluwvegedefoth.supabase.co",
+    "wss://hvwakffluwvegedefoth.supabase.co",
   ].sort(), "connect-src holds only self, the Supabase project, and the two captcha verification hosts");
   // The strict directives that were never weakened.
   assert.match(csp, /object-src 'none'/);

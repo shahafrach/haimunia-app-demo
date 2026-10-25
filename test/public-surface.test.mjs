@@ -26,7 +26,7 @@ const mw = await import(new URL("functions/_middleware.js", root).href);
 async function serve(pathname) {
   let passedThrough = false;
   const res = await mw.onRequest({
-    request: new Request("https://haimunia-app.pages.dev" + pathname),
+    request: new Request("https://box-log.pages.dev" + pathname),
     next: async () => { passedThrough = true; return new Response("asset", { status: 200 }); },
   });
   return { status: res.status, passedThrough };
@@ -129,7 +129,7 @@ test("a blocked response is never cached - a boundary that caches keeps answerin
   // Learned from the real thing: the join QR was removed from the deploy and
   // Cloudflare's edge kept serving it for hours on s-maxage=604800.
   const res = await mw.onRequest({
-    request: new Request("https://haimunia-app.pages.dev/docs/audit/RISK_REGISTER.md"),
+    request: new Request("https://box-log.pages.dev/docs/audit/RISK_REGISTER.md"),
     next: async () => new Response("asset", { status: 200 }),
   });
   assert.equal(res.status, 404);
