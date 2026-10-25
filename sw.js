@@ -1,11 +1,11 @@
-// Service worker for האימוניה.
+// Service worker for BOX-LOG.
 // Version is the single source of truth for the cache name — bumping
 // APP_VERSION in app.js is what ships an update. Don't edit SW_VERSION by
 // hand: run `npm run sync-version` (see app.js) to copy it here.
 const SW_VERSION = "4.81.0";
 // "haimunia-demo-v..." — deliberately distinct from the production app's
 // own "haimunia-v..." cache prefix. Both service workers were once scoped
-// to one origin (haimuniya.github.io, before the move to Cloudflare Pages
+// to one origin (a shared GitHub Pages host, before the move to Cloudflare Pages
 // on 2026-09-16) and could be again, and the activate handler below
 // deletes any Cache Storage entry that isn't the current CACHE name —
 // with a shared prefix, this demo's own cleanup could delete the real
@@ -71,39 +71,13 @@ const OPTIONAL_ASSETS = [
   "./icon-512.png",
   "./icon-192-maskable.png",
   "./icon-512-maskable.png",
-  "./assets/mark.png",
+  "./assets/mark.svg",
   "./assets/icon-barbell.png",
   "./assets/icon-chevrons.png",
-  "./assets/logo-full.png",
+  "./assets/logo-full.svg",
   "./assets/medal-bronze.png",
   "./assets/medal-silver.png",
   "./assets/medal-gold.png",
-  // Direction 06 "Club Balance" handoff: real club photography for the new
-  // .photo-header component (index.html/photoHeaderHtml() in app.js).
-  // Optional, not required: a missed photo degrades to no header image (the
-  // browser just shows the empty .photo-header box's border/background),
-  // never blocks install or the offline training log - same reasoning as
-  // every icon/font above.
-  "./assets/photos/club-stripe-wall-wide.jpeg",
-  "./assets/photos/club-stripe-wall-angle.jpeg",
-  "./assets/photos/club-equipment-wide.jpeg",
-  "./assets/photos/club-logo-wall-wide.jpeg",
-  "./assets/photos/club-logo-wall-portrait.jpeg",
-  "./assets/photos/club-rig-wide.jpeg",
-  "./assets/photos/club-open-floor-wide.jpeg",
-  "./assets/photos/club-rings-portrait.jpeg",
-  // Immersive club redesign (2026-09-08 handoff): full-bleed scene
-  // backgrounds for the primary tabs. Same optional/never-required
-  // reasoning as every photo above - a missed scene photo must never block
-  // the offline training log, it just leaves .scene-page__media showing the
-  // plain --club-navy background color underneath instead.
-  "./assets/club-photos/add-stripe-wall.jpg",
-  "./assets/club-photos/history-open-floor.jpg",
-  "./assets/club-photos/progress-blue-rig.jpg",
-  "./assets/club-photos/library-equipment.jpg",
-  "./assets/club-photos/community-logo-wall.jpg",
-  "./assets/club-photos/achievements-plates.jpg",
-  "./assets/club-photos/library-rings.jpg",
   "./assets/fonts/rubik-400-latin.woff2",
   "./assets/fonts/rubik-400-hebrew.woff2",
   "./assets/fonts/rubik-600-latin.woff2",
@@ -181,7 +155,7 @@ self.addEventListener("message", (e) => {
   if (e.data.type === "PUSH_SELF_TEST") {
     const id = e.data.id;
     e.waitUntil(
-      self.registration.showNotification("האימוניה", {
+      self.registration.showNotification("BOX-LOG", {
         body: "זו התראת בדיקה. ההתראות במכשיר הזה עובדות.",
         icon: "./icon-192.png",
         badge: "./icon-192-maskable.png",
@@ -223,7 +197,7 @@ self.addEventListener("push", (e) => {
   // So this one stays literal, and PER_CLUB_SETUP.md lists it with the other
   // static spots. Setting up a second club is a short, named list of files -
   // not a search through 21,000 lines.
-  const title = payload.title || "האימוניה";
+  const title = payload.title || "BOX-LOG";
   const deepLink = payload.deep_link || payload.deepLink || "./";
   const options = {
     body: payload.body || "",

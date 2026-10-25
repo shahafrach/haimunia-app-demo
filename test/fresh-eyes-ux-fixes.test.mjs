@@ -121,7 +121,7 @@ test("the nav menu shows an app version footer instead of ending in empty space"
   window.document.getElementById("navMenuBtn").click();
   const list = window.document.getElementById("navMenuList");
   assert.match(list.textContent, /v\d+\.\d+\.\d+/, "the nav menu names the running app version");
-  assert.match(list.textContent, /האימוניה/, "the footer names the app, not a bare version number");
+  assert.match(list.textContent, /BOX-LOG/, "the footer names the app, not a bare version number");
 });
 
 test("a one-day streak reads '1 יום ברצף', not the grammatically wrong '1 ימים ברצף'", async () => {

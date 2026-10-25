@@ -106,11 +106,10 @@ window.HAIMUNIA_CONFIG = Object.freeze({
   // (this is wa.me's own required shape). Israeli mobile 05X-XXX-XXXX becomes
   // 9725XXXXXXXX.
   supportWhatsApp: "",
-  // Set 2026-09-15. A club address, deliberately not a personal one: this file
-  // is committed and served to every browser, so whatever is here is public by
-  // construction - the same way supabasePublishableKey above is. That is fine
-  // for an address whose whole purpose is to be written to, and is why the
-  // club inbox is the right one to put here.
+  // TODO(owner): this is still the former gym's inbox and must be replaced with
+  // a BOX-LOG address. It is not blank only because
+  // test/support-and-bug-report.test.mjs requires one real support channel.
+  // This file is public by construction, so use an address meant to be written to.
   supportEmail: "haimuniya@gmail.com",
 
   // ==========================================================================
@@ -124,21 +123,21 @@ window.HAIMUNIA_CONFIG = Object.freeze({
   // contradicts the database.
   //
   // So this is the PRODUCT name: what the app calls itself on the home screen,
-  // in its title bar, and in a push notification. Haimunia keeps its own;
-  // a second box gets BoxLog, or its own.
+  // in its title bar, and in a push notification. BOX-LOG is the name
+  // everywhere a member sees one.
   // ==========================================================================
   brand: Object.freeze({
-    appName: "האימוניה",
+    appName: "BOX-LOG",
     // Used where the name stands alone as a wordmark, and in push titles.
     // Kept separate from appName only so a latin-script deployment can drop
-    // the definite article a Hebrew name carries ("האימוניה" is "the
-    // Haimunia"); set it to the same string when there is no difference.
-    wordmark: "האימוניה",
+    // the definite article a Hebrew name might carry; set it to the same
+    // string when there is no difference.
+    wordmark: "BOX-LOG",
     // The top athlete level and the capstone achievement both read "אלוף
     // <name>" today. It is spelled out rather than composed, because "אלוף " +
     // appName is right for a club name and wrong for a product one - a member
-    // of another box is the champion of THEIR box, not of the software.
-    championTitle: "אלוף האימוניה",
+    // of another circle is the champion of THEIR circle, not of the software.
+    championTitle: "אלוף BOX-LOG",
   }),
 
   // ==========================================================================

@@ -212,7 +212,7 @@ test("notification centre: focus-in, trap, Escape restores focus, backdrop close
   const mock = createMockSupabase({
     profiles: [{ id: "u1", handle: "dana", display_name: "דנה", is_admin: false, recovery_verified_at: VERIFIED, visible_to_club: true }],
     invite_redemptions: [{ user_id: "u1", invite_id: "inv-1", role: "member", redeemed_at: VERIFIED }],
-    clubs: [{ id: "club-1", name: "חיימוניה" }],
+    clubs: [{ id: "club-1", name: "מעגל הדגמה" }],
     notifications: notifs,
     notification_preferences: [],
     feed_page_rows: [],
@@ -262,7 +262,7 @@ test("a background rerender does not throw the member back to the top of an open
   const mock = createMockSupabase({
     profiles: [{ id: "u1", handle: "dana", display_name: "דנה", is_admin: false, recovery_verified_at: VERIFIED, visible_to_club: true }],
     invite_redemptions: [{ user_id: "u1", invite_id: "inv-1", role: "member", redeemed_at: VERIFIED }],
-    clubs: [{ id: "club-1", name: "חיימוניה" }],
+    clubs: [{ id: "club-1", name: "מעגל הדגמה" }],
     notifications: [{ id: "n1", user_id: "u1", type: "achievement_unlocked", category: "training", title: "הישג", body: "גוף", deep_link: null, source_type: null, source_id: null, read_at: null, created_at: new Date().toISOString() }],
     notification_preferences: [],
   });

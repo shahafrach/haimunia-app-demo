@@ -59,9 +59,9 @@ test("NO config at all still names the app - a missing cloud-config.js must not 
   // helper there is not a missing label, it is a dead app. 1184 of 1858 tests
   // proved it.
   const g = freshBrand();
-  assert.equal(g.brandName(), "האימוניה");
-  assert.equal(g.brandWordmark(), "האימוניה");
-  assert.equal(g.brandChampionTitle(), "אלוף האימוניה");
+  assert.equal(g.brandName(), "BOX-LOG");
+  assert.equal(g.brandWordmark(), "BOX-LOG");
+  assert.equal(g.brandChampionTitle(), "אלוף BOX-LOG");
 });
 
 test("the config is read at call time, so a config loaded after this file still counts", () => {
@@ -69,7 +69,7 @@ test("the config is read at call time, so a config loaded after this file still 
   // value at definition time would pin the fallback forever and look correct
   // in every test that happens to use the default.
   const g = freshBrand();
-  assert.equal(g.brandName(), "האימוניה");
+  assert.equal(g.brandName(), "BOX-LOG");
   g.HAIMUNIA_CONFIG = { brand: { appName: "BoxLog" } };
   assert.equal(g.brandName(), "BoxLog", "a later config takes effect");
 });
@@ -77,7 +77,7 @@ test("the config is read at call time, so a config loaded after this file still 
 test("the shipped config still names this club, and the accessors are on BoxLogSafe too", () => {
   const g = freshBrand();
   new Function("window", read("cloud-config.js"))(g);
-  assert.equal(g.brandName(), "האימוניה");
+  assert.equal(g.brandName(), "BOX-LOG");
   assert.equal(typeof g.BoxLogSafe.brandName, "function");
   assert.ok(Object.isFrozen(g.HAIMUNIA_CONFIG.brand), "the brand block is frozen like the rest of the config");
 });
@@ -110,9 +110,9 @@ test("every display of the name goes through the helper - no literal left behind
   // name is exactly the kind of thing that rides along with moved code.
   for (const f of ["app.js", "cloud.js", ...COMMUNITY_MODULES]) {
     const src = read(f);
-    assert.ok(!src.includes('"האימוניה"'),
+    assert.ok(!src.includes('"BOX-LOG"'),
       `${f} still has a quoted literal product name - it should call brandName()`);
-    assert.ok(!src.includes(">האימוניה<"),
+    assert.ok(!src.includes(">BOX-LOG<"),
       `${f} still renders the product name straight into markup`);
   }
   assert.match(read("sw.js"), /A SERVICE WORKER CANNOT READ cloud-config\.js/,

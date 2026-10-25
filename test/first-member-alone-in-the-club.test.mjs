@@ -40,7 +40,7 @@ test("a rejected submit keeps what the member already typed", async () => {
   const { bootCommunity, waitFor } = await import("./helpers/boot.mjs");
   const { createMockSupabase } = await import("./helpers/mockSupabase.mjs");
   const mock = createMockSupabase({
-    profiles: [], invite_redemptions: [], clubs: [{ id: "club-1", name: "חיימוניה" }],
+    profiles: [], invite_redemptions: [], clubs: [{ id: "club-1", name: "מעגל הדגמה" }],
     community_streaks: [], workout_posts: [], feed_page_rows: [], notifications: [],
     notification_preferences: [], challenges: [], onboarding_step_content: [],
   });

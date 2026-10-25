@@ -74,18 +74,18 @@ test("all four documents carry both languages, with Hebrew as the members' text"
   }
 });
 
-test("both formats agree there is no separate legal entity, and point to the coach as the real contact path", () => {
+test("both formats agree there is no separate legal entity, and point to the operator as the real contact path", () => {
   for (const text of privacyBoth) {
     assert.match(text, /no separate (?:company|legal entity)/);
-    assert.match(text, /your coach directly/);
+    assert.match(text, /operator(?:,)? directly/);
     assert.match(text, /אין חברה מאחורי האפליקציה/);
-    assert.match(text, /למאמן\/ת שלכם ישירות/);
+    assert.match(text, /למי שהזמין אתכם או למפעיל\/ת האפליקציה/);
   }
   for (const text of termsBoth) {
     assert.match(text, /no separate company/);
-    assert.match(text, /your coach directly/);
+    assert.match(text, /operator(?:,)? directly/);
     assert.match(text, /אין חברה מאחורי האפליקציה/);
-    assert.match(text, /למאמן\/ת שלכם ישירות/);
+    assert.match(text, /למי שהזמין אתכם או למפעיל\/ת האפליקציה/);
   }
 });
 
@@ -144,7 +144,7 @@ test("all four documents scope the abandoned-account clean-up to an empty accoun
 // The 2026-09-06 correction. The policy used to describe the coach-facing
 // engagement signal as coming from "your class attendance history (not what
 // you view or click in the app)" - the exact inverse of the truth twice
-// over: the app has no class-attendance source at all (that is Arbox's, and
+// over: the app has no class-attendance source at all (that belongs to an external system, and
 // out of scope for this product), and the "not active"/"new members" coach
 // lists are built on activity_pings, whose only writer is pingActivity() in
 // cloud.js and which records "this member opened the app today".
@@ -242,9 +242,9 @@ test("the policy does not re-declare data the app never collects, in either lang
 test("the policy states what a training day actually is - a logged workout, not a class check-in - in both languages", () => {
   for (const text of privacyBoth) {
     assert.match(text, /"יום אימון" באפליקציה הוא יום שרשמתם בו אימון ביומן/);
-    assert.match(text, /לא מחוברת למערכת הרישום או הצ'ק־אין של המועדון/);
+    assert.match(text, /לא מחוברת למערכת רישום או צ'ק־אין/);
     assert.match(text, /a day you logged a workout/);
-    assert.match(text, /not connected to the club's class booking or check-in system/);
+    assert.match(text, /not connected to any class booking or check-in system/);
   }
 });
 

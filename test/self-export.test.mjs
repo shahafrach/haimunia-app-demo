@@ -47,7 +47,7 @@ async function boot(mock) {
 test("the export holds the member's own rows only, and no staff columns", async () => {
   const window = await boot(seeded());
   const out = JSON.parse(JSON.stringify(await window.communityBuildSelfExport()));
-  assert.strictEqual(out.kind, "haimuniya-account-export");
+  assert.strictEqual(out.kind, "box-log-account-export");
   assert.strictEqual(out.user_id, ME);
   assert.deepStrictEqual(out.data.private_records.map((r) => r.record_id), ["e1"]);
   assert.deepStrictEqual(out.data.posts.map((r) => r.id), ["p1"]);
@@ -90,5 +90,5 @@ test("the button is on the backup card, and tapping it downloads a file", async 
   window.HTMLAnchorElement.prototype.click = function () { downloaded = this.download; };
   window.handleCommunityClick({ dataset: { communityAction: "self-export" } });
   await waitFor(() => downloaded !== null, 3000);
-  assert.match(downloaded, /^haimuniya-my-data-\d{4}-\d{2}-\d{2}\.json$/);
+  assert.match(downloaded, /^box-log-my-data-\d{4}-\d{2}-\d{2}\.json$/);
 });

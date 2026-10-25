@@ -1,4 +1,4 @@
-// This app and the real production app (haimuniya.github.io/haimunia-app/)
+// This app and the real production app (the earlier sibling app)
 // were served from the same GitHub Pages origin, just different paths, until
 // this app moved to Cloudflare Pages on 2026-09-16 —
 // browser storage (IndexedDB, localStorage, sessionStorage, Cache Storage)
