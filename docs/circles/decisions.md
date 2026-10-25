@@ -30,7 +30,7 @@ private circles for friends. It is not a gym app and not a product.
 
 - Logging is sharing by circle defaults. No compose step. One tap skips one workout.
 - A post belongs to exactly one circle. Sharing to several circles creates one post each.
-- Reactions: fist bump first, at most two others. No text comments, no mentions.
+- Reactions: exactly three kinds, stored as `fist_bump`, `fire`, `clap`; a member may hold all three on a post. No text comments, no mentions.
 - A PR with no reaction after a day moves to the top of the circle screen. No notification.
 - "Trained together": tag a circle member. It counts for them only after they confirm.
 
@@ -65,7 +65,9 @@ private circles for friends. It is not a gym app and not a product.
 
 - Keep invite-based sign-up with a recovery method. No email, no SMTP.
 - An invite joins one circle: 32-byte random token, only its hash stored, 7-day expiry, a use limit, the token after `#` in the URL, joined only through `join_circle` with rate limits.
-- Anonymous sign-ins are off.
+- **Anonymous sign-ins stay ON** (2026-10-25, reversing the line that said off). Sign-up starts as an anonymous session, redeems an invite with `join_circle`, then upgrades to a username and password. With no email there is no other way to hold an identity during the invite step.
+- **Turnstile CAPTCHA is enforced server-side**, by Supabase Auth (Authentication, Attack Protection, CAPTCHA, provider Turnstile; the secret is a dashboard setting and never enters this repository). The client already sends the token (`withCaptcha` in `cloud.js`) and fails closed; the dashboard step is in `COMMUNITY_SETUP.md`, and it must be done on the new project before the first sign-up.
+- **An anonymous user who is in no circle sees nothing.** Every read policy resolves through circle membership; `is_community_member()` means "member of at least one circle".
 - Keep the existing recovery mechanism. No passkeys for now.
 - Rate limits: `join_circle` 10 attempts per user per hour; invite creation 20 per circle per day.
 
@@ -95,3 +97,10 @@ The 2026-10-02 version of this file said "same repo and same project", "keep
 `training_log_usage`", "sign-up uses a real email" and "no public visibility"
 for a public app. The first two are reversed above, and the email decision is
 reversed too (no email, no SMTP).
+
+The same day, "Anonymous sign-ins are off" (Auth) was reversed: they stay on,
+behind Turnstile and the no-circle-sees-nothing rule above.
+
+Also 2026-10-25 (Circles RPCs review): reactions are exactly three kinds, the
+fist bump (`fist_bump`, formerly `cheer`), `fire` and `clap`; and
+`purge_abandoned_profiles` skips anyone who is a member of at least one circle.

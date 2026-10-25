@@ -46,14 +46,18 @@ select lives_ok(
      values ('b0040000-0000-4000-8000-000000000003', tests.uid('m1'), 'announcement', gen_random_uuid(), 'x') $$,
   'the widened source_type check accepts a new label such as announcement');
 
--- --- recovery gate on insert ------------------------------------
+-- --- membership gate on insert ------------------------------------
+-- is_community_member() means "member of at least one circle" (Circles RPCs);
+-- 'norec' is taken out of the fixture circle, so it is in none.
+select tests.clear_auth();
+delete from public.circle_members where user_id = tests.uid('norec');
 select tests.set_auth(tests.uid('norec'));
 select throws_ok(
   $$ insert into public.workout_posts (author_id, source_type, source_record_id, title, result_text, occurred_on)
      values (tests.uid('norec'), 'strength_entry', 'rn', 'T', 'R', current_date) $$,
   '42501',
   null,
-  'a member with no recovery_verified_at cannot insert a post');
+  'a user who is in no circle cannot insert a post');
 
 select * from finish();
 rollback;

@@ -58,15 +58,15 @@ select is(
      join unnest(c.conkey) with ordinality k(att, ord) on true
      join pg_attribute a on a.attrelid = c.conrelid and a.attnum = k.att
     where c.conrelid = 'public.workout_posts'::regclass and c.contype = 'u'),
-  'author_id,source_type,source_record_id',
-  'the natural key is still exactly (author_id, source_type, source_record_id) - publishWorkout''s on-conflict arbiter is untouched, so this migration cannot break the legacy workout share');
+  'author_id,club_id,source_type,source_record_id',
+  'the natural key is (author_id, club_id, source_type, source_record_id): a record can be shared once PER CIRCLE (Circles RPCs). The old three-column key is gone, so the client''s on-conflict arbiter must name club_id too');
 
 select is(
   (select pg_get_function_identity_arguments(p.oid)
      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public' and p.proname = 'pr_share'),
-  'record_id text, note text, media jsonb, p_idempotency_key uuid',
-  'pr_share''s signature is unchanged - the fix needed no client change');
+  'p_club_id uuid, record_id text, note text, p_weight numeric, p_idempotency_key uuid',
+  'pr_share takes the circle first (Circles RPCs), the absolute weight only if the client sends it');
 
 -- =====================================================================
 -- 1. THE COLLISION ITSELF
@@ -93,7 +93,7 @@ select is(
 
 -- Step 3 of the reachable sequence: the member taps "שיתוף" on the PR prompt.
 select lives_ok(
-  $$ select public.pr_share('set-87-collide', 'שיא חדש אחרי חצי שנה', '[]'::jsonb) $$,
+  $$ select public.pr_share(tests.circle(), 'set-87-collide', 'שיא חדש אחרי חצי שנה', 100) $$,
   'sharing the PR for a record that was already shared as a workout succeeds');
 
 -- THE REGRESSION GUARD. Before 202609060025 this was 0.
@@ -162,7 +162,7 @@ select is(
 -- 202609060019 wrote the probe in the first place. It just has to converge on
 -- a POST_PR now instead of on whatever held the slot.
 select is(
-  (select public.pr_share('set-87-collide', 'טקסט אחר לגמרי', '[]'::jsonb)),
+  (select public.pr_share(tests.circle(), 'set-87-collide', 'טקסט אחר לגמרי')),
   (select id from public.workout_posts
     where author_id = tests.uid('m1') and source_record_id = 'set-87-collide'),
   'a second share of the same record returns the SAME post id');
@@ -214,7 +214,7 @@ values
 select tests.set_auth(tests.uid('m1'));
 
 select lives_ok(
-  $$ select public.pr_share('set-87-deleted', 'חוזר לשתף', '[]'::jsonb) $$,
+  $$ select public.pr_share(tests.circle(), 'set-87-deleted', 'חוזר לשתף') $$,
   'sharing a PR whose workout card the member had deleted succeeds');
 select is(
   (select post_type::text || '/' || coalesce(deleted_at::text, 'live')
@@ -239,7 +239,7 @@ values
 select tests.set_auth(tests.uid('m1'));
 
 select throws_ok(
-  $$ select public.pr_share('set-87-removed', 'נסיון', '[]'::jsonb) $$,
+  $$ select public.pr_share(tests.circle(), 'set-87-removed', 'נסיון') $$,
   'post is not available',
   'a PR share cannot relaunch a post a moderator removed - it fails honestly instead');
 select is(
@@ -253,7 +253,7 @@ select is(
 -- =====================================================================
 -- No prior post for the record: still a straight insert, still visibility
 -- 'club', still POST_PR. 202609060019's behaviour, preserved.
-select public.pr_share('set-87-fresh', 'שיא ראשון', '[]'::jsonb);
+select public.pr_share(tests.circle(), 'set-87-fresh', 'שיא ראשון');
 select is(
   (select p.post_type::text || '/' || p.visibility::text
      from public.workout_posts p
@@ -298,7 +298,7 @@ values
   (tests.uid('m3'), 'achievement', 'sessions-50', 'followers', 'עיטור חדש', 'עיטור חדש נפתח', '2026-09-02');
 
 select lives_ok(
-  $$ select public.ach_share('b0870000-0000-4000-8000-000000000001'::uuid, 'גאה בזה', '[]'::jsonb) $$,
+  $$ select public.ach_share(tests.circle(), 'b0870000-0000-4000-8000-000000000001'::uuid, 'גאה בזה') $$,
   'ach_share still creates its own post for a member who also used the app.js share button - the slug and the uuid do not contend for one slot');
 
 select is(

@@ -245,14 +245,16 @@ select is_empty(
   'the refused anniversary_year_2 claim wrote no row for m3');
 
 -- =====================================================================
--- no recovery method
+-- in no circle (is_community_member() = member of at least one circle)
 -- =====================================================================
+select tests.clear_auth();
+delete from public.circle_members where user_id = tests.uid('norec');
 select tests.set_auth(tests.uid('norec'));
 select throws_ok(
   $$ select public.ach_claim(array['first_workout']) $$,
   'P0001',
   'recovery method required',
-  'a member with no recovery method cannot claim');
+  'a user who is in no circle cannot claim');
 
 -- =====================================================================
 -- rate limit: 30 per 10 minutes, pre-seeded rather than looped 30 times

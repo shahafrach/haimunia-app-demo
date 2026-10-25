@@ -64,6 +64,8 @@ insert into public.achievement_definitions (code, name, description, category, t
 insert into public.analytics_events (user_id, event_name) values (tests.uid('m3'), 'leak_probe');
 insert into public.blocks (blocker_id, blocked_id) values (tests.uid('m3'), tests.uid('owner'));
 insert into public.bug_reports (reporter_id, body) values (tests.uid('m3'), 'probe');
+update public.clubs set benchmark_enabled = true, benchmark = 'fran' where id = 'b0000000-0000-4000-8000-00000000000b';
+insert into public.benchmark_results (club_id, user_id, benchmark, month, result, rx_or_scaled) values ('b0000000-0000-4000-8000-00000000000b', tests.uid('m3'), 'fran', date_trunc('month', now() at time zone 'Asia/Jerusalem')::date, '4:10', 'rx');
 insert into public.circle_invites (club_id, token_hash, created_by, expires_at) values ('b0000000-0000-4000-8000-00000000000b', repeat('b', 64), tests.uid('owner'), now() + interval '7 days');
 insert into public.edge_function_invocations (request_id, slug) values (987654321, 'leak_probe');
 insert into public.invite_attempts (user_id, actor_key_hash) values (tests.uid('m3'), repeat('d', 64));
@@ -79,13 +81,14 @@ insert into public.post_training_partners (post_id, tagged_user_id, tagged_by) v
 insert into public.private_records (user_id, record_type, record_id, payload) values (tests.uid('m3'), 'session_note', 'leak-probe', '{}'::jsonb);
 insert into public.push_subscriptions (user_id, endpoint, keys) values (tests.uid('m3'), 'https://example.test/leak', '{"p256dh":"k","auth":"a"}'::jsonb);
 insert into public.rate_limits (user_id, action) values (tests.uid('m3'), 'leak_probe');
-insert into public.reactions (post_id, user_id, kind) values ('b1000000-0000-4000-8000-000000000001', tests.uid('owner'), 'cheer');
+insert into public.reactions (post_id, user_id, kind) values ('b1000000-0000-4000-8000-000000000001', tests.uid('owner'), 'fist_bump');
 insert into public.request_idempotency (user_id, action, idempotency_key) values (tests.uid('m3'), 'leak_probe', gen_random_uuid());
 
 -- Positive controls: the victim rows exist, so a count of zero below means something.
 select cmp_ok((select count(*) from public.account_deletion_requests where user_id = tests.uid('m3')), '>', 0::bigint, 'account_deletion_requests: the victim row exists');
 select cmp_ok((select count(*) from public.achievement_definitions where code = 'leak_probe'), '>', 0::bigint, 'achievement_definitions: the victim row exists');
 select cmp_ok((select count(*) from public.analytics_events where event_name = 'leak_probe'), '>', 0::bigint, 'analytics_events: the victim row exists');
+select cmp_ok((select count(*) from public.benchmark_results where club_id = 'b0000000-0000-4000-8000-00000000000b'), '>', 0::bigint, 'benchmark_results: the victim row exists');
 select cmp_ok((select count(*) from public.blocks where blocker_id = tests.uid('m3')), '>', 0::bigint, 'blocks: the victim row exists');
 select cmp_ok((select count(*) from public.bug_reports where reporter_id = tests.uid('m3')), '>', 0::bigint, 'bug_reports: the victim row exists');
 select cmp_ok((select count(*) from public.circle_invites where club_id = 'b0000000-0000-4000-8000-00000000000b'), '>', 0::bigint, 'circle_invites: the victim row exists');
@@ -141,6 +144,13 @@ select is(tests.leak_count('analytics_events', 'event_name = ''leak_probe'''), 0
 select is(tests.leak_dml('update public.analytics_events set props = props where event_name = ''leak_probe'''), 0, 'analytics_events: update touches zero rows of circle B');
 select is(tests.leak_dml('delete from public.analytics_events where event_name = ''leak_probe'''), 0, 'analytics_events: delete removes zero rows of circle B');
 select is(tests.leak_dml('insert into public.analytics_events (user_id, event_name) values (tests.uid(''m3''), ''leak_probe_2'')'), 0, 'analytics_events: insert into circle B is refused');
+
+-- benchmark_results
+select tests.set_auth(tests.uid('m1'));
+select is(tests.leak_count('benchmark_results', 'club_id = ''b0000000-0000-4000-8000-00000000000b'''), 0::bigint, 'benchmark_results: select sees zero rows of circle B');
+select is(tests.leak_dml('update public.benchmark_results set result = ''hacked'' where club_id = ''b0000000-0000-4000-8000-00000000000b'''), 0, 'benchmark_results: update touches zero rows of circle B');
+select is(tests.leak_dml('delete from public.benchmark_results where club_id = ''b0000000-0000-4000-8000-00000000000b'''), 0, 'benchmark_results: delete removes zero rows of circle B');
+select is(tests.leak_dml('insert into public.benchmark_results (club_id, user_id, benchmark, month, result, rx_or_scaled) values (''b0000000-0000-4000-8000-00000000000b'', tests.uid(''m1''), ''fran'', date_trunc(''month'', now() at time zone ''Asia/Jerusalem'')::date, ''1:00'', ''rx'')'), 0, 'benchmark_results: insert into circle B is refused');
 
 -- blocks
 select tests.set_auth(tests.uid('m1'));
@@ -294,7 +304,7 @@ select tests.set_auth(tests.uid('m1'));
 select is(tests.leak_count('reactions', 'post_id = ''b1000000-0000-4000-8000-000000000001'''), 0::bigint, 'reactions: select sees zero rows of circle B');
 select is(tests.leak_dml('update public.reactions set kind = kind where post_id = ''b1000000-0000-4000-8000-000000000001'''), 0, 'reactions: update touches zero rows of circle B');
 select is(tests.leak_dml('delete from public.reactions where post_id = ''b1000000-0000-4000-8000-000000000001'''), 0, 'reactions: delete removes zero rows of circle B');
-select is(tests.leak_dml('insert into public.reactions (post_id, user_id, kind) values (''b1000000-0000-4000-8000-000000000001'', tests.uid(''m1''), ''cheer'')'), 0, 'reactions: insert into circle B is refused');
+select is(tests.leak_dml('insert into public.reactions (post_id, user_id, kind) values (''b1000000-0000-4000-8000-000000000001'', tests.uid(''m1''), ''fist_bump'')'), 0, 'reactions: insert into circle B is refused');
 
 -- request_idempotency
 select tests.set_auth(tests.uid('m1'));
@@ -315,6 +325,7 @@ select tests.clear_auth();
 select cmp_ok((select count(*) from public.account_deletion_requests where user_id = tests.uid('m3')), '>', 0::bigint, 'account_deletion_requests: the victim rows survived');
 select cmp_ok((select count(*) from public.achievement_definitions where code = 'leak_probe'), '>', 0::bigint, 'achievement_definitions: the victim rows survived');
 select cmp_ok((select count(*) from public.analytics_events where event_name = 'leak_probe'), '>', 0::bigint, 'analytics_events: the victim rows survived');
+select cmp_ok((select count(*) from public.benchmark_results where club_id = 'b0000000-0000-4000-8000-00000000000b'), '>', 0::bigint, 'benchmark_results: the victim rows survived');
 select cmp_ok((select count(*) from public.blocks where blocker_id = tests.uid('m3')), '>', 0::bigint, 'blocks: the victim rows survived');
 select cmp_ok((select count(*) from public.bug_reports where reporter_id = tests.uid('m3')), '>', 0::bigint, 'bug_reports: the victim rows survived');
 select cmp_ok((select count(*) from public.circle_invites where club_id = 'b0000000-0000-4000-8000-00000000000b'), '>', 0::bigint, 'circle_invites: the victim rows survived');
@@ -344,7 +355,7 @@ select cmp_ok((select count(*) from public.workout_posts where club_id = 'b00000
 select is_empty(
   $$ select c.relname::text from pg_class c
       where c.relnamespace = 'public'::regnamespace and c.relkind in ('r', 'p')
-        and c.relname not in ('account_deletion_requests', 'achievement_definitions', 'analytics_events', 'blocks', 'bug_reports', 'circle_invites', 'circle_members', 'clubs', 'edge_function_invocations', 'invite_attempts', 'invite_codes', 'invite_redemptions', 'invites', 'job_health_state', 'member_achievements', 'member_targets', 'notification_batches', 'notification_preferences', 'notifications', 'post_training_partners', 'private_records', 'profiles', 'push_subscriptions', 'rate_limits', 'reactions', 'request_idempotency', 'workout_posts') $$,
+        and c.relname not in ('account_deletion_requests', 'achievement_definitions', 'analytics_events', 'blocks', 'bug_reports', 'benchmark_results', 'circle_invites', 'circle_members', 'clubs', 'edge_function_invocations', 'invite_attempts', 'invite_codes', 'invite_redemptions', 'invites', 'job_health_state', 'member_achievements', 'member_targets', 'notification_batches', 'notification_preferences', 'notifications', 'post_training_partners', 'private_records', 'profiles', 'push_subscriptions', 'rate_limits', 'reactions', 'request_idempotency', 'workout_posts') $$,
   'this file covers every table in public: a new table must be added here');
 
 select * from finish();

@@ -39,8 +39,7 @@ select ok(
 -- =====================================================================
 select tests.set_auth(tests.uid('m1'));
 select lives_ok(
-  $$ select public.post_create('idempotent post', 'club', '[]'::jsonb, '{}'::jsonb,
-                               'e0800000-0000-4000-8000-000000000001') $$,
+  $$ select public.post_create(tests.circle(), 'idempotent post', 'e0800000-0000-4000-8000-000000000001') $$,
   'a first post_create with an idempotency key succeeds');
 
 select is(
@@ -49,8 +48,7 @@ select is(
 
 -- The retry: same key, same payload, as if the client never saw the response.
 select is(
-  public.post_create('idempotent post', 'club', '[]'::jsonb, '{}'::jsonb,
-                     'e0800000-0000-4000-8000-000000000001'),
+  public.post_create(tests.circle(), 'idempotent post', 'e0800000-0000-4000-8000-000000000001'),
   (select id from public.workout_posts where body = 'idempotent post'),
   'THE FIX: replaying the same key returns the ORIGINAL post id rather than creating a second post');
 select is(
@@ -60,8 +58,7 @@ select is(
 -- A different key IS a different action, even with an identical body: two
 -- deliberate identical posts must both be possible.
 select lives_ok(
-  $$ select public.post_create('idempotent post', 'club', '[]'::jsonb, '{}'::jsonb,
-                               'e0800000-0000-4000-8000-000000000002') $$,
+  $$ select public.post_create(tests.circle(), 'idempotent post', 'e0800000-0000-4000-8000-000000000002') $$,
   'a DIFFERENT key with the same body creates a second post...');
 select is(
   (select count(*)::int from public.workout_posts where body = 'idempotent post'), 2,
@@ -69,10 +66,10 @@ select is(
 
 -- Omitting the key entirely preserves the pre-migration behaviour exactly.
 select lives_ok(
-  $$ select public.post_create('unkeyed post', 'club', '[]'::jsonb, '{}'::jsonb) $$,
-  'the 4-argument call still resolves (p_idempotency_key defaults to null)...');
+  $$ select public.post_create(tests.circle(), 'unkeyed post') $$,
+  'the call without a key still resolves (p_idempotency_key defaults to null)...');
 select lives_ok(
-  $$ select public.post_create('unkeyed post', 'club', '[]'::jsonb, '{}'::jsonb) $$,
+  $$ select public.post_create(tests.circle(), 'unkeyed post') $$,
   '...and remains non-idempotent without a key, which is the documented opt-out');
 select is(
   (select count(*)::int from public.workout_posts where body = 'unkeyed post'), 2,
@@ -83,8 +80,7 @@ select is(
 -- =====================================================================
 select tests.set_auth(tests.uid('m2'));
 select lives_ok(
-  $$ select public.post_create('m2 post', 'club', '[]'::jsonb, '{}'::jsonb,
-                               'e0800000-0000-4000-8000-000000000001') $$,
+  $$ select public.post_create(tests.circle(), 'm2 post', 'e0800000-0000-4000-8000-000000000001') $$,
   'a DIFFERENT member reusing the same key value is unaffected - the claim is keyed (user, action, key)');
 select is(
   (select count(*)::int from public.workout_posts where body = 'm2 post'), 1,

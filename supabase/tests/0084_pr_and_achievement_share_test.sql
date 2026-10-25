@@ -68,28 +68,28 @@ select is(
   (select pg_get_function_identity_arguments(p.oid)
      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public' and p.proname = 'pr_share'),
-  'record_id text, note text, media jsonb, p_idempotency_key uuid',
+  'p_club_id uuid, record_id text, note text, p_weight numeric, p_idempotency_key uuid',
   'pr_share takes record_id as TEXT - contracts.md says uuid, and a uuid parameter would reject every real call ("set-<uuid>") before the body ran');
 select is(
   (select array_to_string(p.proargnames, ',')
      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public' and p.proname = 'pr_share'),
-  'record_id,note,media,p_idempotency_key',
+  'p_club_id,record_id,note,p_weight,p_idempotency_key',
   'and by the argument NAMES cloud.js sends, since PostgREST resolves an RPC by name');
 select is(
   (select array_to_string(p.proargnames, ',')
      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public' and p.proname = 'ach_share'),
-  'member_achievement_id,caption,media,p_idempotency_key',
+  'p_club_id,member_achievement_id,caption,p_idempotency_key',
   'ach_share likewise');
 select is(
-  (select has_function_privilege('authenticated', 'public.pr_share(text, text, jsonb, uuid)', 'execute')), true,
+  (select has_function_privilege('authenticated', 'public.pr_share(uuid, text, text, numeric, uuid)', 'execute')), true,
   'pr_share is callable by a member');
 select is(
-  (select has_function_privilege('anon', 'public.pr_share(text, text, jsonb, uuid)', 'execute')), false,
+  (select has_function_privilege('anon', 'public.pr_share(uuid, text, text, numeric, uuid)', 'execute')), false,
   'and not by anon');
 select is(
-  (select has_function_privilege('anon', 'public.ach_share(uuid, text, jsonb, uuid)', 'execute')), false,
+  (select has_function_privilege('anon', 'public.ach_share(uuid, uuid, text, uuid)', 'execute')), false,
   'nor is ach_share');
 select is(
   (select has_function_privilege('authenticated', 'public.private_record_number(jsonb, text)', 'execute')), false,
@@ -101,7 +101,7 @@ select is(
 -- =====================================================================
 select tests.set_auth(tests.uid('m1'));
 select lives_ok(
-  $$ select public.pr_share('set-83-new', 'הרגשתי חזק', '[]'::jsonb) $$,
+  $$ select public.pr_share(tests.circle(), 'set-83-new', 'הרגשתי חזק', 100) $$,
   'a member shares their own PR');
 
 select is(
@@ -131,7 +131,7 @@ select is(
 -- 2. Ownership
 -- =====================================================================
 select throws_ok(
-  $$ select public.pr_share('set-83-m2', 'לא שלי', '[]'::jsonb) $$,
+  $$ select public.pr_share(tests.circle(), 'set-83-m2', 'לא שלי') $$,
   'P0001', 'not authorized',
   'a member cannot attach a post to ANOTHER member''s record id - the id is untrusted, and this is the boundary');
 
@@ -139,22 +139,22 @@ select throws_ok(
 -- cloud backup is opt-OUT and a member who declined it still owns the PR -
 -- but it publishes no figures at all.
 select lives_ok(
-  $$ select public.pr_share('set-83-never-synced', 'שיא בלי גיבוי', '[]'::jsonb) $$,
+  $$ select public.pr_share(tests.circle(), 'set-83-never-synced', 'שיא בלי גיבוי') $$,
   'an unsynced record can still be shared - refusing would break sharing forever for a member who turned cloud backup off');
 select ok(
   (select result_text is null and metadata -> 'new_result' is null
      from public.workout_posts where source_record_id = 'set-83-never-synced'),
   'and it carries NO performance claim, because there is nothing server-side to compute one from');
 select throws_ok(
-  $$ select public.pr_share('set-83-also-never-synced', '', '[]'::jsonb) $$,
-  'P0001', 'a post needs text or at least one photo',
-  'with no figures, no note and no photo there is nothing to publish');
+  $$ select public.pr_share(tests.circle(), 'set-83-also-never-synced', '') $$,
+  'P0001', 'a post needs text or a figure',
+  'with no figures, no note and no movement there is nothing to publish');
 
 -- =====================================================================
 -- 3. Malformed payloads never abort a share
 -- =====================================================================
 select lives_ok(
-  $$ select public.pr_share('set-83-junk', 'בכל זאת', '[]'::jsonb) $$,
+  $$ select public.pr_share(tests.circle(), 'set-83-junk', 'בכל זאת') $$,
   'a record whose weight is "heavy" and whose date is "nope" does not blow up the share on a cast');
 select ok(
   (select result_text is null from public.workout_posts where source_record_id = 'set-83-junk'),
@@ -164,7 +164,7 @@ select ok(
 -- 4. Idempotency, with and without a key
 -- =====================================================================
 select is(
-  public.pr_share('set-83-new', 'שוב', '[]'::jsonb),
+  public.pr_share(tests.circle(), 'set-83-new', 'שוב'),
   (select id from public.workout_posts where source_record_id = 'set-83-new'),
   'sharing the same record twice returns the FIRST post id - the natural key (author_id, source_type, source_record_id) converges instead of raising 23505');
 select is(
@@ -177,15 +177,18 @@ select is(
 -- =====================================================================
 -- 5. The write gates
 -- =====================================================================
+-- Sharing needs a circle: a user who is in none cannot share into the fixture
+-- circle (the membership gate replaced the recovery gate).
+select tests.clear_auth();
+delete from public.circle_members where user_id = tests.uid('norec');
 select tests.set_auth(tests.uid('norec'));
 select throws_ok(
-  $$ select public.pr_share('set-83-new', 'x', '[]'::jsonb) $$,
-  'P0001', 'recovery method required',
-  'a member who has not verified a recovery method cannot share - the same gate post_create carries');
-select tests.set_auth(tests.uid('norec'));
+  $$ select public.pr_share(tests.circle(), 'set-83-new', 'x') $$,
+  'P0001', 'not authorized',
+  'a user who is not in the circle cannot share a PR into it - the same gate post_create carries');
 select throws_ok(
-  $$ select public.ach_share('b0830000-0000-4000-8000-000000000001', 'x', '[]'::jsonb) $$,
-  'P0001', 'recovery method required',
+  $$ select public.ach_share(tests.circle(), 'b0830000-0000-4000-8000-000000000001', 'x') $$,
+  'P0001', 'not authorized',
   'and neither can they share an achievement');
 
 -- =====================================================================
@@ -193,7 +196,7 @@ select throws_ok(
 -- =====================================================================
 select tests.set_auth(tests.uid('m1'));
 select lives_ok(
-  $$ select public.ach_share('b0830000-0000-4000-8000-000000000001', 'סוף סוף', '[]'::jsonb) $$,
+  $$ select public.ach_share(tests.circle(), 'b0830000-0000-4000-8000-000000000001', 'סוף סוף') $$,
   'a member shares their own achievement');
 select is(
   (select post_type::text from public.workout_posts
@@ -212,20 +215,20 @@ select ok(
   'shared_at is stamped, which is what contracts.md promises and what the client renders as "shared"');
 
 select throws_ok(
-  $$ select public.ach_share('b0830000-0000-4000-8000-000000000002', 'x', '[]'::jsonb) $$,
+  $$ select public.ach_share(tests.circle(), 'b0830000-0000-4000-8000-000000000002', 'x') $$,
   'P0001', 'a private achievement cannot be shared',
   'an only_me decoration is refused server-side - the client checks this too, which is exactly why the server must');
 select throws_ok(
-  $$ select public.ach_share('b0830000-0000-4000-8000-000000000003', 'x', '[]'::jsonb) $$,
+  $$ select public.ach_share(tests.circle(), 'b0830000-0000-4000-8000-000000000003', 'x') $$,
   'P0001', 'not authorized',
   'and another member''s achievement is refused as unauthorised, not reported as missing');
 select throws_ok(
-  $$ select public.ach_share('b0830000-0000-4000-8000-0000000000ff', 'x', '[]'::jsonb) $$,
+  $$ select public.ach_share(tests.circle(), 'b0830000-0000-4000-8000-0000000000ff', 'x') $$,
   'P0001', 'achievement not found',
   'an unknown id is a plain not-found');
 
 select is(
-  public.ach_share('b0830000-0000-4000-8000-000000000001', 'שוב', '[]'::jsonb),
+  public.ach_share(tests.circle(), 'b0830000-0000-4000-8000-000000000001', 'שוב'),
   (select id from public.workout_posts where source_record_id = 'b0830000-0000-4000-8000-000000000001'),
   'a repeat share converges on the first post too');
 select is(
@@ -253,11 +256,11 @@ select is(
 -- =====================================================================
 select tests.set_auth(tests.uid('m2'));
 select lives_ok(
-  $$ select public.ach_share('b0830000-0000-4000-8000-000000000003', 'שלי', '[]'::jsonb,
+  $$ select public.ach_share(tests.circle(), 'b0830000-0000-4000-8000-000000000003', 'שלי',
                              'e0830000-0000-4000-8000-000000000001') $$,
   'ach_share accepts an idempotency key, the same shape post_create takes');
 select is(
-  public.ach_share('b0830000-0000-4000-8000-000000000003', 'שלי', '[]'::jsonb,
+  public.ach_share(tests.circle(), 'b0830000-0000-4000-8000-000000000003', 'שלי',
                    'e0830000-0000-4000-8000-000000000001'),
   (select id from public.workout_posts where source_record_id = 'b0830000-0000-4000-8000-000000000003'),
   'and replaying the key returns the original post id without writing again');

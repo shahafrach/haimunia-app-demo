@@ -49,7 +49,7 @@ select is_empty(
   'every club_id column is NOT NULL with no default');
 select set_eq(
   $$ select table_name::text from information_schema.columns
-      where table_schema = 'public' and column_name = 'club_id' and table_name not in ('circle_members', 'circle_invites') $$,
+      where table_schema = 'public' and column_name = 'club_id' and table_name not in ('circle_members', 'circle_invites', 'benchmark_results') $$,
   $$ values ('invites'), ('post_training_partners'), ('workout_posts') $$,
   'club_id remains only on rows that belong to one circle (plus the new circle tables)');
 select is_empty(

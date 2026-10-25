@@ -391,7 +391,7 @@ Resolved by the 2026-10-25 decisions:
 
 | # | Question | Answer |
 |---|---|---|
-| O1 | Anonymous sign-ins | Off. Sign-up is invite-based with a recovery method; the `training_log_usage` anon insert concern is moot because that table is dropped. |
+| O1 | Anonymous sign-ins | **On** (revised 2026-10-25). Sign-up starts anonymous, joins a circle with `join_circle`, upgrades to username and password. Turnstile is enforced server-side; a user in no circle sees nothing. |
 | O2 | Events | Drop. |
 | O3 | Achievements, PR shares, challenges | Achievements are per user. PR shares are posts, one per circle. Challenges are not kept (not in the keep list). |
 | O5 | Abuse handling without staff | No reports or posting restrictions. A circle is invite-only among friends: the owner removes members, anyone can leave, account deletion exists. |
@@ -405,4 +405,11 @@ Resolved by the 2026-10-25 decisions:
 | O12 | Realtime code | Remove the Realtime code; do not gate it. |
 | O13 | Benchmark of the month | The circle owner picks the benchmark from the fixed list of eight named benchmarks the app already has. |
 
-Nothing is open.
+Opened by the Circles RPCs session (2026-10-25), for the Circles client session or the owner:
+
+| # | Question |
+|---|---|
+| O14 | Turnstile is enforced by Supabase Auth only once the secret is set in the new project's dashboard (`COMMUNITY_SETUP.md`, the dashboard step), and `captchaSiteKey` in `cloud-config.js` is still `""`. Both belong to the repo-split session; until then sign-up is not CAPTCHA-protected. |
+| O16 | `member_targets` is one row per person, so a weekly target is the same in every circle although `decisions.md` lists it under per-circle member settings. Make it per circle? |
+
+Everything else from the original questions is settled.

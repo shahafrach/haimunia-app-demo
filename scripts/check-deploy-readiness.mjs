@@ -32,7 +32,7 @@ const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 // Kept in sync with cloud.js's OUTBOX_ACTIONS by
 // test/community-outbox-rpc-contract.test.mjs.
 const REQUIRED = [
-  { fn: "post_create", args: { body: "", visibility: "club", media: [], links: {} } },
+  { fn: "post_create", args: { p_club_id: null, body: "" } },
   { fn: "add_post_comment", args: { p_post_id: null, p_body: "", p_parent_comment_id: null, p_mentions: null } },
   { fn: "toggle_reaction", args: { p_post_id: null } },
   { fn: "chal_record_progress", args: { p_challenge_id: null, p_user_id: null, p_delta: 0, p_note: null } },

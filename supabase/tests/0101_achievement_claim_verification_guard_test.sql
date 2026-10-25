@@ -50,7 +50,7 @@ select results_eq(
 -- 2. ach_share() refuses to publish an unverified achievement - THE FIX.
 -- =====================================================================
 select throws_ok(
-  $$ select public.ach_share((
+  $$ select public.ach_share(tests.circle(), (
        select ma.id from public.member_achievements ma
        join public.achievement_definitions d on d.id = ma.achievement_id
        where ma.user_id = tests.uid('m1') and d.code = 'unver_probe'
@@ -97,7 +97,7 @@ select results_eq(
   $$ values (true) $$,
   'a tenure_days claim, independently checked against invite_redemptions, is stamped verified = true');
 select lives_ok(
-  $$ select public.ach_share((
+  $$ select public.ach_share(tests.circle(), (
        select ma.id from public.member_achievements ma
        join public.achievement_definitions d on d.id = ma.achievement_id
        where ma.user_id = tests.uid('m3') and d.code = 'tenure_probe'
