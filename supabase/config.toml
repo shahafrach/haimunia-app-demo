@@ -77,8 +77,8 @@ secure_password_change = false
 enable_signup = false
 
 [edge_runtime]
-# COMM-220 is the first Edge Function in this repo
-# (supabase/functions/recap_weekly/). Turning this on is what makes
+# The Edge Functions in this repo
+# (supabase/functions/). Turning this on is what makes
 # `supabase start`/`supabase functions serve` actually boot the Deno
 # runtime container locally; it changes nothing about the real project,
 # which is configured through the dashboard (see the file header).
