@@ -33,6 +33,10 @@
     try {
       const loc = window.location;
       token = CIRCLES.parseInviteHash(String((loc && loc.hash) || ""));
+      // Inside WhatsApp, Instagram or Facebook the invite is held and the URL is
+      // left exactly as it arrived: the fragment is what carries the token into
+      // Safari or Chrome (sharing.js shows the steps).
+      if (token && sharingHoldInviteForInApp(token)) return;
       const hadHash = !!(loc && loc.hash && loc.hash.length > 1);
       const search = String((loc && loc.search) || "");
       const legacy = /(^|[?&])invite=/.test(search);
@@ -100,6 +104,8 @@
     if (state.circles.join.token && !state.circles.join.busy) await joinCircleWithToken(state.circles.join.token);
     if (inCircles()) { loadMyTarget(); loadPendingTags(); }
     rerender();
+    // First open on a Sunday: last week's card, once.
+    sharingMaybeOfferLastWeek();
   }
 
   // ---- Joining ---------------------------------------------------------------
@@ -121,6 +127,7 @@
       j.token = "";
       j.error = "";
       if (state.circles.sheet && state.circles.sheet.kind === "join") state.circles.sheet = null;
+      const firstCircle = !inCircles();
       await loadMyCircles();
       if (clubId && circleById(clubId)) setCurrentCircle(clubId);
       // A fresh anonymous account just got a bare profile from join_circle.
@@ -129,6 +136,7 @@
       loadMyTarget();
       loadPendingTags();
       setMessage(status === "joined" ? "הצטרפת למעגל" : CIRCLES.joinStatusText("already_member"));
+      sharingAfterCircleJoined(firstCircle && status === "joined");
       return;
     }
     if (status === "offline") {
@@ -157,7 +165,7 @@
     state.circles.join.draft = "";
     await joinCircleWithToken(token);
   }
-  function inviteFlowPending() { return !!(state.circles.join.token && !inCircles()); }
+  function inviteFlowPending() { return !!((state.circles.join.token || sharingInAppHeld()) && !inCircles()); }
   function discardPendingInvite() { state.circles.join.token = ""; state.circles.join.error = ""; rerender(); }
 
   // ---- Creating and running a circle ----------------------------------------
@@ -177,11 +185,13 @@
     if (error || !data) return setFieldErrors("circleCreate", { name: CIRCLES.circleErrorText(error, "יצירת המעגל נכשלה") });
     setFieldErrors("circleCreate", {});
     state.circles.sheet = null;
+    const firstCircle = !inCircles();
     await loadMyCircles();
     setCurrentCircle(String(data));
     state.circles.section = "feed";
     loadMyTarget();
     setMessage("המעגל נוצר");
+    sharingAfterCircleJoined(firstCircle);
   }
 
   async function saveCircleSettings(form) {
@@ -266,7 +276,7 @@
     const sheet = state.circles.sheet;
     if (!sheet || !sheet.link) return;
     const c = circleById(sheet.clubId);
-    const text = "הוזמנת להצטרף למעגל " + (c ? c.name : "") + " ב-" + brandName() + ". הקישור תקף שבוע:";
+    const text = sharingInviteText(c);
     if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
       try {
         await navigator.share({ title: brandName(), text: text, url: sheet.link });
@@ -283,7 +293,8 @@
     if (!sheet || !sheet.link) return;
     let ok = false;
     try {
-      if (navigator.clipboard && navigator.clipboard.writeText) { await navigator.clipboard.writeText(sheet.link); ok = true; }
+      // The message and the link, so a paste into WhatsApp says who invited to what and for how long.
+      if (navigator.clipboard && navigator.clipboard.writeText) { await navigator.clipboard.writeText(sharingInviteText(circleById(sheet.clubId)) + "\n" + sheet.link); ok = true; }
     } catch (e) { ok = false; }
     sheet.copied = ok;
     sheet.error = ok ? "" : "ההעתקה לא הצליחה. אפשר ללחוץ על הקישור, לסמן אותו ולהעתיק ידנית.";
@@ -392,6 +403,8 @@
     w.rows = Array.isArray(data) ? data : [];
     w.loaded = true;
     rerender();
+    // Saves this week's snapshot and draws the card before the share tap.
+    sharingAfterWeekLoaded(clubId);
   }
 
   // ---- The member's own target and pause (Me) ---------------------------------

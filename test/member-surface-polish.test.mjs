@@ -127,13 +127,12 @@ test("an earned achievement offers two NAMED share actions, each with a stroke i
 
   const row = window.document.querySelector("[data-achievement-id]");
   const club_ = row.querySelector('[data-community-action="ach-share-later"]');
-  const outward = row.querySelector('[data-community-action="outward-ach-earned"]');
-  assert.ok(club_ && outward, "both share paths are still offered - they are different audiences");
+  assert.ok(club_, "the circle share is offered");
+  assert.equal(row.querySelector('[data-community-action="outward-ach-earned"]'), null, "there is no card for a medal, so no share out of the app");
   assert.match(club_.textContent, /שיתוף למעגל/, "the circle share says which audience it is");
-  assert.match(outward.textContent, /שיתוף מחוץ לאפליקציה/, "and so does the outward one");
   assert.doesNotMatch(row.textContent, /↗/, "the unexplained arrow emoji is gone");
 
-  for (const btn of [club_, outward]) {
+  for (const btn of [club_]) {
     const svg = btn.querySelector("svg");
     assert.ok(svg, "each carries a real icon");
     assert.equal(svg.getAttribute("stroke"), "currentColor", "a stroke icon, taking the button's own colour in both themes");
@@ -151,7 +150,7 @@ test("an already-shared achievement says which audience it was shared with", asy
   await waitFor(() => !!window.document.querySelector("[data-achievement-id]"), 4000);
   const row = window.document.querySelector("[data-achievement-id]");
   assert.match(row.textContent, /שותף למעגל/, "'שותף' alone did not say to whom, beside a control that shares elsewhere");
-  assert.ok(row.querySelector('[data-community-action="outward-ach-earned"]'), "the outward share is still offered");
+  assert.equal(row.querySelector('[data-community-action="outward-ach-earned"]'), null, "no outward share for a medal");
 });
 
 // The twin: cloud.js's own inline "share this session to the club" control

@@ -317,7 +317,7 @@ test("the sheet is in the dialog registry, so Escape, the Tab trap and the backd
   assert.ok(dialogKeys.indexOf("termSheet") < dialogKeys.indexOf("notifCenter"),
     "the term sheet must come before the overlays it can be opened from");
   assert.match(src, /data-cloud-dialog="termSheet"/);
-  // Third, behind confirmSheet and outwardShare and ahead of every overlay a
+  // Third, behind confirmSheet and sharingSheet and ahead of every overlay a
   // marker can be rendered inside - see the ordering pin and its reasoning in
   // community-destructive-symmetry.test.mjs.
   const registry = src.slice(src.indexOf("const CLOUD_DIALOGS = ["), src.indexOf("const cloudDialogOpeners"));

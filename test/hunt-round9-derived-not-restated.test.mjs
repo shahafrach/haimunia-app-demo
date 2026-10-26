@@ -17,7 +17,7 @@ const cloudJs = cloudSource();
 test("Escape closes whatever the dialog registry says is open", () => {
   // The Escape handler was a hand-maintained if/else chain naming fifteen
   // dialogs in the same order as CLOUD_DIALOGS - its own first three comments
-  // said so, explaining that confirmSheet/outwardShare/termSheet must come
+  // said so, explaining that confirmSheet/sharingSheet/termSheet must come
   // first because each stacks on the one below. The BACKDROP handler forty
   // lines away already read the registry.
   //
@@ -55,7 +55,7 @@ test("the local welcome sheet does not cover an invitation", () => {
   assert.match(cloudJs, /window\.communityInviteFlowPending = function \(\) \{/,
     "cloud.js can say whether an invitation is on screen");
   const circlesJs = fs.readFileSync(new URL("../src/community/circles.js", import.meta.url), "utf8");
-  assert.match(circlesJs, /function inviteFlowPending\(\) \{ return !!\(state\.circles\.join\.token && !inCircles\(\)\); \}/,
+  assert.match(circlesJs, /function inviteFlowPending\(\) \{ return !!\(\(state\.circles\.join\.token \|\| sharingInAppHeld\(\)\) && !inCircles\(\)\); \}/,
     "captured but not yet joined");
   assert.match(appJs, /if \(userName === null && isFreshInstall && !invitePending\) openWelcomeModal\(\);/,
     "and app.js's boot asks before opening its own sheet");

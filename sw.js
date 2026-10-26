@@ -47,7 +47,7 @@ const REQUIRED_ASSETS = [
 // must not take down offline support for the training log too.
 const OPTIONAL_ASSETS = [
   "./src/community/circles-core.js",
-  "./src/community/outward.js",
+  "./src/community/sharing-core.js",
   "./src/community/achievements.js",
   "./src/community/notifications.js",
   "./src/community/reactions.js",
@@ -57,6 +57,7 @@ const OPTIONAL_ASSETS = [
   "./src/community/circles.js",
   "./src/community/circles-ui.js",
   "./src/community/circles-sheets.js",
+  "./src/community/sharing.js",
   "./src/share-cards.js",
   "./src/community/auth.js",
   "./cloud.js",

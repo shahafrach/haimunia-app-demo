@@ -121,7 +121,7 @@ test("what I share is set per circle with set_share_defaults, merged one key at 
 });
 
 test("nothing in the client reads a dropped profile column", () => {
-  const files = ["cloud.js", "app.js", "src/community/auth.js", "src/community/privacy.js", "src/community/posts.js", "src/community/outward.js", "src/community/share-prompt.js", "src/community/circles.js", "src/community/circles-ui.js", "src/community/circles-sheets.js"];
+  const files = ["cloud.js", "app.js", "src/community/auth.js", "src/community/privacy.js", "src/community/posts.js", "src/community/sharing.js", "src/community/share-prompt.js", "src/community/circles.js", "src/community/circles-ui.js", "src/community/circles-sheets.js"];
   const dropped = ["show_workout_results", "visible_to_club", "show_prs", "show_achievements", "show_attendance", "show_upcoming_booking", "show_in_attendee_lists", "in_leaderboards", "allow_follows", "allow_mentions", "allow_messages"];
   for (const f of files) {
     const src = readFileSync(new URL("../" + f, import.meta.url), "utf8")

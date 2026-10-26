@@ -349,7 +349,7 @@ console.log("\n---- 14: the share control is a stroke icon, not an emoji ----");
 // member. Asserted off the function itself rather than skipped: the emoji
 // was in the markup it returns, which is exactly what this is about.
 const shareMarkup = await page.evaluate(async () => {
-  const src = await (await fetch("./src/community/outward.js")).text();
+  const src = await (await fetch("./src/community/sharing.js")).text();
   const m = src.match(/club: '(<svg[^']*<\/svg>)'/);
   return m ? m[1] : null;
 });

@@ -41,7 +41,9 @@ test("A2: the section and card helpers emit real headings, so every screen built
 test("A2: every dialog title is a heading, not a styled div", () => {
   // Each of these is the aria-labelledby target of a role="dialog".
   const titleIds = [...cloudJs.matchAll(/aria-labelledby="([a-zA-Z]+Title)"/g)].map((m) => m[1]);
-  assert.ok(titleIds.length >= 8, `expected the full dialog set, found ${titleIds.length}`);
+  // 7 since the Sharing pipeline removed the outward-share sheet: its two
+  // replacements take their id from one frame function, not a literal.
+  assert.ok(titleIds.length >= 7, `expected the full dialog set, found ${titleIds.length}`);
   for (const id of [...new Set(titleIds)]) {
     assert.match(cloudJs, new RegExp(`<h2 id="${id}"`),
       `#${id} labels a dialog but is not a heading - it will not appear in heading navigation`);

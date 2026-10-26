@@ -187,10 +187,6 @@
       `<button class="post-menu-item${danger ? " danger" : ""}" role="menuitem" data-community-action="${action}" data-id="${esc(dataId)}">${esc(label)}</button>`;
     let items = "";
     if (own) {
-      // Five-persona UX audit, outward sharing. Own posts only, and only the
-      // three types whose content is the member's OWN result - see
-      // outwardSubjectFromPost() for why the other nine are out.
-      if (OUTWARD_SHAREABLE_POST_TYPES.indexOf(post.post_type) >= 0) items += mi("outward-post", "שיתוף מחוץ לאפליקציה", post.id);
       // 202609220005. Own workout posts only, and only while the club has
       // the module on - postCanTagPartners() is the same three conditions
       // post_tag_training_partners() enforces.
@@ -859,6 +855,8 @@
         // change that for this one record; the settings stay as they were.
         picked: state.circles.list.filter((c) => CirclesCore.effectiveDefaults(c).share_prs).map((c) => c.id) };
       rememberPrPromptShownForMovement(record.movement);
+      // The card is drawn now, before any tap: navigator.share() has to run inside the tap.
+      sharingPreparePrCard(state.posts.prPrompt.record);
       rerender();
       return true;
     });
@@ -918,7 +916,7 @@
           ${p.error ? `<div class="field-error" role="alert" style="margin-top:8px;">${esc(p.error)}</div>` : ""}
           <div class="chip-row" style="margin-top:14px;">
             <button class="chip-btn primary" data-community-action="pr-share"${p.publishing ? " disabled" : ""}>${p.publishing ? "משתף…" : "שיתוף"}</button>
-            <button class="chip-btn" data-community-action="outward-pr">שיתוף מחוץ לאפליקציה</button>
+            ${sharingPrCardButtonHtml()}
             ${p.showNote ? "" : `<button class="chip-btn" data-community-action="pr-add-note">הוספת הערה</button>`}
             <button class="chip-btn" data-community-action="pr-not-now">לא עכשיו</button>
           </div>

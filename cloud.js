@@ -194,14 +194,6 @@
       openMenu: null, 
       captionEdit: null, prPrompt: null,
       
-      // Five-persona UX audit, outward sharing. The share-outside-the-app
-      // sheet: { subject, caption, showName, spec, status, previewUrl, blob,
-      // sharing, result }. Lives in `posts` rather than a namespace of its
-      // own because this domain is already "composing, own-post controls,
-      // sharing" and every one of its subjects is a post or a post's source
-      // record. Holds a Blob and an object URL, so closeOutwardShare() is the
-      // only way it is cleared - it revokes the URL on the way out.
-      outwardShare: null,
       // 202609220005 "התאמנו יחד". Two separate things, deliberately not one:
       //   partners: post_id -> the tag rows the server returned for it, as
       //     post_training_partners_for() ordered them. Read by every card,
@@ -266,6 +258,8 @@
       members: {}, feed: {}, week: {}, benchmark: {},
       mine: { target: null, pausedUntil: null, loaded: false },
       pendingTags: [], sheet: null, shareBar: null,
+      // The sharing pipeline's one sheet: install steps, or last week's card.
+      sharingSheet: null,
       join: { token: "", busy: false, error: "", draft: "" },
       busy: {},
       // Text typed into a sheet or a form, keyed "form.field": the screen is
@@ -1759,11 +1753,9 @@
     return renderReactorsSheet()
       + renderPrSharePrompt() + renderAchievementUnlockCelebration() + renderNotificationCenter() + renderCircleSheet() + renderCircleShareBar()
       + renderTermSheet()
-      // Second-to-last, immediately under the confirm sheet: the outward
-      // share sheet is opened FROM the PR prompt and the achievement
-      // celebration, so it stacks on top of them and must paint after them
-      // for the same z-order reason renderConfirmSheet() paints last.
-      + renderOutwardShareSheet()
+      // Second-to-last, immediately under the confirm sheet: the sharing sheets
+      // (install steps, last week's card) stack on top of the circles layer.
+      + renderSharingSheet()
       + renderConfirmSheet();
   }
   // THE CLOSE BUTTON EVERY SHEET IN THIS APP USES, defined once.
@@ -2119,12 +2111,10 @@
     // this registry, the Tab trap and the Escape chain - reachable by mouse
     // only, gating ~19 destructive actions including delete-account.
     { key: "confirmSheet", isOpen: () => state.ui.confirmDialog, close: function () { closeConfirm(); } },
-    // Five-persona UX audit, outward sharing. SECOND for the same reason the
-    // confirm sheet is first: this sheet is opened from inside the PR prompt
-    // and the achievement celebration and renders on top of them, so it has
-    // to be checked before either or the Tab trap locks focus into the
-    // covered dialog underneath and Escape closes the wrong one.
-    { key: "outwardShare", isOpen: () => state.posts.outwardShare, close: function () { closeOutwardShare(); } },
+    // SECOND, for the same reason the confirm sheet is first: the install steps
+    // and the Sunday week-card offer open over the circles screens, so they are
+    // matched before the sheets underneath them.
+    { key: "sharingSheet", isOpen: () => state.circles.sharingSheet, close: function () { closeSharingSheet(); } },
     // Design spec section 3, tier 3. THIRD, and for the same stacking reason
     // the two entries above it are first and second: a `?` marker can be
     // rendered inside the challenge, event, recap or profile overlay's own
@@ -2132,12 +2122,12 @@
     // before them or the Tab trap locks focus into the covered dialog
     // underneath and Escape closes the wrong one.
     //
-    // It stays BELOW confirmSheet and outwardShare, and that ordering is not
+    // It stays BELOW confirmSheet and sharingSheet, and that ordering is not
     // arbitrary either: neither of those two can contain a term marker (one
-    // is a title + message + two buttons, the other is a share preview), so
-    // nothing can ever stack on top of the term sheet, while both of them
-    // can still stack on top of it. Moving it above either would reintroduce
-    // exactly the A3 defect this registry order exists to prevent.
+    // is a title + message + two buttons, the other is install steps or a
+    // card offer), so nothing can ever stack on top of the term sheet, while
+    // both of them can still stack on top of it. Moving it above either would
+    // reintroduce exactly the A3 defect this registry order exists to prevent.
     { key: "termSheet", isOpen: () => state.ui.termSheet, close: function () { closeTermSheet(); } },
     { key: "notifCenter", isOpen: () => state.notif.center, close: function () { closeNotifCenter(); } },
     { key: "achUnlock", isOpen: () => state.achievements.unlock, close: function () { dismissAchievementUnlock(); } },
@@ -2434,6 +2424,8 @@
     // Everything the circles screens do ("c-..." and the reaction toggle) is
     // dispatched from src/community/circles-sheets.js.
     if ((action === "react" || (action && action.indexOf("c-") === 0)) && handleCirclesAction(action, el)) return;
+    // The sharing pipeline's taps: PR and week cards, in-app browser, install steps.
+    if (action && action.indexOf("sh-") === 0 && handleSharingAction(action, el)) return;
     if (action === "migrate") askConfirm({ title: "סנכרון היסטוריה", message: "להעלות את היסטוריית האימונים הפרטית לחשבון? שום נתון לא יפורסם במעגלים.", confirmLabel: "העלאה", action: "migrate" });
     // Settings > "protect my data" (window.renderBackupSettingsPanel) - fully
     // separate from Community's own join flow: no invite code, no feed, no
@@ -2588,18 +2580,6 @@
     else if (action === "ach-not-now") dismissAchievementUnlock();
     else if (action === "ach-add-note") { if (state.achievements.unlock) { state.achievements.unlock.showNote = true; rerender(); } }
     else if (action === "ach-share-later") shareEarnedAchievement(el.dataset.id, el.dataset.code);
-    // Five-persona UX audit, outward sharing. Four openers and five sheet
-    // controls. Every one of them is a tap - nothing on this list runs
-    // without one, and nothing on it writes to the server.
-    else if (action === "outward-pr") outwardShareCurrentPr();
-    else if (action === "outward-ach") outwardShareCurrentAchievement();
-    else if (action === "outward-ach-earned") outwardShareEarnedAchievement(el.dataset.id, el.dataset.code);
-    else if (action === "outward-post") outwardSharePost(el.dataset.id);
-    else if (action === "outward-go") outwardShareNow();
-    else if (action === "outward-copy") outwardCopyText();
-    else if (action === "outward-download") outwardDownloadImage();
-    else if (action === "outward-retry") refreshOutwardShareCard();
-    else if (action === "outward-close") closeOutwardShare();
     else if (action === "reactors") openReactors(el.dataset.id);
     else if (action === "reactors-close") closeReactors();
     // COMM-140..142 notification centre.
@@ -2700,7 +2680,7 @@
         state.posts.captionEdit = null; state.posts.prPrompt = null;
         resetSharePromptQueue(); resetCirclesState();
         state.posts.partners = {}; state.posts.partnersPanel = null;
-        outwardRevokePreview(); state.posts.outwardShare = null;
+        sharingReset();
         state.engagement.reactions = {};
         state.engagement.reactionError = null;
         state.engagement.reactorsFor = null;
@@ -2732,7 +2712,6 @@
       Promise.resolve(setNotifPref(t.dataset.type, t.value)).then(() => rerender());
     }
     else if ("partnerPick" in t.dataset) toggleTrainingPartnerPick(t.dataset.partnerPick);
-    else if ("outwardName" in t.dataset) setOutwardShareName(t.checked);
   });
   document.addEventListener("keydown", (e) => {
     if (state.posts.openMenu && !currentCloudDialog() && postMenuKeydown(e)) return;
