@@ -54,8 +54,9 @@ test("the local welcome sheet does not cover an invitation", () => {
   // member arriving from a shared link or QR would have hit.
   assert.match(cloudJs, /window\.communityInviteFlowPending = function \(\) \{/,
     "cloud.js can say whether an invitation is on screen");
-  assert.match(cloudJs, /return !!\(state\.ui\.inviteCodeDraft && !state\.redemption\);/,
-    "captured but not yet redeemed");
+  const circlesJs = fs.readFileSync(new URL("../src/community/circles.js", import.meta.url), "utf8");
+  assert.match(circlesJs, /function inviteFlowPending\(\) \{ return !!\(state\.circles\.join\.token && !inCircles\(\)\); \}/,
+    "captured but not yet joined");
   assert.match(appJs, /if \(userName === null && isFreshInstall && !invitePending\) openWelcomeModal\(\);/,
     "and app.js's boot asks before opening its own sheet");
 });

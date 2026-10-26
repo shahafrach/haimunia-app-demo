@@ -122,8 +122,8 @@ test("a tagged workout post prints התאמנו יחד with the tagged names", a
   assert.ok(t.indexOf("נועם") < t.indexOf("יעל"), `printed in the order the server returned: ${t}`);
   // The names are the same profile control the rest of the feed uses, not
   // plain text - a tagged member is a member you can open.
-  const nameBtn = q(window, '[data-post-partners="ready"] [data-community-action="view-profile"][data-id="u2"]');
-  assert.ok(nameBtn, "a tagged name opens that member's profile");
+  // Circles have no profile screens: a name is a name.
+  assert.equal(q(window, '[data-post-partners="ready"] [data-community-action="view-profile"]'), null);
 });
 
 test("a post the server returned no tags for prints no line at all", async () => {

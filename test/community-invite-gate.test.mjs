@@ -43,7 +43,7 @@ test("cloud.js gates the profile form behind a redeemed invite code and wires th
   assert.match(src, /state\.redemption/);
   assert.match(src, /async function loadRedemption\(\)/);
   assert.match(src, /async function redeemCode\(form\)/);
-  assert.match(src, /if \(!state\.redemption\) return/);
+  assert.match(src, /if \(!inAny && !state\.redemption && !meWithoutCircle\) return renderJoinStep\(\);/);
   assert.match(src, /event\.target\.id === "communityInviteCode"/);
   void window;
 });

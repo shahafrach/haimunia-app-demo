@@ -2,9 +2,10 @@
 // against the mock Supabase client (test/helpers/mockSupabase.mjs).
 //
 // WHAT THIS FILE VERIFIES
-// - COMM-120 one reaction type, optimistic toggle add/remove, reactor avatar
-//   strip and total, rollback with a message on failure.
-// - COMM-125 a blocked member's reaction avatar is hidden, and the block list
+// - COMM-120 reactions are three kinds (fist bump, fire, clap), each an
+//   optimistic toggle with a rollback and a message on failure, and the
+//   "who reacted" sheet lists the people with their kind.
+// - COMM-125 a blocked member's reaction is hidden, and the block list (in Me)
 //   only ever offers to unblock people the viewer blocked.
 // (Comments, replies, mentions and the coach badge were dropped with text
 // comments; their COMM-121 to COMM-124 tests went with them.)
@@ -49,55 +50,37 @@ function seeded(opts) {
 }
 
 async function openFeed(window, mock) {
+  // Handed to the screen directly; the circle feed read must not replace it.
+  mock.onRpc("circle_feed", () => ({ data: null, error: { message: "offline" } }));
   window.document.getElementById("tabCommunityBtn").click();
   await waitFor(() => !!window.document.getElementById("communityHead"), 4000);
   holdPosts(window, mock.db.feed_page_rows);
   await waitFor(() => window.document.querySelectorAll("#communityHeldPosts .post-card").length >= 1, 4000);
 }
+function pressed(window, kind) { return card(window).querySelector(`[data-community-action="react"][data-kind="${kind}"]`).getAttribute("aria-pressed"); }
 function card(window) { return window.document.querySelector('[data-post-id="p1"]'); }
 // --- COMM-120 reactions -------------------------------------------------
 
-test("COMM-120: tapping the reaction adds it, tapping again removes it, optimistically", async () => {
+test("COMM-120: tapping a reaction adds it, tapping again removes it, optimistically; the kinds are independent", async () => {
   const mock = seeded();
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openFeed(window, mock);
+  const tap = (kind) => card(window).querySelector(`[data-community-action="react"][data-kind="${kind}"]`).click();
 
-  window.document.querySelector('[data-post-id="p1"] [data-community-action="cheer"]').click();
-  await waitFor(() => mock.db.reactions.some((r) => r.post_id === "p1" && r.user_id === "u1"), 3000);
-  await waitFor(() => !!card(window).querySelector(".reaction-strip"), 3000);
-  assert.match(card(window).querySelector(".reaction-strip").textContent, /הגבתם/);
-  assert.equal(mock.db.reactions.filter((r) => (r.kind || "cheer") === "cheer").length, 1, "one reaction row, one type");
-
-  // The launch-readiness audit added an in-flight guard to react() (same
-  // shape as pinTarget/unpinTarget's existing pinBusy) so a real double-tap
-  // can't fire toggle_reaction twice before the first response lands. In a
-  // real browser that in-flight window is a network round trip, dwarfing
-  // any human double-tap cadence; in this jsdom harness the mock resolves
-  // near-instantly, but the promise continuation still needs a real tick to
-  // run (see the other `setTimeout(r, ...)` flush waits throughout this
-  // suite) - without it this second click can land while the guard from
-  // the first click's still-settling promise is up, and get silently
-  // dropped instead of exercising the toggle-off path this test is for.
+  tap("fire");
+  assert.equal(pressed(window, "fire"), "true", "optimistic: the button reads pressed before the server answers");
+  assert.equal(pressed(window, "clap"), "false");
+  await waitFor(() => mock.callsTo("toggle_reaction").length === 1, 3000);
+  assert.equal(mock.callsTo("toggle_reaction")[0].p_kind, "fire");
+  // The in-flight guard drops a tap that lands before the first settles; a
+  // real tick is what a real second tap has.
   await new Promise((r) => setTimeout(r, 20));
-
-  window.document.querySelector('[data-post-id="p1"] [data-community-action="cheer"]').click();
-  await waitFor(() => mock.db.reactions.length === 0, 3000);
-  await waitFor(() => !card(window).querySelector(".reaction-strip"), 3000);
-});
-
-test("COMM-120: the card shows the first few reactor avatars and the total", async () => {
-  const mock = seeded({
-    row: { reaction_count: 3 },
-    reactions: [
-      { post_id: "p1", user_id: "a", kind: "cheer", created_at: "2026-08-28T08:00:00.000Z", profiles: { handle: "a", display_name: "אבי" } },
-      { post_id: "p1", user_id: "b", kind: "cheer", created_at: "2026-08-28T08:01:00.000Z", profiles: { handle: "b", display_name: "בני" } },
-      { post_id: "p1", user_id: "c", kind: "cheer", created_at: "2026-08-28T08:02:00.000Z", profiles: { handle: "c", display_name: "גיל" } },
-    ],
-  });
-  const window = await bootCommunity(mock, { syncEnabled: false });
-  await openFeed(window, mock);
-  await waitFor(() => card(window).querySelectorAll(".reaction-strip .avatar-badge").length === 3, 3000);
-  assert.match(card(window).querySelector(".reaction-strip").textContent, /3 הגבות/);
+  tap("clap");
+  assert.equal(pressed(window, "fire"), "true", "a member may hold all three: the second does not replace the first");
+  assert.equal(pressed(window, "clap"), "true");
+  await new Promise((r) => setTimeout(r, 20));
+  tap("fire");
+  assert.equal(pressed(window, "fire"), "false", "tapping again takes it back");
 });
 
 test("COMM-120: a failed reaction rolls back and shows a message", async () => {
@@ -106,37 +89,45 @@ test("COMM-120: a failed reaction rolls back and shows a message", async () => {
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openFeed(window, mock);
 
-  window.document.querySelector('[data-post-id="p1"] [data-community-action="cheer"]').click();
+  card(window).querySelector('[data-community-action="react"][data-kind="fist_bump"]').click();
   await waitFor(() => /לא ניתן היה להגיב/.test(window.document.body.textContent), 3000);
-  assert.equal(card(window).querySelector(".reaction-strip"), null, "the optimistic strip was reverted");
-  assert.equal(mock.db.reactions.length, 0, "nothing was written");
+  assert.equal(pressed(window, "fist_bump"), "false", "the optimistic press was reverted");
 });
 
-// --- COMM-121 replies -------------------------------------------------
-
-// --- COMM-122 edit / delete -----------------------------------------
-
-// --- COMM-123 mentions ---------------------------------------------
-
-// --- COMM-124 coach emphasis --------------------------------------
-
-// --- COMM-125 block effects -------------------------------------
-
-test("COMM-125: a blocked member's reaction avatar is dropped", async () => {
+test("COMM-120: the who-reacted sheet lists people with the kind they chose", async () => {
   const mock = seeded({
-    blocks: [{ blocker_id: "u1", blocked_id: "u2" }],
-    row: { reaction_count: 1 },
+    row: { reaction_counts: { fist_bump: 1, fire: 1 }, reaction_count: 2 },
     reactions: [
-      { post_id: "p1", user_id: "u2", kind: "cheer", created_at: "2026-08-28T08:00:00.000Z", profiles: { handle: "ron", display_name: "רון" } },
-    ],
-    post_comments: [
-      { id: "c1", post_id: "p1", author_id: "u2", body: "טקסט חסום", parent_comment_id: null, created_at: "2026-08-28T08:00:00.000Z", status: "active", profiles: { handle: "ron", display_name: "רון" } },
+      { post_id: "p1", user_id: "a", kind: "fist_bump", created_at: "2026-08-28T08:00:00.000Z", profiles: { display_name: "אבי", emoji: "🦁" } },
+      { post_id: "p1", user_id: "b", kind: "fire", created_at: "2026-08-28T08:01:00.000Z", profiles: { display_name: "בני", emoji: "🌿" } },
     ],
   });
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openFeed(window, mock);
-  await waitFor(() => !!card(window).querySelector(".reaction-strip"), 3000);
-  assert.equal(card(window).querySelectorAll(".reaction-strip .avatar-badge").length, 0, "the blocked reactor's avatar is dropped");
+  card(window).querySelector('[data-community-action="reactors"]').click();
+  await waitFor(() => window.document.querySelectorAll("[data-reactor-user]").length === 2, 3000);
+  const text = window.document.querySelector('[data-cloud-dialog="reactors"]').textContent;
+  assert.match(text, /אבי/);
+  assert.match(text, /🔥/);
+});
+
+// --- COMM-125 block effects -------------------------------------
+
+test("COMM-125: a blocked member's reaction is dropped from the who-reacted sheet", async () => {
+  const mock = seeded({
+    blocks: [{ blocker_id: "u1", blocked_id: "u2" }],
+    row: { reaction_counts: { fist_bump: 1 }, reaction_count: 1 },
+    reactions: [
+      { post_id: "p1", user_id: "u2", kind: "fist_bump", created_at: "2026-08-28T08:00:00.000Z", profiles: { display_name: "רון", emoji: "🦁" } },
+    ],
+  });
+  const window = await bootCommunity(mock, { syncEnabled: false });
+  await openFeed(window, mock);
+  await waitFor(() => !!window.document.querySelector('[data-community-action="reactors"]'), 3000);
+  window.document.querySelector('[data-community-action="reactors"]').click();
+  await waitFor(() => !!window.document.querySelector('[data-cloud-dialog="reactors"]'), 3000);
+  await new Promise((r) => setTimeout(r, 60));
+  assert.equal(window.document.querySelectorAll("[data-reactor-user]").length, 0, "the blocked reactor is not listed");
 });
 
 // Live bug hunt round 4 (2026-09-11): blocking had no reverse path
@@ -144,16 +135,16 @@ test("COMM-125: a blocked member's reaction avatar is dropped", async () => {
 // nothing on the full profile overlay. Confirmed live: a permanent
 // one-way action for the life of both accounts, recoverable only via
 // direct database access.
-test("a blocked member can be unblocked from the Account tab's own blocked-members list", async () => {
+test("a blocked member can be unblocked from Me's own blocked-members list", async () => {
   const mock = seeded({
     profiles: [
-      { id: "u1", handle: "dana", display_name: "דנה", is_admin: false, recovery_verified_at: VERIFIED, visible_to_club: true },
-      { id: "u2", handle: "ron", display_name: "רון", is_admin: false, recovery_verified_at: VERIFIED, visible_to_club: true },
+      { id: "u1", handle: "dana", display_name: "דנה", recovery_verified_at: VERIFIED },
+      { id: "u2", handle: "ron", display_name: "רון", recovery_verified_at: VERIFIED },
     ],
     blocks: [{ blocker_id: "u1", blocked_id: "u2" }],
   });
   const window = await bootCommunity(mock, { syncEnabled: false });
-  window.document.getElementById("tabCommunityBtn").click();
+  window.switchAppTab("me");
   await waitFor(() => !!window.document.getElementById("communityHead"), 4000);
   await waitFor(() => !!window.document.querySelector('[data-blocked-members-section="1"]'), 4000);
 
@@ -170,20 +161,18 @@ test("a blocked member can be unblocked from the Account tab's own blocked-membe
 test("the blocked-members list only ever offers to unblock people the viewer blocked themselves, never someone who blocked the viewer", async () => {
   const mock = seeded({
     profiles: [
-      { id: "u1", handle: "dana", display_name: "דנה", is_admin: false, recovery_verified_at: VERIFIED, visible_to_club: true },
-      { id: "u3", handle: "gil", display_name: "גיל", is_admin: false, recovery_verified_at: VERIFIED, visible_to_club: true },
+      { id: "u1", handle: "dana", display_name: "דנה", recovery_verified_at: VERIFIED },
+      { id: "u3", handle: "gil", display_name: "גיל", recovery_verified_at: VERIFIED },
     ],
     // u3 blocked u1 - the OTHER direction. blockedIds (used to hide
-    // comments/reactions) intentionally merges both directions, but
-    // blockedByMe (this list) must not, or a member could "unblock"
-    // someone who blocked them, undoing a decision that was never theirs.
+    // reactions) intentionally merges both directions, but blockedByMe (this
+    // list) must not, or a member could "unblock" someone who blocked them,
+    // undoing a decision that was never theirs.
     blocks: [{ blocker_id: "u3", blocked_id: "u1" }],
   });
   const window = await bootCommunity(mock, { syncEnabled: false });
-  window.document.getElementById("tabCommunityBtn").click();
-  await waitFor(() => !!window.document.getElementById("communityHead"), 4000);
+  window.switchAppTab("me");
   await waitFor(() => !!window.document.getElementById("communityProfile"), 4000);
   assert.equal(window.document.querySelector('[data-blocked-members-section="1"]'), null,
     "no blocked-members section at all when the viewer hasn't blocked anyone themselves");
 });
-

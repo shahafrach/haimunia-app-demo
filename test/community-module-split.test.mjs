@@ -45,7 +45,9 @@ test("every community module loads before cloud.js", () => {
 test("every community module is a classic script: strict, no IIFE, no import/export", () => {
   for (const rel of COMMUNITY_MODULES) {
     const src = communityFile(rel);
-    assert.match(src, /^"use strict";/, `${rel} must open with its own "use strict" - it is its own script`);
+    // A circles module may open with `// @ts-check` (CLAUDE.md: new modules do),
+    // and nothing else, before its own "use strict".
+    assert.match(src, /^(?:\/\/ @ts-check\r?\n)?"use strict";/, `${rel} must open with its own "use strict" - it is its own script`);
     assert.doesNotMatch(src, /^\s*(?:import|export)\s/m, `${rel} must not use ES module syntax - it is loaded as a classic <script>`);
     assert.doesNotMatch(src, /^\(function \(\) \{/m, `${rel} must not wrap itself in an IIFE - that would hide it from cloud.js and from its siblings`);
     // Top-level declarations must stay at two spaces of indent, the shape

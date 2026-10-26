@@ -64,7 +64,7 @@
   // The five categories, in display order, with the Hebrew heading each
   // shows in the centre.
   const NOTIF_CATEGORIES = [
-    { id: "community", label: "קהילה" },
+    { id: "community", label: "מעגל" },
     { id: "training", label: "אימונים" },
   ];
 
@@ -219,7 +219,7 @@
   function pushAskGateReason(opts) {
     if (!opts || opts.userAction !== true) return "אפשר להפעיל התראות רק מתוך פעולה באפליקציה.";
     if (!isStandalonePwa()) return "כדי לקבל התראות יש להוסיף את האפליקציה למסך הבית ולפתוח אותה משם.";
-    if (!pushAskEarned()) return "נבקש הרשאת התראות אחרי האימון הראשון שתרשמו, או אחרי ההצטרפות לקהילת המועדון.";
+    if (!pushAskEarned()) return "נבקש הרשאת התראות אחרי האימון הראשון שתרשמו, או אחרי ההצטרפות למעגל.";
     return null;
   }
   // push_permission. The browser's own answer, recorded as it stands.
@@ -680,6 +680,8 @@
         }
       }, 60);
     } else if (target.achievement) {
+      // Medals live in Me (opened from the avatar on Home).
+      if (typeof window.switchAppTab === "function") window.switchAppTab("me");
       rerender();
       setTimeout(() => {
         const sel = '[data-achievement-id="' + String(target.achievement).replace(/"/g, '\\"') + '"]';
@@ -992,7 +994,7 @@
     // next to a push option a member can actually see - with the flag off
     // (V1 default) there is no such option on this panel any more, so the
     // copy no longer promises one.
-    const introHtml = "בחרו איך כל סוג התראה מגיע אליכם. הודעות תפעוליות מהמועדון תמיד יופיעו כאן, גם אם כיביתם אותן.";
+    const introHtml = "בחרו איך כל סוג התראה מגיע אליכם. הודעות תפעוליות מהאפליקציה תמיד יופיעו כאן, גם אם כיביתם אותן.";
     return `<div class="ach-section" style="margin-top:18px;">${sectionHead("var(--brass)", "העדפות התראות")}
       <div style="color:var(--steel);font-size:12px;line-height:1.6;margin-bottom:8px;">${introHtml}</div>
       ${deviceStatusHtml}

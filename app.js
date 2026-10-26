@@ -92,9 +92,12 @@ var bidiUnit = SAFE.bidiUnit;
 var bidiUnitHtml = SAFE.bidiUnitHtml;
 // ---------- State ----------
 let entries = [];
-const VALID_TABS = ["add", "history", "calendar", "wod", "community"];
+const VALID_TABS = ["home", "add", "history", "calendar", "wod", "community", "me"];
 const urlTab = new URLSearchParams(location.search).get("tab");
 let tab = VALID_TABS.includes(urlTab) ? urlTab : "add";
+// An invite link lands on the Circle tab, whichever tab the app last had
+// (cloud.js has already read the token from the URL fragment by now).
+if (typeof window.communityInviteFlowPending === "function" && window.communityInviteFlowPending()) tab = "community";
 
 // Single source of truth for the app's primary navigation, consumed by
 // renderNavMenuList() below (the mobile nav-menu overlay) and, later, a
@@ -152,6 +155,8 @@ const PAGE_SCENES = Object.freeze({
   history: { className: "scene-page--progress" },
   wod: { className: "scene-page--library" },
   community: { className: "scene-page--community" },
+  home: { className: "scene-page--community" },
+  me: { className: "scene-page--community" },
 });
 // A plain top-level `const` does NOT become a window property the way a
 // `var`/function declaration does - cloud.js (its own IIFE) reaches this
@@ -159,20 +164,34 @@ const PAGE_SCENES = Object.freeze({
 // cross-file reference, so it has to be assigned explicitly.
 window.PAGE_SCENES = PAGE_SCENES;
 function getNavItems() {
+  // Four tabs (docs/design/decisions.md): Home, Circle, the centre Log button,
+  // Progress. Me opens from the avatar on Home and is not a tab. Calendar and
+  // the workout library (WOD) stay reachable from the navigation menu and from
+  // the screens that link to them; they are not in the bottom bar.
   const items = [
-    { id: "add", tab: "add", rowId: "tabAddBtn", label: "רישום", tint: "energy", icon: ICONS.logIcon, main: true },
+    { id: "home", tab: "home", rowId: "tabHomeBtn", label: "בית", tint: "teal", icon: ICONS.homeIcon, main: true },
+    { id: "community", tab: "community", rowId: "tabCommunityBtn", label: "מעגל", tint: "teal", icon: ICONS.communityIcon, main: true },
+    { id: "add", tab: "add", rowId: "tabAddBtn", label: "רישום", tint: "energy", icon: ICONS.logIcon, main: true, center: true },
     { id: "history", tab: "history", rowId: "tabHistoryBtn", label: "התקדמות", tint: "blue", icon: ICONS.chartIcon, main: true },
-    { id: "calendar", tab: "calendar", rowId: "tabCalendarBtn", label: "לוח שנה", tint: "yellow", icon: ICONS.calendarIcon, main: true },
-    { id: "wod", tab: "wod", rowId: "tabWodBtn", label: "אימונים", tint: "purple", icon: ICONS.stopwatchIcon, main: true },
-    { id: "community", tab: "community", rowId: "tabCommunityBtn", label: "קהילה", tint: "teal", icon: ICONS.communityIcon, main: true },
+    { id: "calendar", tab: "calendar", rowId: "tabCalendarBtn", label: "לוח שנה", tint: "yellow", icon: ICONS.calendarIcon, main: false },
+    { id: "wod", tab: "wod", rowId: "tabWodBtn", label: "אימונים", tint: "purple", icon: ICONS.stopwatchIcon, main: false },
   ];
   return items;
 }
+// Any code (the circles layer, an invite landing, a notification tap) that
+// needs to open a tab by name goes through here: same effect as tapping it.
+window.switchAppTab = function (name) {
+  if (!VALID_TABS.includes(name)) return;
+  tab = name;
+  closeNavMenu();
+  render();
+  window.scrollTo(0, 0);
+};
 function renderBottomTabBar() {
   return getNavItems().filter((item) => item.main).map((item) => {
     const isActive = tab === item.tab;
     return `
-      <button class="tabbtn${isActive ? " active" : ""}" id="${item.rowId}" data-action="switch-tab" data-tab="${item.tab}" role="tab" aria-selected="${isActive}" aria-controls="content" tabindex="${isActive ? "0" : "-1"}"${item.badge ? ` aria-label="${esc(item.label)}, ${item.badge} דיווחים ממתינים"` : ""}>
+      <button class="tabbtn${isActive ? " active" : ""}${item.center ? " tabbtn--log" : ""}" id="${item.rowId}" data-action="switch-tab" data-tab="${item.tab}" role="tab" aria-selected="${isActive}" aria-controls="content" tabindex="${isActive ? "0" : "-1"}"${item.badge ? ` aria-label="${esc(item.label)}, ${item.badge} דיווחים ממתינים"` : ""}>
         <span style="position:relative;display:inline-flex;">${item.icon}${item.badge ? `<span class="tab-badge" aria-hidden="true" style="position:absolute;top:-4px;left:-8px;margin:0;min-width:14px;height:14px;font-size:9px;">${item.badge}</span>` : ""}</span>
         <span>${esc(item.label)}</span>
       </button>`;
@@ -1416,7 +1435,7 @@ function showCelebration(prLabel, badges, opts) {
     // if the community layer is actually signed in.
     const canShare = badges.length && typeof window.isCommunitySignedIn === "function" && window.isCommunitySignedIn();
     shareEl.innerHTML = canShare
-      ? badges.map((a) => `<button class="link-btn" data-action="share-achievement" data-id="${esc(a.id)}" data-title="${esc(a.name)}" data-rule="${esc(a.rule)}">שיתוף ${esc(a.name)} בקהילה</button>`).join(" · ")
+      ? badges.map((a) => `<button class="link-btn" data-action="share-achievement" data-id="${esc(a.id)}" data-title="${esc(a.name)}" data-rule="${esc(a.rule)}">שיתוף ${esc(a.name)} במעגל</button>`).join(" · ")
       : "";
   }
   const sub = document.getElementById("celebrationSub");
@@ -1476,8 +1495,9 @@ const RELEASE_NOTES = [
   // deploys - update it to the real ship date at that point, not the date
   // this entry was written.
   { version: "4.0.0", date: "2026-09-01", items: [
-    "קהילה חדשה! עקבו אחרי חברים, שתפו אימונים והישגים, הגיבו ותגיבו, הצטרפו לאתגרים ואירועים, ועלו בטבלת המובילים",
-    "אפשר להעלות תמונת פרופיל משלכם",
+    "מעגלים! קבוצה קטנה וסגורה של חברים, או זוג. אימונים ושיאים נשלחים רק למעגלים שבחרתם",
+    "תגובות בשלושה סוגים: פיסט באמפ, אש ומחיאות כפיים",
+    "השבוע של המעגל: כל אחד מול היעד של עצמו, בלי דירוג",
     "עיצוב חדש לתפריט הראשי ולהגדרות — נוח יותר גם בנייד וגם במסך רחב",
     "מסך מותאם למחשב, לא רק לנייד",
   ] },
@@ -1712,7 +1732,7 @@ function supportDiagnostics() {
     `גרסה: ${APP_VERSION}`,
     `מותקן במסך הבית: ${isStandalone() ? "כן" : "לא"}`,
     `חיבור: ${online}`,
-    `קהילה: ${community}`,
+    `מעגלים: ${community}`,
     `דפדפן: ${typeof navigator !== "undefined" ? String(navigator.userAgent || "").slice(0, 160) : "לא ידוע"}`,
   ].join("\n");
 }
@@ -2412,11 +2432,11 @@ async function saveSet(sanityConfirmed) {
     // loaded (the member never opened the Community tab), and it cannot open
     // anything the member has switched off.
     //
-    // NEVER ON AN EDIT, the same gate the PR announcement above and all three
-    // celebration gates already take: correcting Tuesday's typo on Thursday
-    // is not a session, and the feed is supposed to fill itself from real
-    // training rather than from bookkeeping.
-    if (!existing) offerCommunityWorkoutShare("strength_entry", entry.id);
+    // AN EDIT REFRESHES, IT NEVER STARTS. Correcting Tuesday's typo on
+    // Thursday is not a session, so an edit only updates the day's summary in
+    // the circles that already hold it (a typo'd weight must not stay on the
+    // circle's screen); it does not post a day that was never shared.
+    offerCommunityWorkoutShare("strength_entry", entry.id, !!existing);
   }
   } finally { savingSet = false; }
 }
@@ -2861,6 +2881,7 @@ async function deleteEntry(id) {
   if (removed) {
     const mov = movementById(removed.exerciseId);
     offerUndo(`${mov ? mov.name : "הסט"} — ${entrySummary(removed)} נמחק`, () => restoreEntry(removed));
+    refreshCommunityWorkoutDay(removed.date);
   }
   render();
 }
@@ -3838,12 +3859,16 @@ function bestWodEffort(id) {
   }
   return null;
 }
-function formatWodEntry(e) {
+function formatWodEntry(e, opts) {
+  // opts.noWeight: the same result with every kilogram left out, for a circle
+  // whose member has not chosen to show weights. A weight-scored WOD has no
+  // result left once its weight is gone, so it returns "".
+  const noWeight = !!(opts && opts.noWeight);
   const base = e.scoreType === "time" ? formatClock(e.timeSeconds)
     : e.scoreType === "amrap" ? `${e.rounds}+${e.reps}`
     : e.scoreType === "emom" ? (e.emomReps || []).join(" · ")
-    : `${e.weight} ק״ג`;
-  return (!e.rx && e.scaledWeight) ? `${base} @ ${e.scaledWeight} ק״ג` : base;
+    : noWeight ? "" : `${e.weight} ק״ג`;
+  return (!noWeight && !e.rx && e.scaledWeight) ? `${base} @ ${e.scaledWeight} ק״ג` : base;
 }
 function lastScaledAttempt(id) {
   const list = wodEntriesFor(id).filter((e) => !e.rx).sort((a, b) => (b.ts || 0) - (a.ts || 0));
@@ -3904,6 +3929,9 @@ function strengthShareCandidate(entry) {
   const duration = entry.type === "duration";
   return { type: "strength_entry", id: entry.id, title: movement.name,
     resultText: duration ? `${formatDuration(entry.durationSeconds)}${entry.weight ? ` @ ${entry.weight} ק״ג` : ""}` : `${entry.weight} ק״ג × ${entry.reps} × ${entry.sets}`,
+    // The same result with no kilograms in it: what a circle receives when its
+    // member has not chosen to show weights there.
+    resultTextNoWeight: duration ? formatDuration(entry.durationSeconds) : `${entry.reps} × ${entry.sets}`,
     comparisonKey: `movement:${entry.exerciseId}:${duration ? "duration" : "est1rm"}`,
     scoreValue: duration ? entry.durationSeconds : entry.est1RM, scoreDirection: "higher", occurredOn: entry.date, rx: null };
 }
@@ -3911,6 +3939,7 @@ function wodShareCandidate(entry) {
   const wod = wodById(entry.wodId);
   if (!wod) return null;
   return { type: "wod_entry", id: entry.id, title: wod.name, resultText: formatWodEntry(entry),
+    resultTextNoWeight: formatWodEntry(entry, { noWeight: true }),
     comparisonKey: entry.scoreType === "emom" ? null : `wod:${entry.wodId}:${entry.scoreType}:${entry.rx ? "rx" : "scaled"}`,
     scoreValue: entry.scoreType === "emom" ? null : scoreValue(entry),
     // Same coercion as communityWodLogFor(), same reason - the community
@@ -3940,19 +3969,63 @@ function communityShareCandidateFor(type, id) {
   return null;
 }
 
+// A circle's unit of "a workout" is a training DAY, not a logged set: circle_week
+// counts posts, and a five-lift session logged as five sets would otherwise
+// count as five workouts against a target of three. So what is shared is the
+// day's summary - one line per lift or WOD logged that date, each in a form
+// with and without kilograms - and src/community/circles-core.js decides, per
+// circle, which of the two forms (or neither) leaves the device. Body weight
+// is a different record type and is not read here.
+function communityDaySummary(day) {
+  if (!day) return null;
+  const lines = [];
+  for (const e of entries) {
+    if (e.date !== day) continue;
+    const c = strengthShareCandidate(e);
+    if (c) lines.push({ title: c.title, text: c.resultText, textNoWeight: c.resultTextNoWeight, rx: null });
+  }
+  for (const e of wodEntries) {
+    if (e.date !== day) continue;
+    const c = wodShareCandidate(e);
+    if (c) lines.push({ title: c.title, text: c.resultText, textNoWeight: c.resultTextNoWeight, rx: c.rx });
+  }
+  return { day, lines };
+}
+function communityDayItemFor(type, id) {
+  const base = type === "strength_entry" ? entries.find((e) => e.id === id)
+    : type === "wod_entry" ? wodEntries.find((e) => e.id === id) : null;
+  return base && base.date ? communityDaySummary(base.date) : null;
+}
+window.communityDaySummary = communityDaySummary;
+// The dates the member trained, from the private log on this device: Home's
+// "this week" is counted here, with no server involved.
+window.communityTrainingDays = function () {
+  const days = new Set();
+  for (const e of entries) if (e.date) days.add(e.date);
+  for (const e of wodEntries) if (e.date) days.add(e.date);
+  return Array.from(days);
+};
+window.communityDayItemFor = communityDayItemFor;
+
 // The one call saveSet() and saveWod() make into the community layer after a
-// save that actually landed on disk. cloud.js owns every decision behind it -
-// the member's "stop offering" switch, the club's feed module, the profile
-// privacy toggles, whether another prompt is already on screen, and whether
-// this record has been offered before; this end only knows what was saved.
+// save that actually landed on disk. src/community/circles.js owns every
+// decision behind it - which circles the member's share settings send this day
+// to, what each of them may receive, the per-day skip, the offline queue; this
+// end only knows what was saved.
 //
 // Read off window and guarded, like claimCommunityAchievements and
 // renderShareControl: cloud.js is loaded lazily and a device that has never
 // opened the Community tab must keep logging exactly as it did before. A bare
 // identifier here would be a ReferenceError in the middle of a save.
-function offerCommunityWorkoutShare(type, id) {
-  if (typeof window.offerWorkoutSharePrompt !== "function") return;
-  try { window.offerWorkoutSharePrompt(type, id); } catch (e) { /* the community layer owns its own failures; a save never fails for one */ }
+function offerCommunityWorkoutShare(type, id, isEdit) {
+  if (typeof window.postWorkoutToCircles !== "function") return;
+  try { window.postWorkoutToCircles(type, id, { refreshOnly: !!isEdit }); } catch (e) { /* the community layer owns its own failures; a save never fails for one */ }
+}
+// A deleted set changes the day it was on: the circles that hold that day's
+// summary get the shorter one, or lose it when nothing is left.
+function refreshCommunityWorkoutDay(day) {
+  if (typeof window.refreshWorkoutDayInCircles !== "function" || !day) return;
+  try { window.refreshWorkoutDayInCircles(day); } catch (e) { /* see above */ }
 }
 
 const TEXT_SCALE_KEY = "haimunia-demo:textScale";
@@ -4419,9 +4492,8 @@ async function saveWod(sanityConfirmed) {
   // WOD is exactly as much a shareable session as a logged set, and the two
   // save paths drifting on this is the defect CLAUDE.md's "sibling drift"
   // rule names. See offerCommunityWorkoutShare() for what it does and does
-  // not do - including the never-on-an-edit gate, which this side needs for
-  // exactly the reason celebratePR above needs it.
-  if (!existing) offerCommunityWorkoutShare("wod_entry", entry.id);
+  // not do - including the refresh-only behaviour on an edit.
+  offerCommunityWorkoutShare("wod_entry", entry.id, !!existing);
   } finally { savingWod = false; }
 }
 // Live bug hunt (2026-09-11): same two-tab staleness fix as startEditEntry()
@@ -4497,6 +4569,7 @@ async function deleteWodEntry(id) {
   if (removed) {
     const w = wodById(removed.wodId);
     offerUndo(`${w ? w.name : "האימון"} — ${formatWodEntry(removed)} נמחק`, () => restoreWodEntry(removed));
+    refreshCommunityWorkoutDay(removed.date);
   }
   render();
 }
@@ -4603,6 +4676,7 @@ const ICONS = {
   chartIcon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V12M12 20V4M20 20v-7"/></svg>',
   stopwatchIcon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6M12 2v3"/></svg>',
   logIcon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9v6M7 7v10M17 7v10M20 9v6M7 12h10"/></svg>',
+  homeIcon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11l8-7 8 7M6 10v10h12V10M10 20v-6h4v6"/></svg>',
   communityIcon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M2 20c0-3.5 3-6 7-6s7 2.5 7 6"/><circle cx="17" cy="9" r="2.3"/><path d="M16.3 14c2.6.2 4.5 2.1 5 5"/></svg>',
   settingsIcon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
   // Redesign, Phase 3 fix: byte-identical gear glyph to settingsIcon above,
@@ -6489,14 +6563,18 @@ function render() {
     } else if (tab === "wod") {
       content = renderWodTab();
       syncWodSaveCta(wodSubTab === "log" ? wodById(selectedWodId) : null);
+    } else if (tab === "home" || tab === "me") {
+      content = tab === "home"
+        ? (typeof renderHomeApp === "function" ? renderHomeApp() : `<div class="empty">טוען…</div>`)
+        : (typeof renderMeApp === "function" ? renderMeApp() : `<div class="empty">טוען…</div>`);
     } else {
-      content = typeof renderCommunityApp === "function" ? renderCommunityApp() : `<div class="empty">הקהילה בטעינה</div>`;
+      content = typeof renderCommunityApp === "function" ? renderCommunityApp() : `<div class="empty">המעגלים בטעינה</div>`;
       // Signed-out, loading and recovery branches share the same scene as
       // the signed-in feed, without changing their forms or auth flow.
       if (!content.includes('class="scene-page ')) {
         content = `<section class="scene-page ${PAGE_SCENES.community.className}" aria-labelledby="pageTitle-community">
           <div class="scene-page__media" aria-hidden="true"></div><div class="scene-page__scrim" aria-hidden="true"></div>
-          <div class="scene-page__intro"><h1 id="pageTitle-community" class="scene-page__title">קהילה</h1></div>
+          <div class="scene-page__intro"><h1 id="pageTitle-community" class="scene-page__title">מעגל</h1></div>
           <div class="scene-sheet">${content}</div></section>`;
       }
     }
@@ -6641,11 +6719,11 @@ function render() {
     }
     if (tab === "calendar") renderCalendarGrid();
     if (tab === "wod") renderWodContent();
-    if (tab === "community" && typeof afterRenderCommunity === "function") afterRenderCommunity();
+    if ((tab === "community" || tab === "home" || tab === "me") && typeof afterRenderCommunity === "function") afterRenderCommunity();
     // COMM-190. The PR/achievement prompts render in the global
     // cloud overlay and can show on any tab, so their focus management runs
     // after every render, not only Community's.
-    if (tab !== "community" && typeof window.syncCloudDialogFocus === "function") window.syncCloudDialogFocus();
+    if (tab !== "community" && tab !== "home" && tab !== "me" && typeof window.syncCloudDialogFocus === "function") window.syncCloudDialogFocus();
     // browser-check audit (dialog-back-button.mjs) found a real gap in the
     // history/back-button fix above APP_DIALOGS: the boot-time loop that
     // attaches a MutationObserver to each registered overlay
@@ -7999,12 +8077,6 @@ document.addEventListener("click", (e) => {
   }
   else if (action === "focus-wod-builder-search") { document.getElementById("wodBuilderMoveSearch").focus(); }
   else if (action === "create-wod") { createWodFromBuilder(); }
-  // A LINK to the privacy screen, never a toggle: show_workout_results
-  // defaults false and stays the member's own decision.
-  else if (action === "open-community-privacy") {
-    if (typeof window.openCommunityPrivacySettings === "function") window.openCommunityPrivacySettings();
-    render();
-  }
   else if (action === "save-bw") { saveBodyweight(); }
   else if (action === "toggle-bodyweight") { bodyweightExpanded = !bodyweightExpanded; renderBodyweightArea(); }
   else if (action === "set-weight-from-pct") {

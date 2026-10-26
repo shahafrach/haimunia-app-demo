@@ -81,6 +81,7 @@ const seedTables = {
     { user_id: "u2", invite_id: "inv-1", role: "member", redeemed_at: VERIFIED },
   ],
   clubs: [{ id: "club-1", name: "מעגל הדגמה" }],
+  circle_members: ["u1", "u2"].map((u) => ({ club_id: "club-1", user_id: u, role: u === "u1" ? "owner" : "member", joined_at: "2026-10-01T00:00:00Z", share_defaults: {}, clubs: { id: "club-1", name: "מעגל הדגמה", type: "friends", emoji: "🔥", mode: "together", benchmark_enabled: false, invite_policy: "owner", welcome_line: "", benchmark: null, benchmark_month: null } })),
   feed_page_rows: Array.from({ length: FEED_ROWS }, (_, i) => feedRow(i)),
   feed_impressions: [], feed_interactions: [], hidden_posts: [], saved_posts: [],
   private_records: [], follows: [], blocks: [], analytics_events: [],
@@ -225,7 +226,7 @@ const perInteraction = await page.evaluate(async () => {
   const real = window.render;
   let count = 0;
   window.render = function () { count++; return real.apply(this, arguments); };
-  const btn = document.querySelector("#communityHeldPosts [data-community-action='cheer']");
+  const btn = document.querySelector("#communityHeldPosts [data-community-action='react']");
   const label = btn ? btn.getAttribute("data-community-action") : null;
   if (btn) { btn.click(); await new Promise((r) => setTimeout(r, 600)); }
   window.render = real;

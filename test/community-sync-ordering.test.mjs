@@ -46,5 +46,5 @@ test("the onAuthStateChange path still flushes before pulling too (regression gu
   // the same "send what is queued before pulling remote state" requirement
   // the private_records flush has. The property under test is unchanged:
   // both flushes complete before pullPrivateRecords runs.
-  assert.match(src, /Promise\.all\(\[loadProfile\(\), flushOutbox\(\), flushCommunityOutbox\(\)\]\)\)\s*\n\s*\.then\(pullPrivateRecords\)/);
+  assert.match(src, /Promise\.all\(\[loadProfile\(\), flushOutbox\(\), flushCommunityOutbox\(\)\]\)\)\s*\n\s*\s*\.then\(circlesAfterSession\)\s*\n\s*\.then\(pullPrivateRecords\)/);
 });

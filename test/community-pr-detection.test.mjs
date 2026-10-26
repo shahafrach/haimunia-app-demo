@@ -98,6 +98,7 @@ test("end to end: a logged lift drives the PR share prompt and posts nothing on 
 
   const window = await bootCommunity(mock, { syncEnabled: false });
   await waitFor(() => window.isCommunitySignedIn && window.isCommunitySignedIn(), 3000);
+  await waitFor(() => window.communityCircleIds && window.communityCircleIds().length > 0, 3000);
 
   await window.addMovement("Prompt Deadlift", "Deadlift");
   // Fresh-eyes audit fix: the share prompt only opens for a record with
@@ -127,7 +128,7 @@ test("end to end: a logged lift drives the PR share prompt and posts nothing on 
 
   await waitFor(() => !!window.document.getElementById("prPrompt"), 3000);
   const prompt = window.document.getElementById("prPrompt");
-  assert.match(prompt.textContent, /שיא חדש זוהה/);
+  assert.match(prompt.textContent, /שיא חדש!/);
   assert.match(prompt.textContent, /Prompt Deadlift/);
   assert.match(prompt.textContent, /140/);
   assert.equal(mock.callsTo("pr_share").length, 0, "the event alone never publishes");
@@ -143,6 +144,7 @@ test("fresh-eyes audit: a brand-new movement's first-ever set still emits PR_CRE
 
   const window = await bootCommunity(mock, { syncEnabled: false });
   await waitFor(() => window.isCommunitySignedIn && window.isCommunitySignedIn(), 3000);
+  await waitFor(() => window.communityCircleIds && window.communityCircleIds().length > 0, 3000);
 
   const seen = [];
   window.HaimuniaEvents.on(window.PRODUCT_EVENTS.PR_CREATED, (p) => seen.push(p));

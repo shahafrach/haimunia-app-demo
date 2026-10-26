@@ -46,6 +46,7 @@ const REQUIRED_ASSETS = [
 // wrap `bus.emit(...)` in a try/catch), so a failed fetch of any of these
 // must not take down offline support for the training log too.
 const OPTIONAL_ASSETS = [
+  "./src/community/circles-core.js",
   "./src/community/outward.js",
   "./src/community/achievements.js",
   "./src/community/notifications.js",
@@ -53,6 +54,9 @@ const OPTIONAL_ASSETS = [
   "./src/community/privacy.js",
   "./src/community/posts.js",
   "./src/community/share-prompt.js",
+  "./src/community/circles.js",
+  "./src/community/circles-ui.js",
+  "./src/community/circles-sheets.js",
   "./src/share-cards.js",
   "./src/community/auth.js",
   "./cloud.js",

@@ -54,9 +54,9 @@ test("the signed-out (or backup-only anonymous, pre-signup) render state trigger
   // file: "if (!state.redemption)" is no longer unique in cloud.js (loadFeed
   // gained one to stop the invite gate showing a false load failure), and a
   // global indexOf found that earlier one and sliced this branch to "".
-  const branchStart = cloudJs.indexOf("if (!state.user || (state.user.is_anonymous && !state.signupStarted && !state.redemption)) {");
+  const branchStart = cloudJs.indexOf("if (!state.user || (state.user.is_anonymous && !state.signupStarted && !state.redemption && !inAny)) {");
   assert.ok(branchStart > -1, "the login-or-start branch is still there");
-  const branch = cloudJs.slice(branchStart, cloudJs.indexOf("if (!state.redemption)", branchStart));
+  const branch = cloudJs.slice(branchStart, cloudJs.indexOf("if ((state.profileLoadError", branchStart));
   assert.ok(branch.length > 0, "and the slice actually captured it");
   assert.match(branch, /ensureAnonymousSession\(\);/);
   assert.doesNotMatch(branch, /type="email"/);

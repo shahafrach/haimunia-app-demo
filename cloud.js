@@ -192,7 +192,7 @@
       // window.holdPosts); nothing loads them in this build.
       held: [],
       openMenu: null, 
-      captionEdit: null, prPrompt: null, workoutPrompt: null, openShare: {},
+      captionEdit: null, prPrompt: null,
       
       // Five-persona UX audit, outward sharing. The share-outside-the-app
       // sheet: { subject, caption, showName, spec, status, previewUrl, blob,
@@ -220,6 +220,7 @@
     engagement: {
       
       
+      // postId -> { counts: {fist_bump, fire, clap}, mine: [kinds], list, loaded }
       reactions: {}, reactionError: null, 
       // The post id whose "who reacted" sheet is open, or null. A dialog, so
       // it starts closed and lives in CLOUD_DIALOGS like every other one.
@@ -251,6 +252,26 @@
 
 
 
+
+    // ---- circles (docs/circles/decisions.md) ----
+    // list is the member's circles (circle_members joined to clubs), currentId
+    // the one on screen, section the Circle tab's sub-view. members/feed/week/
+    // benchmark are per-circle caches keyed by circle id. mine is the member's
+    // own weekly target and pause. pendingTags are "trained together" tags
+    // waiting for this member. sheet is the one open circle sheet (create,
+    // settings, invite, leave, share, medal), shareBar the post-save bar,
+    // join the invite in flight. busy keys the writes that must not double-fire.
+    circles: {
+      loaded: false, loading: false, loadError: false, list: [], currentId: "", section: "feed",
+      members: {}, feed: {}, week: {}, benchmark: {},
+      mine: { target: null, pausedUntil: null, loaded: false },
+      pendingTags: [], sheet: null, shareBar: null,
+      join: { token: "", busy: false, error: "", draft: "" },
+      busy: {},
+      // Text typed into a sheet or a form, keyed "form.field": the screen is
+      // rebuilt on every render and would otherwise erase it.
+      drafts: {},
+    },
 
     // ---- achievements (COMM-130/134) ----
     achievements: { mine: [], unlock: null },
@@ -915,44 +936,14 @@
   // staff. The login screen says so rather than leaving a dead end.
   const LOGIN_RECOVERY_NOTE = `<div class="footer-note" style="margin-top:14px;">${bidiText("שכחתם את הסיסמה? אי אפשר לאפס אותה כרגע. אפשר להצטרף מחדש עם הזמנה חדשה, והיומן הפרטי נשאר במכשיר.")}</div>`;
 
-  function openPrivacySettings() {
-    // Both share prompts carry a link here (the show_workout_results note),
-    // and navigating out from under an open modal leaves it painted over the
-    // panel the member came to read. Dropped rather than closed through
-    // dismissWorkoutSharePrompt()/dismissPrPrompt(), either of which would
-    // release the next parked prompt on top of the screen they just asked
-    // for - and, in the PR prompt's case, would burn the record as dismissed
-    // for a tap that was about privacy, not about the share.
-    state.posts.workoutPrompt = null;
-    state.posts.prPrompt = null;
-    if (typeof window.switchToCommunityTopTab === "function") window.switchToCommunityTopTab();
-    rerender();
-  }
 
 
-  // An invite code is a live credential, and a URL is the leakiest place one
-  // can sit (history, back-stack, screenshots, Referer). It is read once at
-  // boot and stripped from the address bar before anything renders. Nothing
-  // here logs it, and no analytics event carries it.
-  const INVITE_CODE_PATTERN = /^[a-f0-9]{40,128}$/;
-  function captureInviteDeepLink() {
-    let code = "";
-    try {
-      const search = String((window.location && window.location.search) || "");
-      if (!search || search.indexOf("invite=") === -1) return;
-      code = String(new URLSearchParams(search).get("invite") || "").trim().toLowerCase();
-      const url = new URL(window.location.href);
-      url.searchParams.delete("invite");
-      // Strip first, validate second: a malformed code must leave the URL too.
-      window.history.replaceState(null, "", url.pathname + (url.search || "") + url.hash);
-    } catch (e) { return; }
-    if (!INVITE_CODE_PATTERN.test(code)) return;
-    state.ui.inviteCodeDraft = code;
-    // Land on the invite step itself rather than the neutral screen: someone
-    // who followed an invite link has already answered that question.
-    state.signupStarted = true;
-  }
-  captureInviteDeepLink();
+  // An invite token is a live credential. It travels in the URL FRAGMENT (after
+  // #), which no server, proxy or access log ever sees; captureInviteFromUrl()
+  // (src/community/circles.js) reads it once at boot, removes it from the
+  // address bar before anything renders, keeps it in memory only, and hands it
+  // to join_circle. A token in a query string is deliberately not read.
+  captureInviteFromUrl();
 
 
   // ---- Reactions (COMM-120) ----------------------------------------------
@@ -1124,103 +1115,30 @@
   // to show, not the most informative - it would be untranslated, probably
   // English, possibly a Postgres internal, and it is never actionable.
   const SERVER_ERROR_TEXT = {
-    // 202609160005's rank guard. The refusal is a fact about the TARGET, not
-    // about the person reading it, so the sentence names who is out of reach
-    // rather than saying "you are not allowed" - a head coach who tried to
-    // remove another head coach has the permission and is being told about
-    // this row, not about themselves.
-    "cannot remove a member at or above your own role": "אפשר להסיר רק חבר/ה בדרגה נמוכה משלכם. מנהל/ת או בעל/ת המועדון מוסרים/ות על ידי מנהל/ת המערכת.",
-    "use account deletion for your own account": "כדי למחוק את החשבון שלכם יש להשתמש במחיקת חשבון במסך החשבון, לא בהסרת חבר/ה.",
-    // The COMM-016 gate. Worth being blunt that this closes reading too:
-    // feed_page carries the same is_community_member() check as post_create,
-    // so "you can still browse" would be the same false promise the account
-    // security screen used to make.
-    "recovery method required": "החשבון עוד לא אומת כחשבון שאפשר לשחזר, ולכן הקהילה כולה סגורה בפניו — גם הפיד וגם הפרסום. במסך אבטחת החשבון יש כפתור אימות שפותח את הכול; רישום האימונים עצמו לא מושפע וממשיך לעבוד כרגיל.",
-    // COMM-153. The one message in this table that a member may be reading
-    // as the first news that they have been moderated at all, so it names
-    // the sanction plainly, states exactly what still works, and points at
-    // the only people who can lift it. No retry: only a moderator clears it.
-    //
-    // REVISITED once the Account tab actually had a restriction panel
-    // (renderMyRestrictionPanel). This sentence was written to carry a route
-    // to a human BECAUSE it was the member's only channel - it was doing the
-    // job of a surface that did not exist. It no longer is that, so it now
-    // names where the reason and the end date live, which is the one thing it
-    // structurally cannot say itself: an error string has no row behind it
-    // and can never state a date. The route to a coach STAYS rather than
-    // being handed off wholesale, because this message is still very often
-    // the first news, and "go and read a tab" is a colder thing to say to
-    // somebody who has just been refused than "go and read a tab, and there
-    // are people you can ask".
-    posting_restricted: "המועדון הגביל את הפרסום מהחשבון הזה, ולכן פוסטים ותגובות חדשים לא נשלחים. אפשר להמשיך לקרוא את הפיד ולעודד אחרים כרגיל. הסיבה שנרשמה ומועד סיום ההגבלה מופיעים בטאב \"חשבון\", וההגבלה נפתחת רק על ידי המנהלים — כדאי לפנות לבעל/ת המעגל.",
-    "not authorized": "לחשבון הזה אין הרשאה לפעולה הזו. הרשאות של צוות המועדון ניתנות על ידי מנהל/ת, וניסיון נוסף לא ישנה את התוצאה.",
+    // The COMM-016 gate: a member whose account is not yet recoverable (no
+    // username and password) cannot use the circles. Worth being blunt that
+    // this closes reading too.
+    "recovery method required": "החשבון עוד לא אומת כחשבון שאפשר לשחזר, ולכן המעגלים סגורים בפניו. במסך אבטחת החשבון יש כפתור אימות שפותח את הכול; רישום האימונים עצמו לא מושפע וממשיך לעבוד כרגיל.",
+    // A refusal is a stable state: it names what is true and does not say
+    // "try again", because a retry cannot change it.
+    "not authorized": "אין הרשאה לפעולה הזו במעגל הזה. אולי עזבתם אותו או הוסרתם ממנו. ניסיון נוסף לא ישנה את התשובה.",
     // The only server refusal that clears on its own, so the only one that
-    // earns a "try again". Matches the wording react() and the comment
-    // editor already use for the same code.
+    // earns a "try again".
     rate_limited: "נשלחו יותר מדי פעולות בזמן קצר והשרת עצר את האחרונה. זו הגבלה זמנית — אפשר לנסות שוב בעוד כמה דקות.",
     "captcha_failed": "אימות האבטחה לא עבר. אפשר לנסות שוב; אם זה חוזר, כדאי לרענן את הדף.",
-    // Content refusals a queued post or comment can carry. Each one is a
-    // thing the member can actually fix in the composer, so each names the
-    // fix instead of the rule.
-    "a post needs text or at least one photo": "פוסט חייב לכלול טקסט או לפחות תמונה אחת, והפוסט הזה יצא ריק. אפשר להסיר אותו מהתור ולכתוב אותו מחדש.",
-    "at most 4 photos per post": "אפשר לצרף עד ארבע תמונות לפוסט. יש להסיר את הפוסט מהתור ולפרסם אותו מחדש עם פחות תמונות.",
-    "each media item needs a storage_path": "אחת התמונות לא הועלתה במלואה, ולכן הפוסט לא נשלח. אפשר להסיר אותו מהתור ולצרף את התמונה שוב.",
-    "at most 10 mentions per comment": "אפשר לתייג עד עשרה אנשים בתגובה אחת. יש להסיר את התגובה מהתור ולכתוב אותה מחדש עם פחות תיוגים.",
-    "comment body required": "לא נשלחה תגובה ריקה. אפשר להסיר אותה מהתור ולכתוב אותה מחדש.",
-    "reply depth is capped at 2": "אפשר להגיב לתגובה, אבל לא לתגובה על תגובה. כדאי להשיב ישירות לתגובה הראשונה בשרשור.",
-    // The target of a queued write moved while the write was waiting. None
-    // of these can succeed on a retry: the row is gone or closed.
+    // The circle limits (rpcs.md). None of them clears on a retry.
+    circle_full: "המעגל הזה מלא ואין בו מקום לעוד חברים.",
+    too_many_circles: "את/ה כבר ב-10 מעגלים, וזה המקסימום.",
+    invite_limit: "נוצרו היום 20 הזמנות למעגל הזה. אפשר ליצור עוד מחר.",
+    // Content refusals a queued post can carry.
+    "a post needs text": "פוסט חייב לכלול טקסט, והפוסט הזה יצא ריק. אפשר להסיר אותו מהתור ולכתוב אותו מחדש.",
+    // The target of a queued write moved while the write was waiting. None of
+    // these can succeed on a retry: the row is gone or closed.
     "post not found": "הפוסט הזה כבר לא קיים — יכול להיות שהכותב/ת מחק/ה אותו בינתיים. אפשר להסיר את הפעולה מהתור.",
     "post is not available": "הפוסט הזה כבר לא זמין לצפייה. אפשר להסיר את הפעולה מהתור.",
-    "comment not found": "התגובה הזו כבר לא קיימת. אפשר להסיר את הפעולה מהתור.",
-    "parent comment not found": "התגובה שאליה רצינו להשיב כבר לא קיימת. אפשר להסיר את הפעולה מהתור ולהגיב ישירות לפוסט.",
-    "parent comment is no longer available": "התגובה שאליה רצינו להשיב הוסרה בינתיים. אפשר להסיר את הפעולה מהתור ולהגיב ישירות לפוסט.",
-    "content author is no longer available": "החשבון שכתב את התוכן הזה כבר לא פעיל, ולכן הפעולה לא רלוונטית. אפשר להסיר אותה מהתור.",
-    "event not found": "האירוע הזה כבר לא קיים. אפשר להסיר את ההרשמה מהתור.",
-    "event not open for rsvp": "האירוע הזה סגור להרשמה — הוא כבר התקיים או שההרשמה נסגרה. אפשר להסיר את ההרשמה מהתור.",
-    event_full: "האירוע מלא ואין בו יותר מקומות. אפשר להסיר את ההרשמה מהתור; אם יתפנה מקום, כדאי לבדוק שוב בדף האירוע.",
-    "challenge not found": "האתגר הזה כבר לא קיים. אפשר להסיר את העדכון מהתור.",
-    // The club WOD catalogue (202609060028). This is THE error a coach has to
-    // actually understand, and the raw string does not say it: the club copy
-    // is a snapshot taken at publish time, so re-publishing after editing
-    // locally did not overwrite it - and the reason it refuses rather than
-    // overwriting is that overwriting would change what a running challenge
-    // asks of people, mid-week, with scores already on the board. The message
-    // therefore has to name the fix as well as the fact.
-    "wod already published": "האימון הזה כבר נמצא בקטלוג המועדון. העותק של המועדון הוא צילום מצב מרגע הפרסום, ולכן שינוי שנעשה כאן מאז לא עבר אליו — וזה מכוון, כדי שאתגר שכבר רץ לא ישנה את מה שהוא מבקש באמצע השבוע. לתיקון שם או תיאור אפשר לערוך את האימון בקטלוג; לשינוי סוג הניקוד או התרגילים צריך לפרסם אימון חדש.",
-    "wod not found": "האימון הזה לא נמצא בקטלוג המועדון.",
-    "wod id must be a custom WOD id": "אפשר לפרסם רק אימון שנבנה כאן באפליקציה.",
-    "wod is used by a live challenge": "אי אפשר להוציא מהקטלוג אימון שיש עליו אתגר שעדיין לא הסתיים. אפשר לחזור לזה אחרי שהאתגר נגמר.",
-    "wod is locked by a challenge": "כבר התקיים אתגר על האימון הזה, ולכן אי אפשר לשנות אותו — לוח התוצאות מתעד מה אנשים עשו מול אימון מסוים. לאימון שונה צריך לפרסם אימון חדש.",
-    "not an active participant": "העדכון הזה שייך לאתגר שכבר לא משתתפים בו. אפשר להסיר אותו מהתור.",
-    // ---- Club WOD sessions and boards (202609080002) ---------------------
-    // Every refusal the six RPCs can raise, mapped. The rule this file
-    // already follows applies with unusual force here: NOTHING below says
-    // "try again", because none of these can succeed on a retry - each one
-    // is a stable state, and each one therefore names the move that IS
-    // available instead (cancel and re-publish, pick another day, log the
-    // workout, open the board from the feed).
-    //
-    // 'wod not found' is deliberately NOT re-stated: club_wod_session_publish
-    // raises the same string club_wod_publish already does, for the same
-    // reason (the id is not in the catalogue), and the sentence above it
-    // reads correctly for both.
-    "wod is retired": "האימון הזה הוצא מקטלוג המועדון, ולכן אי אפשר לקבוע עליו אימון יום. אפשר להחזיר אותו לקטלוג בניהול הקטלוג, או לבחור אימון אחר.",
-    // The snapshot rule, again - same shape as 'wod already published' above
-    // and for the same reason: the note is frozen at publish time so a card
-    // the club has already read cannot change under it. The correction path
-    // is real and is named.
-    "session already posted": "האימון הזה כבר נקבע ליום הזה, והטקסט שנשמר איתו הוא מה שהמועדון כבר ראה. לשינוי הטקסט אפשר לבטל את האימון שנקבע ולקבוע אותו מחדש; הלוח והתוצאות שכבר צורפו נשמרים.",
-    "too many sessions posted for that day": "כבר נקבעו ארבעה אימונים ליום הזה, וזו התקרה. אפשר לבטל אחד מהם או לקבוע ליום אחר.",
-    "a session can only be posted for yesterday, today or tomorrow": "אפשר לקבוע אימון יום לאתמול, להיום או למחר בלבד — כך הפיד נשאר מה שקורה עכשיו במועדון ולא לוח זמנים של שבוע קדימה.",
-    "session not found": "האימון הזה כבר לא קיים בלוח של המועדון.",
-    // Two different closures behind one server string; the client knows
-    // which from viewer.closed_reason and says so on the board itself, so
-    // this sentence has to cover both without guessing.
-    "this board is closed": "הלוח הזה סגור לצירוף תוצאות — או שהאימון בוטל, או שעברו יותר מ-14 יום מהיום שהוא נקבע אליו. התוצאה שכבר צורפה נשארת, ואפשר להסיר אותה בכל רגע.",
-    "the session has not happened yet": "האימון הזה נקבע למחר, ואפשר לצרף אליו תוצאה רק מהיום שהוא נקבע אליו.",
-    "record is required": "לא נבחר רישום לצירוף. אפשר לרשום את האימון ביומן ואז לצרף את התוצאה.",
-    "that result is for a different workout": "הרישום שנבחר שייך לאימון אחר, ולכן אי אפשר לצרף אותו ללוח הזה. אפשר לרשום את האימון של היום ולצרף את הרישום שלו.",
+    "unknown reaction": "סוג התגובה הזה לא קיים. אפשר להסיר את הפעולה מהתור.",
+    "record is required": "לא נבחר רישום לשיתוף. אפשר לרשום את האימון ביומן ולשתף שוב.",
+    "weight is out of range": "המשקל שנשלח מחוץ לטווח. אפשר להסיר את הפעולה מהתור ולשתף שוב.",
     // Thrown by registerOutboxHandlers() itself, not by the server: the
     // queue tried to send while nobody was signed in.
     "session expired": "החיבור לחשבון פג, ולכן הפעולה לא נשלחה. אחרי התחברות מחדש עם שם המשתמש והסיסמה אפשר לשלוח אותה שוב מכאן.",
@@ -1241,7 +1159,7 @@
   // RECOGNISED the error - not where it fell through to its own generic. A
   // generic replacing a specific one is a downgrade, which is why this cannot
   // simply call serverErrorText() everywhere.
-  const SERVER_ERROR_GENERIC = "הפעולה לא הושלמה. אפשר לנסות שוב, ואם זה חוזר כדאי לפנות לבעל/ת המועדון.";
+  const SERVER_ERROR_GENERIC = "הפעולה לא הושלמה. אפשר לנסות שוב, ואם זה חוזר כדאי לפנות לבעל/ת המעגל.";
   function failText(domainMessage, error) {
     const translated = serverErrorText(error);
     return translated && translated !== SERVER_ERROR_GENERIC ? translated : domainMessage;
@@ -1509,40 +1427,6 @@
     if (newest && typeof window.dbSetSetting === "function") await window.dbSetSetting(cursorKey, newest);
     if (typeof window.reloadFromDb === "function") { await window.reloadFromDb(); rerender(); }
   }
-  // THE THIRD PHOTO SURFACE. Live bug hunt, fresh round 9 (2026-09-16).
-  //
-  // post_photos was added to CLUB_MODULE_TOGGLES the day before and wired
-  // into the feed composer and the PR-share prompt - and missed here, in the
-  // inline share control that Calendar's day detail, the Add tab's
-  // today's-sets card and the WOD progress card all render. A club that
-  // switched photos off still had the camera offered on five call sites.
-  //
-  // These toggles only hide the offer (they are clientOnly by design), so a
-  // surface that keeps offering is the whole of the failure: the club said no
-  // and one of three places did not listen.
-  window.renderShareControl = function (type, id) {
-    if (!window.isCommunitySignedIn || !window.isCommunitySignedIn()) return "";
-    const key = shareKey(type, id);
-    // MERGE NOTE. Two branches replaced this emoji at once, for the same
-    // reported reason ("replace the share emoji on the progress card with a
-    // stroke share icon"), and main's is the one that survives: a local
-    // SHARE_ICON const here would have been a second drawing of an action
-    // that already has one, which is the drift the shared set exists to stop.
-    // The behaviour both sides wanted - no emoji, a stroked glyph inheriting
-    // the button's own --steel - is what SHARE_ICONS.club already gives.
-    // The glyph is SHARE_ICONS.club (src/community/outward.js), the same one
-    // the "ההישגים שלי" rows now draw for "share this to the club" - it was
-    // an outbox-tray emoji here and an arrow emoji there, two different
-    // pictures of one action, each rendered by whatever emoji font the phone
-    // happened to ship. See that constant's own comment. (Named rather than
-    // typed, so test/member-surface-polish.test.mjs can assert this function
-    // contains no emoji at all.)
-    if (!state.posts.openShare[key]) return `<button data-community-action="toggle-share" data-type="${esc(type)}" data-id="${esc(id)}" aria-label="שיתוף לקהילה" style="color:var(--steel);padding:4px;line-height:0;">${SHARE_ICONS.club}</button>`;
-    return `<div class="flex items-center gap-6" style="flex-wrap:wrap;">
-      <button class="chip-btn primary" data-community-action="publish" data-type="${esc(type)}" data-id="${esc(id)}" data-visibility="public" style="padding:5px 9px;font-size:11px;">לכולם</button>
-      <button class="link-btn" data-community-action="toggle-share" data-type="${esc(type)}" data-id="${esc(id)}" aria-label="ביטול שיתוף" style="padding:5px;">✕</button>
-    </div>`;
-  };
   // The one account-deletion path, reached from the Community account tab
   // and from the backup panel (launch-readiness audit B5: a backup-only
   // member has no profile, so no account tab, and had no way to ask).
@@ -1746,7 +1630,8 @@
     if (c.action === "migrate") migrateLocalData();
     else if (c.action === "block") block(c.payload.userId);
     else if (c.action === "delete-account") requestDeletion();
-    else if (c.action === "publish") publishWorkout(c.payload.type, c.payload.id, c.payload.visibility);
+    else if (c.action === "leave-circle") leaveCircle(c.payload.clubId);
+    else if (c.action === "remove-member") removeMember(c.payload.clubId, c.payload.userId);
     else if (c.action === "post-delete-rpc") postDeleteViaMenu(c.payload.postId);
     else rerender();
   }
@@ -1872,7 +1757,7 @@
     // can ever be under it, since the board is only opened from the feed or
     // the club-home strip.
     return renderReactorsSheet()
-      + renderPrSharePrompt() + renderWorkoutSharePrompt() + renderAchievementUnlockCelebration() + renderNotificationCenter()
+      + renderPrSharePrompt() + renderAchievementUnlockCelebration() + renderNotificationCenter() + renderCircleSheet() + renderCircleShareBar()
       + renderTermSheet()
       // Second-to-last, immediately under the confirm sheet: the outward
       // share sheet is opened FROM the PR prompt and the achievement
@@ -1994,280 +1879,21 @@
     if (!items.length) return "";
     return `<div class="log-list" id="communityHeldPosts">${items.map((post) => (post && post.post_type ? renderPostCard(post) : "")).join("")}</div>`;
   }
-  window.renderCommunityApp = function () {
-    // Design spec 3.3's "at most 4 markers per screen, first occurrence
-    // only". The budget is per PAINT, which is what "per screen" means in an
-    // app that re-renders the whole tab on every state change. Reset HERE
-    // rather than in renderConfirmDialog() because app.js calls this first
-    // (app.js:4241) and the dialog mount second (app.js:4287) - so an open
-    // overlay shares the budget with the content behind it instead of
-    // resetting it halfway through one paint.
-    resetTermMarkBudget();
-    if (!configured) return `<div class="chart-card"><div style="font-weight:800;font-size:18px;margin-bottom:8px;">הקהילה מוכנה לחיבור</div><div style="color:var(--steel);font-size:13px;line-height:1.7;">יש ליצור פרויקט Supabase, להריץ את קובץ המיגרציה ולהכניס URL ומפתח publishable בקובץ cloud-config.js. אין להכניס מפתח secret.</div></div>`;
-    // Live bug hunt (2026-09-11): state.signupStarted is in-memory-only and
-    // resets to false on reload - confirmed live, a real member whose
-    // invite-code redemption had already committed server-side (the RPC's
-    // response just never made it back before the reload) was bounced back
-    // to this neutral "start" screen as if signup had never begun. Re-typing
-    // the same (now-spent) code then failed with a generic "invalid/used"
-    // error, misleading someone who actually is mid-signup. A confirmed
-    // server-side redemption (state.redemption, loaded fresh by
-    // loadRedemption() regardless of this in-memory flag) is exactly as
-    // strong a signal as signupStarted that this session should skip the
-    // neutral gate - the post-gate flow below already branches on
-    // state.redemption to jump straight to the credentials step.
-    if (!state.user || (state.user.is_anonymous && !state.signupStarted && !state.redemption)) {
-      // Two real entry points — log into an existing account, or start fresh
-      // with a club invite code. Nothing happens silently *from this screen*
-      // — but state.user can already be a real (anonymous) session by the
-      // time anyone opens this tab: maybeAutoStartBackup() (Settings >
-      // protect my data) may have already created a backup-only session off
-      // the back of a saved set, with no invite code and no Community
-      // involvement at all. The is_anonymous + !signupStarted check keeps
-      // that person on this same neutral choice instead of skipping straight
-      // to "enter your invite code" as if they had clicked start-signup —
-      // ensureAnonymousSession() below still no-ops for them since a session
-      // already exists.
-      //
-      // ================ DESIGN SPEC SECTION 7: THE GATE WAS BACKWARDS =======
-      //
-      // Until now this branch rendered ONE screen, and it led with a login
-      // form and a 56px primary `התחברות ושחזור החשבון` — for an account the
-      // arriving member does not have. The path they actually need was an
-      // 11px underlined .link-btn at the bottom of it.
-      //
-      // For a club rolling this out to a cohort, EVERY arriving member is
-      // new. The primary action was the one almost nobody needs. The
-      // beginner persona's verbatim first reaction was "I don't have a
-      // username. Did I already sign up and forget? Did I do something
-      // wrong?" — a member blaming herself for the app's ordering.
-      //
-      // So the one screen becomes two, and they swap emphasis:
-      //
-      //   gateView ""      the neutral CHOICE screen. Says what the community
-      //                    is, then offers the invite code as the primary
-      //                    .save-btn and login as a real >=44px secondary
-      //                    control (.gate-alt — not the 13px .link-btn that
-      //                    was the defect, just pointed the other way).
-      //   gateView "login" the credential form, alone on a screen.
-      //
-      // THE TWO SENTENCES MOVED UP VERBATIM. The invite-code screen's own
-      // copy — "הכניסה עם קוד הזמנה שמקבלים מחבר/ה במעגל" and "הקוד לא נוגע
-      // לרישום האימונים" — is the app's own best writing and the sentence
-      // that stops a nervous member panicking. It was one screen too late.
-      // It is repeated on the invite step rather than moved off it:
-      // reassurance is allowed to repeat.
-      //
-      // THE STAFF SENTENCE IS DELETED FROM THE GATE. "הסנכרון הפרטי" and
-      // "הרשאות הצוות" mean nothing to a member and were being shown, at
-      // 12.5px, to a person who has no account and no staff role. Rewritten
-      // in member terms and shown only on the login screen, which is the one
-      // place it is answering a question somebody actually asked.
-      //
-      // WHAT THIS DOES *NOT* FIX, so nobody believes it did: the spec claims
-      // splitting login onto its own screen is also the structural fix for
-      // the duplicate input[name="username"]. It is not. Measured on the
-      // real boot: the second field is backupCredentials in #settingsBody,
-      // which app.js repopulates on EVERY render regardless of whether the
-      // settings overlay is open (app.js:4263), so it sits in the DOM
-      // permanently — display:none, but present — from the moment any
-      // anonymous backup session exists. The gate was never rendering two
-      // forms at once. What this split genuinely buys is that a COLD
-      // ARRIVING MEMBER now has zero credential forms mounted instead of
-      // one, so the collision needs a deliberate tap onto the login screen
-      // to happen at all. The real fix is app.js's, and is reported there.
-      if (!state.signupStarted && state.ui.gateView !== "login") {
-        return `<div class="chart-card" style="padding:0;overflow:hidden;">
-
-          <div style="padding:16px;">
-          <div style="font-weight:800;font-size:20px;margin-bottom:8px;">קהילת המועדון</div>
-          <div style="color:var(--chalk);font-size:15px;line-height:1.5;margin-bottom:12px;">${bidiText("כאן רואים מה קורה במועדון: אימונים ושיאים של חברי המועדון, ולוחות תוצאות.")}</div>
-          <div style="color:var(--steel);font-size:14px;line-height:1.6;margin-bottom:18px;">${bidiText("הכניסה עם קוד הזמנה שמקבלים מחבר/ה במעגל. הקוד לא נוגע לרישום האימונים שלכם — הוא רק פותח את לשונית הקהילה.")}</div>
-          <button class="save-btn" data-community-action="start-signup">יש לי קוד הזמנה</button>
-          <div style="display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;margin-top:18px;">
-            <span style="color:var(--steel);font-size:14px;">${bidiText("כבר יש לך חשבון קהילה?")}</span>
-            <button class="gate-alt" data-community-action="show-login">התחברות</button>
-          </div>
-          ${state.ui.message ? `<div class="footer-note" role="status" style="margin-top:10px;color:var(--brass);">${esc(state.ui.message)}</div>` : ""}
-          </div>
-        </div>`;
-      }
-      if (!state.signupStarted) {
-        return `<div class="chart-card">
-          <button class="gate-back" data-community-action="gate-back">‹ חזרה</button>
-          <div style="font-weight:800;font-size:20px;margin:6px 0 8px;">התחברות לקהילה</div>
-          <div style="color:var(--steel);font-size:14px;line-height:1.6;margin-bottom:14px;">${bidiText("התחברות מחזירה את הפרופיל שלך, את מי שאת/ה עוקב/ת אחריו ואת ההיסטוריה בקהילה — גם במכשיר חדש.")}</div>
-          <form id="communityLogin">${field("communityLogin", "username", LOGIN_IDENTIFIER_LABEL, `<input class="text-input" name="username" dir="ltr" autocapitalize="off" autocomplete="username" placeholder="${esc(LOGIN_IDENTIFIER_LABEL)}" required/>`)}${field("communityLogin", "password", "סיסמה", `<input class="text-input" name="password" type="password" dir="ltr" autocomplete="current-password" placeholder="סיסמה" required/>`)}<button class="save-btn" type="submit" style="margin-top:12px;">התחברות</button></form>
-          ${state.ui.message ? `<div class="footer-note" role="status" style="margin-top:10px;color:var(--brass);">${esc(state.ui.message)}</div>` : ""}
-          ${LOGIN_RECOVERY_NOTE}
-        </div>`;
-      }
-      ensureAnonymousSession();
-      return `<div class="chart-card"><div style="font-weight:800;font-size:18px;margin-bottom:6px;">מתחברים לקהילה…</div><div style="color:var(--steel);font-size:13px;">שנייה אחת.</div>${state.ui.message ? `<div class="footer-note" role="status" style="margin-top:10px;color:var(--brass);">${esc(state.ui.message)}</div>` : ""}</div>`;
-    }
-    // Launch-readiness audit, CQ-006. Neither loader has ever run
-    // successfully yet (both null) but the last attempt errored - render a
-    // retry screen instead of assuming "not joined", which is what the two
-    // gates below this one would otherwise conclude for a returning member
-    // on a flaky connection.
-    if ((state.profileLoadError && !state.profile) || (state.redemptionLoadError && !state.redemption)) {
-      return `<div class="chart-card"><div style="font-weight:800;font-size:18px;margin-bottom:6px;">בעיה בטעינת הקהילה</div><div style="color:var(--steel);font-size:13px;margin-bottom:14px;">לא הצלחנו לטעון את פרטי החשבון. ייתכן שזו בעיית רשת זמנית.</div><button class="save-btn" data-community-action="retry-join-load">ניסיון חוזר</button></div>`;
-    }
-    // The invite step. Two things landed here with the joining QR:
-    //
-    // 1. A prefilled note. captureInviteDeepLink() fills state.ui.inviteCodeDraft
-    //    from ?invite=, so someone who scanned a flyer arrives with the field
-    //    already full - and a form that fills itself, unexplained, reads as a
-    //    bug rather than a convenience. The line says where it came from and
-    //    is only rendered when there is genuinely a prefilled draft.
-    // 2. A way back to the login form (see the back-to-login handler). The
-    //    deep link sets signupStarted, which skips the neutral
-    //    log-in-or-start-fresh screen - correct for a genuine new member,
-    //    wrong for a returning one who scanned the same flyer, and this is
-    //    their way out.
-    // 3. Design spec 7.2: a `‹ חזרה` control at >=44px. Before it, the only
-    //    button on this screen was `אישור קוד` — a member who tapped in by
-    //    accident, or who wants to re-read what the community even is, had
-    //    to leave via the bottom tab bar and lose their place. It is
-    //    deliberately a SEPARATE control from "כבר יש לכם חשבון? התחברות"
-    //    below it, because they go to different places and answer different
-    //    questions: back to the choice screen, versus straight to the login
-    //    form. Collapsing them would make one of the two labels a lie.
-    if (!state.redemption) return `<div class="chart-card"><button class="gate-back" data-community-action="gate-back">‹ חזרה</button>${renderJoinProgress(0)}<div style="font-weight:800;font-size:18px;margin:0 0 6px;">קוד הזמנה למועדון</div><div style="color:var(--steel);font-size:14px;line-height:1.6;margin-bottom:14px;">${bidiText("הכניסה עם קוד הזמנה שמקבלים מחבר/ה במעגל. הקוד לא נוגע לרישום האימונים שלכם — הוא רק פותח את לשונית הקהילה.")}</div>${state.ui.inviteCodeDraft ? `<div class="footer-note" data-invite-prefilled="1" style="margin-bottom:10px;color:var(--brass);">${bidiText("הקוד מולא אוטומטית מהקישור שנסרק. אפשר להמשיך.")}</div>` : ""}<form id="communityInviteCode">${field("communityInviteCode", "code", "קוד הזמנה", `<input class="text-input" name="code" dir="ltr" inputmode="text" autocomplete="off" autocapitalize="off" maxlength="128" placeholder="קוד הזמנה" value="${esc(state.ui.inviteCodeDraft)}" data-invite-code required/>`)}<button class="save-btn" type="submit"${state.ui.redeemingCode ? " disabled" : ""} style="margin-top:12px;">${state.ui.redeemingCode ? "בודקים…" : "אישור קוד"}</button></form><div style="display:flex;justify-content:center;margin-top:16px;"><button class="gate-alt" data-community-action="back-to-login">כבר יש לכם חשבון? התחברות</button></div>${state.ui.message ? `<div class="footer-note" role="status" style="margin-top:10px;color:var(--brass);">${esc(state.ui.message)}</div>` : ""}</div>`;
-    // Right after the code, before anything else — this is what turns the
-    // bootstrap anonymous session into a real, log-in-from-any-device
-    // account. state.user.is_anonymous flips to false the moment
-    // setCredentials() succeeds, so a returning user (who logged in with
-    // real credentials to begin with) never sees this screen at all.
-    if (state.user.is_anonymous) return `<div class="chart-card">${renderJoinProgress(1)}<div style="font-weight:800;font-size:18px;margin-bottom:6px;">יצירת חשבון</div><div style="color:var(--steel);font-size:13px;line-height:1.7;margin-bottom:14px;">${CREDENTIALS_INTRO_TEXT}</div><form id="communityCredentials">${field("communityCredentials", "username", LOGIN_NAME_LABEL, `<input class="text-input" name="username" dir="ltr" autocapitalize="off" autocomplete="username" placeholder="${esc(USERNAME_RULE_TEXT)}" data-live-validate="username" data-live-validate-form="communityCredentials" required/>`)}${field("communityCredentials", "password", "סיסמה", `<input class="text-input" name="password" type="password" dir="ltr" autocomplete="new-password" placeholder="${esc(PASSWORD_RULE_TEXT)}" data-live-validate="password" data-live-validate-form="communityCredentials" required/>`)}${field("communityCredentials", "passwordConfirm", "אימות סיסמה", `<input class="text-input" name="passwordConfirm" type="password" dir="ltr" autocomplete="new-password" placeholder="הקלידו שוב" data-live-validate="passwordConfirm" data-live-validate-form="communityCredentials" required/>`)}<button class="save-btn" type="submit" style="margin-top:12px;">יצירת חשבון</button></form>${state.ui.message ? `<div class="footer-note" role="status" style="margin-top:10px;color:var(--brass);">${esc(state.ui.message)}</div>` : ""}</div>`;
-    // Redesign, Phase 3. Three purely informational screens, shown once per
-    // device, right where the mockup's own new-member flow put them: after
-    // credentials exist (so is_anonymous is already false and this gate is
-    // reached at all) but before profile completion, which is what makes
-    // "המשך להשלמת הפרופיל" on the last screen an honest label rather than
-    // a lie about what happens next.
-    //
-    // BOTH HALVES OF THE PREDICATE ARE LOAD-BEARING, and the first one was
-    // missing until a launch-readiness re-audit reproduced it live. The
-    // original comment here claimed "a returning member (who already has a
-    // profile) never reaches this line at all", inferring it from the
-    // credentials gate above. That inference was wrong: the gates above only
-    // establish a session, a redemption and non-anonymity, all three of
-    // which a returning member logging in ON A NEW DEVICE satisfies - and
-    // the seen-flag is per-device localStorage, so it is unset for them.
-    // They landed on all three intro screens and had to click through them
-    // before reaching the club, and the last screen's "המשך להשלמת הפרופיל"
-    // promised a profile form they were never going to see because they
-    // already have a profile. !state.profile is what actually expresses
-    // "brand-new member, has not completed signup yet" - the same condition
-    // the profile-completion gate immediately below runs on, so the carousel
-    // now precedes exactly the flow it was written for and nothing else.
-    // Without this gate, a fresh code-redeemer landed straight on the Feed
-    // sub-tab — mostly empty, nothing prompting them to the profile form
-    // buried in Account — with no clear signal anything had actually been
-    // saved. Now profile creation is unskippable, same pattern as the
-    // gates above it: this screen is all there is until a profile exists,
-    // and the whole screen changing to the real tabbed UI afterward is the
-    // confirmation, not just a toast that's easy to miss.
-    if (!state.profile) return `<div class="chart-card">${renderJoinProgress(3)}<div style="font-weight:800;font-size:18px;margin-bottom:6px;">השלמת פרופיל</div><div style="color:var(--steel);font-size:13px;line-height:1.7;margin-bottom:14px;">כמעט סיימתם — עוד רגע אחד ותהיו בפנים. ${CLUB_NAME_HINT_TEXT}</div><form id="communityProfile">${field("communityProfile", "displayName", CLUB_NAME_LABEL, `<input class="text-input" name="displayName" dir="auto" placeholder="למשל דנה כהן" required/>`)}<div class="footer-note" style="margin:6px 0 12px;">${CLUB_NAME_HINT_TEXT}</div><label class="field"><span class="field-label">קצת עליי</span><textarea class="text-input" name="bio" maxlength="160" placeholder="כמה מילים עליי"></textarea></label><button class="save-btn" type="submit" style="margin-top:12px;">שמירת פרופיל</button></form>${state.ui.message ? `<div class="footer-note" role="status" style="margin-top:10px;color:var(--brass);">${esc(state.ui.message)}</div>` : ""}</div>`;
-    // COMM-016. Credentials are set and the profile row exists, but the
-    // account has not been stamped recoverable yet, so is_community_member()
-    // still blocks every write. Try once automatically (guarded inside
-    // verifyRecovery so it cannot loop), then leave a manual retry. The
-    // invite is already redeemed here and is never re-attempted, so a
-    // failed verification does not consume it - the member can retry or
-    // sign in again later on any device.
-    if (!state.profile.recovery_verified_at) {
-      verifyRecovery();
-      // "עד להשלמת האימות אפשר לצפות בקהילה בלבד" - what this sentence used
-      // to promise - is not what happens. is_community_member() gates the
-      // READS too: with recovery_verified_at unset, feed_page,
-      // community_search and announcements_read all refuse with 'recovery
-      // method required', exactly as post_create does. Checked against the
-      // real stack, not inferred: signed in as a member whose stamp was
-      // cleared, all four calls came back 400 with that same message.
-      //
-      // So the screen was describing a browse-only state that does not
-      // exist, to the one member who is standing in it and can see for
-      // themselves that the feed is empty. Replaced with what is actually
-      // true, plus the bound that matters most here - this gate is the
-      // COMMUNITY's, and the workout log it sits next to never depended on
-      // it. That pairing is the invite-code screen's own shape: say what
-      // the thing is, then say what it does not touch.
-      return `<div class="chart-card"><div style="font-weight:800;font-size:18px;margin-bottom:6px;">אבטחת החשבון</div>
-        <div style="color:var(--steel);font-size:13px;line-height:1.7;margin-bottom:14px;">כדי להשתתף בקהילה — לפרסם, להגיב, לעודד ולהצטרף לאתגרים — נדרש חשבון שאפשר לשחזר. שם המשתמש והסיסמה שהגדרתם הם דרך השחזור: הם מאפשרים להתחבר לאותו פרופיל מכל מכשיר, גם אחרי החלפת טלפון או מחיקת נתונים. עד להשלמת האימות הקהילה כולה סגורה — גם הפיד וגם הפרסום — ולכן כדאי להשלים אותו עכשיו; רישום האימונים והגיבוי הפרטי לא מושפעים וממשיכים לעבוד כרגיל.</div>
-        <button class="save-btn" data-community-action="verify-recovery" style="margin-top:2px;">אימות והמשך</button>
-        ${state.ui.message ? `<div class="footer-note" role="status" style="margin-top:10px;color:var(--brass);">${esc(state.ui.message)}</div>` : ""}</div>`;
-    }
-    const p = state.profile || {};
-
-    const account = `<form id="communityProfile" class="chart-card"><div style="font-weight:800;font-size:16px;margin-bottom:12px;">הפרופיל שלי</div>
-      ${field("communityProfile", "displayName", CLUB_NAME_LABEL, `<input class="text-input" name="displayName" dir="auto" value="${esc(p.display_name || "")}" placeholder="למשל דנה כהן" required/>`)}
-      <div class="footer-note" style="margin:6px 0 12px;">${CLUB_NAME_HINT_TEXT}</div>
-      <label class="field"><span class="field-label">קצת עליי</span><textarea class="text-input" name="bio" maxlength="160" placeholder="כמה מילים עליי">${esc(p.bio || "")}</textarea></label>
-      <div class="chip-row"><button class="chip-btn primary" type="submit">שמירת פרופיל</button><button class="chip-btn" type="button" data-community-action="migrate">סנכרון היסטוריה פרטית</button></div>
-    </form>`;
-
-    const privacyRows = state.profile
-      ? PRIVACY_FIELDS.map((f) => `<label class="log-row" style="justify-content:space-between;gap:12px;cursor:pointer;"><span style="font-size:13px;">${f.label}</span><input type="checkbox" data-privacy-field="${f.key}"${state.profile[f.key] ? " checked" : ""} aria-label="${esc(f.label)}"/></label>`).join("")
-      : `<div class="log-row" aria-hidden="true"><span style="height:12px;width:62%;background:var(--border);border-radius:6px;display:inline-block;"></span></div>`.repeat(4);
-    const privacyPanel = `<div class="ach-section" id="communityPrivacyPanel" style="margin-top:18px;">${sectionHead("var(--blue)", "פרטיות")}
-      <div style="color:var(--steel);font-size:12px;line-height:1.6;margin-bottom:8px;">כל שינוי נשמר מיד ונאכף בשרת.</div>
-      <div class="log-list">${privacyRows}</div>
-    </div>`;
-    const blockedMembersPanel = renderBlockedMembersPanel();
-
-    const marksOn = termMarksSwitchOn();
-    const marksRetired = marksOn && !termMarksVisible();
-    const termMarkPanel = `<div class="ach-section" style="margin-top:18px;">${sectionHead("var(--steel)", "מונחים והסברים")}
-      <label class="log-row" style="justify-content:space-between;gap:12px;cursor:pointer;">
-        <span style="font-size:13px;">סימוני הסבר על מונחים<span style="color:var(--steel);display:block;font-size:11px;line-height:1.5;">${bidiText(marksRetired ? "העיגול הקטן עם ? ליד מונחים כמו AMRAP. הוא מפסיק להופיע אחרי שפותחים שלושה הסברים, וזה כבר קרה — אפשר להחזיר אותו בכל רגע." : "העיגול הקטן עם ? ליד מונחים כמו AMRAP. הוא נעלם מעצמו אחרי שפותחים שלושה הסברים.")}</span></span>
-        <input type="checkbox" data-term-marks="1"${marksOn ? " checked" : ""} aria-label="סימוני הסבר על מונחים"/>
-      </label>
-      <button class="chip-btn" data-community-action="term-glossary-open" style="margin-top:10px;">כל המונחים</button>
-    </div>`;
-
-    const accountTab = `<div class="chart-card" id="communityHead" style="margin-bottom:12px;"><div class="flex" style="justify-content:space-between;align-items:center;gap:10px;"><div style="font-weight:800;font-size:16px;">${bidiText(p.display_name || p.handle || "")}</div>${renderNotificationBell()}</div></div>`
-      + renderHeldPosts() + account + renderMyAchievements() + privacyPanel + renderSharePromptPrefPanel() + blockedMembersPanel + renderNotifPrefsPanel() + termMarkPanel
-      + selfExportButtonHtml("display:block;margin:20px auto 0;")
-      + `<button class="link-btn" data-community-action="sign-out" style="display:block;margin:20px auto 0;">התנתקות</button>`
-      + `<button class="link-btn" data-community-action="delete-account" style="display:block;margin:10px auto 8px;color:var(--red-text);">בקשת מחיקת חשבון</button>`;
-
-    return `<section class="scene-page ${window.PAGE_SCENES.community.className}" aria-labelledby="pageTitle-community">
-      <div class="scene-page__media" aria-hidden="true"></div>
-      <div class="scene-page__scrim" aria-hidden="true"></div>
-      <div class="scene-page__intro">
-        <div class="scene-page__brand">${esc(brandWordmark())}</div>
-        <h1 id="pageTitle-community" class="scene-page__title">קהילה</h1>
-      </div>
-      <div class="scene-sheet">
-    <div class="stripe-ribbon" aria-hidden="true"></div>`
-      + (state.ui.message ? `<div role="status" aria-live="polite" style="position:fixed;left:0;right:0;bottom:calc(var(--bottom-nav-reserve) - 118px);display:flex;justify-content:center;padding:0 16px;z-index:60;pointer-events:none;"><div style="max-width:448px;background:var(--surface);border:1px solid var(--brass);color:var(--brass);border-radius:14px;padding:11px 16px;font-size:13px;font-weight:700;line-height:1.45;box-shadow:var(--shadow-card);text-align:center;">${esc(state.ui.message)}</div></div>` : "")
-      + renderOutboxBanner()
-      + accountTab
-      + `</div></section>`;
-  };
 
   function outboxActionLabel(action) {
     return {
       post_create: "פוסט",
-      add_post_comment: "תגובה",
-      toggle_reaction: "לייק",
-      event_rsvp: "הרשמה לאירוע",
-      chal_record_progress: "עדכון התקדמות",
+      toggle_reaction: "תגובה",
       pr_share: "שיתוף שיא",
       ach_share: "שיתוף מדליה",
       // Not an OUTBOX_ACTION - a table upsert with its own handler, see
       // registerOutboxHandlers() - but it reaches this banner the same way
       // every other member write does, so it needs a Hebrew noun here too.
       workout_share: "שיתוף אימון",
-      // The queue's own actions are the five above, but a row queued by an
-      // OLDER build can name an action this table has never heard of - the
-      // same case outbox.js reports as "unsupported action". The fallback
-      // used to be `action` itself, so that row labelled itself to the
-      // member with a raw English identifier ("chal_record_progress"). A
-      // generic Hebrew noun says no less: serverErrorText() on the line
-      // below already explains that the op is from a retired version.
+      // A row queued by an OLDER build can name an action this table has never
+      // heard of - the same case outbox.js reports as "unsupported action".
+      // A generic Hebrew noun says no less: serverErrorText() already explains
+      // that the op is from a retired version.
     }[action] || "פעולה";
   }
   function renderOutboxBanner() {
@@ -2414,7 +2040,7 @@
     if (!state.ui.backupDeleteConfirm) {
       return `<button class="link-btn" data-community-action="backup-delete" style="display:block;margin-top:10px;color:var(--red-text);">מחיקת הגיבוי מהענן</button>`;
     }
-    const alsoProfile = state.profile ? " גם הפרופיל והשיתופים בקהילה יוסרו מיד." : "";
+    const alsoProfile = state.profile ? " גם הפרופיל והשיתופים במעגלים יוסרו מיד." : "";
     return `<div class="footer-note" role="group" aria-labelledby="backupDeleteTitle" style="margin-top:12px;padding:10px;border-radius:8px;border:1px solid var(--red-text);">
       <h2 id="backupDeleteTitle" style="margin-top:0;margin-bottom:4px;font-size:13.5px;font-weight:800;color:var(--red-text);">מחיקת הגיבוי מהענן</h2>
       <div style="margin-bottom:10px;">כל מה שגובה לענן, יחד עם החשבון שנפתח לגיבוי, יימחק לצמיתות בתוך 30 יום.${esc(alsoProfile)} האימונים שבמכשיר הזה נשארים, והגיבוי האוטומטי ייכבה כדי שהשמירה הבאה לא תפתח גיבוי חדש.</div>
@@ -2521,7 +2147,10 @@
     // their relative order settles nothing. Both stay below the three that
     // can stack on top of a prompt. See the pinned reasoning in
     // test/community-state-namespaces.test.mjs.
-    { key: "workoutPrompt", isOpen: () => state.posts.workoutPrompt, close: function () { dismissWorkoutSharePrompt(); } },
+    // The circle sheets (create, settings, invite, join, share, medal): one at
+    // a time. Below the confirm sheet, which a leave or a removal stacks on top
+    // of; nothing stacks on top of a circle sheet but that and the term sheet.
+    { key: "circleSheet", isOpen: () => state.circles.sheet, close: function () { closeSheet(); } },
     // 202609080002, the club WOD board. LAST, which is the mirror image of
     // its FIRST position in renderConfirmDialog()'s DOM order and follows the
     // same rule the three entries at the top of this list follow: this
@@ -2782,10 +2411,12 @@
 
   window.afterRenderCommunity = function () {
     ensureCommunityDataLoaded();
+    // The Circle tab loads what its section needs, once per circle.
+    if (window.haimuniaActiveTab === "community" && state.circles.loaded && state.profile && state.profile.recovery_verified_at) {
+      const c = currentCircle();
+      if (c) ensureSectionLoaded(c.id);
+    }
     if (state.user && notifPushEnabled() && !state.notif.pushChecked) loadNotifPushStatus();
-    document.querySelectorAll("[data-privacy-field]").forEach((el) => {
-      el.addEventListener("change", () => savePrivacyField(el.dataset.privacyField, el.checked));
-    });
     document.querySelectorAll("[data-share-prompt-pref]").forEach((el) => {
       el.addEventListener("change", () => setSharePromptsEnabled(el.checked));
     });
@@ -2800,7 +2431,10 @@
 
   window.handleCommunityClick = function (el) {
     const action = el.dataset.communityAction;
-    if (action === "migrate") askConfirm({ title: "סנכרון היסטוריה", message: "להעלות את היסטוריית האימונים הפרטית לחשבון? שום נתון לא יפורסם בקהילה.", confirmLabel: "העלאה", action: "migrate" });
+    // Everything the circles screens do ("c-..." and the reaction toggle) is
+    // dispatched from src/community/circles-sheets.js.
+    if ((action === "react" || (action && action.indexOf("c-") === 0)) && handleCirclesAction(action, el)) return;
+    if (action === "migrate") askConfirm({ title: "סנכרון היסטוריה", message: "להעלות את היסטוריית האימונים הפרטית לחשבון? שום נתון לא יפורסם במעגלים.", confirmLabel: "העלאה", action: "migrate" });
     // Settings > "protect my data" (window.renderBackupSettingsPanel) - fully
     // separate from Community's own join flow: no invite code, no feed, no
     // profile. "enable" clears the opt-out and starts (or resumes) a
@@ -2882,18 +2516,9 @@
       if (typeof window.showToast === "function") window.showToast("גיבוי אוטומטי לענן כובה. האימונים ממשיכים להישמר במכשיר הזה.");
       rerender();
     }
-    else if (action === "cheer") react(el.dataset.id);
-    else if (action === "publish") {
-      const fileInput = document.getElementById("photo-" + el.dataset.id);
-      const file = fileInput && fileInput.files && fileInput.files[0];
-      const item = typeof window.communityShareCandidateFor === "function" ? window.communityShareCandidateFor(el.dataset.type, el.dataset.id) : null;
-      const audience = el.dataset.visibility === "public" ? "לכולם, פומבי" : "לעוקבים שלכם בלבד";
-      const preview = item ? `"${item.title}" — ${item.resultText}${file ? " (כולל תמונה)" : ""}` : "";
-      askConfirm({ title: "פרסום תוצאה", message: `לפרסם ${audience}?${preview ? " " + preview : ""}`, confirmLabel: "פרסום", action: "publish", payload: { type: el.dataset.type, id: el.dataset.id, visibility: el.dataset.visibility, file } });
-    }
     // Opened from the member card's "⋯" menu as well as from a post's -
     // either way the menu has served its purpose once the confirm is up.
-    else if (action === "block") { state.posts.openMenu = null; askConfirm({ title: "חסימת משתמש", message: "לחסום את {subject}? לא תראו זה את זה בקהילה.", subject: subjectNameFor(el.dataset.id), confirmLabel: "חסימה", destructive: true, action: "block", payload: { userId: el.dataset.id } }); }
+    else if (action === "block") { state.posts.openMenu = null; askConfirm({ title: "חסימת משתמש", message: "לחסום את {subject}? לא תראו זה את זה במעגלים.", subject: subjectNameFor(el.dataset.id), confirmLabel: "חסימה", destructive: true, action: "block", payload: { userId: el.dataset.id } }); }
     // Live bug hunt (2026-09-11): unblock()'s dispatch - no confirm sheet,
     // same "no confirm needed for a reversible toggle" shape the club-module
     // toggles already use (block() itself still confirms - it's the one
@@ -2944,7 +2569,6 @@
     else if (action === "outbox-retry") retryOutboxItem(el.dataset.id);
     else if (action === "outbox-discard") discardOutboxItem(el.dataset.id);
     else if (action === "sign-out") client.auth.signOut();
-    else if (action === "toggle-share") toggleShare(el.dataset.type, el.dataset.id);
     else if (action === "toggle-post-menu") togglePostMenu(el.dataset.id);
     else if (action === "post-edit-caption") postStartCaptionEdit(el.dataset.id);
     else if (action === "caption-cancel") { state.posts.captionEdit = null; rerender(); }
@@ -2957,8 +2581,6 @@
     // #40's copy, kept: deletion is undoable for a few seconds now, and the
     // confirm has to say so. This branch's four rows above are additive.
     else if (action === "post-delete") askConfirm({ title: "מחיקת פוסט", message: "הפוסט יוסר מהפיד. אפשר יהיה לבטל למשך כמה שניות.", confirmLabel: "מחיקה", destructive: true, action: "post-delete-rpc", payload: { postId: el.dataset.id } });
-    else if (action === "workout-share") shareWorkoutSharePrompt();
-    else if (action === "workout-not-now") dismissWorkoutSharePrompt();
     else if (action === "pr-share") sharePrPrompt();
     else if (action === "pr-not-now") dismissPrPrompt();
     else if (action === "pr-add-note") { if (state.posts.prPrompt) { state.posts.prPrompt.showNote = true; rerender(); } }
@@ -3012,7 +2634,7 @@
   // cloud.js is deferred ahead of app.js, so captureInviteDeepLink() has
   // already run by the time app.js asks this.
   window.communityInviteFlowPending = function () {
-    return !!(state.ui.inviteCodeDraft && !state.redemption);
+    return inviteFlowPending();
   };
   // WHO OWNS A WRITE, at the moment it is made. app.js's queueSyncRecord()
   // needs this to stamp an outbox row with the member who created it - see
@@ -3035,19 +2657,6 @@
     if (!window.isCommunitySignedIn()) return false;
     openNotifCenter("#notificationsBellBtn");
     return true;
-  };
-  // The privacy-screen link, so the log form's "hidden from the club" hint
-  // routes to the same place the board's does. It NAVIGATES; it never writes
-  // a privacy field.
-  window.openCommunityPrivacySettings = openPrivacySettings;
-  // READ-ONLY, and deliberately so. app.js's log form needs to know whether
-  // the member's figure reaches the club, so it can say so and link to the
-  // privacy screen. There is no matching setter and there must not be one:
-  // show_workout_results defaults false, and no surface in this app flips a
-  // member's disclosure ON for them. null while the profile is still loading,
-  // which is neither true nor false and renders no hint at all.
-  window.communityShowsWorkoutResults = function () {
-    return state.profile ? !!state.profile.show_workout_results : null;
   };
   window.shareAchievementToCommunity = function (achievementId, title, rule) { publishAchievement(achievementId, title, rule); };
   document.addEventListener("submit", (event) => {
@@ -3075,6 +2684,7 @@
         ensureAnalyticsConfigured();
         loadRedemption()
           .then(() => Promise.all([loadProfile(), flushOutbox(), flushCommunityOutbox()]))
+          .then(circlesAfterSession)
           .then(pullPrivateRecords)
           .then(() => { if (typeof window.syncCommunityMilestones === "function") window.syncCommunityMilestones(); })
           .then(() => { state.communityDataLoaded = false; return ensureCommunityDataLoaded(); })
@@ -3086,10 +2696,9 @@
         state.ui.fieldErrors = {}; state.ui.confirmDialog = null;
         state.ui.gateView = ""; state.ui.termSheet = null; state.ui.termGlossaryOpen = false;
         state.posts.held = [];
-        state.posts.openShare = {};
         state.posts.openMenu = null;
         state.posts.captionEdit = null; state.posts.prPrompt = null;
-        state.posts.workoutPrompt = null; resetSharePromptQueue();
+        resetSharePromptQueue(); resetCirclesState();
         state.posts.partners = {}; state.posts.partnersPanel = null;
         outwardRevokePreview(); state.posts.outwardShare = null;
         state.engagement.reactions = {};

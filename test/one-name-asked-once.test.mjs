@@ -42,11 +42,11 @@ function seeded(extra) {
 test("the club profile asks for exactly one name", () => {
   assert.equal((cloudJs.match(/name="handle"/g) || []).length, 0,
     "no form asks a member to invent a handle");
-  assert.equal((cloudJs.match(/name="displayName"/g) || []).length, 2,
-    "the gate and the account tab each ask for the club name, once");
+  assert.equal((cloudJs.match(/name="displayName"/g) || []).length, 1,
+    "the gate and Me share one profile form, which asks for the circle name once");
   // The label that describes what the club sees belongs on the field the club
   // actually shows.
-  assert.match(cloudJs, /field\("communityProfile", "displayName", CLUB_NAME_LABEL/);
+  assert.match(cloudJs, /field\(formId, "displayName", CLUB_NAME_LABEL/);
 });
 
 test("a real name with a space is accepted and becomes the club name", async () => {
@@ -108,9 +108,9 @@ test("a collision is resolved for the member, not handed back to them", () => {
 });
 
 test("the rejection a member CAN still get is about their name, not an identifier", () => {
-  assert.match(cloudJs, /displayName: "השם שרואים במועדון צריך להיות באורך 2 עד 40 תווים\."/);
-  assert.ok(!/השם שרואים במועדון צריך להיות 3 עד 24 תווים/.test(cloudJs),
+  assert.match(cloudJs, /displayName: "השם שרואים במעגל צריך להיות באורך 2 עד 40 תווים\."/);
+  assert.ok(!/השם שרואים במעגל צריך להיות 3 עד 24 תווים/.test(cloudJs),
     "the old handle-shaped rule is gone from the club-name field");
   // And a duplicate lands on the field that exists.
-  assert.match(cloudJs, /setFieldErrors\(formId, \{ displayName: "השם הזה כבר תפוס במועדון/);
+  assert.match(cloudJs, /setFieldErrors\(formId, \{ displayName: "השם הזה כבר תפוס/);
 });

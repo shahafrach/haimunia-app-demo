@@ -58,6 +58,7 @@ const seedTables = {
     { user_id: "office", invite_id: "inv-1", role: "staff", redeemed_at: VERIFIED },
   ],
   clubs: [{ id: "club-1", name: "מעגל הדגמה" }],
+  circle_members: [{ club_id: "club-1", user_id: "u1", role: "owner", joined_at: "2026-10-01T00:00:00Z", share_defaults: {}, clubs: { id: "club-1", name: "מעגל הדגמה", type: "friends", emoji: "🔥", mode: "together", benchmark_enabled: false, invite_policy: "owner", welcome_line: "", benchmark: null, benchmark_month: null } }],
   achievement_definitions: [
     { id: "ad1", code: "first_workout", name: "האימון הראשון", icon: "🏅", category: "milestone" },
   ],
@@ -104,8 +105,8 @@ await page.goto(target.url, { waitUntil: "networkidle" });
 await page.waitForSelector("#app", { state: "visible", timeout: 10000 });
 await dismissWelcomeModal(page);
 
-await switchTab(page, "tabCommunityBtn");
-await page.waitForSelector("#communityHead", { timeout: 5000 });
+await page.evaluate(() => window.switchAppTab("me"));
+await page.waitForSelector("#content", { timeout: 5000 });
 
 // A page that scrolls sideways at 390px is the failure mode five of these
 // seven fixes share, so it is asserted after every section rather than once
@@ -140,7 +141,7 @@ const ach = await page.evaluate(() => {
 check("both achievement share controls are labelled",
   ach.labels.length === 2 && ach.labels.every((l) => l.includes("שיתוף")), JSON.stringify(ach.labels));
 check("the two labels say which audience each goes to",
-  ach.labels.some((l) => l.includes("למועדון")) && ach.labels.some((l) => l.includes("מחוץ לאפליקציה")),
+  ach.labels.some((l) => l.includes("למעגל")) && ach.labels.some((l) => l.includes("מחוץ לאפליקציה")),
   JSON.stringify(ach.labels));
 check("neither label is an emoji glyph", !ach.labels.some((l) => /[←-⇿☀-➿️\u{1F300}-\u{1FAFF}]/u.test(l)),
   JSON.stringify(ach.labels));
@@ -157,14 +158,14 @@ const hint = await page.evaluate(() => {
   const form = document.getElementById("communityProfile");
   if (!form) return null;
   const input = form.querySelector('input[name="displayName"]');
-  const note = form.querySelector(".footer-note");
-  if (!input || !note) return null;
-  const i = input.getBoundingClientRect(), n = note.getBoundingClientRect();
-  return { gap: Math.round((n.top - i.bottom) * 10) / 10, noteText: note.textContent.trim().slice(0, 20) };
+  const next = form.querySelector('input[name="emoji"]');
+  if (!input || !next) return null;
+  const i = input.getBoundingClientRect(), n = next.getBoundingClientRect();
+  return { gap: Math.round((n.top - i.bottom) * 10) / 10 };
 });
-check("the display-name hint exists and sits BELOW the input, not over its border",
+check("the display-name field sits above the emoji field, not over it",
   !!hint && hint.gap > 0, JSON.stringify(hint));
-check("and it is clear of the border by a readable gap", !!hint && hint.gap >= 4, JSON.stringify(hint));
+check("and is clear of it by a readable gap", !!hint && hint.gap >= 4, JSON.stringify(hint));
 
 // =====================================================================
 // 6. One compact row per notification type, one control, three choices

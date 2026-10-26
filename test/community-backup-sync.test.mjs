@@ -90,7 +90,8 @@ test("the anonymous backup session and the Community join flow use the same unde
   // (2026-09-11) widened the condition to also fall through for a
   // CONFIRMED server-side redemption (state.redemption) - a backup-only
   // session has none, so it is unaffected and still hits this same gate.
-  assert.match(cloudJs, /if \(!state\.user \|\| \(state\.user\.is_anonymous && !state\.signupStarted && !state\.redemption\)\) \{/);
+  const ui = fs.readFileSync(new URL("../src/community/circles-ui.js", import.meta.url), "utf8");
+  assert.match(ui, /if \(!state\.user \|\| \(state\.user\.is_anonymous && !state\.signupStarted && !state\.redemption && !inAny\)\) \{/);
 });
 
 test("setCredentials (the anonymous-to-permanent-account upgrade) is reusable from the standalone backupCredentials form in Settings, not only the Community onboarding gate", () => {

@@ -64,7 +64,7 @@ const plain = (v) => JSON.parse(JSON.stringify(v));
 const allProps = (mock) => JSON.stringify((mock.db.analytics_events || []).map((r) => r.props));
 
 async function openCommunity(window) {
-  window.document.getElementById("tabCommunityBtn").click();
+  window.switchAppTab("me");
   await waitFor(() => !!window.document.getElementById("communityHead"), 4000);
 }
 async function openAccount(window) {

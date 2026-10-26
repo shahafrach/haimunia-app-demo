@@ -53,7 +53,7 @@ function seeded(opts) {
 }
 
 async function openAccount(window) {
-  window.document.getElementById("tabCommunityBtn").click();
+  window.switchAppTab("me");
   await waitFor(() => !!window.document.getElementById("communityHead"), 4000);
   await waitFor(() => !!notifPrefControl(window, "reactions"), 4000);
 }

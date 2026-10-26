@@ -24,17 +24,16 @@ test("the standing share-result list no longer exists in the Community feed tab"
   assert.doesNotMatch(cloudJs, /const sharing = candidates\.length/);
 });
 
-test("renderShareControl is collapsed to one icon by default, and only signed-in members see it", () => {
+test("renderShareControl is one icon, only signed-in members in a circle see it, and it opens the circles for that day", () => {
   assert.match(cloudJs, /window\.renderShareControl = function \(type, id\) \{/);
-  assert.match(cloudJs, /if \(!window\.isCommunitySignedIn \|\| !window\.isCommunitySignedIn\(\)\) return "";/);
-  assert.match(cloudJs, /data-community-action="toggle-share"/);
+  assert.match(cloudJs, /if \(!window\.isCommunitySignedIn \|\| !window\.isCommunitySignedIn\(\) \|\| !state\.circles\.list\.length\) return "";/);
+  assert.match(cloudJs, /data-community-action="c-share-open" data-day=/);
+  assert.doesNotMatch(cloudJs, /data-community-action="toggle-share"/, "the per-record publish menu is gone: logging is sharing");
 });
 
-test("publishing looks up the entry by id regardless of age (communityShareCandidateFor), not just the most recent handful", () => {
-  assert.match(appJs, /function communityShareCandidateFor\(type, id\)/);
-  assert.match(cloudJs, /window\.communityShareCandidateFor\(type, id\)/);
-  assert.match(cloudJs, /window\.communityShareCandidateFor\(el\.dataset\.type, el\.dataset\.id\)/);
-  assert.doesNotMatch(cloudJs, /window\.communityShareCandidates\(\)\.find/, "publishing must not rely on the recency-limited list anymore");
+test("the share control resolves a record to its training day by id, regardless of age (communityDayItemFor)", () => {
+  assert.match(appJs, /function communityDayItemFor\(type, id\)/);
+  assert.match(cloudJs, /window\.communityDayItemFor\(type, id\)/);
 });
 
 test("the share control is wired into the day-entries list (Calendar's day-detail AND the Add tab's today's-sets card) and into Progress's detail cards", () => {
@@ -63,8 +62,10 @@ test("the share control is wired into the day-entries list (Calendar's day-detai
   assert.match(appJs.slice(wodDetailStart, wodDetailEnd), /window\.renderShareControl\("wod_entry", e\.id\)/);
 });
 
-test("a successful publish collapses that entry's share control back down", () => {
-  const start = cloudJs.indexOf("async function publishWorkout(type, id, visibility)");
-  const end = cloudJs.indexOf("\n  }", start);
-  assert.match(cloudJs.slice(start, end), /delete state\.posts\.openShare\[shareKey\(type, id\)\];/);
+test("saving the circles for a day closes the sheet and re-reads the feeds", () => {
+  const start = cloudJs.indexOf("async function applySharePick()");
+  const end = cloudJs.indexOf("window.openCircleShareSheet", start);
+  const body = cloudJs.slice(start, end);
+  assert.match(body, /state\.circles\.sheet = null;/);
+  assert.match(body, /delete state\.circles\.feed\[c\.id\]/);
 });

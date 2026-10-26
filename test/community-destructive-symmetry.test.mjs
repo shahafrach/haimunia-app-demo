@@ -151,10 +151,11 @@ test("subjectSentenceHtml escapes both halves and isolates only the name, and no
   assert.deepEqual([...dialogs.matchAll(/\{ key: "([^"]+)"/g)].map((m) => m[1]), [
     "confirmSheet", "outwardShare", "termSheet",
     "notifCenter", "achUnlock", "prPrompt",
-    // The short "לשתף עם המועדון?" sheet after an ordinary logged workout,
-    // beside prPrompt: the two can never be open together, so their relative
-    // order settles nothing.
-    "workoutPrompt",
+    // The circle sheets (create, settings, invite, join, share, medal): one
+    // dialog at a time, beside the prompts it can never be open with. It
+    // replaced the short "share this workout?" sheet, which is gone: logging
+    // is sharing now. Only the confirm and term sheets can stack on top of it.
+    "circleSheet",
     // The "who reacted" list. LAST: it is only ever opened from a post card,
     // so nothing can be covered BY it, while the confirm and term sheets can
     // both cover it. (The composer, profile, challenge, event, recap, report,

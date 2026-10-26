@@ -54,6 +54,7 @@ function seededFeed() {
 }
 
 async function openFeed(mock, opts = {}) {
+  mock.onRpc("circle_feed", () => ({ data: null, error: { message: "offline" } }));
   const window = await bootCommunity(mock, { syncEnabled: false, ...opts });
   window.document.getElementById("tabCommunityBtn").click();
   await waitFor(() => !!window.document.getElementById("communityHead"), 5000);
@@ -284,6 +285,7 @@ test("one explicit switch overrides the counter in both directions, and says whi
   // And the switch itself is reachable, with a status line that tells the
   // truth - "on" is not the whole story once the counter has retired them.
   const d = back.document;
+  back.switchAppTab("me"); // the switch is in Me
   await waitFor(() => !!d.querySelector("[data-term-marks]"), 4000);
   const row = d.querySelector("[data-term-marks]").closest("label");
   assert.ok(row.textContent.includes("סימוני הסבר על מונחים"));

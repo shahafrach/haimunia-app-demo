@@ -44,6 +44,7 @@ const seedTables = {
     { user_id: OTHER, invite_id: "inv-2", role: "member", redeemed_at: VERIFIED },
   ],
   clubs: [{ id: "club-1", name: "מעגל הדגמה" }],
+  circle_members: [{ club_id: "club-1", user_id: ME, role: "owner", joined_at: "2026-10-01T00:00:00Z", share_defaults: {}, clubs: { id: "club-1", name: "מעגל הדגמה", type: "friends", emoji: "🔥", mode: "together", benchmark_enabled: false, invite_policy: "owner", welcome_line: "", benchmark: null, benchmark_month: null } }],
   private_records: [
     { user_id: ME, record_type: "entry", record_id: "e-mine", payload: { reps: 5 }, deleted_at: null, created_at: "2026-09-01", updated_at: "2026-09-01" },
     { user_id: OTHER, record_type: "entry", record_id: "e-theirs", payload: { reps: 9 }, deleted_at: null, created_at: "2026-09-01", updated_at: "2026-09-01" },
@@ -168,8 +169,7 @@ await page.waitForFunction(() => !document.getElementById("settingsOverlay")?.cl
 // ---------------------------------------------------------------------------
 // Surface 2: Community's account tab
 // ---------------------------------------------------------------------------
-await switchTab(page, "tabCommunityBtn");
-await page.waitForSelector("#communityHead", { timeout: 5000 });
+await page.evaluate(() => window.switchAppTab("me"));
 const accountBtn = '#content [data-community-action="self-export"]';
 await page.waitForSelector(accountBtn, { state: "visible", timeout: 5000 });
 await verifyDownload(await clickAndDownload(accountBtn), "Account tab");

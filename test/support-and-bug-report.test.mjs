@@ -35,7 +35,7 @@ test("a member with Community switched off can still open support and write a re
     "this fixture must genuinely have no community layer, or the test proves nothing");
   const overlay = await openSupportSheet(window);
   assert.ok(overlay.querySelector("#supportMessage"), "the description field should render");
-  assert.match(overlay.textContent, /קהילה: כבויה/, "and the report should say the community layer is off, not crash on it");
+  assert.match(overlay.textContent, /מעגלים: כבויה/, "and the report should say the community layer is off, not crash on it");
   window.closeSupport();
   assert.ok(!overlay.classList.contains("open"), "and it should close again");
 });
