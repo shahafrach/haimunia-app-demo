@@ -55,6 +55,7 @@
   function sharingToday() { return window.CirclesCore.jerusalemDay(new Date()); }
 
   function sharingReset() {
+    if (sharingInstallWait) { clearInterval(sharingInstallWait); sharingInstallWait = null; }
     sharingState.pr = null;
     sharingState.week = {};
     state.circles.sharingSheet = null;
@@ -213,11 +214,31 @@
   }
   /** @param {boolean} wasFirst true when this join/create took the member from no circle to one */
   function sharingAfterCircleJoined(wasFirst) {
-    if (!wasFirst || state.circles.sharingSheet) return;
-    const mode = sharingInstallMode();
-    if (!mode) return;
-    state.circles.sharingSheet = { kind: "install", mode: mode };
-    rerender();
+    if (!wasFirst || sharingInstallWait) return;
+    if (!sharingInstallMode()) return;
+    sharingInstallWait = setInterval(sharingTryShowInstall, 400);
+    sharingTryShowInstall();
+  }
+  // The install steps never open under another dialog (the first-run welcome
+  // sheet, a PR prompt, any circle sheet). Until the screen is clear they wait,
+  // and the wait is not a dismissal: only closing the steps themselves is.
+  /** @type {any} */
+  let sharingInstallWait = null;
+  function sharingOtherDialogOpen() {
+    return !!document.querySelector('.modal-overlay.open, [data-cloud-dialog]:not([data-cloud-dialog="sharingSheet"])');
+  }
+  // Runs until the steps are answered (closed, installed) or the member signs out.
+  // If something else opens while the steps are up (the welcome sheet can open a
+  // moment after the join), the steps step back and return when it is gone.
+  function sharingTryShowInstall() {
+    if (!sharingInstallWait) return;
+    const mode = sharingInstallMode(); // re-read: dismissed or installed meanwhile
+    if (!mode) { clearInterval(sharingInstallWait); sharingInstallWait = null; return; }
+    const sheet = state.circles.sharingSheet;
+    if (sheet && sheet.kind !== "install") return;
+    const busy = sharingOtherDialogOpen();
+    if (sheet && busy) { state.circles.sharingSheet = null; rerender(); return; }
+    if (!sheet && !busy) { state.circles.sharingSheet = { kind: "install", mode: mode }; rerender(); }
   }
   function sharingInstallNative() {
     sharingSet(SHARING_INSTALL_DONE_KEY, "1");

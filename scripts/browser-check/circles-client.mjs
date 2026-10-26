@@ -433,8 +433,16 @@ const MEMBER = { id: ME, is_anonymous: false, email: "me@members.haimuniya.inval
   const { page, errors } = await newPageUA(IOS_SAFARI, seed({ circle_members: [] }), MEMBER);
   await page.goto(target.url + "#invite=" + TOKEN, { waitUntil: "networkidle" });
   await page.waitForSelector("#app", { state: "visible", timeout: 10000 });
-  // No dismissWelcomeModal here: it presses Escape, which is a "no" to these steps.
+  // The seeded first-run path: the app's welcome sheet opens as the member joins.
+  // The steps must never sit under it, and closing it must not count as a "no".
+  await page.waitForSelector("#welcomeOverlay.open", { timeout: 10000 });
+  await page.waitForTimeout(1200);
+  check("install: not shown under the welcome sheet", (await page.$('[data-install-steps]')) === null);
+  check("install: waiting is not dismissing", (await page.evaluate(() => localStorage.getItem("haimunia-demo:circleInstallDone"))) === null);
+  await dismissWelcomeModal(page);
   await page.waitForSelector('[data-install-steps="ios"]', { timeout: 10000 });
+  check("install: shown once the welcome sheet is closed", true);
+  check("install: closing the welcome sheet did not dismiss the steps", (await page.evaluate(() => localStorage.getItem("haimunia-demo:circleInstallDone"))) === null);
   const steps = await page.$$eval('[data-install-steps="ios"] li', (els) => els.map((e) => ({ svg: !!e.querySelector("svg"), text: e.textContent.trim() })));
   check("install: three illustrated steps in Hebrew", steps.length === 3 && steps.every((s) => s.svg && /[א-ת]/.test(s.text)), JSON.stringify(steps));
   const sheet = await page.evaluate(() => { const r = document.querySelector('[data-cloud-dialog="sharingSheet"] .modal-sheet').getBoundingClientRect(); return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, vh: innerHeight, vw: innerWidth }; });
@@ -443,10 +451,7 @@ const MEMBER = { id: ME, is_anonymous: false, email: "me@members.haimuniya.inval
   check("install: right-to-left, no sideways scroll", l.dir === "rtl" && l.scrollWidth <= l.clientWidth + 1, JSON.stringify(l));
   const ok = await tapSize(page, '[data-install-steps="ios"] [data-community-action="sh-close"]');
   check("install: the dismiss button is a 44px tap target", ok && ok.h >= 44, JSON.stringify(ok));
-  // The app's own first-run welcome sheet can sit above these steps in this seeded
-  // path (a signed-in member with no circles); the steps are still a dialog of
-  // their own, so dismiss them through the DOM rather than through the sheet above.
-  await page.evaluate(() => document.querySelector('[data-install-steps="ios"] [data-community-action="sh-close"]').click());
+  await page.click('[data-install-steps="ios"] [data-community-action="sh-close"]');
   await page.waitForFunction(() => !document.querySelector("[data-install-steps]"), null, { timeout: 5000 });
   check("install: dismissing it is remembered", (await page.evaluate(() => localStorage.getItem("haimunia-demo:circleInstallDone"))) === "1");
   await page.reload({ waitUntil: "networkidle" });

@@ -20,6 +20,13 @@ const ANDROID_FACEBOOK = "Mozilla/5.0 (Linux; Android 14; wv) AppleWebKit/537.36
 const ANDROID_CHROME = "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Mobile Safari/537.36";
 const IOS_CHROME = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/125.0 Mobile/15E148 Safari/604.1";
 
+/** The first-run welcome sheet is open on a fresh profile; the member closes it. */
+async function closeWelcome(window) {
+  await tick(600);
+  const w = window.document.getElementById("welcomeOverlay");
+  if (w) w.classList.remove("open");
+}
+
 const showWeights = membership({}, { share_defaults: { show_weights: true } });
 const hideWeights = membership({}, { share_defaults: { show_weights: false } });
 const circlesOf = (...ms) => ms.map((m) => Object.assign({}, m.clubs, { role: m.role, share_defaults: m.share_defaults }));
@@ -332,6 +339,7 @@ function firstCircleMock() {
 test("joining the first circle on iOS Safari shows the illustrated steps, and closing them is final", async () => {
   const mock = firstCircleMock();
   const window = await bootCommunity(mock, { url: "https://box.example/app/#invite=" + TOKEN, syncEnabled: false, userAgent: IOS_SAFARI });
+  await closeWelcome(window);
   await waitFor(() => !!window.document.querySelector('[data-install-steps="ios"]'), 4000);
   const steps = window.document.querySelectorAll('[data-install-steps="ios"] li');
   assert.equal(steps.length, 3);
@@ -348,6 +356,7 @@ test("joining the first circle on iOS Safari shows the illustrated steps, and cl
 test("Escape counts as a no, exactly like the button", async () => {
   const mock = firstCircleMock();
   const window = await bootCommunity(mock, { url: "https://box.example/app/#invite=" + TOKEN, syncEnabled: false, userAgent: IOS_SAFARI });
+  await closeWelcome(window);
   await waitFor(() => !!window.document.querySelector('[data-install-steps="ios"]'), 4000);
   window.document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   await waitFor(() => !window.document.querySelector("[data-install-steps]"), 4000);
@@ -366,6 +375,7 @@ test("a member who joins a second circle is not shown the install steps again", 
 test("on Android with a held install prompt the native prompt is offered, and used from the tap", async () => {
   const mock = createCirclesMock({ circles: [hideWeights] });
   const window = await bootCircle(mock);
+  await closeWelcome(window);
   const held = new window.Event("beforeinstallprompt", { cancelable: true });
   held.prompt = () => { window.__prompted = (window.__prompted || 0) + 1; };
   held.userChoice = Promise.resolve({ outcome: "accepted" });
@@ -408,4 +418,40 @@ test("nothing loads or calls the old gym-era painter", () => {
     const src = readFileSync(new URL("../" + f, import.meta.url), "utf8");
     assert.ok(!/community\/outward\.js|communityOutwardShare|renderOutwardShareSheet|outwardShareNow|state\.posts\.outwardShare/.test(src), `${f} must not reference the old painter`);
   }
+});
+
+test("the install steps wait for any open dialog to close, and waiting is not dismissing", async () => {
+  const mock = createCirclesMock({ circles: [hideWeights] });
+  const window = await bootCircle(mock, { userAgent: IOS_SAFARI });
+  await closeWelcome(window);
+  const welcome = window.document.createElement("div");
+  welcome.id = "welcomeOverlay";
+  welcome.className = "modal-overlay open";
+  welcome.setAttribute("role", "dialog");
+  window.document.body.appendChild(welcome);
+  window.boxlogSharing.afterCircleJoined(true);
+  await tick(1000);
+  assert.equal(window.document.querySelector("[data-install-steps]"), null, "never under the welcome sheet");
+  assert.equal(window.localStorage.getItem("haimunia-demo:circleInstallDone"), null, "the wait is not a dismissal");
+  welcome.remove(); // the member closes it
+  await waitFor(() => !!window.document.querySelector('[data-install-steps="ios"]'), 4000);
+  assert.equal(window.localStorage.getItem("haimunia-demo:circleInstallDone"), null, "closing the welcome sheet did not count as a no");
+  click(window, '[data-install-steps="ios"] [data-community-action="sh-close"]');
+  assert.equal(window.localStorage.getItem("haimunia-demo:circleInstallDone"), "1");
+});
+
+test("steps already on screen step back when another dialog opens over the join, and return after it", async () => {
+  const mock = createCirclesMock({ circles: [hideWeights] });
+  const window = await bootCircle(mock, { userAgent: IOS_SAFARI });
+  await closeWelcome(window);
+  window.boxlogSharing.afterCircleJoined(true);
+  await waitFor(() => !!window.document.querySelector("[data-install-steps]"), 4000);
+  const late = window.document.createElement("div");
+  late.className = "modal-overlay open";
+  window.document.body.appendChild(late);
+  await waitFor(() => !window.document.querySelector("[data-install-steps]"), 4000);
+  assert.equal(window.localStorage.getItem("haimunia-demo:circleInstallDone"), null, "stepping back is not a no");
+  late.remove();
+  await waitFor(() => !!window.document.querySelector("[data-install-steps]"), 4000);
+  click(window, '[data-install-steps] [data-community-action="sh-close"]');
 });
