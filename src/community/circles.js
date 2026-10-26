@@ -266,10 +266,10 @@
     const sheet = state.circles.sheet;
     if (!sheet || !sheet.link) return;
     const c = circleById(sheet.clubId);
-    const text = "הוזמנת להצטרף למעגל " + (c ? c.name : "") + " ב-BOX-LOG. הקישור תקף שבוע:";
+    const text = "הוזמנת להצטרף למעגל " + (c ? c.name : "") + " ב-" + brandName() + ". הקישור תקף שבוע:";
     if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
       try {
-        await navigator.share({ title: "BOX-LOG", text: text, url: sheet.link });
+        await navigator.share({ title: brandName(), text: text, url: sheet.link });
         return;
       } catch (e) {
         if (e && e.name === "AbortError") return;
@@ -621,9 +621,15 @@
       if (!args) continue;
       const { queued, data, error } = await communityRpc("pr_share", args);
       if (error || (!queued && !data)) { results.failed++; results.error = error || results.error; continue; }
-      if (queued) results.queued++; else results.sent++;
+      if (queued) results.queued++; else { results.sent++; emitPostCreated(data, "POST_PR"); }
     }
     return results;
+  }
+  // The product bus hears about every post that landed (a queued one has no id
+  // yet, so it is not announced until it does).
+  function emitPostCreated(postId, postType) {
+    if (!postId || !window.HaimuniaEvents || !window.PRODUCT_EVENTS || !window.PRODUCT_EVENTS.POST_CREATED) return;
+    try { window.HaimuniaEvents.emit(window.PRODUCT_EVENTS.POST_CREATED, { post_id: postId, post_type: postType }); } catch (e) { /* the bus is optional */ }
   }
   async function shareAchievementToCircles(memberAchievementId, clubIds, caption) {
     const results = { sent: 0, queued: 0, failed: 0, error: null };
@@ -631,7 +637,7 @@
       if (!circleById(id)) continue;
       const { queued, data, error } = await communityRpc("ach_share", { p_club_id: id, member_achievement_id: memberAchievementId, caption: caption || "" });
       if (error || (!queued && !data)) { results.failed++; results.error = error || results.error; continue; }
-      if (queued) results.queued++; else results.sent++;
+      if (queued) results.queued++; else { results.sent++; emitPostCreated(data, "POST_ACHIEVEMENT"); }
     }
     return results;
   }
@@ -641,7 +647,7 @@
       if (!circleById(id)) continue;
       const { queued, data, error } = await communityRpc("post_create", { p_club_id: id, body: body });
       if (error || (!queued && !data)) { results.failed++; results.error = error || results.error; continue; }
-      if (queued) results.queued++; else results.sent++;
+      if (queued) results.queued++; else { results.sent++; emitPostCreated(data, "POST_TEXT"); }
     }
     return results;
   }
@@ -790,7 +796,11 @@
   }
   function reactionStateFor(postId) {
     const r = state.engagement.reactions[postId];
-    return { loaded: !!(r && r.loaded), list: (r && r.list) || [], counts: Object.assign({}, (r && r.counts) || {}), mine: (r && Array.isArray(r.mine)) ? r.mine.slice() : [] };
+    if (r) return { loaded: !!r.loaded, list: r.list || [], counts: Object.assign({}, r.counts || {}), mine: Array.isArray(r.mine) ? r.mine.slice() : [] };
+    // Nothing has been tapped or loaded for this post yet: what circle_feed (or
+    // whoever handed the post to the screen) said about it.
+    const post = typeof findFeedPost === "function" ? findFeedPost(postId) : null;
+    return { loaded: false, list: [], counts: Object.assign({}, (post && post.reaction_counts) || {}), mine: post && Array.isArray(post.my_reactions) ? post.my_reactions.slice() : [] };
   }
 
   // Drops everything a signed-out device must not keep about the last member.

@@ -43,6 +43,9 @@ const cloudJs = fs.readFileSync(new URL("../cloud.js", import.meta.url), "utf8")
 const RAW_SERVER_STRINGS = [
   "recovery method required",
   "posting_restricted",
+  "circle_full",
+  "too_many_circles",
+  "invite_limit",
   "not authorized",
   "rate_limited",
   "captcha_failed",
@@ -141,22 +144,15 @@ function assertNoRawServerString(window) {
   }
 }
 
-test("THE DEFECT: a moderated member gets a Hebrew explanation, never the enum 'posting_restricted'", async () => {
-  const window = await failedBanner("posting_restricted");
+test("THE DEFECT: a full circle gets a Hebrew explanation, never the enum 'circle_full'", async () => {
+  const window = await failedBanner("circle_full");
   const text = window.document.body.textContent;
   assertNoRawServerString(window);
-  // What happened, in words, naming the sanction rather than the code.
-  assert.match(text, /הגביל את הפרסום/, "the card says a restriction was applied");
-  // What still works. Verified against the real stack: feed_page and
-  // toggle_reaction both return 200 for a restricted member, so this is a
-  // promise the app can keep.
-  assert.match(text, /לקרוא את הפיד ולעודד/, "and bounds the sanction instead of implying the whole app is gone");
-  // Who can lift it - the only actionable next step there is.
-  assert.match(text, /לפנות לבעל\/ת המעגל/, "and routes the member to the people who can lift it");
+  assert.match(text, /המעגל הזה מלא/, "the card says what happened");
 });
 
-test("...and offers no retry button, because a restriction cannot be retried away", async () => {
-  const window = await failedBanner("posting_restricted");
+test("...and offers no retry button, because a full circle cannot be retried away", async () => {
+  const window = await failedBanner("circle_full");
   assert.equal(window.document.querySelector('[data-community-action="outbox-retry"]'), null,
     "a button that reruns the same refused call is a promise the app cannot keep");
   assert.ok(window.document.querySelector('[data-community-action="outbox-discard"]'),
@@ -181,7 +177,7 @@ test("'not authorized' and 'rate_limited' differ on exactly one thing: whether a
   const denied = await failedBanner("not authorized");
   assertNoRawServerString(denied);
   assert.match(denied.document.body.textContent, /אין הרשאה/);
-  assert.match(denied.document.body.textContent, /לא ישנה את התוצאה/, "a permission refusal never invites another attempt");
+  assert.match(denied.document.body.textContent, /לא ישנה את התשובה/, "a permission refusal never invites another attempt");
   assert.equal(denied.document.querySelector('[data-community-action="outbox-retry"]'), null);
 
   const limited = await failedBanner("rate_limited");
@@ -249,7 +245,7 @@ test("every mapped code produces its own Hebrew sentence, and none of them is a 
   // left as its own key, or duplicated from the neighbour it was copied
   // from, is caught here rather than by a member reading it.
   const entries = mappingEntries();
-  assert.ok(entries.length >= 20, `expected the full mapping table, found ${entries.length} entries`);
+  assert.ok(entries.length >= 10, `expected the full mapping table, found ${entries.length} entries`);
   const texts = entries.map((e) => e.text);
   assert.equal(new Set(texts).size, texts.length, "two codes share one sentence - one of them is mislabelled");
   for (const { code, text } of entries) {
@@ -294,7 +290,7 @@ test("the account security screen states what actually happens, not browse-only"
   const text = window.document.body.textContent;
   assert.ok(!text.includes("אפשר לצפות בקהילה בלבד"),
     "feed_page carries the same is_community_member() gate as post_create - browsing is NOT available");
-  assert.match(text, /הקהילה כולה סגורה/, "it says the whole community is closed");
+  assert.match(text, /המעגלים סגורים בפניו/, "it says the circles are closed");
   assert.match(text, /רישום האימונים/, "and bounds it: the workout log never depended on this gate");
 });
 

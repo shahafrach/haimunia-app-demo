@@ -53,7 +53,7 @@ test("a cold arriving member lands on a choice screen whose PRIMARY action is th
   // almost everybody needs. This is the whole inversion.
   const primaries = [...content.querySelectorAll(".save-btn")];
   assert.equal(primaries.length, 1, "the gate must offer exactly one primary action, so there is no ambiguity about the main path");
-  assert.equal(primaries[0].textContent.trim(), "יש לי קוד הזמנה");
+  assert.equal(primaries[0].textContent.trim(), "יש לי קישור הזמנה");
   assert.equal(primaries[0].getAttribute("data-community-action"), "start-signup");
 
   // ...and it is NOT a login form. Before this change, a member who has
@@ -74,12 +74,12 @@ test("the invite-code screen's own reassurance moves UP to the gate verbatim, be
   // stops a nervous member concluding she has done something wrong. They
   // existed already - one screen further in, where the panic had already
   // happened.
-  assert.match(text, /הכניסה עם קוד הזמנה שמקבלים מחבר\/ה במעגל/);
-  assert.match(text, /הקוד לא נוגע לרישום האימונים שלכם/,
+  assert.match(text, /הכניסה בקישור הזמנה שמקבלים מחבר\/ה במעגל/);
+  assert.match(text, /הקישור לא נוגע ליומן האימונים הפרטי שלכם/,
     "the sentence that bounds the invite code - it does not touch your workout log - must be on the FIRST screen");
   // And a plain statement of what the tab even is, which the old gate never
   // made at all.
-  assert.match(text, /כאן רואים מה קורה במועדון/);
+  assert.match(text, /מעגל הוא קבוצה קטנה של חברים/);
 });
 
 test("the staff sentence is deleted from the gate and rewritten in member terms on the login screen", async () => {
@@ -97,7 +97,7 @@ test("the staff sentence is deleted from the gate and rewritten in member terms 
 
   await openCommunityLogin(window);
   const login = window.document.getElementById("content").textContent;
-  assert.match(login, /התחברות מחזירה את הפרופיל שלך/,
+  assert.match(login, /התחברות מחזירה את הפרופיל והמעגלים שלך/,
     "the login screen answers the question a member on THAT screen is actually asking");
   assert.ok(!/הרשאות הצוות/.test(login));
 });
@@ -153,39 +153,27 @@ test("MEASURED: cold arrival reaches the invite-code field in 2 screens / 2 taps
   assert.ok(d.querySelector("#communityInviteCode [data-invite-code]"), "and the code field is reached");
 });
 
-test("MEASURED: the QR deep link still lands on the code field in 1 screen / 1 tap, prefilled — the flip does not fight 9c15214", async () => {
+test("MEASURED: an invite link lands on the invite landing in 1 screen / 0 extra taps, and puts nothing secret on the page", async () => {
   const window = await bootCommunity(createMockSupabase(), {
-    syncEnabled: false, url: `https://example.test/?tab=community&invite=${CODE}`,
+    syncEnabled: false, url: `https://example.test/#invite=${"ab".repeat(32)}`,
   });
   const d = window.document;
-  d.getElementById("tabCommunityBtn").click();
-  await waitFor(() => !!d.getElementById("communityInviteCode"), 4000);
-
-  // captureInviteDeepLink() sets signupStarted, which skips the choice
-  // screen entirely - correct, because somebody who scanned a joining QR has
-  // already answered the question that screen asks. This is now the COMMON
-  // arrival for anyone who scanned the club's QR, so the gate flip must not
-  // add a screen to it.
-  assert.ok(d.querySelector("#communityInviteCode [data-invite-code]"));
-  assert.equal(d.querySelector("#communityInviteCode [data-invite-code]").value, CODE,
-    "the scanned code is still prefilled, so this path needs no typing at all");
-  assert.ok(d.querySelector("[data-invite-prefilled]"), "and still says where the code came from");
-  assert.equal(d.querySelector('#content [data-community-action="show-login"]'), null,
-    "a QR scanner is not shown the choice screen - they already chose by scanning");
+  // app.js opens the Circle tab itself when a link is waiting.
+  await waitFor(() => !!d.querySelector('#content [data-community-action="start-signup"]'), 4000);
+  assert.match(d.getElementById("content").textContent, /הוזמנת להצטרף למעגל/);
+  assert.ok(d.querySelector('#content [data-community-action="show-login"]'),
+    "and a member who already has an account has its own door right there");
+  assert.equal(d.querySelector("[data-invite-code], [data-invite-prefilled]"), null,
+    "the token is held in memory only: it is not prefilled into any field");
 });
 
-test("a returning member who scanned the QR by mistake still reaches the login FORM in one tap, not the choice screen", async () => {
-  // This is 9c15214's escape hatch, and the flip could easily have made it
-  // two taps by landing "כבר יש לכם חשבון? התחברות" on the choice screen -
-  // which would have been a quiet regression of somebody else's fix.
+test("a returning member who opened an invite link by mistake still reaches the login FORM in one tap", async () => {
   const window = await bootCommunity(createMockSupabase(), {
-    syncEnabled: false, url: `https://example.test/?tab=community&invite=${CODE}`,
+    syncEnabled: false, url: `https://example.test/#invite=${"ab".repeat(32)}`,
   });
   const d = window.document;
-  d.getElementById("tabCommunityBtn").click();
-  await waitFor(() => !!d.getElementById("communityInviteCode"), 4000);
-
-  d.querySelector('#content [data-community-action="back-to-login"]').click();
+  await waitFor(() => !!d.querySelector('#content [data-community-action="show-login"]'), 4000);
+  d.querySelector('#content [data-community-action="show-login"]').click();
   await waitFor(() => !!d.getElementById("communityLogin"), 3000);
   assert.ok(d.getElementById("communityLogin"),
     "one tap must reach the login form itself, not a screen that then offers login");
@@ -215,33 +203,19 @@ test("spec 7.2: the invite step has a back control, so tapping in by accident is
     src.indexOf('data-community-action="back-to-login"'));
 });
 
-test("the two gate flags never tangle: invite -> login -> back lands on the choice screen, not on either screen it came from", async () => {
-  // The gate is driven by TWO independent flags - signupStarted ("this
-  // person is joining", which captureInviteDeepLink and
-  // ensureAnonymousSession also key off) and ui.gateView ("which of the two
-  // pre-signup screens to paint"). Keeping them separate is what lets the QR
-  // scanner's "כבר יש לכם חשבון" land directly on the login form. The risk
-  // that buys is the two getting out of step, so this walks the one path
-  // that sets and then clears both.
+test("the two gate flags never tangle: link -> login -> back lands on the landing, not on the login form it came from", async () => {
   const window = await bootCommunity(createMockSupabase(), {
-    syncEnabled: false, url: `https://example.test/?tab=community&invite=${CODE}`,
+    syncEnabled: false, url: `https://example.test/#invite=${"ab".repeat(32)}`,
   });
   const d = window.document;
-  d.getElementById("tabCommunityBtn").click();
-  await waitFor(() => !!d.getElementById("communityInviteCode"), 4000);  // signupStarted = true
-
-  d.querySelector('#content [data-community-action="back-to-login"]').click();
-  await waitFor(() => !!d.getElementById("communityLogin"), 3000);      // + gateView = "login"
-
+  await waitFor(() => !!d.querySelector('#content [data-community-action="show-login"]'), 4000);
+  d.querySelector('#content [data-community-action="show-login"]').click();
+  await waitFor(() => !!d.getElementById("communityLogin"), 3000);
   d.querySelector('#content [data-community-action="gate-back"]').click();
-  await waitFor(() => !!d.querySelector('#content [data-community-action="show-login"]'), 3000);
-
-  // Both flags cleared: neither the invite step nor the login form is left
-  // showing, and the member is back at the screen that explains the choice.
+  await waitFor(() => !!d.querySelector('#content [data-community-action="start-signup"]'), 3000);
   assert.equal(d.getElementById("communityLogin"), null, "the login form is gone");
-  assert.equal(d.getElementById("communityInviteCode"), null, "and so is the invite step");
   assert.ok(d.querySelector('#content [data-community-action="start-signup"]'),
-    "leaving the choice screen as the single resting state of the gate");
+    "leaving the landing as the single resting state of the gate");
 });
 
 test("backing out of the login screen returns to the choice screen", async () => {
@@ -273,7 +247,6 @@ test("the invite field accepts the full code length the server actually allows, 
   // valid code and produce a "wrong code" error for a code that was right,
   // so the cap follows the schema rather than the prose.
   assert.equal(Number(input.getAttribute("maxlength")), 128);
-  assert.match(src, /INVITE_CODE_PATTERN = \/\^\[a-f0-9\]\{40,128\}\$\//);
 });
 
 test("MEASURED: the duplicate input[name=username] - what the split fixed, and the half that is app.js's", async () => {
@@ -348,7 +321,7 @@ test("signing out returns a member to the choice screen, not to a bare login for
   mock.setUser({ id: "u1", is_anonymous: false, email: "dana@members.haimuniya.invalid" });
   const window = await bootCommunity(mock, { syncEnabled: false });
   const d = window.document;
-  d.getElementById("tabCommunityBtn").click();
+  window.switchAppTab("me");
   await waitFor(() => !!d.getElementById("communityHead"), 4000);
 
   await waitFor(() => !!d.querySelector('[data-community-action="sign-out"]'), 3000);
@@ -380,10 +353,10 @@ test("a stalled anonymous sign-in times out instead of hanging forever, and the 
   window.document.getElementById("tabCommunityBtn").click();
   await waitForCommunityGate(window);
   window.document.querySelector('[data-community-action="start-signup"]').click();
-  await waitFor(() => window.document.body.textContent.includes("מתחברים לקהילה"), 2000);
+  await waitFor(() => window.document.body.textContent.includes("מתחברים"), 2000);
 
   await waitFor(() => /לוקח יותר מדי זמן|לא ניתן להתחבר/.test(window.document.body.textContent), 2000);
-  assert.doesNotMatch(window.document.body.textContent, /^\s*מתחברים לקהילה/, "must not still be showing only the bare connecting screen after the timeout");
+  assert.doesNotMatch(window.document.body.textContent, /^\s*מתחברים…/, "must not still be showing only the bare connecting screen after the timeout");
 
   // The guard must have cleared: the render branch for this screen calls
   // ensureAnonymousSession() again on every pass it's shown on (that's how

@@ -74,6 +74,7 @@ function countRenders(window) {
 }
 
 async function openFeed(window, atLeast, mock) {
+  mock.onRpc("circle_feed", () => ({ data: null, error: { message: "offline" } }));
   window.document.getElementById("tabCommunityBtn").click();
   await waitFor(() => !!window.document.getElementById("communityHead"), 5000);
   holdPosts(window, mock.db.feed_page_rows);
@@ -117,7 +118,7 @@ test("a member's own tap still rerenders synchronously - the fix must not defer 
   const probe = countRenders(window);
   // Reacting is the plainest user action on a post card; the optimistic
   // toggle repaints in the same turn it was tapped.
-  window.document.querySelector('[data-post-id="p1"] [data-community-action="cheer"]').click();
+  window.document.querySelector('[data-post-id="p1"] [data-community-action="react"][data-kind="fist_bump"]').click();
   // NO await. If this action had been routed through the coalescing path the
   // DOM would still be the old one at this point in the same turn.
   const immediate = probe.count;

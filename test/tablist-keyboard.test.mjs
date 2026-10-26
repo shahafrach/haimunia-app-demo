@@ -59,7 +59,8 @@ test("Home/End jump to the first/last tab of a tablist", async () => {
   assert.equal(window.document.activeElement, lastTab);
 
   arrow(window, lastTab, "Home");
-  assert.equal(window.document.getElementById("tabAddBtn").getAttribute("aria-selected"), "true");
+  // The first of the four tabs is Home; Log is the centre one.
+  assert.equal(window.document.getElementById("tabHomeBtn").getAttribute("aria-selected"), "true");
 });
 
 test("Arrow keys move the WOD subtabbar's selection and focus too, in DOM order (Up/Down are direction-agnostic)", async () => {

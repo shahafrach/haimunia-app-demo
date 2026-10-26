@@ -77,7 +77,7 @@ async function openCommunity(window) {
   // that one-time, one-off grab land and finish before opening anything of
   // its own, rather than letting it race a Phase 1 dialog's own focus-in.
   await new Promise((resolve) => setTimeout(resolve, 150));
-  window.document.getElementById("tabCommunityBtn").click();
+  window.switchAppTab("me");
   await waitFor(() => !!window.document.getElementById("communityHead"), 4000);
 }
 
@@ -137,6 +137,7 @@ test("PR share prompt: focus-in, trap, Escape restores focus, backdrop closes", 
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openCommunity(window);
   await waitFor(() => window.isCommunitySignedIn && window.isCommunitySignedIn(), 3000);
+  await waitFor(() => window.communityCircleIds && window.communityCircleIds().length > 0, 3000);
 
   const record = { record_id: "rec-42", movement: "Deadlift", new_result: '180 ק"ג', previous_result: '172.5 ק"ג', improvement: '+7.5 ק"ג' };
   // A distinct movement per call, not just a distinct record_id: cloud.js's
@@ -183,6 +184,7 @@ test("achievement celebration: focus-in, trap, Escape restores focus, backdrop c
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openCommunity(window);
   await waitFor(() => window.isCommunitySignedIn && window.isCommunitySignedIn(), 3000);
+  await waitFor(() => window.communityCircleIds && window.communityCircleIds().length > 0, 3000);
 
   const opener = makeOpener(window, {});
   await window.claimCommunityAchievements(["first_pr"]);

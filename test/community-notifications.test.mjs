@@ -79,7 +79,7 @@ function seeded(notifications, opts) {
 }
 
 async function openCommunity(window) {
-  window.document.getElementById("tabCommunityBtn").click();
+  window.switchAppTab("me");
   await waitFor(() => !!window.document.getElementById("communityHead"), 4000);
 }
 async function openCenter(window) {
@@ -123,7 +123,7 @@ test("rows are grouped under the two category headings in order", async () => {
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openCenter(window);
   const t = centerText(window);
-  const order = ["קהילה", "אימונים"].map((h) => t.indexOf(h));
+  const order = ["מעגל", "אימונים"].map((h) => t.indexOf(h));
   assert.ok(order.every((i) => i >= 0), "every category heading is present");
   assert.deepEqual(order.slice().sort((a, b) => a - b), order, "headings render in category order");
 });
@@ -332,9 +332,15 @@ test("tapping a row opens its deep-link target and marks it read", async () => {
     [notif(1, { type: "trained_together", deep_link: "/community/feed?post=p7" })],
     { feed: [post] },
   );
+  // The post is handed to the Circle tab directly; the feed read must not replace it.
+  mock.onRpc("circle_feed", () => ({ data: null, error: { message: "offline" } }));
   const window = await bootCommunity(mock, { syncEnabled: false });
-  await openCommunity(window);
+  // The post is in the Circle tab; the bell and the centre are in Me.
+  window.document.getElementById("tabCommunityBtn").click();
+  await waitFor(() => !!window.document.getElementById("communityHead"), 4000);
   holdPosts(window, [post]);
+  window.switchAppTab("me");
+  await waitFor(() => !!window.document.querySelector('[data-community-action="feed-notifications"]'), 4000);
   window.document.querySelector('[data-community-action="feed-notifications"]').click();
   await waitFor(() => !!window.document.querySelector('[data-community-action="notif-open"]'), 4000);
 

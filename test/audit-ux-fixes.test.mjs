@@ -30,12 +30,12 @@ test("the main tab bar and community sub-tab bar meet the 44px touch-target base
   assert.match(indexHtml, /\.subtabbtn\{[^}]*min-height:44px/);
 });
 
-test("onboarding mentions the Community tab, not just the four offline screens", () => {
+test("onboarding mentions circles, not just the offline screens", () => {
   const start = indexHtml.indexOf('id="onboardingOverlay"');
   const end = indexHtml.indexOf("close-onboarding");
   const block = indexHtml.slice(start, end);
-  assert.match(block, />קהילה</);
-  assert.match(block, /קוד הזמנה/, "should mention it needs an invite code, not just name the tab");
+  assert.match(block, />מעגלים</);
+  assert.match(block, /קישור הזמנה/, "should mention it needs an invite code, not just name the tab");
 });
 
 test("submitting the WOD builder with an empty name shows a real error and marks the field invalid, instead of silently doing nothing", async () => {

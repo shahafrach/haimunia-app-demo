@@ -33,6 +33,8 @@ test("the club-name input never forces dir=\"ltr\" - Hebrew must render naturall
   // is gone and the club name is the single thing a member types.
   assert.doesNotMatch(cloudJs, /name="displayName" dir="ltr"/);
   const nameInputs = (cloudJs.match(/name="displayName" dir="auto"/g) || []).length;
-  assert.equal(nameInputs, 2, "both club-name inputs (the profile gate and the account tab) use dir=\"auto\"");
+  // One shared form (profileFormHtml) now draws the name field for the
+  // sign-up gate and for Me alike, so one definition carries the rule.
+  assert.equal(nameInputs, 1, "the club-name input, shared by the profile gate and Me, uses dir=\"auto\"");
   assert.equal((cloudJs.match(/name="handle"/g) || []).length, 0, "and no handle input is asked for at all");
 });

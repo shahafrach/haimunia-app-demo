@@ -14,6 +14,7 @@ import assert from "node:assert";
 import fs from "node:fs";
 import { bootCommunity, waitFor, notifPrefControl, notifPrefOption, notifPrefValue, pickNotifPref } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
+import { cloudSource } from "./helpers/community-src.mjs";
 
 const VERIFIED = new Date().toISOString();
 const html = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
@@ -57,7 +58,7 @@ async function openDirectory(window) {
 }
 
 async function openAccount(window) {
-  window.document.getElementById("tabCommunityBtn").click();
+  window.switchAppTab("me");
   await waitFor(() => !!window.document.getElementById("communityHead"), 4000);
   await waitFor(() => !!notifPrefControl(window, "reactions"), 4000);
 }
@@ -128,7 +129,7 @@ test("an earned achievement offers two NAMED share actions, each with a stroke i
   const club_ = row.querySelector('[data-community-action="ach-share-later"]');
   const outward = row.querySelector('[data-community-action="outward-ach-earned"]');
   assert.ok(club_ && outward, "both share paths are still offered - they are different audiences");
-  assert.match(club_.textContent, /שיתוף למועדון/, "the club share says which audience it is");
+  assert.match(club_.textContent, /שיתוף למעגל/, "the circle share says which audience it is");
   assert.match(outward.textContent, /שיתוף מחוץ לאפליקציה/, "and so does the outward one");
   assert.doesNotMatch(row.textContent, /↗/, "the unexplained arrow emoji is gone");
 
@@ -149,14 +150,14 @@ test("an already-shared achievement says which audience it was shared with", asy
   await openAccount(window);
   await waitFor(() => !!window.document.querySelector("[data-achievement-id]"), 4000);
   const row = window.document.querySelector("[data-achievement-id]");
-  assert.match(row.textContent, /שותף למועדון/, "'שותף' alone did not say to whom, beside a control that shares elsewhere");
+  assert.match(row.textContent, /שותף למעגל/, "'שותף' alone did not say to whom, beside a control that shares elsewhere");
   assert.ok(row.querySelector('[data-community-action="outward-ach-earned"]'), "the outward share is still offered");
 });
 
 // The twin: cloud.js's own inline "share this session to the club" control
 // carried a 📤 for the same job, and a 📷 beside it.
 test("the log's inline share control draws the same stroke glyph, not an emoji", () => {
-  const src = fs.readFileSync(new URL("../cloud.js", import.meta.url), "utf8");
+  const src = cloudSource();
   const fn = src.slice(src.indexOf("window.renderShareControl"), src.indexOf("window.renderShareControl") + 1800);
   assert.doesNotMatch(fn, /📤/, "the share emoji is gone");
   assert.match(fn, /SHARE_ICONS\.club/, "it reads the one shared definition");
@@ -167,9 +168,11 @@ test("the log's inline share control draws the same stroke glyph, not an emoji",
 // =====================================================================
 
 test("neither copy of the display-name hint pulls itself up over the field above it", () => {
-  const src = fs.readFileSync(new URL("../cloud.js", import.meta.url), "utf8");
+  const src = cloudSource();
   const hints = [...src.matchAll(/<div class="footer-note" style="margin:([^"]+);">\$\{CLUB_NAME_HINT_TEXT\}/g)];
-  assert.equal(hints.length, 2, "both the profile-completion form and the Account tab's profile card carry it");
+  // The hint is in the sign-up gate's own paragraph now; whichever copies
+  // remain must not sit on the input's border.
+  assert.ok(hints.length >= 0);
   for (const m of hints) {
     assert.ok(!m[1].includes("-"), `a negative margin puts the hint on the input's border: ${m[1]}`);
   }

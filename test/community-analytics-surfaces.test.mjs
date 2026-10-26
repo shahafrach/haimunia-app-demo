@@ -68,10 +68,11 @@ const names = (mock) => mock.db.analytics_events.map((r) => r.event_name);
 const plain = (v) => JSON.parse(JSON.stringify(v));
 
 async function openCommunity(window) {
-  window.document.getElementById("tabCommunityBtn").click();
+  window.switchAppTab("me");
   await waitFor(() => !!window.document.getElementById("communityHead"), 4000);
 }
 async function openFeed(window, mock, atLeast = 1) {
+  mock.onRpc("circle_feed", () => ({ data: null, error: { message: "offline" } }));
   window.document.getElementById("tabCommunityBtn").click();
   await waitFor(() => !!window.document.getElementById("communityHead"), 4000);
   holdPosts(window, mock.db.feed_page_rows);
@@ -169,13 +170,13 @@ test("reacting writes exactly one reaction_added, from the bus and not from a se
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openFeed(window, mock);
 
-  window.document.querySelector('[data-post-id="p1"] [data-community-action="cheer"]').click();
+  window.document.querySelector('[data-post-id="p1"] [data-community-action="react"][data-kind="fist_bump"]').click();
   await waitFor(() => events(mock, "reaction_added").length === 1, 3000);
   assert.deepStrictEqual(plain(events(mock, "reaction_added")[0].props), { post_id: "p1" });
 
   // Un-react. toggle_reaction removes the row and the producer only emits
   // on a new reaction, so there is no second event and no phantom one.
-  window.document.querySelector('[data-post-id="p1"] [data-community-action="cheer"]').click();
+  window.document.querySelector('[data-post-id="p1"] [data-community-action="react"][data-kind="fist_bump"]').click();
   await new Promise((r) => setTimeout(r, 100));
   assert.equal(events(mock, "reaction_added").length, 1);
 });
@@ -186,7 +187,7 @@ test("every prop payload the Phase 1 surfaces write stays well under the client 
   const mock = seeded([row(1, { author_id: "u2" }), row(2, { author_id: "u2" })]);
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openFeed(window, mock, 2);
-  window.document.querySelector('[data-post-id="p1"] [data-community-action="cheer"]').click();
+  window.document.querySelector('[data-post-id="p1"] [data-community-action="react"][data-kind="fist_bump"]').click();
   window.HaimuniaEvents.emit("POST_CREATED", { post_id: "p9", post_type: "POST_TEXT" });
   await waitFor(() => mock.db.analytics_events.length >= 2, 4000);
 
@@ -209,7 +210,7 @@ test("a failing analytics write is invisible to the member and never breaks the 
     getUserId: () => "u1",
   });
 
-  window.document.querySelector('[data-post-id="p1"] [data-community-action="cheer"]').click();
+  window.document.querySelector('[data-post-id="p1"] [data-community-action="react"][data-kind="fist_bump"]').click();
   await new Promise((r) => setTimeout(r, 100));
   assert.ok(window.document.querySelector('[data-post-id="p1"]'), "the card is still rendered");
   assert.ok(!/משהו השתבש/.test(window.document.body.textContent), "no error surface");

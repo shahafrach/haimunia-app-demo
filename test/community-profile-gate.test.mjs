@@ -1,27 +1,22 @@
-// Two real bugs, both reported by the user actually trying this: member
-// search only fired on blur (a "change" listener), which looks completely
-// broken to anyone typing and expecting results as they go; and a
-// freshly-redeemed code landed straight on the mostly-empty Feed tab with
-// no visible cue that a profile still needed to be created, so "did this
-// even save?" had no clear answer. Both fixed by matching the app's own
-// existing patterns: historySearch already uses a live "input" listener,
-// and the invite-code/signed-out states already use an unskippable
-// single-purpose gate instead of a normal tabbed screen.
 import { test } from "node:test";
 import assert from "node:assert";
 import fs from "node:fs";
 
-const cloudJs = fs.readFileSync(new URL("../cloud.js", import.meta.url), "utf8");
+const ui = fs.readFileSync(new URL("../src/community/circles-ui.js", import.meta.url), "utf8");
 
-test("a signed-in, code-redeemed user with no profile yet sees an unskippable profile-completion gate, not the tabbed UI", () => {
-  const gateAt = cloudJs.indexOf("if (!state.profile) return");
-  const tabsAt = cloudJs.indexOf("const accountTab = ");
+test("a signed-in member with no profile name yet sees an unskippable profile-completion gate, before any circle screen", () => {
+  const gateAt = ui.indexOf("if (!state.profile || !String(state.profile.display_name");
+  const circlesAt = ui.indexOf("if (!inAny && !meWithoutCircle) return renderFirstCircle();");
   assert.ok(gateAt > -1, "the profile gate must exist");
-  assert.ok(gateAt < tabsAt, "the gate must be checked before the tabbed UI is ever built");
-  const gate = cloudJs.slice(gateAt, cloudJs.indexOf("const p = state.profile"));
-  assert.match(gate, /id="communityProfile"/, "the gate's form must use the same id the existing submit dispatcher already handles");
-  // One name, asked once: the gate collects the club-facing name and derives
-  // the handle from it, so a member is never asked to invent an identifier.
-  assert.match(gate, /name="displayName"/);
-  assert.doesNotMatch(gate, /name="handle"/);
+  assert.ok(gateAt < circlesAt, "the gate must be checked before the circle screens are ever built");
+  const gate = ui.slice(gateAt, ui.indexOf("recovery_verified_at", gateAt));
+  assert.match(gate, /profileFormHtml\("communityProfile"/, "the gate's form must use the same id the existing submit dispatcher already handles");
+  // One name, asked once: the gate collects the circle-facing name and an
+  // emoji and derives the handle from the name, so a member is never asked to
+  // invent an identifier.
+  const form = ui.slice(ui.indexOf("function profileFormHtml"), ui.indexOf("// ---- Pending"));
+  assert.match(form, /name="displayName"/);
+  assert.match(form, /name="emoji"/);
+  assert.doesNotMatch(form, /name="handle"/);
+  assert.doesNotMatch(form, /name="bio"/);
 });

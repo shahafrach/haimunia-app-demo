@@ -114,6 +114,7 @@ function installCanvas(window) {
 async function bootReady(mock, opts) {
   const window = await bootCommunity(mock, Object.assign({ syncEnabled: false }, opts || {}));
   await waitFor(() => window.isCommunitySignedIn && window.isCommunitySignedIn(), 3000);
+  await waitFor(() => window.communityCircleIds && window.communityCircleIds().length > 0, 3000);
   installCanvas(window);
   return window;
 }
@@ -410,8 +411,8 @@ test("the name switch repaints the card, because the preview is the payload", as
   assert.ok(joined(window.__lastCtx).includes("Deadlift"), "turning the name off must not empty the card");
 });
 
-test("a member who has hidden their profile from the club gets the name switch off by default", async () => {
-  const window = await bootReady(seeded({ visible_to_club: false }));
+test("a member with no display name gets the name switch off by default", async () => {
+  const window = await bootReady(seeded({ display_name: "" }));
   window.HaimuniaEvents.emit(window.PRODUCT_EVENTS.PR_CREATED, { record: RECORD });
   await waitFor(() => !!window.document.getElementById("prPrompt"), 3000);
   window.document.querySelector('[data-community-action="outward-pr"]').click();
@@ -466,8 +467,8 @@ test("the disclosure line on the sheet says exactly what is and is not on the im
   window.document.querySelector('[data-community-action="outward-pr"]').click();
   await waitFor(() => !!window.document.getElementById("outwardShare"), 3000);
   const sheet = window.document.getElementById("outwardShare");
-  assert.match(sheet.textContent, /שמות של חברי מועדון אחרים/);
-  assert.match(sheet.textContent, /שם המועדון/);
+  assert.match(sheet.textContent, /שמות של חברי המעגל האחרים/);
+  assert.match(sheet.textContent, /שם המעגל/);
   assert.match(sheet.textContent, /קישור אין/);
 });
 

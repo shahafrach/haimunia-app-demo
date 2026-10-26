@@ -120,7 +120,7 @@
     if (!state.profile.recovery_verified_at) {
       verifyRecovery();
       return gateCard(`<div style="font-weight:800;font-size:18px;margin-bottom:6px;">אבטחת החשבון</div>
-        <div style="color:var(--steel);font-size:13px;line-height:1.7;margin-bottom:14px;">כדי להשתתף במעגלים נדרש חשבון שאפשר לשחזר. שם המשתמש והסיסמה שהגדרתם הם דרך השחזור: הם מאפשרים להתחבר לאותו פרופיל מכל מכשיר, גם אחרי החלפת טלפון. רישום האימונים והגיבוי הפרטי לא מושפעים וממשיכים לעבוד כרגיל.</div>
+        <div style="color:var(--steel);font-size:13px;line-height:1.7;margin-bottom:14px;">כדי להשתתף במעגלים נדרש חשבון שאפשר לשחזר. עד האימות המעגלים סגורים בפניו, גם לקריאה וגם לשיתוף. שם המשתמש והסיסמה שהגדרתם הם דרך השחזור: הם מאפשרים להתחבר לאותו פרופיל מכל מכשיר, גם אחרי החלפת טלפון. רישום האימונים והגיבוי הפרטי לא מושפעים וממשיכים לעבוד כרגיל.</div>
         <button class="save-btn" data-community-action="verify-recovery" style="margin-top:2px;">אימות והמשך</button>${uiMessageHtml()}`);
     }
     if (!inAny && !meWithoutCircle) return renderFirstCircle();
@@ -139,10 +139,9 @@
       <form id="circleJoin">${field("circleJoin", "link", "קישור הזמנה", `<input class="text-input" name="link" dir="ltr" inputmode="url" autocomplete="off" autocapitalize="off" placeholder="https://…#invite=…" value="${esc(j.draft || "")}" data-circle-join-draft required/>`)}<button class="save-btn" type="submit"${j.busy ? " disabled" : ""} style="margin-top:12px;">${j.busy ? "מצטרפים…" : "הצטרפות"}</button></form>
       <div style="display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin-top:16px;">
         <button class="gate-alt" data-community-action="back-to-login">כבר יש לכם חשבון? התחברות</button>
-        <button class="gate-alt" data-community-action="c-bootstrap-open">יש לי קוד פתיחה</button>
         ${meLinkHtml()}
       </div>
-      ${state.ui.bootstrapOpen ? `<form id="communityInviteCode" style="margin-top:14px;">${field("communityInviteCode", "code", "קוד פתיחה (לבעלי המעגל הראשון)", `<input class="text-input" name="code" dir="ltr" inputmode="text" autocomplete="off" autocapitalize="off" maxlength="128" placeholder="קוד פתיחה" value="${esc(state.ui.inviteCodeDraft)}" data-invite-code required/>`)}<button class="save-btn" type="submit"${state.ui.redeemingCode ? " disabled" : ""} style="margin-top:12px;">${state.ui.redeemingCode ? "בודקים…" : "אישור קוד"}</button></form>` : ""}
+      <form id="communityInviteCode" style="margin-top:18px;border-top:1px solid var(--border);padding-top:14px;">${field("communityInviteCode", "code", "קוד פתיחה (למי שפותח את המעגל הראשון, בלי קישור)", `<input class="text-input" name="code" dir="ltr" inputmode="text" autocomplete="off" autocapitalize="off" maxlength="128" placeholder="קוד פתיחה" value="${esc(state.ui.inviteCodeDraft)}" data-invite-code required/>`)}<button class="save-btn" type="submit"${state.ui.redeemingCode ? " disabled" : ""} style="margin-top:12px;">${state.ui.redeemingCode ? "בודקים…" : "אישור קוד"}</button></form>
       ${uiMessageHtml()}`);
   }
 
@@ -239,8 +238,8 @@
       circleIsOwner(c) ? `<button class="chip-btn" data-community-action="c-settings-open" data-id="${esc(c.id)}">הגדרות המעגל</button>` : "",
       `<button class="chip-btn danger" data-community-action="c-leave-ask" data-id="${esc(c.id)}">עזיבת המעגל</button>`,
     ].join("");
-    return `<div class="chart-card" style="margin-bottom:12px;">
-      <div class="flex" style="align-items:center;gap:12px;"><span aria-hidden="true" style="font-size:30px;">${esc(c.emoji)}</span><div style="min-width:0;"><div style="font-weight:800;font-size:18px;">${bidiText(c.name)}</div><div style="color:var(--steel);font-size:12.5px;">${esc((c.type === "couple" ? "מעגל זוגי" : "מעגל חברים") + (c.mode === "weekly_competition" ? " · תחרות שבועית" : "") + (count ? " · " + (count === 1 ? "חבר/ה אחד/ת" : count + " חברים") : ""))}</div></div></div>
+    return `<div class="chart-card" id="communityHead" style="margin-bottom:12px;">
+      <div class="flex" style="align-items:center;gap:12px;"><span aria-hidden="true" style="font-size:30px;">${esc(c.emoji)}</span><div style="min-width:0;"><div style="font-weight:800;font-size:18px;">${bidiText(c.name)}</div><div style="color:var(--steel);font-size:12.5px;">${esc((c.type === "couple" ? "מעגל זוגי" : "מעגל חברים") + (c.mode === "weekly_competition" ? " · תחרות שבועית" : "") + (count ? " · " + (count === 1 ? "חבר/ה אחד" : count + " חברים") : ""))}</div></div></div>
       ${c.welcome_line ? `<div style="margin-top:10px;font-size:14px;line-height:1.6;" data-welcome-line="1">${bidiText(c.welcome_line)}</div>` : ""}
       <div class="chip-row" style="margin-top:10px;">${actions}</div></div>`;
   }
@@ -249,19 +248,22 @@
     if (c.benchmark_enabled) secs.push(["benchmark", "בנצ'מרק"]);
     secs.push(["members", "חברים"]);
     const cur = secs.some((s) => s[0] === state.circles.section) ? state.circles.section : "feed";
-    return `<div class="subtabbar" role="tablist" aria-label="תצוגת המעגל">${secs.map((s) => `<button class="subtabbtn${cur === s[0] ? " active" : ""}" role="tab" aria-selected="${cur === s[0]}" data-community-action="c-section" data-section="${s[0]}">${esc(s[1])}</button>`).join("")}</div>`;
+    return `<div class="subtabbar" role="tablist" aria-label="תצוגת המעגל">${secs.map((s) => `<button class="subtabbtn${cur === s[0] ? " active" : ""}" id="circleTab-${s[0]}" role="tab" aria-selected="${cur === s[0]}" aria-controls="circlePanel" tabindex="${cur === s[0] ? "0" : "-1"}" data-community-action="c-section" data-section="${s[0]}">${esc(s[1])}</button>`).join("")}</div>`;
   }
 
   function feedSectionHtml(c) {
-    const f = state.circles.feed[c.id];
-    if (!f || (!f.loaded && f.loading)) return `<div class="empty" aria-busy="true">טוען…</div>`;
-    if (f.error && !f.loaded) return `<div class="chart-card"><div style="color:var(--steel);font-size:13px;margin-bottom:10px;">לא הצלחנו לטעון את הפיד.</div><button class="chip-btn" data-community-action="c-feed-retry">ניסיון חוזר</button></div>`;
-    const shown = CirclesCore.feedOrder(f.rows);
-    if (!shown.length) {
-      return `<div class="empty" data-empty="feed">${esc(c.type === "couple" ? "עוד אין כלום כאן. אימון שתשמרו יופיע אצל שניכם." : "עוד אין כלום בפיד. שיא שתשתפו, או אימון בהגדרת שיתוף מלאה, יופיעו כאן.")}</div>`;
+    const f = state.circles.feed[c.id] || { rows: [], done: true, loaded: false, loading: false, error: false };
+    // The cards are the posts the client holds (state.posts.held): loadFeed()
+    // fills it from circle_feed, in the order they are drawn, and window.holdPosts
+    // is the one other way in.
+    const held = Array.isArray(state.posts.held) ? state.posts.held : [];
+    if (held.length) {
+      const cards = held.map((p) => renderPostCard(p)).join("");
+      return `<div class="log-list" id="communityHeldPosts">${cards}</div>${f.done ? "" : `<button class="chip-btn" data-community-action="c-feed-more" style="margin:10px auto;display:block;"${f.loading ? " disabled" : ""}>${f.loading ? "טוען…" : "עוד"}</button>`}`;
     }
-    const cards = shown.map((r) => renderPostCard(Object.assign(CirclesCore.feedPost(r), { club_id: c.id }))).join("");
-    return `<div class="log-list" id="communityHeldPosts">${cards}</div>${f.done ? "" : `<button class="chip-btn" data-community-action="c-feed-more" style="margin:10px auto;display:block;"${f.loading ? " disabled" : ""}>${f.loading ? "טוען…" : "עוד"}</button>`}`;
+    if (!state.circles.feed[c.id] || (!f.loaded && f.loading)) return `<div class="empty" aria-busy="true">טוען…</div>`;
+    if (f.error && !f.loaded) return `<div class="chart-card"><div style="color:var(--steel);font-size:13px;margin-bottom:10px;">לא הצלחנו לטעון את הפיד.</div><button class="chip-btn" data-community-action="c-feed-retry">ניסיון חוזר</button></div>`;
+    return `<div class="empty" data-empty="feed">${esc(c.type === "couple" ? "עוד אין כלום כאן. אימון שתשמרו יופיע אצל שניכם." : "עוד אין כלום בפיד. שיא שתשתפו, או אימון בהגדרת שיתוף מלאה, יופיעו כאן.")}</div>`;
   }
 
   // The week: each member's percent of their OWN target, paused marked, weeks
@@ -350,8 +352,10 @@
     else if (sec === "benchmark" && c.benchmark_enabled) body = circleBenchmarkSectionHtml(c);
     else if (sec === "members") body = membersSectionHtml(c);
     else body = feedSectionHtml(c);
+    const titles = { feed: "הפיד", week: "השבוע", benchmark: "בנצ'מרק החודש", members: "חברים" };
+    const shown = sec === "benchmark" && !c.benchmark_enabled ? "feed" : (titles[sec] ? sec : "feed");
     const inner = circleSwitcherHtml(c) + circleHeaderHtml(c) + pendingTagsHtml() + circleSectionTabsHtml(c)
-      + `<div role="tabpanel">${body}</div>`;
+      + `<div role="tabpanel" id="circlePanel" aria-labelledby="circleTab-${shown}"><div class="ach-section">${sectionHead("var(--brass)", esc(titles[shown]))}</div>${body}</div>`;
     return circleScene("community", "מעגל", inner);
   }
 

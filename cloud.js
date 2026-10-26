@@ -156,9 +156,6 @@
       // see its own comment. Declared here like every other ui leaf
       // (community-state-namespaces.test.mjs enforces this).
       redeemingCode: false,
-      // The first-owner opening code field on the join step (the one way into
-      // a first circle that is not an invite link).
-      bootstrapOpen: false,
       // Design spec section 7. Which of the community gate's THREE screens is
       // showing while there is still no redemption: "" is the neutral choice
       // screen (what the club is, then "יש לי קוד הזמנה" as the primary

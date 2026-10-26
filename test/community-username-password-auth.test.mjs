@@ -95,8 +95,8 @@ test("startSignup() begins the anonymous bootstrap only when explicitly chosen, 
 });
 
 test("the gate order is: choice-or-login -> (bootstrap) -> invite code -> set credentials (only while still anonymous) -> profile -> app", () => {
-  const start = src.indexOf("window.renderCommunityApp = function ()");
-  const end = src.indexOf("const p = state.profile || {};");
+  const start = src.indexOf("function renderCircleGate(opts) {");
+  const end = src.indexOf("// The invite step: paste a link", start);
   const body = src.slice(start, end);
 
   // Design spec section 7. The pre-session gate used to be ONE screen that
@@ -108,9 +108,9 @@ test("the gate order is: choice-or-login -> (bootstrap) -> invite code -> set cr
   const choiceGate = body.indexOf('if (!state.signupStarted && state.ui.gateView !== "login") {');
   const loginGate = body.indexOf("if (!state.signupStarted) {");
   const bootstrapGate = body.indexOf("ensureAnonymousSession();");
-  const redemptionGate = body.indexOf("if (!state.redemption) return");
-  const credentialsGate = body.indexOf("if (state.user.is_anonymous) return");
-  const profileGate = body.indexOf("if (!state.profile) return");
+  const redemptionGate = body.indexOf("if (!inAny && !state.redemption && !meWithoutCircle) return renderJoinStep();");
+  const credentialsGate = body.indexOf("if (state.user.is_anonymous) {");
+  const profileGate = body.indexOf("if (!state.profile ||");
 
   assert.ok(choiceGate > -1, "the gate must open on the neutral choice screen before any session exists");
   assert.ok(loginGate > choiceGate, "and the login form must be a screen of its own, reached from that choice");
@@ -128,7 +128,7 @@ test("a returning member who signs in with real credentials never sees the crede
   // failed a test about authentication. The gate never moved; a test that
   // reports a defect when nothing it describes has changed trains people to
   // edit tests instead of reading them.
-  assert.match(src, /if \(state\.user\.is_anonymous\) return `<div class="chart-card">[\s\S]{0,400}?יצירת חשבון/);
+  assert.match(src, /if \(state\.user\.is_anonymous\) \{\s*return gateCard\(`[\s\S]{0,400}?יצירת חשבון/);
 });
 
 test("the login form and the credentials form each validate independently and clear their own field errors on success", () => {

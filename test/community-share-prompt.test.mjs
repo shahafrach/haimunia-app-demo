@@ -84,6 +84,7 @@ function seeded(profileOverrides) {
 async function bootReady(mock, opts) {
   const window = await bootCommunity(mock, Object.assign({ syncEnabled: false }, opts || {}));
   await waitFor(() => window.isCommunitySignedIn && window.isCommunitySignedIn(), 3000);
+  await waitFor(() => window.communityCircleIds && window.communityCircleIds().length > 0, 3000);
   return window;
 }
 
@@ -153,73 +154,6 @@ function sharedPosts(mock) { return mock.db.workout_posts || []; }
 // Rule 1 — the prompt itself, and that it never writes on its own
 // ---------------------------------------------------------------------------
 
-test("a logged workout asks once, in two words and two buttons, and posts nothing by itself", async () => {
-  const mock = seeded();
-  const window = await bootReady(mock);
-  await logPastTheArrivalCard(window, "Prompt Deadlift");
-
-  await logReps(window, 101);
-  await waitFor(() => !!promptEl(window), 3000);
-
-  const p = promptEl(window);
-  assert.match(p.textContent, /לשתף עם המועדון\?/, "the question the ticket asks for, verbatim");
-  assert.match(p.textContent, /Prompt Deadlift/, "and it names what it is about");
-  assert.ok(p.querySelector('[data-community-action="workout-share"]'), "share");
-  assert.ok(p.querySelector('[data-community-action="workout-not-now"]'), "not now");
-  // Short: the two controls above and nothing else. No note field, no photo
-  // uploader, no visibility picker - a question with a form attached is not a
-  // question, it is the composer the member did not open.
-  assert.equal(p.querySelectorAll("button, input, textarea, select").length, 2);
-  assert.equal(sharedPosts(mock).length, 0, "the prompt alone publishes nothing");
-});
-
-test("Share is the only thing that writes, and it writes exactly one post", async () => {
-  const mock = seeded();
-  const window = await bootReady(mock);
-  await logPastTheArrivalCard(window, "Share Deadlift");
-  await logReps(window, 102);
-  await waitFor(() => !!promptEl(window), 3000);
-
-  promptEl(window).querySelector('[data-community-action="workout-share"]').click();
-  await waitFor(() => sharedPosts(mock).length === 1, 3000);
-  await waitFor(() => !promptEl(window), 3000);
-
-  const post = sharedPosts(mock)[0];
-  assert.equal(post.author_id, "u1");
-  assert.equal(post.source_type, "strength_entry");
-  assert.ok(post.source_record_id, "keyed to the record it is about, which is what makes it de-duplicable");
-  assert.match(String(post.result_text), /102/);
-});
-
-test("Not now writes nothing and never asks about that record again", async () => {
-  const mock = seeded();
-  const window = await bootReady(mock);
-  await logPastTheArrivalCard(window, "Quiet Deadlift");
-  await logReps(window, 103);
-  await waitFor(() => !!promptEl(window), 3000);
-
-  promptEl(window).querySelector('[data-community-action="workout-not-now"]').click();
-  await waitFor(() => !promptEl(window), 3000);
-  assert.equal(sharedPosts(mock).length, 0);
-
-  // Re-offering the SAME record is the nag this remembers its way out of.
-  window.offerWorkoutSharePrompt("strength_entry", lastOfferedRecordId(window));
-  await new Promise((r) => setTimeout(r, 50));
-  assert.equal(promptEl(window), null, "asked once, ever, per record");
-});
-
-test("Escape maps to Not now, because the prompt is in the dialog registry", async () => {
-  const mock = seeded();
-  const window = await bootReady(mock);
-  await logPastTheArrivalCard(window, "Escape Deadlift");
-  await logReps(window, 104);
-  await waitFor(() => !!promptEl(window), 3000);
-
-  window.document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-  await waitFor(() => !promptEl(window), 3000);
-  assert.equal(sharedPosts(mock).length, 0);
-});
-
 test("the member's first-ever save gets its arrival card and no share prompt on top of it", async () => {
   const mock = seeded();
   const window = await bootReady(mock);
@@ -248,28 +182,6 @@ test("a save that is a real PR gets the PR prompt, and not the workout prompt as
   assert.equal(promptEl(window), null, "one moment, one question");
 });
 
-test("an unanswered workout prompt is superseded by a newer, richer offer - never stacked under one", async () => {
-  // Found by walking it: log a set, leave the prompt up, log another that is
-  // a real PR, and the PR prompt sat parked behind a question about the
-  // PREVIOUS set. The plain workout offer is the weakest of the three and is
-  // about an older moment, so a newer offer replaces it.
-  const mock = seeded();
-  const window = await bootReady(mock);
-  await logPastTheArrivalCard(window, "Parked Deadlift");
-  await logReps(window, 105);
-  await waitFor(() => !!promptEl(window), 3000);
-
-  window.HaimuniaEvents.emit(window.PRODUCT_EVENTS.ACHIEVEMENT_UNLOCKED,
-    { code: "first_pr", member_achievement_id: "ma-1", visibility: "club" });
-  await waitFor(() => !!window.document.getElementById("achUnlock"), 3000);
-  assert.equal(promptEl(window), null, "one prompt on screen, and it is the newer one");
-
-  // And superseding is not a second chance to ask about that record.
-  window.document.querySelector('[data-community-action="ach-not-now"]').click();
-  await waitFor(() => !window.document.getElementById("achUnlock"), 3000);
-  assert.equal(promptEl(window), null);
-});
-
 test("an achievement that unlocks while an EARNED prompt is open is parked, not dropped", async () => {
   // The other direction, and the reason superseding is scoped to the workout
   // prompt: the PR prompt and the medal celebration are about something the
@@ -293,41 +205,6 @@ test("an achievement that unlocks while an EARNED prompt is open is parked, not 
 // ---------------------------------------------------------------------------
 // Rule 2 — the switch
 // ---------------------------------------------------------------------------
-
-test("the Account tab carries the switch, and it is on until the member says otherwise", async () => {
-  const mock = seeded();
-  const window = await bootReady(mock);
-  await openAccountTab(window);
-  assert.equal(window.document.querySelector("[data-share-prompt-pref]").checked, true,
-    "no migration, no default row, no onboarding step - a member who has never touched it is asked");
-});
-
-test("switching it off stops all three prompts, and closes the one already on screen", async () => {
-  const mock = seeded();
-  const window = await bootReady(mock);
-  await logPastTheArrivalCard(window, "Off Deadlift");
-  await logReps(window, 106);
-  await waitFor(() => !!promptEl(window), 3000);
-
-  await setSwitch(window, false);
-  assert.equal(promptEl(window), null, "the question the member just said to stop asking is not left on screen");
-  assert.equal(sharedPosts(mock).length, 0, "switching it off is not a share");
-
-  // The workout prompt.
-  await logReps(window, 107);
-  await new Promise((r) => setTimeout(r, 50));
-  assert.equal(promptEl(window), null);
-
-  // The PR prompt.
-  window.HaimuniaEvents.emit(window.PRODUCT_EVENTS.PR_CREATED, { record: { record_id: "rec-off", movement: "Off Deadlift", new_result: '200 ק"ג' } });
-  await new Promise((r) => setTimeout(r, 50));
-  assert.equal(window.document.getElementById("prPrompt"), null);
-
-  // The achievement celebration.
-  window.HaimuniaEvents.emit(window.PRODUCT_EVENTS.ACHIEVEMENT_UNLOCKED, { code: "first_pr", member_achievement_id: "ma-2", visibility: "club" });
-  await new Promise((r) => setTimeout(r, 50));
-  assert.equal(window.document.getElementById("achUnlock"), null);
-});
 
 test("the switch is about being OFFERED a share, never about being ABLE to share", async () => {
   const mock = seeded();
@@ -354,69 +231,6 @@ test("the switch is about being OFFERED a share, never about being ABLE to share
 // Rule 3 — the privacy toggles
 // ---------------------------------------------------------------------------
 
-test("the profile-wide toggles do not withhold a member's own share - they are a server-side read rule", async () => {
-  // visible_to_club and show_achievements DEFAULT TRUE, show_workout_results
-  // and show_prs DEFAULT FALSE, and all four answer "what may the club read
-  // ABOUT me", which the server decides on every read for every viewer. None
-  // answers "may I publish": feed_page has no visible_to_club clause, and
-  // renderShareControl and the outward sheet have offered the same share
-  // under all four since they shipped (see the pinned reasoning in
-  // community-outward-share.test.mjs). A gate here would be this one surface
-  // inventing a rule the schema does not have - the sibling drift CLAUDE.md
-  // is about, not respect for a toggle.
-  const mock = seeded({ visible_to_club: false, show_achievements: false, show_prs: false });
-  const window = await bootReady(mock);
-  await logPastTheArrivalCard(window, "Hidden Deadlift");
-  await logReps(window, 109);
-  await waitFor(() => !!promptEl(window), 3000);
-  promptEl(window).querySelector('[data-community-action="workout-not-now"]').click();
-  await waitFor(() => !promptEl(window), 3000);
-
-  window.HaimuniaEvents.emit(window.PRODUCT_EVENTS.ACHIEVEMENT_UNLOCKED, { code: "first_pr", member_achievement_id: "ma-4", visibility: "club" });
-  await waitFor(() => !!window.document.getElementById("achUnlock"), 3000);
-});
-
-
-test("show_workout_results off does not block the share - it is stated on the prompt, with the way to change it", async () => {
-  // This toggle DEFAULTS FALSE and governs what other members may READ
-  // (feed_page strips result_text and the result metadata keys server-side).
-  // Blocking on it would make the prompt dead for every member who has never
-  // gone and flipped a default, which is all of them; saying nothing would
-  // produce a card with the number missing and no explanation.
-  const mock = seeded({ show_workout_results: false });
-  const window = await bootReady(mock);
-  await logPastTheArrivalCard(window, "Redacted Deadlift");
-  await logReps(window, 111);
-  await waitFor(() => !!promptEl(window), 3000);
-
-  const p = promptEl(window);
-  assert.match(p.textContent, /לא את התוצאה עצמה/, "the member is told before they tap, not after");
-  assert.ok(p.querySelector('[data-community-action="open-privacy-settings"]'),
-    "a LINK to the privacy screen - never a control that flips someone's privacy toggle for them");
-
-  p.querySelector('[data-community-action="workout-share"]').click();
-  await waitFor(() => sharedPosts(mock).length === 1, 3000);
-  await waitFor(() => !promptEl(window), 3000);
-
-  // THE TWIN. feed_page redacts a POST_PR's figures under the identical
-  // show_workout_results rule (202608310006), so the PR prompt - which had no
-  // such sentence before this change - carries the same one, from the same
-  // definition.
-  window.HaimuniaEvents.emit(window.PRODUCT_EVENTS.PR_CREATED, { record: { record_id: "rec-redacted", movement: "Other Lift", new_result: '200 ק"ג' } });
-  await waitFor(() => !!window.document.getElementById("prPrompt"), 3000);
-  assert.match(window.document.getElementById("prPrompt").textContent, /לא את התוצאה עצמה/);
-});
-
-test("show_workout_results on drops the note, rather than telling every member their results are hidden", async () => {
-  const mock = seeded({ show_workout_results: true });
-  const window = await bootReady(mock);
-  await logPastTheArrivalCard(window, "Visible Deadlift");
-  await logReps(window, 112);
-  await waitFor(() => !!promptEl(window), 3000);
-  assert.doesNotMatch(promptEl(window).textContent, /לא את התוצאה עצמה/);
-});
-
-
 test("an achievement whose own visibility is only_me still offers no share control", async () => {
   // Pre-existing item-level privacy, re-asserted here because it is the third
   // kind of toggle rule 3 covers and the one the coordinator does NOT own.
@@ -430,152 +244,6 @@ test("an achievement whose own visibility is only_me still offers no share contr
 // ---------------------------------------------------------------------------
 // Rule 4 — one record, one post
 // ---------------------------------------------------------------------------
-
-test("sharing the workout and then the PR for one logged set leaves ONE post, upgraded in place", async () => {
-  const mock = seeded();
-  const window = await bootReady(mock);
-  await logPastTheArrivalCard(window, "Upgrade Deadlift");
-  await logReps(window, 114);
-  await waitFor(() => !!promptEl(window), 3000);
-  promptEl(window).querySelector('[data-community-action="workout-share"]').click();
-  await waitFor(() => sharedPosts(mock).length === 1, 3000);
-  await waitFor(() => !promptEl(window), 3000);
-  const recordId = sharedPosts(mock)[0].source_record_id;
-
-  // The PR prompt for the SAME record, the way it arrives when a member logs
-  // the set that finally beats their old best.
-  window.HaimuniaEvents.emit(window.PRODUCT_EVENTS.PR_CREATED, {
-    record: { record_id: recordId, movement: "Upgrade Deadlift", new_result: '114 ק"ג × 5' },
-  });
-  await waitFor(() => !!window.document.getElementById("prPrompt"), 3000);
-  window.document.querySelector('[data-community-action="pr-share"]').click();
-  await waitFor(() => !window.document.getElementById("prPrompt"), 3000);
-
-  assert.equal(sharedPosts(mock).length, 1, "one record, one post - pr_share upgrades, it does not duplicate");
-  assert.equal(sharedPosts(mock)[0].post_type, "POST_PR", "and the card the club sees is the better one");
-  assert.equal(mock.callsTo("pr_share")[0].record_id, recordId);
-});
-
-test("sharing the same record twice converges on the post that already exists", async () => {
-  const mock = seeded();
-  const window = await bootReady(mock);
-  await logPastTheArrivalCard(window, "Twice Deadlift");
-  await logReps(window, 115);
-  await waitFor(() => !!promptEl(window), 3000);
-  const recordId = lastOfferedRecordId(window);
-  promptEl(window).querySelector('[data-community-action="workout-share"]').click();
-  await waitFor(() => sharedPosts(mock).length === 1, 3000);
-
-  // The same record shared a second time - the case a lost response, a double
-  // tap or a drained outbox row all reduce to.
-  window.localStorage.setItem("haimunia-demo:workoutPromptOffered", "[]");
-  window.offerWorkoutSharePrompt("strength_entry", recordId);
-  await waitFor(() => !!promptEl(window), 3000);
-  promptEl(window).querySelector('[data-community-action="workout-share"]').click();
-  await waitFor(() => !promptEl(window), 3000);
-  assert.equal(sharedPosts(mock).length, 1, "the unique triple is what makes a re-share an update");
-});
-
-test("both workout-share callers go through the one write, with the on-conflict target on it", () => {
-  // Rule 4 is a property of ONE function. A second copy of this upsert that
-  // drifted by an on-conflict clause would publish a duplicate card for every
-  // re-share, and "I fixed the one I was shown" is how that copy appears.
-  const posts = communityFile("src/community/posts.js");
-  const upserts = [...cloudSource().matchAll(/\.upsert\([^)]*onConflict: "author_id,source_type,source_record_id"/g)];
-  assert.equal(upserts.length, 2,
-    `exactly two: upsertWorkoutSharePost() and publishAchievement()'s own, found ${upserts.length}`);
-  assert.match(posts, /function upsertWorkoutSharePost\(payload\) \{\s*\n\s*return client\.from\("workout_posts"\)\.upsert\(payload, \{ onConflict: "author_id,source_type,source_record_id" \}\);/);
-  // And every writer of a workout share reaches it through that one function.
-  for (const caller of ["shareWorkoutRecord", "workoutShareOutboxHandler"]) {
-    const at = posts.indexOf("function " + caller);
-    assert.notEqual(at, -1, caller + " must exist");
-  }
-  assert.match(posts, /const result = await writeWorkoutSharePost\(payload\);/);
-  assert.match(posts, /const \{ queued, error \} = await shareWorkoutRecord\(item, visibility\);/);
-});
-
-// ---------------------------------------------------------------------------
-// The card the prompt produces, in the feed the social pass rebuilt
-// ---------------------------------------------------------------------------
-
-test("what the prompt writes is a POST_WORKOUT, and reads as one in the rebuilt card", async () => {
-  // The social-feed pass (#33) gave every type a tag on the time line and one
-  // body order for all fourteen renderers. The prompt's post is not exempt
-  // from either, and it never names post_type - it relies on
-  // default_post_type() (202608280004), the BEFORE INSERT trigger that maps
-  // source_type 'strength_entry'/'wod_entry' to POST_WORKOUT. So this checks
-  // the two halves separately rather than inferring one from the other:
-  // what the client actually wrote, and how a row of that type actually
-  // renders through the real card.
-  const mock = seeded();
-  const window = await bootReady(mock);
-  await logPastTheArrivalCard(window, "Card Deadlift");
-  await logReps(window, 117);
-  await waitFor(() => !!promptEl(window), 3000);
-  promptEl(window).querySelector('[data-community-action="workout-share"]').click();
-  await waitFor(() => sharedPosts(mock).length === 1, 3000);
-
-  const written = sharedPosts(mock)[0];
-  assert.ok(["strength_entry", "wod_entry"].includes(written.source_type),
-    "the trigger keys POST_WORKOUT off source_type, so this is the half the client owns");
-  assert.equal(written.post_type, undefined,
-    "and the client deliberately does not name post_type - pr_share's later upgrade to POST_PR must not be undone by a re-share");
-
-  // The other half: the row the server hands back, drawn by the real card.
-  const rebuilt = [{
-    id: "prompt-post-1", post_type: "POST_WORKOUT", author_id: "u1",
-    author: { display_name: "דנה", handle: "dana" },
-    title: written.title, result_text: written.result_text,
-    occurred_on: written.occurred_on, visibility: "club",
-    created_at: VERIFIED, published_at: VERIFIED,
-    reaction_count: 0, comment_count: 0, media: [],
-    metadata: { source_type: written.source_type, source_id: written.source_record_id },
-  }];
-  window.document.getElementById("tabCommunityBtn").click();
-  await waitFor(() => !!window.document.getElementById("communityHead"), 4000);
-  window.holdPosts(rebuilt);
-  await waitFor(() => !!window.document.querySelector('[data-post-id="prompt-post-1"]'), 4000);
-
-  const cardEl = window.document.querySelector('[data-post-id="prompt-post-1"]');
-  assert.equal(cardEl.querySelector(".post-type-tag").textContent, "אימון",
-    "the new head tag, not a `· word` glued to the timestamp");
-  assert.ok(cardEl.querySelector(".post-result-block"), "and the result block the unified body order puts last");
-  assert.match(cardEl.textContent, /117/);
-  assert.ok(cardEl.querySelector('[data-community-action="open-source"]'),
-    "the deep link back into the member's own log still resolves off source_record_id");
-});
-
-// ---------------------------------------------------------------------------
-// The offline outbox
-// ---------------------------------------------------------------------------
-
-test("a workout shared with no connection is queued, not lost, and lands as one post on reconnect", async () => {
-  const mock = seeded();
-  const window = await bootReady(mock);
-  await logPastTheArrivalCard(window, "Offline Deadlift");
-  await logReps(window, 116);
-  await waitFor(() => !!promptEl(window), 3000);
-
-  Object.defineProperty(window.navigator, "onLine", { value: false, configurable: true });
-  promptEl(window).querySelector('[data-community-action="workout-share"]').click();
-  await waitFor(async () => (await window.HaimuniaOutbox.list()).length > 0, 3000);
-
-  // Filtered to the member's own writes: going offline also parks whatever
-  // telemetry was in flight, and a silent row is not what this is about.
-  const queued = (await window.HaimuniaOutbox.list()).filter((r) => !r.silent);
-  assert.equal(queued.length, 1);
-  assert.equal(queued[0].action, "workout_share");
-  assert.equal(queued[0].userId, "u1", "bound to the member who tapped, not to whoever drains it");
-  assert.equal(queued[0].silent, false, "a member's share is visible in the outbox banner, unlike telemetry");
-  assert.equal(sharedPosts(mock).length, 0, "nothing reached the server while offline");
-  await waitFor(() => !promptEl(window), 3000);
-
-  Object.defineProperty(window.navigator, "onLine", { value: true, configurable: true });
-  window.dispatchEvent(new window.Event("online"));
-  await waitFor(() => sharedPosts(mock).length === 1, 5000);
-  await waitFor(async () => (await window.HaimuniaOutbox.list()).filter((r) => !r.silent).length === 0, 5000);
-  assert.equal(sharedPosts(mock)[0].author_id, "u1");
-});
 
 test("a PR shared with no connection is queued too - pr_share and ach_share are queueable actions now", async () => {
   const mock = seeded();

@@ -196,7 +196,7 @@ test("the login name and the club-facing name are not both called שם משתמ�
   assert.match(loginLabel, /כניסה/, "this one is the name you log in with, and says so");
   // And the screen names the OTHER name, so this field does not read as the
   // one the club will see.
-  assert.match(credentialsCard.textContent, /השם שחברי המועדון/, "it must say the club-facing name is chosen separately");
+  assert.match(credentialsCard.textContent, /השם שחברי המעגל/, "it must say the club-facing name is chosen separately");
 
   // Through the gate and on to profile completion, where the second name is.
   window.document.querySelector('#communityCredentials input[name="username"]').value = "dana";
@@ -213,7 +213,7 @@ test("the login name and the club-facing name are not both called שם משתמ�
   const clubNameLabel = window.document.querySelector('#communityProfile [name="displayName"]').closest("label.field").querySelector(".field-label").textContent;
   assert.notEqual(clubNameLabel, "שם משתמש");
   assert.notEqual(clubNameLabel, loginLabel, "the two name fields must not carry the same label");
-  assert.match(clubNameLabel, /מועדון/, "this one is the name other members see, and says so");
+  assert.match(clubNameLabel, /מעגל/, "this one is the name other members see, and says so");
   assert.equal(window.document.querySelectorAll('#communityProfile [name="handle"]').length, 0,
     "and there is no third name field to confuse it with");
   assert.match(profileCard.textContent, /לא שם הכניסה/, "and it says explicitly that it is not the login name");
@@ -240,5 +240,5 @@ test("the club-facing name field still accepts the Hebrew its own placeholder su
   submit(window, "communityProfile");
   // The profile gate hands over to the signed-in home (which has its own
   // profile form), so the signal is the home's header, not the form going.
-  await waitFor(() => !!window.document.getElementById("communityHead"), 3000);
+  await waitFor(() => !!window.document.getElementById("communityHead") || !!window.document.querySelector('[data-community-action="c-create-open"]'), 3000);
 });

@@ -42,6 +42,7 @@ test("signed into community with unread notifications: header badge shows the so
   mock.setUser({ id: "u1", is_anonymous: false, email: "dana@members.haimuniya.invalid" });
   const window = await bootCommunity(mock, { syncEnabled: false });
   await waitFor(() => window.isCommunitySignedIn && window.isCommunitySignedIn(), 3000);
+  await waitFor(() => window.communityCircleIds && window.communityCircleIds().length > 0, 3000);
   await waitFor(() => window.communityUnreadCount && window.communityUnreadCount() === 2, 3000);
 
   window.updateNotificationsBadge();
@@ -59,6 +60,7 @@ test("tapping the header bell with unread community notifications opens the noti
   mock.setUser({ id: "u1", is_anonymous: false, email: "dana@members.haimuniya.invalid" });
   const window = await bootCommunity(mock, { syncEnabled: false });
   await waitFor(() => window.isCommunitySignedIn && window.isCommunitySignedIn(), 3000);
+  await waitFor(() => window.communityCircleIds && window.communityCircleIds().length > 0, 3000);
   await waitFor(() => window.communityUnreadCount && window.communityUnreadCount() === 1, 3000);
 
   window.document.getElementById("notificationsBellBtn").click();
@@ -74,6 +76,7 @@ test("no unread community notifications: the header bell still serves UNSEEN rel
   mock.setUser({ id: "u1", is_anonymous: false, email: "dana@members.haimuniya.invalid" });
   const window = await bootCommunity(mock, { syncEnabled: false });
   await waitFor(() => window.isCommunitySignedIn && window.isCommunitySignedIn(), 3000);
+  await waitFor(() => window.communityCircleIds && window.communityCircleIds().length > 0, 3000);
   await waitFor(() => typeof window.communityUnreadCount === "function" && window.communityUnreadCount() === 0, 3000);
 
   // A device that has not caught up. bootCommunity() starts fresh, which the
@@ -105,6 +108,7 @@ test("nothing unread and nothing unseen: the bell answers, and does not open an 
   mock.setUser({ id: "u1", is_anonymous: false, email: "dana@members.haimuniya.invalid" });
   const window = await bootCommunity(mock, { syncEnabled: false });
   await waitFor(() => window.isCommunitySignedIn && window.isCommunitySignedIn(), 3000);
+  await waitFor(() => window.communityCircleIds && window.communityCircleIds().length > 0, 3000);
   await waitFor(() => typeof window.communityUnreadCount === "function" && window.communityUnreadCount() === 0, 3000);
   assert.equal(window.unseenReleaseNotes().length, 0, "a fresh device is bootstrapped as already caught up");
 
@@ -122,6 +126,7 @@ test("Settings' own 'מה חדש' row always opens release notes, even with unre
   mock.setUser({ id: "u1", is_anonymous: false, email: "dana@members.haimuniya.invalid" });
   const window = await bootCommunity(mock, { syncEnabled: false });
   await waitFor(() => window.isCommunitySignedIn && window.isCommunitySignedIn(), 3000);
+  await waitFor(() => window.communityCircleIds && window.communityCircleIds().length > 0, 3000);
   await waitFor(() => window.communityUnreadCount && window.communityUnreadCount() === 1, 3000);
 
   window.document.getElementById("navMenuBtn").click();

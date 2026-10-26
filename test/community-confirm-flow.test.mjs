@@ -37,13 +37,14 @@ test("askConfirm/closeConfirm/runConfirm exist, and the dispatcher wires confirm
   assert.match(src, /action === "confirm-no"\) closeConfirm\(\)/);
 });
 
-test("publishing asks for confirmation with a title/result preview before calling publishWorkout, instead of firing immediately", () => {
-  const clickHandlerStart = src.indexOf('if (action === "publish") {');
-  const clickHandlerEnd = src.indexOf("else if (action === \"follow\")", clickHandlerStart);
-  const block = src.slice(clickHandlerStart, clickHandlerEnd);
-  assert.match(block, /askConfirm\(\{ title: "פרסום תוצאה"/);
-  assert.match(block, /action: "publish", payload: \{ type: el\.dataset\.type, id: el\.dataset\.id, visibility: el\.dataset\.visibility, file \}/);
-  assert.doesNotMatch(block, /publishWorkout\(/, "publishWorkout must not be called directly from the click handler anymore - only from runConfirm()");
+test("leaving a circle and removing a member route through askConfirm and name the consequence", () => {
+  const leave = src.slice(src.indexOf('case "c-leave-ask"'), src.indexOf('case "c-remove-ask"'));
+  assert.match(leave, /askConfirm\(\{[\s\S]*?title: "עזיבת המעגל"/);
+  assert.match(leave, /הפוסטים שלכם בו יימחקו/, "the confirmation says the member's posts in the circle are deleted");
+  assert.match(leave, /action: "leave-circle"/);
+  const remove = src.slice(src.indexOf('case "c-remove-ask"'), src.indexOf('case "c-feed-more"'));
+  assert.match(remove, /action: "remove-member"/);
+  assert.match(src, /c\.action === "leave-circle"\) leaveCircle\(/);
 });
 
 test("block, delete-account, and migrate all route through askConfirm with a destructive-appropriate label", () => {

@@ -182,7 +182,6 @@
       case "c-section": setSection(el.dataset.section); return true;
       case "c-create-open": openCircleSheetFor("create"); return true;
       case "c-join-open": state.circles.join.error = ""; state.circles.sheet = { kind: "join" }; rerender(); return true;
-      case "c-bootstrap-open": state.ui.bootstrapOpen = true; rerender(); return true;
       case "c-settings-open": openCircleSheetFor("settings", id); return true;
       case "c-invite-open": openCircleSheetFor("invite", id); return true;
       case "c-invite-share": shareInvite(); return true;

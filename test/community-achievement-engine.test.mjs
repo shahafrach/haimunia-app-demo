@@ -40,6 +40,7 @@ function seededMock(defs, extra = {}) {
 async function bootReady(mock) {
   const window = await bootCommunity(mock, { syncEnabled: false });
   await waitFor(() => window.isCommunitySignedIn && window.isCommunitySignedIn(), 3000);
+  await waitFor(() => window.communityCircleIds && window.communityCircleIds().length > 0, 3000);
   return window;
 }
 
@@ -129,7 +130,8 @@ test("a claimed unlock shows a celebration and Share creates a POST_ACHIEVEMENT 
   const args = mock.callsTo("ach_share")[0];
   assert.ok(args.member_achievement_id, "the member_achievement id from the claim is passed through");
   assert.equal(args.caption, "סוף סוף");
-  assert.deepEqual(args.media, []);
+  assert.ok(args.p_club_id, "ach_share is told which circle the post belongs to");
+  assert.ok(!("media" in args), "and no longer carries media");
   await waitFor(() => !window.document.getElementById("achUnlock"), 3000);
   assert.ok(mock.db.workout_posts.some((p) => p.post_type === "POST_ACHIEVEMENT"), "a POST_ACHIEVEMENT now exists");
 });
@@ -165,9 +167,9 @@ test("the Account tab lists an earned badge and offers a later Share for one not
     { member_achievements: [{ id: "ma-old", user_id: "u1", achievement_id: "d-first_pr", code: "first_pr", visibility: "club", shared_at: null, unlocked_at: VERIFIED, achievement_definitions: { code: "first_pr" } }] },
   );
   const window = await bootReady(mock);
-  window.document.getElementById("tabCommunityBtn").click();
+  window.switchAppTab("me"); // medals live in Me
   await waitFor(() => !!window.document.getElementById("communityHead"), 3000);
-  
+
   await waitFor(() => !!window.document.querySelector('[data-community-action="ach-share-later"]'), 3000);
 
   window.document.querySelector('[data-community-action="ach-share-later"]').click();
@@ -204,25 +206,7 @@ test("seed doc covers all six categories, keeps codes snake case, is idempotent,
 // English placeholder copy, no icon, and no COMMUNITY_ACHIEVEMENT_META entry
 // the whole time - so achMeta() fell through to the bare code and the
 // celebration sheet literally read "attendance_first_class".
-test("the four live attendance achievements have Hebrew copy in the migration, in cloud.js and in the seed doc, and the three agree", () => {
-  const mig = readFileSync(path.join(ROOT, "supabase", "migrations", "202609060008_attendance_achievement_copy.sql"), "utf8");
-  const cloud = cloudSource();
-  const seed = readFileSync(path.join(ROOT, "docs", "community", "achievement-seed.md"), "utf8");
-  const expected = {
-    attendance_first_class: { name: "השיעור הראשון", icon: "👋" },
-    attendance_25_classes: { name: "25 שיעורים", icon: "💪" },
-    attendance_100_classes: { name: "100 שיעורים", icon: "💯" },
-    attendance_weekly_streak: { name: "רצף שבועי", icon: "⚡" },
-  };
-  for (const [code, { name, icon }] of Object.entries(expected)) {
-    const stmt = mig.slice(mig.indexOf("update public.achievement_definitions set\n  name = '" + name));
-    assert.ok(stmt.startsWith("update public.achievement_definitions set\n  name = '" + name), `${code}: the migration sets a Hebrew name`);
-    assert.match(mig, new RegExp(`icon = '${icon}'\\nwhere code = '${code}'`), `${code}: the migration sets its icon`);
-    assert.match(cloud, new RegExp(`${code}: \\{ title: "${name}", explanation: "[^"]+", icon: "${icon}" \\}`), `${code}: cloud.js carries the same title and icon`);
-    assert.ok(seed.includes("`" + code + "`") && seed.includes(name), `${code}: the seed doc records it`);
-  }
-  assert.ok(!/'First class'|'25 classes'|'100 classes'|'Weekly streak'/.test(mig), "no English placeholder survives in the corrected copy");
-});
+// (The four attendance achievements went with class attendance; their copy test went with them.)
 
 test("achMeta falls back to the definition's own name and icon before the bare code", () => {
   const cloud = cloudSource();

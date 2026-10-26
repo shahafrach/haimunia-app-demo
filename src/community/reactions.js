@@ -45,7 +45,9 @@
     const pid = state.engagement.reactorsFor;
     if (!pid) return "";
     const rs = reactionStateFor(pid);
-    const rows = rs.list || [];
+    // A blocked member's reaction is not shown to the one who blocked them (or
+    // the other way round).
+    const rows = (rs.list || []).filter((r) => !isBlockedUser(r.id));
     const body = !rs.loaded
       ? `<div class="empty">טוען…</div>`
       : rows.length

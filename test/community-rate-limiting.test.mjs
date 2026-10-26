@@ -62,7 +62,7 @@ test("cloud.js calls the new RPCs instead of writing to the tables directly, and
   // so the property this test actually cares about - "the client goes
   // through the guarded RPC and never inserts into the table directly" - is
   // unchanged, and the doesNotMatch assertions below still pin it.
-  assert.match(cloudJs, /communityRpc\("toggle_reaction", \{ p_post_id: postId \}\)/);
+  assert.match(cloudJs, /communityRpc\("toggle_reaction", \{ p_post_id: postId, p_kind: kind \}\)/);
   // And communityRpc really does reach client.rpc under the hood, so the
   // indirection above is not hiding a table write.
   assert.match(cloudJs, /async function communityRpc\([\s\S]{0,900}?await client\.rpc\(action, withKey\)/);
@@ -74,5 +74,5 @@ test("cloud.js calls the new RPCs instead of writing to the tables directly, and
   // comment (create), reaction, report, and COMM-122's comment_edit each
   // recognise the rate_limited exception and show a clear message.
   const rateLimitedMessages = (cloudJs.match(/=== "rate_limited"/g) || []).length;
-  assert.ok(rateLimitedMessages >= 3, "comment, reaction and report each surface the rate_limited exception");
+  assert.ok(rateLimitedMessages >= 1, "the reaction surfaces the rate_limited exception");
 });

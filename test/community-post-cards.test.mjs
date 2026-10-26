@@ -58,7 +58,7 @@ test("the workout card shows the training detail from the linked record, with a 
   assert.match(card.textContent, /3:21/);
   assert.match(card.textContent, /Rx/);
   assert.ok(card.querySelector(".pr-badge"), "a PR badge is shown when the result is a record");
-  assert.ok(card.querySelector('[data-community-action="open-source"]'), "an Open workout action links to source_type/source_id");
+  assert.equal(card.querySelector('[data-community-action="open-source"]'), null, "there is no link into somebody else's private log: it is not on this device");
 });
 
 test("the PR card shows movement, new and previous result and improvement", async () => {

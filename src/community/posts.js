@@ -438,7 +438,7 @@
     // can only name someone in the post's own circle. Members and the tags
     // already on this post (pending and confirmed - the author sees both) are
     // read together.
-    const clubId = post.club_id;
+    const clubId = post.club_id || state.circles.currentId;
     const [roster, tags] = await Promise.all([
       client.from("circle_members").select("user_id,profiles(display_name,emoji)").eq("club_id", clubId),
       client.from("post_training_partners").select("tagged_user_id,confirmed_at").eq("post_id", postId),

@@ -680,6 +680,8 @@
         }
       }, 60);
     } else if (target.achievement) {
+      // Medals live in Me (opened from the avatar on Home).
+      if (typeof window.switchAppTab === "function") window.switchAppTab("me");
       rerender();
       setTimeout(() => {
         const sel = '[data-achievement-id="' + String(target.achievement).replace(/"/g, '\\"') + '"]';

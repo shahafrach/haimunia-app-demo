@@ -58,7 +58,7 @@ test("a genuinely invalid per-person code ('invalid') still shows the generic er
 
   await waitFor(() => {
     const err = window.document.querySelector("#communityInviteCode .field-error");
-    return err && /קוד ההזמנה שגוי, פג תוקף או נוצל/.test(err.textContent);
+    return err && /קוד הפתיחה שגוי, פג תוקף או נוצל/.test(err.textContent);
   }, 3000);
   assert.ok(window.document.getElementById("communityInviteCode"), "still on the invite gate after a genuinely invalid code");
 });

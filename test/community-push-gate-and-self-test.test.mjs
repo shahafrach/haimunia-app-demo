@@ -84,7 +84,7 @@ function stubPush(window, opts = {}) {
 }
 
 async function openAccount(window) {
-  window.document.getElementById("tabCommunityBtn").click();
+  window.switchAppTab("me");
   await waitFor(() => !!window.document.getElementById("communityHead"), 4000);
   await waitFor(() => !!notifPrefControl(window, "trained_together"), 4000);
 }
@@ -231,7 +231,7 @@ test("app_opened carries display_mode and platform, once per page load, and neve
 
   // Opening the Community tab and moving around does not write a second one:
   // this is a session, not a navigation.
-  window.document.getElementById("tabCommunityBtn").click();
+  window.switchAppTab("me");
   await waitFor(() => !!window.document.getElementById("communityHead"), 4000);
   await waitFor(() => !!notifPrefControl(window, "trained_together"), 4000);
   assert.equal(events(mock, "app_opened").length, 1);

@@ -27,7 +27,7 @@ test("a queued local edit reaches the mock server before a stale remote copy wou
   // Confirms the initial load (real refreshSession(), triggered
   // automatically the moment cloud.js boots with an existing session)
   // correctly reached the main app - i.e. redemption/profile loaded.
-  await waitFor(() => !!window.document.getElementById("communityHead"), 3000);
+  await waitFor(() => !!window.document.getElementById("communityHead") || !!window.document.querySelector('[data-community-action="c-create-open"]'), 3000);
 
   // Simulate: this device queued a real edit (weight 999) while the
   // "server" still only has an older, stale copy (weight 1).
@@ -68,11 +68,14 @@ test("full signup lifecycle executes for real: bootstrap -> redeem code -> set c
 
   window.document.querySelector('#communityProfile input[name="displayName"]').value = "dana";
   window.document.getElementById("communityProfile").dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
-  await waitFor(() => !!window.document.getElementById("communityHead"), 3000);
+  await waitFor(() => !!window.document.getElementById("communityHead") || !!window.document.querySelector('[data-community-action="c-create-open"]'), 3000);
 
   assert.ok(mock.db.profiles.find((p) => p.handle === "dana"), "the profile must actually exist server-side after the real saveProfile() ran");
   assert.equal(mock.getUser().is_anonymous, false, "the account must be permanent (not anonymous) after setCredentials()");
 
+  // Sign-out lives in Me.
+  window.switchAppTab("me");
+  await waitFor(() => !!window.document.querySelector('[data-community-action="sign-out"]'), 3000);
   window.document.querySelector('[data-community-action="sign-out"]').click();
   // A "different device" logging in with the same credentials - the
   // thing plain anonymous-only sign-in structurally could not do. Since
@@ -88,7 +91,7 @@ test("full signup lifecycle executes for real: bootstrap -> redeem code -> set c
   // communityProfile form id for its own profile-edit form) always has
   // one, so this alone distinguishes "reached the app" from "stuck on
   // a gate" without being tripped up by that id reuse.
-  await waitFor(() => !!window.document.getElementById("communityHead"), 3000);
+  await waitFor(() => !!window.document.getElementById("communityHead") || !!window.document.querySelector('[data-community-action="c-create-open"]'), 3000);
 
   assert.equal(window.document.getElementById("communityInviteCode"), null, "a returning member must not be asked to redeem the invite code again");
   assert.equal(window.document.getElementById("communityCredentials"), null, "a returning member must not be asked to set credentials again");

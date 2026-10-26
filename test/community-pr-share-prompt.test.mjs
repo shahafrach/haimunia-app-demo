@@ -25,6 +25,7 @@ const RECORD = { record_id: "rec-42", movement: "Deadlift", new_result: '180 ק"
 async function bootReady(mock) {
   const window = await bootCommunity(mock, { syncEnabled: false });
   await waitFor(() => window.isCommunitySignedIn && window.isCommunitySignedIn(), 3000);
+  await waitFor(() => window.communityCircleIds && window.communityCircleIds().length > 0, 3000);
   return window;
 }
 
@@ -38,7 +39,7 @@ test("PR_CREATED shows a prompt with Share, Add note and Not now, and never auto
   emitPr(window);
   await waitFor(() => !!window.document.getElementById("prPrompt"), 3000);
   const p = window.document.getElementById("prPrompt");
-  assert.match(p.textContent, /שיא חדש זוהה/);
+  assert.match(p.textContent, /שיא חדש!/);
   assert.match(p.textContent, /Deadlift/);
   assert.match(p.textContent, /180/);
   assert.ok(p.querySelector('[data-community-action="pr-share"]'));
@@ -61,7 +62,8 @@ test("Add note reveals a note field and Share sends it to pr_share with the reco
   await waitFor(() => !!mock.db.__prShare, 3000);
   assert.equal(mock.db.__prShare.record_id, "rec-42");
   assert.equal(mock.db.__prShare.note, "שבירת מחסום");
-  assert.deepEqual(mock.db.__prShare.media, []);
+  assert.ok(mock.db.__prShare.p_club_id, "pr_share is told which circle the post belongs to");
+  assert.ok(!("media" in mock.db.__prShare), "and no longer carries media");
   await waitFor(() => !window.document.getElementById("prPrompt"), 3000);
 });
 

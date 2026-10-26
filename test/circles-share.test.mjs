@@ -34,6 +34,7 @@ function spyOnPosts(mock) {
 async function ready(mock, opts) {
   const window = await bootCommunity(mock, Object.assign({ syncEnabled: false }, opts || {}));
   await waitFor(() => window.isCommunitySignedIn && window.isCommunitySignedIn(), 3000);
+  await waitFor(() => window.communityCircleIds && window.communityCircleIds().length > 0, 3000);
   await waitFor(() => window.communityCircleIds().length === mock.db.circle_members.length, 3000);
   return window;
 }

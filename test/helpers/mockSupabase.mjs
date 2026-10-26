@@ -13,6 +13,26 @@
 export function createMockSupabase(seedTables = {}) {
   const db = {};
   for (const [table, rows] of Object.entries(seedTables)) db[table] = rows;
+  // Every member the fixture seeds - or creates, by saving a profile - is in
+  // one default circle unless the fixture says otherwise (it names
+  // circle_members itself, even as an empty list): the circles screens sit
+  // behind "member of at least one circle", and the many tests that are about
+  // something else - notifications, the sign-up forms, post cards - should not
+  // each have to seed a membership to reach them.
+  const defaultCircles = !Object.prototype.hasOwnProperty.call(db, "circle_members");
+  function ensureDefaultCircle(profileRows) {
+    if (!defaultCircles) return;
+    const members = (db.circle_members = db.circle_members || []);
+    for (const p of profileRows) {
+      if (!p || !p.id || members.some((m) => m.user_id === p.id)) continue;
+      members.push({
+        club_id: "club-1", user_id: p.id, role: "member", joined_at: "2026-10-01T00:00:00Z", share_defaults: {},
+        clubs: { id: "club-1", name: "מעגל הדגמה", type: "friends", emoji: "🔥", mode: "together", benchmark_enabled: false,
+          invite_policy: "owner", welcome_line: "", benchmark: null, benchmark_month: null, created_by: p.id },
+      });
+    }
+  }
+  if (Array.isArray(db.profiles)) ensureDefaultCircle(db.profiles);
 
   let currentUser = null;
   let authCb = null;
@@ -232,6 +252,7 @@ export function createMockSupabase(seedTables = {}) {
         if (mode === "insert") {
           const list = Array.isArray(pendingPayload) ? pendingPayload : [pendingPayload];
           for (const p of list) rows(table).push(p);
+          if (table === "profiles") ensureDefaultCircle(list);
           // COMM-201..207. See applyChallengeProgressInserts() above - the
           // one table whose direct-insert write path has a real trigger
           // behind it in production.
@@ -255,6 +276,7 @@ export function createMockSupabase(seedTables = {}) {
             const idx = rows(table).findIndex((r) => keyCols.every((k) => r[k] === p[k]));
             if (idx >= 0) rows(table)[idx] = { ...rows(table)[idx], ...p }; else rows(table).push(p);
           }
+          if (table === "profiles") ensureDefaultCircle(list);
           return { error: null };
         }
         if (mode === "delete") {
@@ -400,6 +422,11 @@ export function createMockSupabase(seedTables = {}) {
         // shortcut masking it.
         const handler = rpcHandlers[name];
         if (handler) return Promise.resolve(handler(args, { db, currentUser }));
+        // The circle reads are answered only by a fixture that registers them
+        // (test/helpers/circles.mjs). Everywhere else they fail like any
+        // unreachable server, so a test that hands posts to the screen
+        // directly (holdPosts) is not wiped by an empty page.
+        if (name === "circle_feed" || name === "circle_week") return Promise.resolve({ data: null, error: { message: "not mocked in this fixture" } });
         // N2 (202609230007). The client reads club features through
         // club_features_for_caller() now, because SELECT (config) is revoked
         // from authenticated. Served from the SAME club_features fixture the 27
