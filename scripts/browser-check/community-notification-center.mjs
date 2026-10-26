@@ -27,6 +27,7 @@ const seedTables = {
   profiles: [{ id: "u1", handle: "dana", display_name: "דנה", is_admin: false, recovery_verified_at: VERIFIED, visible_to_club: true }],
   invite_redemptions: [{ user_id: "u1", invite_id: "inv-1", role: "member", redeemed_at: VERIFIED }],
   clubs: [{ id: "club-1", name: "מעגל הדגמה" }],
+  circle_members: [{ club_id: "club-1", user_id: "u1", role: "owner", joined_at: "2026-10-01T00:00:00Z", share_defaults: {}, clubs: { id: "club-1", name: "מעגל הדגמה", type: "friends", emoji: "🔥", mode: "together", benchmark_enabled: false, invite_policy: "owner", welcome_line: "", benchmark: null, benchmark_month: null } }],
   notifications: [
     notif(1, { type: "reaction", category: "community", title: "עידודים חדשים", body: "התקדמות חדשה נרשמה", source_type: "post", source_id: "p1", deep_link: "/community/feed?post=p1" }),
     notif(2, { type: "achievement_unlocked", category: "training", title: "פתחת הישג חדש", body: "100 אימונים", deep_link: "/community/achievements" }),
@@ -48,7 +49,7 @@ await page.goto(target.url, { waitUntil: "networkidle" });
 await page.waitForSelector("#app", { state: "visible", timeout: 10000 });
 await dismissWelcomeModal(page);
 
-await switchTab(page, "tabCommunityBtn");
+await page.evaluate(() => window.switchAppTab("home"));
 await page.waitForSelector("#communityHead", { timeout: 5000 });
 await page.click('[data-community-action="feed-notifications"]');
 await page.waitForSelector("[data-notif-center]", { timeout: 5000 });

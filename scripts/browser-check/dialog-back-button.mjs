@@ -303,6 +303,7 @@ async function runCloudMemberDialogs(browser) {
       { user_id: "author-1", invite_id: "inv-1", role: "member", redeemed_at: VERIFIED },
     ],
     clubs: [{ id: "club-1", name: "מעגל הדגמה" }],
+    circle_members: [{ club_id: "club-1", user_id: "u1", role: "owner", joined_at: "2026-10-01T00:00:00Z", share_defaults: {}, clubs: { id: "club-1", name: "מעגל הדגמה", type: "friends", emoji: "🔥", mode: "together", benchmark_enabled: false, invite_policy: "owner", welcome_line: "", benchmark: null, benchmark_month: null } }],
     achievement_definitions: [{
       id: "d-first_pr", code: "first_pr", name: "השיא הראשון", description: "", category: "performance",
       trigger_type: "PR_CREATED", threshold: 1, repeatable: false, visibility: "club", icon: "⭐",
@@ -338,44 +339,26 @@ async function runCloudMemberDialogs(browser) {
   await page.evaluate(() => window.claimCommunityAchievements(["first_pr"]));
   await checkBackCloses(page, "achUnlock", '[data-cloud-dialog="achUnlock"]');
 
-  // ---- workoutPrompt: the share prompt after an ordinary logged workout.
-  // Same reasoning as the two above - it has no on-screen trigger by design,
-  // it is the client's own reaction to a save - so it is opened through the
-  // one public entry point app.js itself calls
-  // (window.offerWorkoutSharePrompt), after logging a real set through
-  // app.js's real save path, because the prompt refuses to open for a record
-  // it cannot find in the member's own log.
-  const loggedSetId = await page.evaluate(async () => {
-    await window.addMovement("Back Button Deadlift", "Deadlift");
-    window.applyFieldValue("step", "weight", 100);
-    window.applyFieldValue("step", "reps", 5);
-    window.applyFieldValue("step", "sets", 1);
-    await window.saveSet();
-    // The first save of this member's life opens the full-screen arrival
-    // card, and the prompt deliberately stands down while it is up.
-    window.closeCelebration();
-    return entries[0].id;
-  });
-  await page.evaluate((id) => window.offerWorkoutSharePrompt("strength_entry", id), loggedSetId);
-  await page.waitForSelector('[data-cloud-dialog="workoutPrompt"]', { timeout: 5000 });
-  const postsBeforeWorkoutPromptBack = await page.evaluate(() => (window.__mock.db.workout_posts || []).length);
-  await checkBackCloses(page, "workoutPrompt", '[data-cloud-dialog="workoutPrompt"]');
-  const postsAfterWorkoutPromptBack = await page.evaluate(() => (window.__mock.db.workout_posts || []).length);
-  // The same DISMISS-never-submit rule this file pins for the destructive
-  // confirm sheet and the composer, asked of the one prompt whose whole
-  // premise is that nothing is ever shared without an explicit tap.
-  check("workoutPrompt: closing via back did not share anything",
-    postsAfterWorkoutPromptBack === postsBeforeWorkoutPromptBack,
-    `expected ${postsBeforeWorkoutPromptBack}, got ${postsAfterWorkoutPromptBack}`);
+  // The circle sheets (create, join, share, settings) are one registered
+  // dialog, circleSheet. Back must close it and must not create anything.
+  await page.evaluate(() => window.switchAppTab("home"));
+  await page.waitForSelector('[data-community-action="c-create-open"]', { timeout: 5000 });
+  const circlesBefore = await page.evaluate(() => (window.__mock.db.circle_members || []).length);
+  await page.click('[data-community-action="c-create-open"]');
+  await page.waitForSelector('[data-cloud-dialog="circleSheet"]', { timeout: 5000 });
+  await checkBackCloses(page, "circleSheet", '[data-cloud-dialog="circleSheet"]');
+  const circlesAfter = await page.evaluate(() => (window.__mock.db.circle_members || []).length);
+  check("circleSheet: closing via back did not create a circle", circlesAfter === circlesBefore, `expected ${circlesBefore}, got ${circlesAfter}`);
 
   // ---- notifCenter --------------------------------------------------------
-  await switchTab(page, "tabCommunityBtn");
+  await page.evaluate(() => window.switchAppTab("home"));
   await page.waitForSelector('[data-community-action="feed-notifications"]', { timeout: 5000 });
   await page.click('[data-community-action="feed-notifications"]');
   await page.waitForSelector('[data-cloud-dialog="notifCenter"]', { timeout: 5000 });
   await checkBackCloses(page, "notifCenter", '[data-cloud-dialog="notifCenter"]');
 
   // ---- termSheet (Account tab's glossary entry point) --------------------
+  await page.evaluate(() => window.switchAppTab("me"));
   await page.waitForSelector('[data-community-action="term-glossary-open"]', { timeout: 5000 });
   await page.click('[data-community-action="term-glossary-open"]');
   await page.waitForSelector('[data-cloud-dialog="termSheet"]', { timeout: 5000 });

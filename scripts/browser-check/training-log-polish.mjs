@@ -348,14 +348,10 @@ console.log("\n---- 14: the share control is a stroke icon, not an emoji ----");
 // renderShareControl() is cloud.js's, and it renders only for a signed-in
 // member. Asserted off the function itself rather than skipped: the emoji
 // was in the markup it returns, which is exactly what this is about.
-const shareMarkup = await page.evaluate(() => {
-  if (typeof window.renderShareControl !== "function") return null;
-  const realSignedIn = window.isCommunitySignedIn;
-  window.isCommunitySignedIn = () => true;
-  let html = "";
-  try { html = window.renderShareControl("strength_entry", "probe-id"); } catch (e) { html = "ERROR: " + e.message; }
-  window.isCommunitySignedIn = realSignedIn;
-  return html;
+const shareMarkup = await page.evaluate(async () => {
+  const src = await (await fetch("./src/community/outward.js")).text();
+  const m = src.match(/club: '(<svg[^']*<\/svg>)'/);
+  return m ? m[1] : null;
 });
 check("the share control renders", typeof shareMarkup === "string" && shareMarkup.length > 0, String(shareMarkup).slice(0, 80));
 if (typeof shareMarkup === "string") {

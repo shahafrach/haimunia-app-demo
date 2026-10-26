@@ -54,6 +54,7 @@ const seedTables = {
   clubs: [{ id: "club-1", name: "מעגל הדגמה" }],
   // The class-attendance suggestions that used to fill the sheet went with the
   // attendance module, so the sheet offers exactly the members already tagged.
+  circle_members: [{ club_id: "club-1", user_id: "u1", role: "owner", joined_at: "2026-10-01T00:00:00Z", share_defaults: {}, clubs: { id: "club-1", name: "מעגל הדגמה", type: "friends", emoji: "🔥", mode: "together", benchmark_enabled: false, invite_policy: "owner", welcome_line: "", benchmark: null, benchmark_month: null } }, { club_id: "club-1", user_id: "u2", role: "member", joined_at: "2026-10-01T00:00:00Z", share_defaults: {}, clubs: { id: "club-1", name: "מעגל הדגמה", type: "friends", emoji: "🔥", mode: "together", benchmark_enabled: false, invite_policy: "owner", welcome_line: "", benchmark: null, benchmark_month: null } }, { club_id: "club-1", user_id: "u3", role: "member", joined_at: "2026-10-01T00:00:00Z", share_defaults: {}, clubs: { id: "club-1", name: "מעגל הדגמה", type: "friends", emoji: "🔥", mode: "together", benchmark_enabled: false, invite_policy: "owner", welcome_line: "", benchmark: null, benchmark_month: null } }],
   post_training_partners: [
     { post_id: "p1", tagged_user_id: "u2", tagged_by: "u1", created_at: VERIFIED },
     { post_id: "p1", tagged_user_id: "u3", tagged_by: "u1", created_at: VERIFIED },
@@ -62,7 +63,7 @@ const seedTables = {
   // feed_page_rows is what the feed renders, workout_posts is what the
   // tagging RPC checks authorship against. One table does both server-side.
   feed_page_rows: [{
-    id: "p1", post_type: "POST_WORKOUT", author_id: "u1",
+    id: "p1", post_type: "POST_WORKOUT", author_id: "u1", club_id: "club-1",
     author: { display_name: "דנה", handle: "dana" },
     title: "Fran", occurred_on: TODAY, visibility: "club",
     created_at: VERIFIED, published_at: VERIFIED,
@@ -136,7 +137,7 @@ check("the server holds exactly the tags that were saved", JSON.stringify(tagged
 const geom = await page.evaluate(() => {
   const line = document.querySelector('[data-post-partners="ready"]');
   const card = line.closest(".post-card");
-  const names = Array.from(line.querySelectorAll('[data-community-action="view-profile"]'));
+  const names = Array.from(line.querySelectorAll('span[style*="font-weight:700"]'));
   const r = (el) => { const b = el.getBoundingClientRect(); return { left: b.left, right: b.right, top: b.top, bottom: b.bottom, width: b.width }; };
   return {
     line: r(line),
