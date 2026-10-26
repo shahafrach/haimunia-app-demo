@@ -220,16 +220,6 @@
           ${a.error ? `<div class="field-error" role="alert" style="margin-top:8px;">${esc(a.error)}</div>` : ""}
           <div class="chip-row" style="margin-top:14px;justify-content:center;">
             ${canShare ? `<button class="chip-btn primary" data-community-action="ach-share"${a.sharing ? " disabled" : ""}>${a.sharing ? "משתף…" : "שיתוף"}</button>` : ""}
-            ${/* Five-persona UX audit, outward sharing. Gated on the SAME
-                  canShare as the club share, which is false for
-                  visibility === "only_me". Unlike the profile-wide privacy
-                  toggles - which are about what OTHER members may read and
-                  are deliberately not consulted for an outward share - this
-                  is an item-level flag the member set on this exact
-                  decoration to mean "private". It defaults to "club", so
-                  honouring it costs the feature nothing and is the reading
-                  the audit's privacy note asks for. */ ""}
-            ${canShare ? `<button class="chip-btn" data-community-action="outward-ach">שיתוף מחוץ לאפליקציה</button>` : ""}
             ${canShare && !a.showNote ? `<button class="chip-btn" data-community-action="ach-add-note">הוספת הערה</button>` : ""}
             <button class="chip-btn" data-community-action="ach-not-now">לא עכשיו</button>
           </div>
@@ -247,29 +237,13 @@
       // has never heard of renders the seeded Hebrew label rather than the
       // raw code.
       const meta = achMeta(code, r);
-      // TWO SHARE CONTROLS, BOTH NAMED. Real phone screenshots at 390px:
-      // this row offered "שיתוף" and a bare "↗" side by side with nothing
-      // saying they went to different places - the first publishes the
-      // decoration to the club feed, the second opens the outward share
-      // sheet. Same two actions, same two handlers; what changed is that
-      // each now carries the label the rest of the app already uses for it
-      // ("שיתוף למעגל" is the unlock sheet's own wording a few lines up,
-      // "שיתוף מחוץ לאפליקציה" is the string every outward control in the
-      // app uses) and a stroke icon from SHARE_ICONS instead of an emoji.
-      // The chip-row wraps, so on a 390px phone the pair drops to its own
-      // line under a long decoration name rather than overflowing it.
+      // One share control: into the circles, named and with the SHARE_ICONS
+      // stroke icon. There is no card for a medal, so no share out of the app.
       const share = r.shared_at
         ? `<span style="color:var(--steel);font-size:12px;">שותף למעגל</span>`
         : r.visibility === "only_me"
           ? ""
           : `<button class="chip-btn" data-community-action="ach-share-later" data-id="${esc(r.id)}" data-code="${esc(code)}">${SHARE_ICONS.club} שיתוף למעגל</button>`;
-      // Five-persona UX audit, outward sharing. Offered even once the
-      // decoration has already been shared to the club - the two are
-      // different audiences and sharing to one is not sharing to the other -
-      // and withheld for only_me, matching the club control beside it.
-      const outward = r.visibility === "only_me"
-        ? ""
-        : `<button class="chip-btn" data-community-action="outward-ach-earned" data-id="${esc(r.id)}" data-code="${esc(code)}">${SHARE_ICONS.outward} שיתוף מחוץ לאפליקציה</button>`;
       // data-achievement-id: the anchor a `target.achievement` notification
       // tap (navigateToNotifTarget) scrolls to and briefly highlights - the
       // same scrollIntoView pattern the `target.post` branch already uses
@@ -277,7 +251,7 @@
       // notif_on_achievement's own deep link carries (`?ma=<member_
       // achievements.id>`), so the notification's target and this row's
       // anchor always agree.
-      return `<div class="log-row" data-achievement-id="${esc(r.id)}" style="flex-wrap:wrap;gap:6px;"><span style="min-width:0;">${esc(meta.icon)} ${esc(meta.title)}</span><span class="chip-row" style="margin:0;justify-content:flex-end;flex:1 1 auto;">${share}${outward}</span></div>`;
+      return `<div class="log-row" data-achievement-id="${esc(r.id)}" style="flex-wrap:wrap;gap:6px;"><span style="min-width:0;">${esc(meta.icon)} ${esc(meta.title)}</span><span class="chip-row" style="margin:0;justify-content:flex-end;flex:1 1 auto;">${share}</span></div>`;
     }).join("");
     return `<div class="ach-section" style="margin-top:18px;">${sectionHead("var(--brass)", "ההישגים שלי")}${list.length ? `<div class="log-list">${rowsHtml}</div>` : `<div class="empty">אין עדיין הישגים</div>`}</div>`;
   }

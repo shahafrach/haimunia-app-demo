@@ -136,11 +136,11 @@ test("subjectSentenceHtml escapes both halves and isolates only the name, and no
   //   second page (the full glossary) would have turned it into a general
   //   dialog framework, which is precisely what this pin exists to prevent.
   //
-  //   WHY IT IS THIRD. Same stacking rule as confirmSheet and outwardShare
+  //   WHY IT IS THIRD. Same stacking rule as confirmSheet and sharingSheet
   //   above it, applied in the other direction: a `?` marker can be rendered
   //   inside the challenge, event, recap and profile overlays' own content,
   //   so the term sheet paints on top of those and must be matched before
-  //   them. It stays BELOW confirmSheet and outwardShare because neither of
+  //   them. It stays BELOW confirmSheet and sharingSheet because neither of
   //   those can contain a term marker, so nothing can stack on top of it.
   //
   //   WHY IT IS ONE ENTRY AND NOT TWO. The full glossary is a second PAGE of
@@ -149,7 +149,7 @@ test("subjectSentenceHtml escapes both halves and isolates only the name, and no
   //   click instead of duplicating all three.
   const dialogs = src.slice(src.indexOf("const CLOUD_DIALOGS = ["), src.indexOf("];", src.indexOf("const CLOUD_DIALOGS = [")));
   assert.deepEqual([...dialogs.matchAll(/\{ key: "([^"]+)"/g)].map((m) => m[1]), [
-    "confirmSheet", "outwardShare", "termSheet",
+    "confirmSheet", "sharingSheet", "termSheet",
     "notifCenter", "achUnlock", "prPrompt",
     // The circle sheets (create, settings, invite, join, share, medal): one
     // dialog at a time, beside the prompts it can never be open with. It

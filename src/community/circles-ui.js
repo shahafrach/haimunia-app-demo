@@ -66,6 +66,9 @@
   // profile and a circle before they have anything to show.
   function renderCircleGate(opts) {
     if (!configured) return gateNotConfigured();
+    // An invite opened inside WhatsApp, Instagram or Facebook: steps to open it in the real browser.
+    const inApp = sharingInAppGateHtml();
+    if (inApp && !state.circles.list.length) return inApp;
     const j = state.circles.join;
     const inAny = state.circles.list.length > 0;
     if (!state.user || (state.user.is_anonymous && !state.signupStarted && !state.redemption && !inAny)) {
@@ -292,7 +295,7 @@
     const note = c.mode === "weekly_competition"
       ? "תחרות שבועית: משווים אחוז מהיעד האישי, אף פעם לא מספרים מוחלטים."
       : "כל אחד מול היעד של עצמו. אין דירוג. השבוע מתחיל ביום ראשון.";
-    return grid + `<div class="footer-note" style="margin-top:10px;">${esc(note)}</div>`;
+    return grid + `<div class="footer-note" style="margin-top:10px;">${esc(note)}</div>` + sharingWeekButtonHtml(c);
   }
 
   function circleBenchmarkSectionHtml(c) {

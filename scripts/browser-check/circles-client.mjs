@@ -6,7 +6,7 @@
 // every control is a real tap target, that the two weeks of a couple sit side
 // by side in the right reading order, and that the page never scrolls sideways.
 //
-// ONE SCRIPT, FIVE SECTIONS, and deliberately not five scripts:
+// ONE SCRIPT, NINE SECTIONS (the last four are the sharing pipeline), and deliberately not nine scripts:
 // scripts/browser-check/ is enumerated from disk by run-all.mjs (CLAUDE.md,
 // "Parallel work"), so every file added here is a merge hazard for every other
 // open branch.
@@ -336,6 +336,130 @@ const WEEK = [
   check("couple: no sideways scroll", l.scrollWidth <= l.clientWidth + 1);
   check("couple: no console errors", errors.length === 0, errors.join(" | "));
   await page.close();
+}
+
+// ===========================================================================
+// 6-9. The sharing pipeline: PR card, week card, in-app browser, install steps
+// ===========================================================================
+const IOS_SAFARI = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1";
+const IOS_WHATSAPP = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 WhatsApp/24.10.80";
+// Records every share the page makes: Chromium on Linux has no file sharing, so
+// this stands in for a phone's share sheet and keeps the real File it was given.
+const SHARE_SPY = `window.__shares = [];
+  navigator.canShare = (d) => !!(d && d.files && d.files.length);
+  navigator.share = async (d) => { window.__shares.push(d.files.map((f) => ({ name: f.name, type: f.type, size: f.size }))); };`;
+async function newPageUA(userAgent, tables, user, init) {
+  const context = await browser.newContext({ viewport: VIEWPORT, userAgent, hasTouch: true, isMobile: true });
+  const page = await context.newPage();
+  const errors = await consoleErrorCollector(page);
+  await installMockCloud(page, tables, user ? { user } : {});
+  await page.addInitScript({ content: `(${circleRpcs().toString()})();` });
+  if (init) await page.addInitScript({ content: init });
+  return { page, errors };
+}
+const MEMBER = { id: ME, is_anonymous: false, email: "me@members.haimuniya.invalid" };
+
+// 6. The PR card: built before the tap, shared as one PNG file.
+{
+  const { page, errors } = await newPageUA(IOS_SAFARI, seed(), MEMBER, SHARE_SPY);
+  await page.goto(target.url, { waitUntil: "networkidle" });
+  await page.waitForSelector("#app", { state: "visible", timeout: 10000 });
+  await dismissWelcomeModal(page);
+  await switchTab(page, "tabCommunityBtn");
+  await page.waitForSelector('[data-community-action="c-invite-open"]', { timeout: 8000 });
+  await page.evaluate(() => window.HaimuniaEvents.emit(window.PRODUCT_EVENTS.PR_CREATED, { record: {
+    record_id: "rec-1", movement: "סקוואט", new_result: "105 ק״ג × 5", previous_result: "100 ק״ג × 5", improvement: "+5 ק״ג", new_value_numeric: 105, previous_value_numeric: 100 } }));
+  await page.waitForSelector('[data-cloud-dialog="prPrompt"]', { timeout: 8000 });
+  await page.waitForSelector('[data-pr-card="ready"]', { timeout: 10000 });
+  const btn = await tapSize(page, '[data-pr-card="ready"]');
+  check("pr card: the share button is a 44px tap target", btn && btn.h >= 44, JSON.stringify(btn));
+  const sheet = await page.evaluate(() => { const r = document.querySelector("#prPrompt").getBoundingClientRect(); return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, vh: innerHeight, vw: innerWidth }; });
+  check("pr card: the prompt fits the phone", sheet.top >= 0 && sheet.bottom <= sheet.vh + 1 && sheet.left >= -1 && sheet.right <= sheet.vw + 1, JSON.stringify(sheet));
+  const l = await layout(page);
+  check("pr card: right-to-left, no sideways scroll", l.dir === "rtl" && l.scrollWidth <= l.clientWidth + 1, JSON.stringify(l));
+  check("pr card: nothing was shared by opening the prompt", (await page.evaluate(() => window.__shares.length)) === 0);
+  await page.click('[data-pr-card="ready"]');
+  await page.waitForFunction(() => window.__shares.length === 1, null, { timeout: 8000 });
+  const shared = await page.evaluate(() => window.__shares[0]);
+  check("pr card: one PNG file was handed to the share sheet", shared.length === 1 && shared[0].type === "image/png" && shared[0].size > 5000, JSON.stringify(shared));
+  check("pr card: no console errors", errors.length === 0, errors.join(" | "));
+  await page.context().close();
+}
+
+// 7. The week card button on the circle's week view.
+{
+  const { page, errors } = await newPageUA(IOS_SAFARI, seed(), MEMBER, SHARE_SPY + `window.__week = ${JSON.stringify(WEEK)};`);
+  await page.goto(target.url, { waitUntil: "networkidle" });
+  await page.waitForSelector("#app", { state: "visible", timeout: 10000 });
+  await dismissWelcomeModal(page);
+  await switchTab(page, "tabCommunityBtn");
+  await page.click('[data-community-action="c-section"][data-section="week"]');
+  await page.waitForSelector('[data-week-card="ready"]', { timeout: 10000 });
+  const btn = await tapSize(page, '[data-week-card="ready"]');
+  check("week card: the button is a 44px tap target inside the page width", btn && btn.h >= 44 && btn.left >= 0 && btn.right <= VIEWPORT.width, JSON.stringify(btn));
+  const l = await layout(page);
+  check("week card: right-to-left, no sideways scroll", l.dir === "rtl" && l.scrollWidth <= l.clientWidth + 1, JSON.stringify(l));
+  await page.click('[data-week-card="ready"]');
+  await page.waitForFunction(() => window.__shares.length === 1, null, { timeout: 8000 });
+  const shared = await page.evaluate(() => window.__shares[0]);
+  check("week card: one PNG file was handed to the share sheet", shared.length === 1 && shared[0].type === "image/png" && shared[0].size > 5000, JSON.stringify(shared));
+  check("week card: no console errors", errors.length === 0, errors.join(" | "));
+  await page.context().close();
+}
+
+// 8. An invite opened inside the WhatsApp browser.
+{
+  const { page, errors } = await newPageUA(IOS_WHATSAPP, seed({ profiles: [], circle_members: [] }), null);
+  await page.goto(target.url + "#invite=" + TOKEN, { waitUntil: "networkidle" });
+  await page.waitForSelector("#app", { state: "visible", timeout: 10000 });
+  await dismissWelcomeModal(page);
+  await page.waitForSelector('[data-inapp-browser="whatsapp"]', { timeout: 8000 });
+  const body = await page.textContent("#content");
+  check("in-app: Hebrew steps naming Safari and WhatsApp", body.includes("Safari") && body.includes("WhatsApp") && body.includes("פתיחה ב-Safari"), body.slice(0, 160));
+  check("in-app: three numbered steps", (await page.$$eval("[data-inapp-browser] li", (els) => els.length)) === 3);
+  check("in-app: the token is still in the fragment, so it survives the switch", page.url().endsWith("#invite=" + TOKEN), page.url());
+  const calls = await page.evaluate(() => window.__mock.rpcCalls.map((c) => c.name).filter((n) => n !== "notif_unread_count"));
+  check("in-app: no session is started and nothing is joined", calls.length === 0, calls.join(","));
+  const l = await layout(page);
+  check("in-app: right-to-left, no sideways scroll at 390px", l.dir === "rtl" && l.scrollWidth <= l.clientWidth + 1, JSON.stringify(l));
+  const copy = await tapSize(page, '[data-community-action="sh-inapp-copy"]');
+  check("in-app: copy-link is a 44px tap target on screen", copy && copy.h >= 44 && copy.bottom <= VIEWPORT.height, JSON.stringify(copy));
+  check("in-app: no console errors", errors.length === 0, errors.join(" | "));
+  await page.context().close();
+}
+
+// 9. Add to Home Screen steps after the first circle (iOS Safari), shown once.
+{
+  const { page, errors } = await newPageUA(IOS_SAFARI, seed({ circle_members: [] }), MEMBER);
+  await page.goto(target.url + "#invite=" + TOKEN, { waitUntil: "networkidle" });
+  await page.waitForSelector("#app", { state: "visible", timeout: 10000 });
+  // The seeded first-run path: the app's welcome sheet opens as the member joins.
+  // The steps must never sit under it, and closing it must not count as a "no".
+  await page.waitForSelector("#welcomeOverlay.open", { timeout: 10000 });
+  await page.waitForTimeout(1200);
+  check("install: not shown under the welcome sheet", (await page.$('[data-install-steps]')) === null);
+  check("install: waiting is not dismissing", (await page.evaluate(() => localStorage.getItem("haimunia-demo:circleInstallDone"))) === null);
+  await dismissWelcomeModal(page);
+  await page.waitForSelector('[data-install-steps="ios"]', { timeout: 10000 });
+  check("install: shown once the welcome sheet is closed", true);
+  check("install: closing the welcome sheet did not dismiss the steps", (await page.evaluate(() => localStorage.getItem("haimunia-demo:circleInstallDone"))) === null);
+  const steps = await page.$$eval('[data-install-steps="ios"] li', (els) => els.map((e) => ({ svg: !!e.querySelector("svg"), text: e.textContent.trim() })));
+  check("install: three illustrated steps in Hebrew", steps.length === 3 && steps.every((s) => s.svg && /[א-ת]/.test(s.text)), JSON.stringify(steps));
+  const sheet = await page.evaluate(() => { const r = document.querySelector('[data-cloud-dialog="sharingSheet"] .modal-sheet').getBoundingClientRect(); return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, vh: innerHeight, vw: innerWidth }; });
+  check("install: the sheet fits the phone", sheet.top >= 0 && sheet.bottom <= sheet.vh + 1 && sheet.left >= -1 && sheet.right <= sheet.vw + 1, JSON.stringify(sheet));
+  const l = await layout(page);
+  check("install: right-to-left, no sideways scroll", l.dir === "rtl" && l.scrollWidth <= l.clientWidth + 1, JSON.stringify(l));
+  const ok = await tapSize(page, '[data-install-steps="ios"] [data-community-action="sh-close"]');
+  check("install: the dismiss button is a 44px tap target", ok && ok.h >= 44, JSON.stringify(ok));
+  await page.click('[data-install-steps="ios"] [data-community-action="sh-close"]');
+  await page.waitForFunction(() => !document.querySelector("[data-install-steps]"), null, { timeout: 5000 });
+  check("install: dismissing it is remembered", (await page.evaluate(() => localStorage.getItem("haimunia-demo:circleInstallDone"))) === "1");
+  await page.reload({ waitUntil: "networkidle" });
+  await page.waitForSelector("#app", { state: "visible", timeout: 10000 });
+  await page.waitForTimeout(500);
+  check("install: it does not come back", (await page.$('[data-install-steps]')) === null);
+  check("install: no console errors", errors.length === 0, errors.join(" | "));
+  await page.context().close();
 }
 
 await browser.close();

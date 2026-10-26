@@ -38,8 +38,8 @@
 //
 // COVERAGE NOTE. Two of CLOUD_DIALOGS's 18 entries are not exercised here
 // (the registry has since gained outwardShare, clubWodBoard, workoutPrompt
-// and reactors; outwardShare is covered by
-// test/community-outward-share.test.mjs, reactors by the social-feed pass's
+// and reactors; outwardShare is now sharingSheet, covered by
+// test/sharing-pipeline.test.mjs, reactors by the social-feed pass's
 // own scenario in community-feed-social.mjs, and workoutPrompt below):
 // reclaimInvite (a ghost-member reclaim sheet gated on a grace-period that
 // has elapsed - meaningful seed data for it is a small project on its own)

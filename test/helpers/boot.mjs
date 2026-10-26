@@ -81,6 +81,9 @@ function newDom(url, opts = {}) {
 
   window.indexedDB = new FDBFactory();
   window.IDBKeyRange = FDBKeyRange;
+  // A test about where the app runs (an in-app browser, iOS Safari) passes
+  // `userAgent`; every other caller keeps jsdom's own.
+  if (opts.userAgent) Object.defineProperty(window.navigator, "userAgent", { value: opts.userAgent, configurable: true });
 
   // jsdom implements neither matchMedia nor a full randomUUID-capable crypto.
   //

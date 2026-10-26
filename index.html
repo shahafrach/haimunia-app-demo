@@ -2873,7 +2873,8 @@
 <!-- Circles. circles-core.js first: it is pure (no session, no DOM) and the
      files after it read window.CirclesCore the moment they are evaluated. -->
 <script defer src="./src/community/circles-core.js"></script>
-<script defer src="./src/community/outward.js"></script>
+<!-- The pure half of the sharing pipeline (what reaches a card, when an offer is due). After circles-core.js, which its week helpers read. -->
+<script defer src="./src/community/sharing-core.js"></script>
 <script defer src="./src/community/achievements.js"></script>
 <script defer src="./src/community/notifications.js"></script>
 <script defer src="./src/community/reactions.js"></script>
@@ -2890,6 +2891,8 @@
 <script defer src="./src/community/circles.js"></script>
 <script defer src="./src/community/circles-ui.js"></script>
 <script defer src="./src/community/circles-sheets.js"></script>
+<!-- Share cards in the PR prompt and the week view, the in-app browser screen, the install steps. -->
+<script defer src="./src/community/sharing.js"></script>
 <script defer src="./src/share-cards.js"></script>
 <script defer src="./src/community/auth.js"></script>
 <script defer src="./cloud.js"></script>

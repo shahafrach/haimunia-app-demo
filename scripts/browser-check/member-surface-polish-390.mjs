@@ -138,14 +138,11 @@ const ach = await page.evaluate(() => {
     rowLeft: row.getBoundingClientRect().left,
   };
 });
-check("both achievement share controls are labelled",
-  ach.labels.length === 2 && ach.labels.every((l) => l.includes("שיתוף")), JSON.stringify(ach.labels));
-check("the two labels say which audience each goes to",
-  ach.labels.some((l) => l.includes("למעגל")) && ach.labels.some((l) => l.includes("מחוץ לאפליקציה")),
-  JSON.stringify(ach.labels));
+check("the achievement share control is labelled, and says which audience it goes to",
+  ach.labels.length === 1 && ach.labels[0].includes("שיתוף") && ach.labels[0].includes("למעגל"), JSON.stringify(ach.labels));
 check("neither label is an emoji glyph", !ach.labels.some((l) => /[←-⇿☀-➿️\u{1F300}-\u{1FAFF}]/u.test(l)),
   JSON.stringify(ach.labels));
-check("each carries exactly one stroke icon", ach.svgs.join(",") === "1,1", ach.svgs.join(","));
+check("it carries exactly one stroke icon", ach.svgs.join(",") === "1", ach.svgs.join(","));
 check("the icons are stroke, not fill", ach.strokes.every((s) => s === "currentColor/none"), JSON.stringify(ach.strokes));
 check("the achievement row stays inside 390px",
   ach.rowLeft >= 0 && ach.rowRight <= VIEWPORT.width + 1, `${ach.rowLeft}..${ach.rowRight}`);

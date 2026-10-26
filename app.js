@@ -2153,6 +2153,11 @@ function emitCommunityPrCreated(entry, mov, detail) {
   const record = {
     record_id: entry.id, movement: mov.name, new_result: newResult,
     new_value_numeric: detail.repRecordPR ? detail.weight : detail.est,
+    // The figure it beat, so the PR card can show the improvement as a percent
+    // without the previous weight ever leaving this device. An estimated 1RM
+    // is flagged so the card never prints it as a lifted weight.
+    previous_value_numeric: detail.repRecordPR ? detail.prevRepRecord : detail.prevEst1RM,
+    estimated: !detail.repRecordPR,
     // See the comment on emitPR at the call site: onPrCreated (the
     // share-prompt) must not open for a trivial record; onPrCreatedForChallenges
     // must not care. Defaults true (treat as trivial / don't praise) if the
@@ -7857,6 +7862,10 @@ window.addEventListener("beforeinstallprompt", (e) => {
   // up on the first render that qualifies, which may be days later.
   maybeShowInstallBanner();
 });
+// What src/community/sharing.js asks after a member's first circle: is the
+// browser holding an install prompt, and run it (from the member's tap).
+window.appHasInstallPrompt = () => !!deferredInstallPrompt;
+window.appInstall = () => installApp();
 window.addEventListener("appinstalled", () => {
   deferredInstallPrompt = null;
   dismissInstallBanner();

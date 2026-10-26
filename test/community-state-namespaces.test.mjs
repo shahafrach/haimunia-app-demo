@@ -135,7 +135,8 @@ test("the dialog registry keeps DOM keys and state paths separate", () => {
   // which is the exact defect A3 found in the confirm sheet.
   //
   // 14 since the five-persona audit's outward-sharing work added
-  // "outwardShare". Treated as the review trigger this pin is meant to be:
+  // "outwardShare", which the Sharing pipeline replaced with "sharingSheet"
+  // (install steps and the Sunday week-card offer; same slot, same stacking). Treated as the review trigger this pin is meant to be:
   //
   //   WHY A DIALOG AND NOT A REUSE. The three candidates were askConfirm
   //   (title + message + confirm + cancel), the PR prompt and the achievement
