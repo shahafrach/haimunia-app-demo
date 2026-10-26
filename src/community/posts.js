@@ -1,41 +1,19 @@
 "use strict";
 
-  async function publishWorkout(type, id, visibility) {
-    if (!state.user || !state.profile || typeof window.communityShareCandidateFor !== "function") return;
-    // communityShareCandidateFor looks up any entry by id regardless of
-    // age: sharing can be triggered from Calendar or Progress, which show
-    // results from any date.
-    const item = window.communityShareCandidateFor(type, id);
-    if (!item) return setMessage("לא ניתן למצוא את התוצאה במכשיר");
-    const { queued, error } = await shareWorkoutRecord(item, visibility);
-    if (error) return setMessage(failText("שיתוף התוצאה נכשל", error));
-    delete state.posts.openShare[shareKey(type, id)];
-    if (queued) return setMessage("התוצאה תישלח למועדון כשהחיבור יחזור");
-    setMessage("התוצאה שותפה בלי הערות, מדדים או פרטים אישיים");
-  }
-  // ---- The one workout-share write in the app --------------------------
+  // ---- The one workout-share write in the app ---------------------------------
   //
-  // Two callers now: publishWorkout() above (the share control in Calendar
-  // and Progress, where the member goes looking) and shareWorkoutSharePrompt()
-  // in src/community/share-prompt.js (the prompt that comes looking for them).
-  // They are one write, one payload, one on-conflict target and one
-  // measurement, declared here once, because two copies of this that drifted
-  // by one column is the defect CLAUDE.md's "sibling drift" rule is about -
-  // and because the on-conflict target IS rule 4 of the share prompt ("one
-  // record, one post"): a second definition that omitted it would publish a
-  // duplicate card for every re-share.
-  function workoutSharePayload(item, visibility) {
-    const payload = { author_id: state.user.id, source_type: item.type, source_record_id: item.id, visibility: visibility === "public" ? "public" : "club", title: item.title, result_text: item.resultText, comparison_key: item.comparisonKey, score_value: item.scoreValue, score_direction: item.scoreDirection, rx: item.rx, occurred_on: item.occurredOn };
-    return payload;
-  }
-  // THE on-conflict target. workout_posts(author_id, source_type,
-  // source_record_id) is unique, so a repeat share of one logged record
-  // converges on the post that already exists instead of raising 23505 or
-  // minting a second card - the same uniqueness pr_share() leans on when it
-  // UPGRADES this row in place to a POST_PR (202609060025) rather than
-  // writing a second post beside it.
-  function upsertWorkoutSharePost(payload) {
-    return client.from("workout_posts").upsert(payload, { onConflict: "author_id,source_type,source_record_id" });
+  // A workout post is an upsert on (author, circle, source type, source record):
+  // the day's summary for one circle (src/community/circles.js builds the rows,
+  // src/community/circles-core.js decides what each circle may receive). The
+  // unique key is workout_posts_author_club_source_key (202610250005), and
+  // every row carries its club_id: a post belongs to exactly one circle.
+  //
+  // This is the ONLY place the on-conflict target is spelled out. It is the
+  // sibling of pr_share's "is this record already a post in THIS circle" lookup
+  // on the server, and the two must name the same four columns.
+  const WORKOUT_POST_CONFLICT = "author_id,club_id,source_type,source_record_id";
+  function upsertWorkoutSharePost(row) {
+    return client.from("workout_posts").upsert(row, { onConflict: WORKOUT_POST_CONFLICT });
   }
   // The queued action name. NOT in OUTBOX_ACTIONS, and for exactly the reason
   // ANALYTICS_OUTBOX_ACTION is not: that list is what communityRpc() consults,
@@ -44,21 +22,21 @@
   //
   // The queue mints an idempotency key per row and this handler ignores it,
   // which is safe here and only here: the write is an upsert on a unique
-  // triple, so replaying it converges rather than duplicating. An RPC in the
-  // same position would need the key.
+  // key, so replaying it converges rather than duplicating.
   const WORKOUT_SHARE_OUTBOX_ACTION = "workout_share";
-  async function writeWorkoutSharePost(payload) {
-    // The same storeReady() question src/outbox.js asks itself, asked before
-    // enqueue() can throw it back at a member who is simply offline.
+  // Returns { queued, error }. A row is queued, not lost, when the device is
+  // offline or the server says slow down; it is the posted day, so replaying it
+  // later is the same write.
+  async function writeWorkoutSharePost(row) {
     const canQueue = !!(window.HaimuniaOutbox && typeof window.dbPutCommunityOutboxRow === "function");
     const enqueueOpts = { userId: state.user && state.user.id };
     if (canQueue && typeof navigator !== "undefined" && navigator.onLine === false) {
-      await window.HaimuniaOutbox.enqueue(WORKOUT_SHARE_OUTBOX_ACTION, { row: payload }, enqueueOpts);
+      await window.HaimuniaOutbox.enqueue(WORKOUT_SHARE_OUTBOX_ACTION, { row: row }, enqueueOpts);
       return { queued: true, error: null };
     }
-    const { error } = await upsertWorkoutSharePost(payload);
-    if (error && canQueue && isOfflineError(error)) {
-      await window.HaimuniaOutbox.enqueue(WORKOUT_SHARE_OUTBOX_ACTION, { row: payload }, enqueueOpts);
+    const { error } = await upsertWorkoutSharePost(row);
+    if (error && canQueue && (isOfflineError(error) || /rate_limited/.test(String(error.message || "")))) {
+      await window.HaimuniaOutbox.enqueue(WORKOUT_SHARE_OUTBOX_ACTION, { row: row }, enqueueOpts);
       return { queued: true, error: null };
     }
     if (error) trackWriteFailure(WORKOUT_SHARE_OUTBOX_ACTION, error);
@@ -73,33 +51,14 @@
     const payload = Object.assign({}, args && args.row);
     // Re-stamped rather than trusted: the row was built while this member was
     // offline, flush() and the check above already refuse a row belonging to
-    // anybody else, and author_id is the column the unique triple - and every
+    // anybody else, and author_id is the column the unique key - and every
     // RLS policy on this table - is keyed on.
     payload.author_id = state.user.id;
+    // A row queued by an older build has no circle. It cannot be sent anywhere
+    // honest, so it fails visibly instead of guessing one.
+    if (!payload.club_id) throw new Error("not found: no circle on this queued post");
     const { error } = await upsertWorkoutSharePost(payload);
     if (error) throw new Error(error.message || "workout share failed");
-  }
-  // Returns { queued, error }. COMM-170's measurement lives here, after the
-  // write and on both callers' behalf, so a failed share is never counted as
-  // one - and a QUEUED share is, because it is a member action that will
-  // land. This path predates the composer and emits no POST_CREATED, so
-  // workout_shared is the only record of it.
-  async function shareWorkoutRecord(item, visibility) {
-    const payload = workoutSharePayload(item, visibility);
-    const result = await writeWorkoutSharePost(payload);
-    if (!result.error) track(A.WORKOUT_SHARED, { source_type: item.type, visibility: payload.visibility });
-    return result;
-  }
-  // Collapsed to one small icon by default wherever a result actually
-  // lives (Calendar day view, a movement/WOD's Progress card) instead of
-  // a standing list of everything shareable sitting in the Community tab
-  // itself - tap to expand the same photo/visibility controls publishing
-  // already had.
-  function shareKey(type, id) { return `${type}:${id}`; }
-  function toggleShare(type, id) {
-    const key = shareKey(type, id);
-    if (state.posts.openShare[key]) delete state.posts.openShare[key]; else state.posts.openShare[key] = true;
-    rerender();
   }
 
   const POST_BODY_MAX = 1000;
@@ -130,12 +89,20 @@
     return (post && (post.created_at || post.published_at || post.occurred_on)) || null;
   }
   // Authorless posts render the club mark, never a broken avatar (COMM-107).
-  const CLUB_MARK_HTML = `<span aria-hidden="true" class="avatar-badge" style="width:40px;height:40px;font-size:16px;background:var(--brass);">ח</span>`;
+  const CLUB_MARK_HTML = `<span aria-hidden="true" class="avatar-badge" style="width:40px;height:40px;font-size:16px;background:var(--brass);">◎</span>`;
+
+  // Members have an emoji, not a photo (decisions.md: Profile). The circle feed
+  // carries it on the post; anything without one falls back to the initial.
+  function memberAvatarHtml(post, name, size) {
+    const emoji = post && post.author && post.author.emoji;
+    if (!emoji) return avatarHtml(name, size);
+    return `<span aria-hidden="true" class="avatar-badge" style="width:${size}px;height:${size}px;font-size:${Math.round(size * 0.55)}px;background:var(--surface);border:1px solid var(--border);">${esc(emoji)}</span>`;
+  }
 
   function postHeadHtml(post, opts) {
     opts = opts || {};
     const authorless = !!opts.authorless;
-    const name = authorless ? (opts.clubName || "המועדון") : (postAuthorName(post) || "חבר/ה");
+    const name = authorless ? (opts.clubName || "המעגל") : (postAuthorName(post) || "חבר/ה");
     // opts.markIcon lets one authorless post type stand out from the generic
     // "ח" club mark every other authorless type (system, new-member) still
     // shares - used by the announcement card so a club notice reads at a
@@ -147,8 +114,7 @@
       // just this one call site (the main feed card's own head), not every
       // other 36px avatar in the app (comments, directory rows, etc. keep
       // their own deliberate, smaller-context sizing).
-      : authorless ? CLUB_MARK_HTML : avatarHtml(name, 40);
-    const authorId = !authorless && post && post.author_id;
+      : authorless ? CLUB_MARK_HTML : memberAvatarHtml(post, name, 40);
     const roleBadge = "";
     // THE NAME AND THE BADGE ARE SIBLINGS NOW, not a badge nested inside the
     // name. Measured on a 390px phone: the badge was inside the name's own
@@ -164,9 +130,7 @@
     // there was silently overriding .post-author's own font-size, and every
     // other property it set is now in the class, where the ellipsis rules it
     // has to cooperate with also live.
-    const nameLink = authorId
-      ? `<button class="post-author link-btn" data-community-action="view-profile" data-id="${esc(authorId)}" title="${esc(name)}">${esc(name)}</button>`
-      : `<div class="post-author" title="${esc(name)}">${esc(name)}</div>`;
+    const nameLink = `<div class="post-author" title="${esc(name)}">${esc(name)}</div>`;
     const nameHtml = `<div class="post-author-row">${nameLink}${roleBadge}</div>`;
     return `<div class="post-head">${avatar}<div class="post-head-text">${nameHtml}<div class="post-time">${esc(relativeTime(postTimestamp(post)))}${postTypeTagHtml(post, opts)}</div></div>${opts.hideMenu ? "" : postMenuHtml(post)}</div>`;
   }
@@ -187,7 +151,7 @@
     POST_WORKOUT: "אימון",
     POST_PR: "שיא אישי",
     POST_ACHIEVEMENT: "הישג",
-    POST_SYSTEM: "מהמועדון",
+    POST_SYSTEM: "מהמעגל",
   };
   function postTypeLabel(post, opts) {
     if (opts && opts.badge) return opts.badge;
@@ -251,29 +215,22 @@
     </div>`;
   }
 
-  // The reaction mark. The feed's one reaction is a cheer for a session
-  // somebody logged, so it is drawn as the thing they logged it with rather
-  // than as a flame emoji - the same dumbbell ICONS.dumbbell (app.js) draws
-  // on every empty chart in the app, re-cut here at pill size and on
-  // `currentColor` so it takes the pill's own colour in both themes instead
-  // of carrying a hardcoded stroke.
-  const DUMBBELL_ICON = '<svg class="reaction-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M4 9v6M20 9v6M2 10v4M22 10v4M7 12h10"/></svg>';
-
+  // The reactions: exactly three kinds (decisions.md, Sharing), each a toggle,
+  // and a member may hold all three on a post. The counts come from
+  // circle_feed (reaction_counts) and the member's own from my_reactions.
   function postActionsHtml(post, opts) {
     opts = opts || {};
     const id = esc(post && post.id);
-    const reactions = Number((post && (post.reaction_count != null ? post.reaction_count : post.cheer_count)) || 0);
-    const mine = !!(state.engagement.reactions[post && post.id] && state.engagement.reactions[post && post.id].mine);
-    // ONE REACTION PER MEMBER, unchanged: this is still toggle_reaction on
-    // the same `cheer` kind, and the pill is pressed or not pressed. What is
-    // new is that it SAYS which, through aria-pressed and a filled state,
-    // instead of leaving a member to compare a number against the one they
-    // remember seeing.
-    return `<div class="chip-row post-actions">
-      <button class="chip-btn reaction-pill${mine ? " is-mine" : ""}" data-community-action="cheer" data-id="${id}" aria-pressed="${mine ? "true" : "false"}" aria-label="עידוד, ${reactions} עידודים">${DUMBBELL_ICON}<span class="reaction-count">${reactions}</span></button>
-      ${typeof reactionSummaryHtml === "function" ? reactionSummaryHtml(post) : ""}
-      ${opts.extra || ""}
-    </div>`;
+    const rs = reactionStateFor(post && post.id);
+    const buttons = CirclesCore.REACTION_KINDS.map((kind) => {
+      const meta = CirclesCore.REACTION_META[kind];
+      const n = Number(rs.counts[kind] || 0);
+      const mine = rs.mine.indexOf(kind) >= 0;
+      return `<button class="chip-btn reaction-pill${mine ? " is-mine" : ""}" data-community-action="react" data-kind="${kind}" data-id="${id}" aria-pressed="${mine ? "true" : "false"}" aria-label="${esc(meta.label)}${n ? ", " + n : ""}"><span aria-hidden="true">${meta.emoji}</span>${n ? ` <span class="mono">${n}</span>` : ""}</button>`;
+    }).join("");
+    const total = CirclesCore.REACTION_KINDS.reduce((n, k) => n + Number(rs.counts[k] || 0), 0);
+    const who = total ? `<button class="link-btn reaction-summary" data-community-action="reactors" data-id="${id}" aria-haspopup="dialog" aria-label="מי הגיב, ${total}">מי הגיב</button>` : "";
+    return `<div class="chip-row post-actions" role="group" aria-label="תגובות">${buttons}${who}${opts.extra || ""}</div>`;
   }
 
   function postBodyHtml(post) {
@@ -411,7 +368,7 @@
     const rows = (loaded || []).filter((r) => !(typeof isBlockedUser === "function" && isBlockedUser(r.user_id)));
     if (!loaded || !rows.length) return "";
     const pid = esc(post.id);
-    const names = rows.map((r) => `<button class="link-btn" data-community-action="view-profile" data-id="${esc(r.user_id)}" style="padding:0;font:inherit;color:var(--chalk);font-weight:700;">${esc(trainingPartnerName(r))}</button>`)
+    const names = rows.map((r) => `<span style="color:var(--chalk);font-weight:700;">${esc(trainingPartnerName(r))}</span>`)
       .join(`<span aria-hidden="true">, </span>`);
     // The member's own escape hatch, on the card rather than behind the
     // author's sheet: being able to remove the tag is the whole reason being
@@ -441,7 +398,7 @@
       const on = picked.indexOf(o.user_id) >= 0;
       return `<label class="field flex gap-6" style="align-items:center;">
         <input type="checkbox" data-partner-pick="${esc(o.user_id)}"${on ? " checked" : ""}${!on && atCap ? " disabled" : ""}/>
-        <span style="font-size:13px;">${esc(trainingPartnerName(o))}</span>
+        <span style="font-size:13px;">${esc(trainingPartnerName(o))}${(p.pending || []).indexOf(o.user_id) >= 0 ? ` <span style="color:var(--steel);font-size:11.5px;">(ממתין לאישור)</span>` : ""}</span>
       </label>`;
     }).join("");
     const body = p.loading
@@ -452,10 +409,10 @@
         // member deliberately opened: here an empty list has to say why, or
         // it reads as broken. The two real causes are named, because one of
         // them is the member's own setting and they can change it.
-        : `<div class="empty">אין כרגע חברים להצעה.</div>`;
+        : `<div class="empty">אין עוד חברים במעגל הזה.</div>`;
     return `<div class="post-inline-edit" data-partners-panel="${esc(post.id)}" style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px;">
       <div class="field-label" style="margin-bottom:6px;">מי התאמן/ה איתכם?</div>
-      <div style="color:var(--steel);font-size:12px;margin-bottom:8px;">מי שתסמנו יקבל/ת התראה ויוכל/תוכל להסיר את התיוג.</div>
+      <div style="color:var(--steel);font-size:12px;margin-bottom:8px;">התיוג ממתין לאישור של מי שסימנתם. רק אחרי האישור האימון נספר גם לשבוע שלו/שלה.</div>
       ${body}
       ${atCap ? `<div style="color:var(--steel);font-size:12px;margin-top:6px;">אפשר לתייג עד ${TRAINING_PARTNERS_MAX} חברים.</div>` : ""}
       ${p.error ? `<div class="field-error" role="alert" style="margin-top:8px;">${esc(p.error)}</div>` : ""}
@@ -471,20 +428,32 @@
     if (!post || !postCanTagPartners(post)) return;
     state.posts.openMenu = null;
     const day = postTrainingDay(post);
-    const tagged = postTrainingPartners(post) || [];
     state.posts.partnersPanel = {
-      postId, day,
-      options: tagged.slice(),
-      picked: tagged.map((r) => r.user_id),
+      postId, day, options: [], picked: [], pending: [],
       loading: true, saving: false, error: "",
     };
     rerender();
-    // The class-attendance suggestions that used to fill this list went with
-    // the attendance module; the circle's member list replaces them. Until
-    // then the sheet offers the members already tagged.
-    const p = state.posts.partnersPanel;
-    if (!p || p.postId !== postId) return;
-    p.loading = false;
+    const panel = state.posts.partnersPanel;
+    // The people to offer are the circle's members, not the whole app: a tag
+    // can only name someone in the post's own circle. Members and the tags
+    // already on this post (pending and confirmed - the author sees both) are
+    // read together.
+    const clubId = post.club_id;
+    const [roster, tags] = await Promise.all([
+      client.from("circle_members").select("user_id,profiles(display_name,emoji)").eq("club_id", clubId),
+      client.from("post_training_partners").select("tagged_user_id,confirmed_at").eq("post_id", postId),
+    ]);
+    if (state.posts.partnersPanel !== panel) return;
+    panel.loading = false;
+    if (roster.error || tags.error) {
+      panel.error = "טעינת חברי המעגל נכשלה, אפשר לנסות שוב";
+    } else {
+      panel.options = (roster.data || [])
+        .filter((r) => !state.user || r.user_id !== state.user.id)
+        .map((r) => ({ user_id: r.user_id, display_name: (r.profiles && r.profiles.display_name) || "" }));
+      panel.picked = (tags.data || []).map((t) => t.tagged_user_id);
+      panel.pending = (tags.data || []).filter((t) => !t.confirmed_at).map((t) => t.tagged_user_id);
+    }
     rerender();
   }
   function closeTrainingPartners() {
@@ -548,14 +517,18 @@
     opts = opts || {};
     const pid = post && post.id;
     const partnersPanelOpen = state.posts.partnersPanel && pid && state.posts.partnersPanel.postId === pid;
-    return `<article class="chart-card post-card" data-post-type="${esc((post && post.post_type) || "UNKNOWN")}"${opts.unknown ? ' data-post-unknown="1"' : ""}${pid ? ` data-post-id="${esc(pid)}"` : ""}>
+    // A PR a day old that nobody else has reacted to (circle_feed's
+    // unreacted_pr) is lifted to the top of the circle and drawn with a quiet
+    // outline and one line. No notification, no badge, nothing to dismiss.
+    const lift = !!(post && post.unreacted_pr);
+    return `<article class="chart-card post-card${lift ? " post-card--lift" : ""}" data-post-type="${esc((post && post.post_type) || "UNKNOWN")}"${opts.unknown ? ' data-post-unknown="1"' : ""}${lift ? ' data-unreacted-pr="1"' : ""}${pid ? ` data-post-id="${esc(pid)}"` : ""}>
+      ${lift ? `<div class="post-lift-note">עוד לא קיבל/ה תגובה על השיא</div>` : ""}
       ${postHeadHtml(post, opts)}
       ${inner || ""}
       ${trainingPartnersHtml(post)}
       ${opts.engagementDisabled ? "" : postActionsHtml(post, opts)}
       ${state.posts.captionEdit && pid && state.posts.captionEdit.postId === pid ? captionEditPanel() : ""}
       ${partnersPanelOpen ? trainingPartnersPanel(post) : ""}
-      ${!opts.engagementDisabled && pid && typeof reactionStripHtml === "function" ? reactionStripHtml(post) : ""}
     </article>`;
   }
 
@@ -588,11 +561,9 @@
       ${when ? `<div style="color:var(--steel);font-size:12px;">${esc(shortHebDate(when))}</div>` : ""}
       ${result ? `<div class="mono post-result">${esc(result)}</div>` : ""}
       ${metaParts.length ? `<div style="color:var(--steel);font-size:12px;">${metaParts.join(" · ")}</div>` : ""}`;
-    const src = m.source_id || post.source_id || post.source_record_id;
-    const extra = src ? `<button class="chip-btn" data-community-action="open-source" data-source-type="${esc(m.source_type || post.source_type || "workout")}" data-source-id="${esc(src)}">פתיחת האימון</button>` : "";
     // `detail` is this type's RESULT BLOCK and so goes last, after the photo
     // and after whatever the member wrote about it.
-    return postCardShell(post, postCardBody(post, `<div class="post-result-block">${detail}</div>`), { extra });
+    return postCardShell(post, postCardBody(post, `<div class="post-result-block">${detail}</div>`));
   }
 
   function renderPrPostCard(post) {
@@ -641,7 +612,7 @@
   // COMM-107: system notices read as club voice. No profile link, muted, no
   // More menu, reactions and comments disabled.
   function renderSystemPostCard(post) {
-    return postCardShell(post, postBodyHtml(post), { authorless: true, clubName: "המועדון", hideMenu: true, engagementDisabled: true });
+    return postCardShell(post, postBodyHtml(post), { authorless: true, clubName: "המעגל", hideMenu: true, engagementDisabled: true });
   }
 
   function renderUnknownPostCard(post) {
@@ -883,7 +854,10 @@
       // is what stops the second of two PRs in one session from asking again.
       if (prPromptDismissedSet().has(String(recordId))) return false;
       if (prPromptOnCooldownFor(record.movement)) return false;
-      state.posts.prPrompt = { record: Object.assign({}, record, { record_id: recordId }), note: "", showNote: false, publishing: false, error: "" };
+      state.posts.prPrompt = { record: Object.assign({}, record, { record_id: recordId }), note: "", showNote: false, publishing: false, error: "",
+        // Ticked: the circles whose share settings take PRs. The member can
+        // change that for this one record; the settings stay as they were.
+        picked: state.circles.list.filter((c) => CirclesCore.effectiveDefaults(c).share_prs).map((c) => c.id) };
       rememberPrPromptShownForMovement(record.movement);
       rerender();
       return true;
@@ -898,29 +872,32 @@
   async function sharePrPrompt() {
     const p = state.posts.prPrompt;
     if (!p || p.publishing) return;
+    if (!p.picked || !p.picked.length) { p.error = "בחרו לפחות מעגל אחד"; return rerender(); }
     p.publishing = true;
     p.error = "";
     rerender();
-    // communityRpc(), not client.rpc(): pr_share is in OUTBOX_ACTIONS now, so
-    // a share tapped with no connection is persisted in IndexedDB with its own
-    // idempotency key and sent on reconnect instead of failing in front of a
-    // member who has just finished training in a basement. The key is what
-    // makes the retry safe; the server (202609060014) answers a repeated key
-    // with the original post id rather than writing twice.
-    const { queued, data, error } = await communityRpc("pr_share", { record_id: p.record.record_id, note: cleanPostBody(p.note), media: [] });
-    if (error || (!queued && !data)) { p.publishing = false; p.error = "השיתוף נכשל, אפשר לנסות שוב"; return rerender(); }
+    // One pr_share call per circle (a post belongs to exactly one circle), each
+    // through communityRpc(): pr_share is in OUTBOX_ACTIONS, so a share tapped
+    // with no connection is persisted in IndexedDB with its own idempotency
+    // key and sent on reconnect. The key is what makes the retry safe; the
+    // server answers a repeated key with the original post id.
+    // p_weight goes only to circles where the member chose to show weights.
+    const res = await sharePrToCircles(p.record, p.picked.slice(), cleanPostBody(p.note));
+    if (res.failed && !res.sent && !res.queued) { p.publishing = false; p.error = failText("השיתוף נכשל, אפשר לנסות שוב", res.error); return rerender(); }
     rememberPrDismissed(p.record.record_id);
     state.posts.prPrompt = null;
-    setMessage(queued ? "השיא יישלח לקהילה כשהחיבור יחזור" : "השיא שותף לקהילה");
-    // No post id yet on the queued branch, and POST_CREATED's whole payload is
-    // one - so it is not emitted rather than emitted with a null. The queue
-    // owns the write from here; nothing downstream of this event is load-
-    // bearing for the member's own share.
-    if (!queued && window.HaimuniaEvents && window.PRODUCT_EVENTS && window.PRODUCT_EVENTS.POST_CREATED) {
-      try { window.HaimuniaEvents.emit(window.PRODUCT_EVENTS.POST_CREATED, { post_id: data, post_type: "POST_PR" }); } catch (e) {}
-    }
+    setMessage(res.queued && !res.sent ? "השיא יישלח למעגלים כשהחיבור יחזור" : res.failed ? "השיא שותף, אבל לא בכל המעגלים" : "השיא שותף למעגלים");
+    for (const id of p.picked) delete state.circles.feed[id];
     rerender();
     sharePromptClosed();
+  }
+  function togglePrCircle(clubId) {
+    const p = state.posts.prPrompt;
+    if (!p) return;
+    const at = p.picked.indexOf(clubId);
+    if (at >= 0) p.picked.splice(at, 1); else p.picked.push(clubId);
+    p.error = "";
+    rerender();
   }
   function renderPrSharePrompt() {
     const p = state.posts.prPrompt;
@@ -930,23 +907,17 @@
     return `<div class="modal-overlay open" role="dialog" aria-modal="true" aria-labelledby="prPromptTitle" data-cloud-dialog="prPrompt" style="align-items:center;padding:0 16px;">
       <div class="modal-sheet" id="prPrompt" style="border-radius:22px;max-height:90vh;overflow:auto;">
         <div style="padding:22px 20px calc(env(safe-area-inset-bottom,0px) + 18px);">
-          <h2 id="prPromptTitle" style="margin-top:0;color:var(--chalk);font-weight:800;font-size:17px;margin-bottom:6px;">שיא חדש זוהה. לשתף עם המועדון?</h2>
+          <h2 id="prPromptTitle" style="margin-top:0;color:var(--chalk);font-weight:800;font-size:17px;margin-bottom:6px;">שיא חדש! לשתף עם המעגלים?</h2>
           <div style="display:inline-block;font-size:11px;font-weight:800;color:#0c0c0c;background:var(--brass);border-radius:999px;padding:2px 8px;margin-bottom:8px;">PR</div>
           ${line("תרגיל", r.movement || r.movement_name)}
           ${line("תוצאה חדשה", r.new_result || r.new_value)}
           ${line("תוצאה קודמת", r.previous_result || r.previous_value)}
           ${line("שיפור", r.improvement)}
           ${p.showNote ? `<label class="field" style="margin-top:8px;"><span class="field-label">הערה</span><textarea class="text-input" data-pr-note maxlength="${POST_BODY_MAX}" rows="3">${esc(p.note || "")}</textarea></label>` : ""}
-          ${/* Sibling: feed_page redacts a POST_PR's figures under exactly the
-                same show_workout_results rule it redacts a POST_WORKOUT's
-                (202608310006), so the sentence the workout prompt says before
-                a member taps belongs on this prompt too - it was the twin
-                this prompt was missing. One definition, in
-                src/community/share-prompt.js. */ ""}
-          ${sharePromptPrivacyNoteHtml()}
+          ${circlePickListHtml(p.picked, "data-pr-circle", (c) => CirclesCore.effectiveDefaults(c).show_weights ? "המשקל יוצג" : "בלי משקל מוחלט: רק התרגיל והשיפור באחוזים")}
           ${p.error ? `<div class="field-error" role="alert" style="margin-top:8px;">${esc(p.error)}</div>` : ""}
           <div class="chip-row" style="margin-top:14px;">
-            <button class="chip-btn primary" data-community-action="pr-share"${p.publishing ? " disabled" : ""}>${p.publishing ? "משתף…" : "שיתוף למועדון"}</button>
+            <button class="chip-btn primary" data-community-action="pr-share"${p.publishing ? " disabled" : ""}>${p.publishing ? "משתף…" : "שיתוף"}</button>
             <button class="chip-btn" data-community-action="outward-pr">שיתוף מחוץ לאפליקציה</button>
             ${p.showNote ? "" : `<button class="chip-btn" data-community-action="pr-add-note">הוספת הערה</button>`}
             <button class="chip-btn" data-community-action="pr-not-now">לא עכשיו</button>

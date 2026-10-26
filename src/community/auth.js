@@ -63,6 +63,9 @@
       // keeps deferred, so promoting only this one call here does not
       // reopen that tradeoff.
       await Promise.all([loadProfile(), loadNotifUnread()]);
+      // Circles: the member's list, then any invite link that was waiting for
+      // this session (join_circle), then their own target.
+      await circlesAfterSession();
       // Push pending local edits before pulling the remote copy - without
       // this, reopening the app with an unflushed outbox (e.g. a set
       // logged offline seconds ago) pulls the still-stale server record
@@ -87,10 +90,11 @@
     }
     rerender();
   }
-  // recovery_verified_at drives the COMM-016 gate; the privacy columns
-  // (COMM-018) drive the Account > Privacy panel and are read straight off
-  // state.profile, so they have to be selected here too.
-  const PROFILE_COLUMNS = "id,handle,display_name,bio,is_admin,recovery_verified_at,visible_to_club,show_workout_results,show_prs,show_achievements,show_attendance,show_upcoming_booking,show_in_attendee_lists,in_leaderboards,allow_follows,allow_mentions";
+  // recovery_verified_at drives the COMM-016 gate. A profile is a display name
+  // and an emoji and nothing else (docs/circles/decisions.md): the privacy
+  // toggles, the bio and the visibility flag no longer exist, and nothing here
+  // selects them.
+  const PROFILE_COLUMNS = "id,handle,display_name,emoji,recovery_verified_at";
   // Launch-readiness audit, CQ-006. loadProfile()/loadRedemption() used to
   // drop `error` and collapse "the fetch failed" into "the row doesn't
   // exist" (`data || null`, unconditionally). The join funnel below reads
@@ -112,9 +116,10 @@
     if (error) return;
     state.profile = data || null;
   }
-  // A profile can only be created once a valid box invite code has been
-  // redeemed (enforced server-side by profiles_insert_self's RLS check,
-  // not just here) — this just drives which form the Community tab shows.
+  // The bootstrap redemption: the one row redeem_invite_code leaves for the
+  // first owner of a first circle. A member who joined by invite link has none
+  // (join_circle writes a membership, not a redemption), so "no redemption"
+  // no longer means "not a member" - the circle list does.
   async function loadRedemption() {
     if (!state.user) return;
     const { data, error } = await client.from("invite_redemptions").select("invite_id,role,redeemed_at").eq("user_id", state.user.id).maybeSingle();
@@ -125,32 +130,14 @@
   // The retry action for the join-funnel error screen below - re-runs both
   // loaders (either could be the one that failed) and rerenders either way.
   async function retryJoinFunnelLoad() {
-    await Promise.all([loadProfile(), loadRedemption()]);
+    await Promise.all([loadProfile(), loadRedemption(), loadMyCircles()]);
     rerender();
   }
-  // Renders inside the normal app shell (header, bottom tab bar), same as
-  // the credentials/invite-code/profile-completion gates right beside it -
-  // not a separate full-screen overlay. Same "this screen is all there is
-  // until it's done" treatment those gates already use, just within that
-  // shell rather than outside it. Three content-only screens; no recovery
-  // form and no profile fields here (both already exist for real, right
-  // after this carousel finishes, in the credentials gate above and the
-  // profile-completion gate below - duplicating either here would ask
-  // twice for the same thing under different copy).
-  // JOINING IS A FOUR-STEP FLOW AND ONLY ONE STEP EVER SAID SO.
-  //
-  // A member redeeming an invite passes through: the code, then credentials,
-  // then three intro screens, then the profile form. The intro carousel drew
-  // progress dots; the three screens around it drew nothing. So for most of
-  // the flow a member could not tell whether they were nearly finished or had
-  // just started - "it is not clear what to do" - and a form with no visible
-  // end is the easiest place in an app to abandon.
-  //
-  // One indicator, in the carousel's existing dot language rather than a
-  // second convention, plus the step named in words for anyone who cannot see
-  // the dots. The carousel keeps its own internal dots for its three screens;
-  // this is the outer flow, which is why the counts differ and do not clash.
-  const JOIN_STEPS = ["קוד הזמנה", "חשבון", "היכרות", "פרופיל"];
+  // JOINING IS A THREE-STEP FLOW: the invite (join_circle), the account
+  // (username and password), the profile (a name and an emoji). One indicator,
+  // so a member can tell how far from the end they are; the screens
+  // themselves are in src/community/circles-ui.js.
+  const JOIN_STEPS = ["הזמנה", "חשבון", "פרופיל"];
   function renderJoinProgress(idx) {
     const dots = JOIN_STEPS.map((_, i) => `<span style="display:inline-block;height:6px;width:${i === idx ? "20px" : "6px"};border-radius:3px;background:${i <= idx ? "var(--brass)" : "var(--border)"};transition:width .2s;"></span>`).join(" ");
     return `<div style="margin-bottom:14px;">
@@ -186,7 +173,7 @@
     // Was a bare `return` - a submit with no session did nothing at all,
     // with no error and no explanation, which is indistinguishable from the
     // app being broken. Same audit pass as the retry loop below.
-    if (!state.user) return setFieldErrors("communityInviteCode", { code: "אין חיבור לקהילה כרגע, נסו שוב בעוד רגע" });
+    if (!state.user) return setFieldErrors("communityInviteCode", { code: "אין חיבור כרגע, נסו שוב בעוד רגע" });
     // Live bug hunt round 5 (2026-09-11): no in-flight guard existed at
     // all - a fast double-tap on submit fired redeem_invite_code twice
     // concurrently, confirmed live. The real RPC increments a shared
@@ -209,7 +196,7 @@
     // way - this was the asymmetry: manual entry, the far more common
     // path, did not.
     const code = String(state.ui.inviteCodeDraft || form.elements.code.value || "").trim().toLowerCase();
-    if (!code) return setFieldErrors("communityInviteCode", { code: "יש להזין קוד הזמנה" });
+    if (!code) return setFieldErrors("communityInviteCode", { code: "יש להזין קוד פתיחה" });
     state.ui.redeemingCode = true;
     try {
     // Two-arg overload: passes the actor key so the throttle holds across
@@ -223,7 +210,7 @@
     // (COMM-372). Checking for the literal "invalid" instead of the
     // literal "member" keeps this a generic success/failure branch, not
     // one hardcoded to the one role a shared code could ever grant.
-    if (data === "invalid") return setFieldErrors("communityInviteCode", { code: "קוד ההזמנה שגוי, פג תוקף או נוצל" });
+    if (data === "invalid") return setFieldErrors("communityInviteCode", { code: "קוד הפתיחה שגוי, פג תוקף או נוצל" });
     setFieldErrors("communityInviteCode", {});
     state.ui.inviteCodeDraft = "";
     // Launch-readiness audit, RELIABILITY. THE BUG THIS FIXES: the
@@ -319,9 +306,9 @@
   // try. Only the LOGIN label says so - account CREATION still mints a
   // username-only account, so the signup form keeps LOGIN_NAME_LABEL.
   const LOGIN_IDENTIFIER_LABEL = "שם לכניסה או אימייל";
-  const CLUB_NAME_LABEL = "השם שרואים במועדון";
-  const CREDENTIALS_INTRO_TEXT = "שם וסיסמה לכניסה — כדי שתוכלו להיכנס לחשבון שוב מכל מכשיר. שם הכניסה הוא רק בשבילכם ואף אחד במועדון לא רואה אותו; את השם שחברי המועדון כן יראו בוחרים בשלב הבא, והוא יכול להיות אחר לגמרי.";
-  const CLUB_NAME_HINT_TEXT = "זה השם שחברי המועדון יראו לידכם בפיד ובלוחות. אפשר שם מלא עם רווחים, בעברית או באנגלית. זה לא שם הכניסה לחשבון.";
+  const CLUB_NAME_LABEL = "השם שרואים במעגל";
+  const CREDENTIALS_INTRO_TEXT = "שם וסיסמה לכניסה — כדי שתוכלו להיכנס לחשבון שוב מכל מכשיר. שם הכניסה הוא רק בשבילכם ואף אחד במעגל לא רואה אותו; את השם שחברי המעגל כן יראו בוחרים בשלב הבא, והוא יכול להיות אחר לגמרי.";
+  const CLUB_NAME_HINT_TEXT = "זה השם שחברי המעגל יראו לידכם. אפשר שם מלא עם רווחים, בעברית או באנגלית. זה לא שם הכניסה לחשבון.";
   // The value setCredentials() will actually save, not the raw keystrokes: it
   // trims and lower-cases before validating, so "Dana_K" is accepted and
   // stored as "dana_k". The live check normalises identically, otherwise it
@@ -564,7 +551,7 @@
       anonSignInAttempted = false;
       setMessage(error.message === "captcha_failed" ? "אימות האבטחה נכשל, נסו שוב"
         : timedOut ? "החיבור לוקח יותר מדי זמן. בדקו את האינטרנט ונסו שוב"
-        : "לא ניתן להתחבר לקהילה כרגע, נסו לרענן את הדף");
+        : "לא ניתן להתחבר כרגע, נסו לרענן את הדף");
       return;
     }
     // onAuthStateChange below picks up the new session and loads everything.
@@ -780,11 +767,17 @@
     if (!state.user) return;
     const formId = form.id;
     const displayName = cleanStr(form.elements.displayName.value, 80).trim();
+    const emoji = String(form.elements.emoji.value || "").trim();
     // The only rule a member can now break, and it is about THEIR name rather
     // than about an identifier's character set: it has to be long enough to be
     // a name and short enough to sit beside an avatar.
     if (displayName.length < 2 || displayName.length > 40) {
-      return setFieldErrors(formId, { displayName: "השם שרואים במועדון צריך להיות באורך 2 עד 40 תווים." });
+      return setFieldErrors(formId, { displayName: "השם שרואים במעגל צריך להיות באורך 2 עד 40 תווים." });
+    }
+    // The emoji is the member's avatar (there are no photos): one to sixteen
+    // characters, and it has to be an emoji, not a letter that looks like one.
+    if (!emoji || Array.from(emoji).length > 16 || !/\p{Extended_Pictographic}/u.test(emoji)) {
+      return setFieldErrors(formId, { emoji: "בחרו אימוג'י אחד או שניים." });
     }
     // An existing member keeps the handle they already have: it is their
     // identity in @mentions and in every link already posted, so renaming
@@ -802,7 +795,7 @@
     // full admin access. Full admin stays a manual dashboard-only flip;
     // real coach-scoped permissions (their own classes/members) are a
     // separate piece of work, not built yet.
-    const payload = { id: state.user.id, handle: candidates[0], display_name: displayName, bio: cleanStr(form.elements.bio.value, 160) };
+    const payload = { id: state.user.id, handle: candidates[0], display_name: displayName, emoji: emoji };
     // The ONE place an insert is genuinely possible: profile completion runs
     // before the row exists. Once it does, update - an upsert would evaluate
     // profiles_insert_self, which requires recovery_verified_at to be null,
@@ -819,17 +812,18 @@
     for (const candidate of candidates) {
       payload.handle = candidate;
       const res = state.profile
-        ? (await client.from("profiles").update({ handle: candidate, display_name: payload.display_name, bio: payload.bio }).eq("id", state.user.id))
+        ? (await client.from("profiles").update({ handle: candidate, display_name: payload.display_name, emoji: payload.emoji }).eq("id", state.user.id))
         : (await client.from("profiles").upsert(payload));
       error = res.error;
       if (!error || error.code !== "23505") break;
     }
     if (error) {
-      if (error.code === "23505") setFieldErrors(formId, { displayName: "השם הזה כבר תפוס במועדון. נסו להוסיף שם משפחה או כינוי." });
+      if (error.code === "23505") setFieldErrors(formId, { displayName: "השם הזה כבר תפוס. נסו להוסיף שם משפחה או כינוי." });
       else setMessage("שמירת הפרופיל נכשלה");
       return;
     }
     setFieldErrors(formId, {});
+    for (const k of Object.keys(state.circles.drafts)) if (k.indexOf(formId + ".") === 0) delete state.circles.drafts[k];
     await loadProfile();
     // Right after the first profile insert (which the RLS policy forces to
     // land with recovery_verified_at null), stamp the recovery method so

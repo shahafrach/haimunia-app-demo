@@ -781,12 +781,13 @@
     state.posts.outwardShare = null;
     rerender();
   }
-  // Rule 2: the default of the name switch is the member's own
-  // visible_to_club, and the switch itself is always there. A member who has
-  // hidden their profile from the club does not get their name pre-loaded
-  // onto an image that is about to leave the app.
+  // Rule 2: the name switch is always there, and its default is the member's
+  // display name when they have one. The profile-wide visibility flag that used
+  // to set this default is gone with the column (a profile is a display name
+  // and an emoji, the same in every circle), so the only question left is
+  // whether there is a name to put on the image.
   function outwardDefaultShowName() {
-    return !!(state.profile && state.profile.visible_to_club !== false && (state.profile.display_name || "").trim());
+    return !!(state.profile && (state.profile.display_name || "").trim());
   }
   function openOutwardShare(subject, opts) {
     if (!subject) return;
@@ -910,7 +911,7 @@
   // The disclosure line. Written out rather than implied, because "what is
   // on this image" is the only question a member has at the moment of the
   // tap, and the answer is short.
-  const OUTWARD_PRIVACY_NOTE = "על התמונה מופיעים רק הנתונים שלכם. שמות של חברי מועדון אחרים, שם המועדון, מיקום בטבלאות ונוכחות - לא מופיעים, וקישור אין.";
+  const OUTWARD_PRIVACY_NOTE = "על התמונה מופיעים רק הנתונים שלכם. שמות של חברי המעגל האחרים, שם המעגל ומקומכם ביחס לאחרים - לא מופיעים, וקישור אין.";
 
   function renderOutwardShareSheet() {
     const s = state.posts.outwardShare;

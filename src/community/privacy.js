@@ -1,10 +1,12 @@
 "use strict";
-// ---- Community: blocks and per-field privacy ------------------------------
+// ---- Community: blocks -----------------------------------------------------
 //
 // What stayed of the old directory module when search, follows and the member
 // directory were dropped: the block list (a block hides a member's posts and
-// reactions from the viewer, and the other way round), and the privacy
-// switches a member sets on their own profile.
+// reactions from the viewer, and the other way round). The per-field privacy
+// switches are gone with the columns they set: a profile is a display name
+// and an emoji, what a member shares is per circle (set_share_defaults), and
+// nothing here reads show_workout_results or any other dropped column.
 //
 // Classic <script>, no IIFE, loaded before cloud.js; it reads state, client,
 // rerender, setMessage and failText from the shared scope, from inside
@@ -65,30 +67,3 @@
   }
 
   function isBlockedUser(userId) { return !!userId && state.members.blockedIds.indexOf(userId) >= 0; }
-
-  // The single client entry point to the server's per-field privacy resolver.
-  async function canViewProfileField(targetUserId, fieldName) {
-    if (!state.user || !targetUserId) return false;
-    const { data, error } = await client.rpc("can_view_profile_field", { p_target: targetUserId, p_field: fieldName });
-    return !error && data === true;
-  }
-  window.canViewProfileField = canViewProfileField;
-
-  const PRIVACY_FIELDS = [
-    { key: "visible_to_club", label: "הפרופיל שלי גלוי לחברי המועדון" },
-    { key: "show_workout_results", label: "תוצאות האימונים שלי גלויות לחברי המועדון" },
-    { key: "show_prs", label: "שיאים אישיים (PR) גלויים" },
-    { key: "show_achievements", label: "הישגים ומדליות גלויות" },
-  ];
-  const PRIVACY_KEYS = PRIVACY_FIELDS.map((f) => f.key);
-
-  async function savePrivacyField(field, value) {
-    if (!state.user || !state.profile || PRIVACY_KEYS.indexOf(field) < 0) return;
-    const prev = state.profile[field];
-    if (prev === value) return;
-    state.profile[field] = value;
-    rerender();
-    const { error } = await client.from("profiles").update({ [field]: value }).eq("id", state.user.id);
-    if (error) { state.profile[field] = prev; setMessage(failText("לא ניתן לשמור הגדרה זו", error)); return; }
-    setMessage("הגדרת הפרטיות נשמרה");
-  }

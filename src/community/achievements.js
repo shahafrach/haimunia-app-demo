@@ -14,15 +14,17 @@
 // there. Classic <script>, no IIFE, loaded before cloud.js; see
 // src/community/events.js's header for why each of those matters.
 
+  // The offline medals in the training log (app.js ACHIEVEMENTS) are not
+  // member_achievements rows, so they have no ach_share. Sharing one is a short
+  // text post, one per chosen circle, through post_create(p_club_id, body) -
+  // the same queued write every other circle post uses. The sheet that picks
+  // the circles is in circles-ui.js.
   async function publishAchievement(achievementId, title, rule) {
-    if (!state.user || !state.profile) return setMessage("התחברו לקהילה כדי לשתף מדליה");
-    const payload = { author_id: state.user.id, source_type: "achievement", source_record_id: achievementId, visibility: "club", title: String(title || "מדליה חדשה").slice(0, 120), result_text: String(rule || "מדליה חדשה נפתחה").slice(0, 240), occurred_on: todayIso() };
-    const { error } = await client.from("workout_posts").upsert(payload, { onConflict: "author_id,source_type,source_record_id" });
-    if (error) return setMessage(failText("שיתוף המדליה נכשל", error));
-    // COMM-170. The app.js entry point (window.shareAchievementToCommunity),
-    // distinct from the unlock sheet below and never both in one action.
-    track(A.ACHIEVEMENT_SHARED, { member_achievement_id: null, code: null, source: "app_share_button" });
-    setMessage("המדליה שותפה"); rerender();
+    if (!state.user || !state.profile) return setMessage("התחברו כדי לשתף מדליה");
+    if (!state.circles.list.length) return setMessage("אפשר לשתף מדליה אחרי שמצטרפים למעגל");
+    const name = String(title || "מדליה חדשה").slice(0, 120);
+    const body = cleanPostBody("🏅 " + name + (rule ? " - " + String(rule).slice(0, 200) : ""));
+    openMedalShareSheet(body);
   }
 
   // Hebrew display copy for the celebration, keyed by definition code. The
@@ -45,28 +47,12 @@
     pr_100: { title: "100 שיאים", explanation: "100 שיאים אישיים.", icon: "💫" },
     first_rx: { title: "Rx ראשון", explanation: "רשמת אימון ראשון כ-Rx.", icon: "🏋️" },
     well_rounded: { title: "אתלט שלם", explanation: "שיא לפחות בכל אחת מחמש קבוצות התרגילים.", icon: "🧩" },
-    anniversary_year_1: { title: "שנה במועדון", explanation: "שנה מתאריך ההצטרפות.", icon: "🎉" },
-    anniversary_year_2: { title: "שנתיים במועדון", explanation: "שנתיים מתאריך ההצטרפות.", icon: "🎉" },
-    anniversary_year_3: { title: "שלוש שנים במועדון", explanation: "שלוש שנים מתאריך ההצטרפות.", icon: "🎉" },
-    anniversary_year_5: { title: "חמש שנים במועדון", explanation: "חמש שנים מתאריך ההצטרפות.", icon: "🎖️" },
+    anniversary_year_1: { title: "שנה עם BOX-LOG", explanation: "שנה מתאריך ההצטרפות.", icon: "🎉" },
+    anniversary_year_2: { title: "שנתיים עם BOX-LOG", explanation: "שנתיים מתאריך ההצטרפות.", icon: "🎉" },
+    anniversary_year_3: { title: "שלוש שנים עם BOX-LOG", explanation: "שלוש שנים מתאריך ההצטרפות.", icon: "🎉" },
+    anniversary_year_5: { title: "חמש שנים עם BOX-LOG", explanation: "חמש שנים מתאריך ההצטרפות.", icon: "🎖️" },
     first_cheer: { title: "עידוד ראשון", explanation: "שלחת עידוד ראשון לחבר/ה.", icon: "👏" },
-    first_comment: { title: "תגובה ראשונה", explanation: "כתבת תגובה ראשונה.", icon: "💬" },
-    supportive_10: { title: "10 עידודים", explanation: "10 עידודים ותגובות תומכות.", icon: "🤝" },
-    welcomed_member: { title: "קבלת פנים", explanation: "עזרת לקבל חבר/ה חדש/ה במועדון.", icon: "🙌" },
-    challenge_finisher: { title: "סיום אתגר", explanation: "השלמת אתגר מועדון.", icon: "🏁" },
-    challenge_winner: { title: "מנצח/ת אתגר", explanation: "מקום ראשון באתגר מועדון.", icon: "🥇" },
-    // The four ATTENDANCE_RECORDED codes. These went live in 202608310007
-    // with English placeholder copy and no icon and were missing from this
-    // map entirely, so achMeta() fell all the way through to the bare code
-    // and the celebration sheet literally read "attendance_first_class".
-    // 202609060008 fixed the rows; these keep the client's own copy in step
-    // with them. The wording says "שיעור"/"נוכחות", never "רישום אימון",
-    // because these count VERIFIED attendance while sessions_* above count
-    // what the member wrote in their own log - two different badges.
-    attendance_first_class: { title: "השיעור הראשון", explanation: "השתתפות ראשונה בשיעור במועדון.", icon: "👋" },
-    attendance_25_classes: { title: "25 שיעורים", explanation: "נוכחות ב-25 שיעורים במועדון.", icon: "💪" },
-    attendance_100_classes: { title: "100 שיעורים", explanation: "נוכחות ב-100 שיעורים במועדון.", icon: "💯" },
-    attendance_weekly_streak: { title: "רצף שבועי", explanation: "נוכחות בכל שבוע, ארבעה שבועות ברצף.", icon: "⚡" },
+    supportive_10: { title: "10 עידודים", explanation: "10 עידודים לחברים.", icon: "🤝" },
   };
   // Three tiers, in this order, so a gap between the seed and this map
   // degrades instead of leaking a raw code string at a member:
@@ -75,8 +61,8 @@
   //   2. the DEFINITION'S OWN name/icon, which loadMyAchievements() and
   //      ach_claim already fetch - `row` is the member_achievements row the
   //      caller already has in hand, so this costs no round trip
-  //   3. the bare code, which is what the four attendance achievements
-  //      printed at members for as long as they were live
+  //   3. the bare code, which is what an achievement the client has no copy
+  //      for would print
   // Tier 2 is the one this fix adds. Every call site passes its row where it
   // has one; the signature stays code-first so a call with only a code keeps
   // working exactly as before.
@@ -175,6 +161,9 @@
       error: "",
       showNote: false,
       note: "",
+      // Ticked: every circle. A medal has no share setting of its own; the
+      // member sees the list and un-ticks what they do not want.
+      picked: state.circles.list.map((c) => c.id),
     };
     rerender();
     return true;
@@ -187,12 +176,13 @@
     a.sharing = true;
     a.error = "";
     rerender();
-    // communityRpc(), not client.rpc(): ach_share is in OUTBOX_ACTIONS now, so
-    // a share tapped offline is persisted with its own idempotency key and
-    // sent on reconnect rather than refused. Same change, same reasoning, as
-    // the PR prompt's own share - see sharePrPrompt() in posts.js.
-    const { queued, data, error } = await communityRpc("ach_share", { member_achievement_id: a.memberAchievementId, caption: cleanPostBody(a.note), media: [] });
-    if (error || (!queued && !data)) { a.sharing = false; a.error = "לא ניתן לשתף. נסו שוב."; return rerender(); }
+    if (!a.picked || !a.picked.length) { a.sharing = false; a.error = "בחרו לפחות מעגל אחד"; return rerender(); }
+    // One ach_share per circle (a post belongs to exactly one), each through
+    // communityRpc(): ach_share is in OUTBOX_ACTIONS, so a share tapped offline
+    // is persisted with its own idempotency key and sent on reconnect.
+    const res = await shareAchievementToCircles(a.memberAchievementId, a.picked.slice(), cleanPostBody(a.note));
+    const queued = res.queued > 0 && !res.sent;
+    if (res.failed && !res.sent && !res.queued) { a.sharing = false; a.error = failText("לא ניתן לשתף. נסו שוב.", res.error); return rerender(); }
     if (Array.isArray(state.achievements.mine)) {
       const row = state.achievements.mine.find((r) => r.id === a.memberAchievementId);
       if (row) row.shared_at = new Date().toISOString();
@@ -203,12 +193,7 @@
     // this records that a member chose to share a decoration.
     track(A.ACHIEVEMENT_SHARED, { member_achievement_id: a.memberAchievementId, code: a.code || null, source: "unlock_sheet" });
     state.achievements.unlock = null;
-    setMessage(queued ? "המדליה תישלח למועדון כשהחיבור יחזור" : "המדליה שותפה למועדון");
-    // Not emitted on the queued branch: POST_CREATED's payload is a post id
-    // and there is not one yet. Same reasoning as sharePrPrompt()'s.
-    if (!queued && window.HaimuniaEvents && window.PRODUCT_EVENTS && window.PRODUCT_EVENTS.POST_CREATED) {
-      try { window.HaimuniaEvents.emit(window.PRODUCT_EVENTS.POST_CREATED, { post_id: data, post_type: "POST_ACHIEVEMENT" }); } catch (e) {}
-    }
+    setMessage(queued ? "המדליה תישלח למעגלים כשהחיבור יחזור" : res.failed ? "המדליה שותפה, אבל לא בכל המעגלים" : "המדליה שותפה למעגלים");
     rerender();
     sharePromptClosed();
   }
@@ -231,9 +216,10 @@
           <div style="color:var(--brass);font-weight:800;font-size:15px;">${esc(a.title)}</div>
           ${a.explanation ? `<div style="color:var(--steel);font-size:12.5px;margin-top:6px;">${esc(a.explanation)}</div>` : ""}
           ${a.showNote ? `<label class="field" style="margin-top:10px;text-align:right;"><span class="field-label">הערה</span><textarea class="text-input" data-ach-note maxlength="${POST_BODY_MAX}" rows="3">${esc(a.note || "")}</textarea></label>` : ""}
+          ${canShare ? `<div style="text-align:right;margin-top:10px;">${circlePickListHtml(a.picked || [], "data-ach-circle")}</div>` : ""}
           ${a.error ? `<div class="field-error" role="alert" style="margin-top:8px;">${esc(a.error)}</div>` : ""}
           <div class="chip-row" style="margin-top:14px;justify-content:center;">
-            ${canShare ? `<button class="chip-btn primary" data-community-action="ach-share"${a.sharing ? " disabled" : ""}>${a.sharing ? "משתף…" : "שיתוף למועדון"}</button>` : ""}
+            ${canShare ? `<button class="chip-btn primary" data-community-action="ach-share"${a.sharing ? " disabled" : ""}>${a.sharing ? "משתף…" : "שיתוף"}</button>` : ""}
             ${/* Five-persona UX audit, outward sharing. Gated on the SAME
                   canShare as the club share, which is false for
                   visibility === "only_me". Unlike the profile-wide privacy
@@ -267,16 +253,16 @@
       // decoration to the club feed, the second opens the outward share
       // sheet. Same two actions, same two handlers; what changed is that
       // each now carries the label the rest of the app already uses for it
-      // ("שיתוף למועדון" is the unlock sheet's own wording a few lines up,
+      // ("שיתוף למעגל" is the unlock sheet's own wording a few lines up,
       // "שיתוף מחוץ לאפליקציה" is the string every outward control in the
       // app uses) and a stroke icon from SHARE_ICONS instead of an emoji.
       // The chip-row wraps, so on a 390px phone the pair drops to its own
       // line under a long decoration name rather than overflowing it.
       const share = r.shared_at
-        ? `<span style="color:var(--steel);font-size:12px;">שותף למועדון</span>`
+        ? `<span style="color:var(--steel);font-size:12px;">שותף למעגל</span>`
         : r.visibility === "only_me"
           ? ""
-          : `<button class="chip-btn" data-community-action="ach-share-later" data-id="${esc(r.id)}" data-code="${esc(code)}">${SHARE_ICONS.club} שיתוף למועדון</button>`;
+          : `<button class="chip-btn" data-community-action="ach-share-later" data-id="${esc(r.id)}" data-code="${esc(code)}">${SHARE_ICONS.club} שיתוף למעגל</button>`;
       // Five-persona UX audit, outward sharing. Offered even once the
       // decoration has already been shared to the club - the two are
       // different audiences and sharing to one is not sharing to the other -
@@ -293,5 +279,5 @@
       // anchor always agree.
       return `<div class="log-row" data-achievement-id="${esc(r.id)}" style="flex-wrap:wrap;gap:6px;"><span style="min-width:0;">${esc(meta.icon)} ${esc(meta.title)}</span><span class="chip-row" style="margin:0;justify-content:flex-end;flex:1 1 auto;">${share}${outward}</span></div>`;
     }).join("");
-    return `<div class="ach-section" style="margin-top:18px;">${sectionHead("var(--brass)", "ההישגים שלי")}${list.length ? `<div class="log-list">${rowsHtml}</div>` : `<div class="empty">אין עדיין הישגים במועדון</div>`}</div>`;
+    return `<div class="ach-section" style="margin-top:18px;">${sectionHead("var(--brass)", "ההישגים שלי")}${list.length ? `<div class="log-list">${rowsHtml}</div>` : `<div class="empty">אין עדיין הישגים</div>`}</div>`;
   }

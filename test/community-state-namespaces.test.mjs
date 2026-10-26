@@ -62,7 +62,10 @@ test("the state root is the session core plus per-domain namespaces, nothing els
       `state.${ns} is a flat non-namespace key - put it inside a feature domain (or in ROOT_SCALARS here, deliberately)`);
   }
   assert.deepEqual(namespaces, [
-    "ui", "posts", "engagement", "members", "achievements", "notif",
+    "ui", "posts", "engagement", "members",
+    // The circles layer (docs/circles/decisions.md): the member's circles, the
+    // one on screen, and the per-circle feed, week and benchmark caches.
+    "circles", "achievements", "notif",
     // The community write queue's view-model (launch-readiness audit,
     // RELIABILITY): { pending, failed }. A real namespace rather than two
     // root scalars, because it groups two related leaves that are always
