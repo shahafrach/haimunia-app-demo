@@ -5744,7 +5744,7 @@ function renderCalendarTab() {
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--chalk)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
         </button>
         <span class="cal-month-label" id="calMonthLabel"></span>
-        <button class="cal-view-btn" data-action="cal-toggle-view" aria-pressed="${calView === "list"}" aria-label="${calView === "list" ? "הצגת לוח שנה" : "הצגת רשימת אימונים"}">${calView === "list" ? "לוח" : "רשימה"}</button>
+        <button class="cal-view-btn" data-action="cal-toggle-view" aria-pressed="${calView === "list"}" aria-label="${calView === "list" ? "לוח, הצגת לוח השנה" : "רשימה, הצגת האימונים כרשימה"}">${calView === "list" ? "לוח" : "רשימה"}</button>
         <button class="cal-nav-btn" data-action="cal-next" aria-label="חודש הבא">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--chalk)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
         </button>

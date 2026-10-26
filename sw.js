@@ -57,6 +57,7 @@ const OPTIONAL_ASSETS = [
   "./src/community/circles.js",
   "./src/community/circles-ui.js",
   "./src/community/circles-sheets.js",
+  "./src/share-cards.js",
   "./src/community/auth.js",
   "./cloud.js",
   "./src/eventbus.js",
