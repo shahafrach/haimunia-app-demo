@@ -97,7 +97,7 @@ for (const [palette, scheme] of [["chalk", "light"], ["slate", "dark"]]) {
   await page.waitForSelector("#communityProfile", { timeout: 8000 });
   const me = await facts(page);
   check(`${palette}/${scheme} Me: no sideways scroll`, me.overflow <= 1, String(me.overflow));
-  check(`${palette}/${scheme} Me: Appearance is on the page`, await page.locator('[data-appearance-root="me"] [data-action="set-palette"]').count() === 5);
+  check(`${palette}/${scheme} Me: Appearance is on the page`, await page.locator('[data-appearance-root="me"] [data-action="set-palette"]').count() === 6);
   check(`${palette}/${scheme}: no console errors`, errors.length === 0, errors.join(" | "));
   await ctx.close();
 }
@@ -114,7 +114,7 @@ for (const [palette, scheme] of [["chalk", "light"], ["slate", "dark"]]) {
   check("palette switch: the page color changes with it", after.bg !== before, `${before} -> ${after.bg}`);
   check("palette switch: the choice is marked in the picker", await page.getAttribute('#settingsBody [data-palette="slate"][data-action="set-palette"]', "aria-checked") === "true");
   const swatch = await page.evaluate(() => [...document.querySelectorAll("#settingsBody .palette-opt")].map((el) => getComputedStyle(el).backgroundColor));
-  check("palette switch: each miniature paints its own palette", new Set(swatch).size === 5, swatch.join(" | "));
+  check("palette switch: each miniature paints its own palette", new Set(swatch).size === 6, swatch.join(" | "));
   await page.reload({ waitUntil: "networkidle" });
   await page.waitForSelector("#app", { state: "visible" });
   check("palette switch: it survives a reload", (await facts(page)).palette === "slate");

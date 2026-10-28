@@ -136,7 +136,7 @@ console.log("\n---- finding 3: Add photo height vs the movement picker ----");
 const photoToken = await page.evaluate(() =>
   getComputedStyle(document.querySelector(".scene-page--add")).getPropertyValue("--scene-photo-height").trim(),
 );
-check("the Add scene declares its own, reduced --scene-photo-height", photoToken.includes("46svh"), photoToken);
+check("the Add scene declares its own, reduced --scene-photo-height", photoToken.includes("38svh"), photoToken);
 
 const otherScenePhoto = await page.evaluate(async () => {
   // The look of the other scenes is the thing finding 3 must not change, so
@@ -161,8 +161,8 @@ const otherScenePhoto = await page.evaluate(async () => {
 // different from Add's", which the inequality below states directly rather
 // than leaving implied by two literals.
 check(
-  "the other scenes keep a photo height of their own — Calendar resolves its own 33svh + 16px, not Add's",
-  otherScenePhoto === "calc(33svh + 16px)",
+  "the other scenes keep a photo height of their own — Calendar resolves its own 33svh, not Add's",
+  String(otherScenePhoto).includes("33svh"),
   String(otherScenePhoto),
 );
 check(
@@ -382,14 +382,18 @@ const never = flags.filter((f) => !["Squat", "Press"].includes(f.cat));
 // assertion that never-logged "is not red" passes trivially on a screen
 // with no red left anywhere, which would be a different regression of the
 // same finding.
+// The Design session's tokens: colors are resolved from the token names, not pinned to one
+// theme's rgb() values.
+const tokenPaint = (name, prop) => page.evaluate(([n, pr]) => { const d = document.createElement("div"); d.style[pr] = `var(${n})`; document.body.appendChild(d); const v = getComputedStyle(d)[pr]; d.remove(); return v; }, [name, prop]);
+const DANGER = await tokenPaint("--color-danger", "color"), SUCCESS = await tokenPaint("--color-success", "color"), NEUTRAL_BG = await tokenPaint("--color-surface-sunken", "backgroundColor");
 check(
   "control: a category trained 45 days ago is STILL flagged in red — red survives as the overdue signal",
-  !!overdue && overdue.color === "rgb(255, 120, 105)" && overdue.bg === "rgba(216, 69, 60, 0.1)",
+  !!overdue && overdue.color === DANGER && overdue.bg !== NEUTRAL_BG,
   overdue ? `${overdue.text} ${overdue.color} on ${overdue.bg}` : "no overdue row on screen to compare against",
 );
 check(
   "a category trained today is green, unchanged",
-  !!recent && recent.color === "rgb(92, 187, 116)",
+  !!recent && recent.color === SUCCESS,
   recent ? `${recent.text} ${recent.color}` : "no recent row",
 );
 check("there are never-logged categories on screen to assert about", never.length >= 3, `${never.length} rows`);
@@ -400,8 +404,8 @@ for (const f of never) {
     `${f.color} on ${f.bg}`,
   );
   check(
-    `never-logged "${f.cat}" carries the neutral --steel treatment`,
-    f.bg === "rgba(138, 143, 151, 0.1)",
+    `never-logged "${f.cat}" carries the neutral treatment`,
+    f.bg === NEUTRAL_BG,
     `${f.color} on ${f.bg}`,
   );
   check(

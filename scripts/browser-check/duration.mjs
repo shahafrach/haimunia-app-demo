@@ -112,8 +112,8 @@ await switchTab(page, "tabHistoryBtn");
 await page.waitForTimeout(200);
 await page.click(`.exercise-row[data-action='select-history']:has-text("Weighted Plank")`);
 await page.waitForTimeout(200);
-const historyHasSvg = await page.evaluate(() => !!document.querySelector(".chart-card svg"));
-const historyHasBestHold = (await page.evaluate(() => document.querySelector(".chart-card")?.textContent || "")).includes("שיא החזקה");
+const historyHasSvg = await page.evaluate(() => !!document.querySelector("#historyListArea .chart-card svg"));
+const historyHasBestHold = (await page.evaluate(() => document.querySelector("#historyListArea .chart-card")?.textContent || "")).includes("שיא החזקה");
 check("History tab renders a chart for the duration exercise", historyHasSvg);
 check("History tab shows a best-hold stat instead of the rep-record grid", historyHasBestHold);
 
