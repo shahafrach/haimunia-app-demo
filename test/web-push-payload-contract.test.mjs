@@ -55,3 +55,11 @@ test("the service worker still reads what this test claims it reads", () => {
   assert.match(pushHandler, /payload\.title \|\|/);
   assert.match(pushHandler, /body: payload\.body \|\|/);
 });
+
+test("the VAPID subject is the site's https URL, never an email, and the sender does not read one from the environment", async () => {
+  const { VAPID_SUBJECT } = await import("../supabase/functions/_shared/webPush.mjs");
+  assert.strictEqual(VAPID_SUBJECT, "https://box-log.pages.dev");
+  assert.doesNotMatch(VAPID_SUBJECT, /mailto:|@/);
+  assert.match(sender, /subject: VAPID_SUBJECT/);
+  assert.doesNotMatch(sender, /Deno\.env\.get\("VAPID_SUBJECT"\)/);
+});

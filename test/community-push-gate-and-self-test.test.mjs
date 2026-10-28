@@ -93,7 +93,7 @@ async function openAccount(window) {
 // picking it is what used to be a click on the push button. Both halves of
 // the old control are still reachable: the option's existence (it is omitted
 // entirely while the module flag is off) and choosing it.
-const choosePush = (window, type = "trained_together") => pickNotifPref(window, type, "push");
+const choosePush = (window, type = "trained_together") => pickNotifPref(window, type, true);
 
 // ===== the gate =======================================================
 
@@ -114,8 +114,11 @@ test("nothing asks for notification permission on first load - the only callers 
   const src = fs.readFileSync(new URL("../src/community/notifications.js", import.meta.url), "utf8");
   const asks = src.split("Notification.requestPermission").length - 1;
   assert.equal(asks, 2, "exactly two call sites: enableNotifPush and runPushSelfTest");
-  assert.equal(src.split("pushAskGateReason({ userAction: true })").length - 1, 2,
-    "each of those two is gated, and each states the user action rather than implying it");
+  // Those two, plus setNotifPref, which asks the gate only to decide whether
+  // to TRY to subscribe (a switch tap is a user action) and otherwise says why
+  // the switch will be for the bell.
+  assert.equal(src.split("pushAskGateReason({ userAction: true })").length - 1, 3,
+    "each is gated, and each states the user action rather than implying it");
 });
 
 test("outside the installed app the prompt is refused, with a visible reason instead of a dead control", async () => {
@@ -128,7 +131,8 @@ test("outside the installed app the prompt is refused, with a visible reason ins
   await waitFor(() => window.document.body.textContent.includes("להוסיף את האפליקציה למסך הבית"), 4000);
   assert.equal(calls.requestPermission, 0, "the one prompt a browser ever gives is not spent in a tab");
   assert.equal(mock.db.push_subscriptions.length, 0);
-  assert.equal(mock.db.notification_preferences.length, 0, "the stored preference is left exactly as it was");
+  await waitFor(() => mock.db.notification_preferences.length === 1, 4000);
+  assert.equal(mock.db.notification_preferences[0].channel, "in_app", "the switch is for the bell, never stored as push");
 });
 
 test("before the first logged workout and before joining the community, the app does not ask", async () => {
@@ -211,8 +215,8 @@ test("a grant is recorded once per distinct status, so a re-render of the panel 
   const before = events(mock, "push_permission").length;
   // A second type routed through the same device re-renders the whole panel
   // and does not re-prompt; it must not re-record either.
-  choosePush(window, "reactions");
-  await waitFor(() => mock.db.notification_preferences.some((r) => r.type === "reactions" && r.channel === "push"), 4000);
+  choosePush(window, "reaction");
+  await waitFor(() => mock.db.notification_preferences.some((r) => r.type === "reaction" && r.channel === "push"), 4000);
   assert.equal(events(mock, "push_permission").length, before, "same status, same source, no second row");
 });
 

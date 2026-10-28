@@ -65,5 +65,5 @@ test("the signed-out (or backup-only anonymous, pre-signup) render state trigger
 
 test("a real sign-out button exists now that logging back in is possible with real credentials", () => {
   assert.match(cloudJs, /data-community-action="sign-out"/);
-  assert.match(cloudJs, /action === "sign-out"\) client\.auth\.signOut\(\)/);
+  assert.match(cloudJs, /action === "sign-out"\) endSessionAndForgetPush\(\)/);
 });

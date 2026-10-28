@@ -1,39 +1,31 @@
-// COMM-229, the client half of web push: subscription storage and the
-// sw.js handlers, behind state.featureFlags.notifPush (localStorage-backed,
-// the one remaining device-level feature flag; coachEngage was the other until
-// N3 moved the Engage section onto the engagement_alerts club module).
+// The client half of web push: turning a switch in Me on subscribes this
+// device, the VAPID key fails closed, a subscription does not outlive the
+// session, and the sw.js handlers read what the sender writes.
 //
 // WHAT THIS FILE VERIFIES
-// - The flag stays off by default: the push option does not render on the
-//   preferences panel at all (real device feedback: a disabled "בקרוב"
-//   button used to sit there, unbalancing the row next to in_app/off -
-//   omitted entirely now, not just visually de-emphasized) and no browser
-//   Push API call happens, even when the browser would support it - this
-//   is what "default off in production" actually means client-side.
-// - With the flag on and the browser supporting push: choosing Push for a
-//   type triggers Notification.requestPermission, then
+// - With the device flag off, no push mention and no Push API call.
+// - Flag on and a capable browser: turning a switch on asks permission, then
 //   pushManager.subscribe with the VAPID applicationServerKey, then a
-//   push_subscriptions upsert, then the notification_preferences upsert -
-//   in that order, and only once all of it succeeds.
-// - Permission denied: the exact Hebrew copy, the stored preference is left
-//   untouched (reads as In-app), nothing is written.
-// - A device already subscribed does not re-prompt for a second type.
-// - Unsupported browsers and iOS Safari without an installed PWA disable
-//   the option with a real, visible Hebrew explanation, not a silent
-//   failed prompt.
-// - Revoking (explicit control, and detected on the next load after an
-//   OS-level permission revoke) sets revoked_at - the row is never deleted.
-// - sw.js's push and notificationclick handlers (source-level, the same
-//   convention test/sw-precache.test.mjs uses - jsdom cannot execute a real
-//   service worker).
-// - Deep link resolution: window.communityHandlePushDeepLink (the
-//   notificationclick/cold-start receiver) opens the exact target screen
-//   and item, reusing resolveNotifTarget (COMM-143) - and app.js's own
-//   serviceWorker "message" listener actually reaches it.
+//   push_subscriptions upsert, then the notification_preferences upsert.
+// - FAIL CLOSED ON THE KEY: while cloud-config.js still holds the placeholder
+//   (or anything that is not a 65-byte P-256 point) there is no permission
+//   prompt, no subscribe attempt and no push_subscriptions write; the switch
+//   falls back to the bell and the screen says push is not set up.
+// - A subscription made under another key is replaced, not reused.
+// - Permission denied: the exact Hebrew copy, nothing subscribed, the switch
+//   still works for the bell.
+// - A device that is already subscribed does not re-prompt for a second type.
+// - Unsupported browsers and iOS Safari without an installed PWA say why.
+// - The explicit device control revokes (revoked_at, never a delete).
+// - SIGN-OUT removes this device's subscription, the browser's and the server
+//   row, without ever blocking the sign-out; ACCOUNT DELETION removes every
+//   one the member has.
+// - sw.js's push and notificationclick handlers (source-level; jsdom cannot
+//   run a service worker) and the deep-link receivers in cloud.js/app.js.
 import { test } from "node:test";
 import assert from "node:assert";
 import fs from "node:fs";
-import { bootCommunity, waitFor, waitForCommunityGate, notifPrefControl, notifPrefOption, notifPrefValue, pickNotifPref } from "./helpers/boot.mjs";
+import { bootCommunity, waitFor, waitForCommunityGate, notifPrefControl, notifPrefValue, pickNotifPref } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
 
 const VERIFIED = new Date().toISOString();
@@ -55,7 +47,7 @@ function seeded(opts) {
 async function openAccount(window) {
   window.switchAppTab("me");
   await waitFor(() => !!window.document.getElementById("communityHead"), 4000);
-  await waitFor(() => !!notifPrefControl(window, "reactions"), 4000);
+  await waitFor(() => !!notifPrefControl(window, "reaction"), 4000);
 }
 
 // A faithful-enough stand-in for the browser's Push API: one mutable
@@ -77,10 +69,11 @@ function stubPushApis(window, opts = {}) {
     configurable: true,
   });
   const calls = { requestPermission: 0, subscribe: 0, getSubscription: 0 };
-  let sub = opts.existingEndpoint ? makeSub(opts.existingEndpoint) : null;
-  function makeSub(endpoint) {
+  let sub = opts.existingEndpoint ? makeSub(opts.existingEndpoint, opts.existingKey) : null;
+  function makeSub(endpoint, applicationServerKey) {
     return {
       endpoint,
+      options: applicationServerKey ? { applicationServerKey } : {},
       keys: { p256dh: "keyA", auth: "keyB" },
       toJSON() { return { endpoint: this.endpoint, keys: this.keys }; },
       unsubscribe: async () => { sub = null; return true; },
@@ -92,7 +85,7 @@ function stubPushApis(window, opts = {}) {
       subscribe: async (options) => {
         calls.subscribe++;
         calls.subscribeOptions = options;
-        sub = makeSub(opts.newEndpoint || "https://push.example/ep-" + (calls.subscribe));
+        sub = makeSub(opts.newEndpoint || "https://push.example/ep-" + (calls.subscribe), options.applicationServerKey);
         return sub;
       },
     },
@@ -116,44 +109,38 @@ function stubIOSNonStandalone(window) {
 
 // ===== the flag stays off by default ==================================
 
-// The flag went default-ON on 2026-09-17 (B3), so this test now sets it off
-// explicitly rather than relying on the default. That distinction matters: if
-// it kept relying on the default it would have silently started testing the
-// on-path under an off-path name, and passed.
-test("with the flag explicitly off, the push option does not render at all - real device feedback: a disabled 'בקרוב' button unbalanced the row next to in_app/off", async () => {
+test("with the device flag explicitly off, nothing mentions push and no Push API call happens", async () => {
   const mock = seeded();
   const window = await bootCommunity(mock, { syncEnabled: false, localStorage: { "haimunia-demo:notifPushFlag": "0" } });
-  stubPushApis(window);
+  const push = stubPushApis(window);
   await openAccount(window);
 
-  const push = notifPrefOption(window, "reactions", "push");
-  assert.equal(push, null, "no push option in the DOM at all while the flag is off - not merely disabled");
-  const row = notifPrefControl(window, "reactions").closest(".log-row");
-  assert.doesNotMatch(row.textContent, /בקרוב|דחיפה/, "no push mention anywhere on the row");
+  const row = notifPrefControl(window, "reaction").closest(".log-row");
+  assert.doesNotMatch(row.textContent, /דחיפה/, "no push mention on the row");
+  pickNotifPref(window, "reaction", true);
+  await waitFor(() => mock.db.notification_preferences.length === 1, 4000);
+  assert.equal(mock.db.notification_preferences[0].channel, "in_app", "on means the bell");
+  assert.equal(push.calls.requestPermission, 0);
+  assert.equal(push.calls.subscribe, 0);
   assert.equal(mock.db.push_subscriptions.length, 0, "no subscription exists while the flag is off");
-  assert.equal(mock.db.notification_preferences.length, 0, "nothing was written");
 });
 
 // ===== flag on, happy path =============================================
 
-test("flag on: choosing Push asks permission, subscribes with the VAPID key, writes push_subscriptions, then the preference - in that order", async () => {
+test("flag on: turning a switch on asks permission, subscribes with the VAPID key, writes push_subscriptions, then the preference - in that order", async () => {
   const mock = seeded();
   const window = await bootCommunity(mock, { syncEnabled: false, localStorage: { "haimunia-demo:notifPushFlag": "1" } });
   const push = stubPushApis(window);
   await openAccount(window);
 
-  const pushOption = notifPrefOption(window, "trained_together", "push");
-  assert.equal(pushOption.disabled, false, "Push is offered once the flag is on and the browser supports it");
-
-  pickNotifPref(window, "trained_together", "push");
+  pickNotifPref(window, "trained_together", true);
   await waitFor(() => mock.db.push_subscriptions.length === 1, 4000);
 
   assert.equal(push.calls.requestPermission, 1, "the browser permission prompt was triggered");
   assert.equal(push.calls.subscribe, 1, "pushManager.subscribe was called");
-  // instanceof would fail here even for a real Uint8Array: it was
-  // constructed inside the jsdom window's own realm (a separate
-  // Uint8Array constructor from this test file's Node-global one) - the
-  // same cross-realm gap ArrayBuffer.isView() exists to paper over.
+  // instanceof would fail here even for a real Uint8Array: it was constructed
+  // inside the jsdom window's own realm - the same cross-realm gap
+  // ArrayBuffer.isView() exists to paper over.
   assert.ok(ArrayBuffer.isView(push.calls.subscribeOptions.applicationServerKey), "the VAPID public key was passed as a byte array");
   assert.ok(push.calls.subscribeOptions.applicationServerKey.length === 65, "the decoded key is the uncompressed 65-byte EC point");
 
@@ -164,42 +151,85 @@ test("flag on: choosing Push asks permission, subscribes with the VAPID key, wri
   assert.equal(row.revoked_at, null, "a fresh subscription is not revoked");
 
   await waitFor(() => mock.db.notification_preferences.some((r) => r.type === "trained_together" && r.channel === "push"), 4000);
-
-  // Populated state: an active subscription shows "פעיל" next to the push option.
   await waitFor(() => /פעיל/.test(notifPrefControl(window, "trained_together").closest(".log-row").textContent), 4000);
-  // The device-level status/turn-off control appears once subscribed.
   assert.ok(window.document.querySelector('[data-community-action="notif-push-disable"]'), "a device-level turn-off control is offered");
 });
 
-test("permission denied: the exact Hebrew copy is shown, the toggle reverts to In-app, and nothing is written", async () => {
+// ===== fail closed on the VAPID key ======================================
+
+for (const [label, key] of [
+  ["the shipped placeholder", "REPLACE_WITH_VAPID_PUBLIC_KEY"],
+  ["an empty value", ""],
+  ["a key that is not 65 bytes", "BD16mHSAcS-jU5cV2xEqkNy09hCQ7MTjkY22CK8UrRw1JpI"],
+  ["a compressed point", "AD16mHSAcS-jU5cV2xEqkNy09hCQ7MTjkY22CK8UrRw1JpI_5kjReL7tME6O4BFmQhuiaOVCWQ-nqsnoa1_0nAo"],
+]) {
+  test(`FAIL CLOSED: with ${label} as the VAPID key there is no prompt, no subscribe, no push_subscriptions write`, async () => {
+    const mock = seeded();
+    const window = await bootCommunity(mock, { syncEnabled: false, vapidKey: key });
+    const push = stubPushApis(window);
+    await openAccount(window);
+
+    assert.match(window.document.querySelector("[data-notif-push-reason]").textContent, /עדיין לא הוגדרו/, "the screen says push is not set up");
+    pickNotifPref(window, "reaction", true);
+    await waitFor(() => mock.db.notification_preferences.length === 1, 4000);
+    assert.equal(mock.db.notification_preferences[0].channel, "in_app", "the switch still works, for the bell");
+    assert.equal(push.calls.requestPermission, 0, "the permission prompt is never raised for a key that cannot work");
+    assert.equal(push.calls.subscribe, 0, "and pushManager.subscribe is never called");
+    assert.equal(mock.db.push_subscriptions.length, 0);
+  });
+}
+
+test("the shipped cloud-config.js carries the placeholder, so a build that skipped the rotation cannot subscribe", async () => {
+  const cfg = fs.readFileSync(new URL("../cloud-config.js", import.meta.url), "utf8");
+  assert.match(cfg, /notifPushVapidPublicKey: "REPLACE_WITH_VAPID_PUBLIC_KEY"/);
+  assert.equal((cfg.match(/notifPushVapidPublicKey/g) || []).length >= 1, true);
+  // The client reads the key from that one property and nowhere else.
+  const reads = ["cloud.js", "app.js", "sw.js", "src/community/notifications.js"].flatMap((f) =>
+    fs.readFileSync(new URL("../" + f, import.meta.url), "utf8").split("\n").filter((l) => /notifPushVapidPublicKey/.test(l) && !/^\s*\/\//.test(l)).map((l) => f));
+  assert.deepEqual(reads, ["src/community/notifications.js"], "exactly one place reads it");
+});
+
+test("a subscription made under an older key is dropped and replaced, not reused", async () => {
+  const mock = seeded();
+  const window = await bootCommunity(mock, { syncEnabled: false });
+  const oldKey = new Uint8Array(65).fill(7);
+  const push = stubPushApis(window, { existingEndpoint: "https://push.example/old", existingKey: oldKey.buffer, newEndpoint: "https://push.example/new" });
+  await openAccount(window);
+
+  pickNotifPref(window, "reaction", true);
+  await waitFor(() => mock.db.push_subscriptions.some((r) => r.endpoint === "https://push.example/new"), 4000);
+  assert.equal(push.calls.subscribe, 1, "re-subscribed under the current key");
+  assert.equal(push.getSub().endpoint, "https://push.example/new");
+});
+
+test("permission denied: the exact Hebrew copy is shown, nothing is subscribed, the switch still works for the bell", async () => {
   const mock = seeded();
   const window = await bootCommunity(mock, { syncEnabled: false, localStorage: { "haimunia-demo:notifPushFlag": "1" } });
   const push = stubPushApis(window, { deny: true });
   await openAccount(window);
 
-  pickNotifPref(window, "reactions", "push");
+  pickNotifPref(window, "reaction", true);
   await waitFor(() => /לא אושרה הרשאת התראות/.test(window.document.getElementById("content").textContent), 4000);
 
   assert.equal(push.calls.subscribe, 0, "subscribe is never called once permission is denied");
   assert.equal(mock.db.push_subscriptions.length, 0);
-  assert.equal(mock.db.notification_preferences.length, 0, "the preference write never happens");
-  assert.equal(notifPrefValue(window, "reactions"), "in_app", "the control reads In-app, not Push");
+  await waitFor(() => mock.db.notification_preferences.length === 1, 4000);
+  assert.equal(mock.db.notification_preferences[0].channel, "in_app", "stored as the bell, never as push");
 });
 
-test("a device that is already subscribed does not re-prompt when a second type also switches to push", async () => {
+test("a device that is already subscribed does not re-prompt when a second type is turned on", async () => {
   const mock = seeded({ push_subscriptions: [{ id: "ps1", user_id: "u1", endpoint: "https://push.example/existing", keys: { p256dh: "a", auth: "b" }, revoked_at: null }] });
   const window = await bootCommunity(mock, { syncEnabled: false, localStorage: { "haimunia-demo:notifPushFlag": "1" } });
   const push = stubPushApis(window, { existingEndpoint: "https://push.example/existing" });
   await openAccount(window);
 
-  // First switch loads this device's existing subscription status.
-  pickNotifPref(window, "reactions", "push");
-  await waitFor(() => mock.db.notification_preferences.some((r) => r.type === "reactions" && r.channel === "push"), 4000);
+  pickNotifPref(window, "reaction", true);
+  await waitFor(() => mock.db.notification_preferences.some((r) => r.type === "reaction" && r.channel === "push"), 4000);
   const promptsAfterFirst = push.calls.requestPermission;
   const subscribesAfterFirst = push.calls.subscribe;
 
-  pickNotifPref(window, "reactions", "push");
-  await waitFor(() => mock.db.notification_preferences.some((r) => r.type === "reactions" && r.channel === "push"), 4000);
+  pickNotifPref(window, "week_card", true);
+  await waitFor(() => mock.db.notification_preferences.some((r) => r.type === "week_card" && r.channel === "push"), 4000);
 
   assert.equal(push.calls.requestPermission, promptsAfterFirst, "no new permission prompt for the second type");
   assert.equal(push.calls.subscribe, subscribesAfterFirst, "no new subscribe call for the second type");
@@ -208,30 +238,30 @@ test("a device that is already subscribed does not re-prompt when a second type 
 
 // ===== unsupported browsers and iOS ====================================
 
-test("flag on, a browser with no Push API: the option is disabled with a real explanation, not בקרוב", async () => {
+test("flag on, a browser with no Push API: the panel says so, and the switch is for the bell", async () => {
   const mock = seeded();
   const window = await bootCommunity(mock, { syncEnabled: false, localStorage: { "haimunia-demo:notifPushFlag": "1" } });
   // No stubPushApis() call: this browser has neither serviceWorker nor
   // PushManager nor Notification.
   await openAccount(window);
 
-  const pushOption = notifPrefOption(window, "reactions", "push");
-  assert.ok(pushOption.disabled);
-  const row = notifPrefControl(window, "reactions").closest(".log-row");
-  assert.match(row.textContent, /לא תומך בהתראות דחיפה/);
-  assert.doesNotMatch(row.textContent, /בקרוב/, "the flag-on reason replaces the flag-off placeholder copy");
+  assert.match(window.document.querySelector("[data-notif-push-reason]").textContent, /לא תומך בהתראות דחיפה/);
+  assert.match(window.document.querySelector("[data-notif-push-reason]").textContent, /יופיעו בפעמון/);
+  pickNotifPref(window, "reaction", true);
+  await waitFor(() => mock.db.notification_preferences.some((r) => r.channel === "in_app"), 4000);
 });
 
-test("flag on, iOS Safari without an installed PWA: the option is disabled with the install explanation, not a silent failed prompt", async () => {
+test("flag on, iOS Safari without an installed PWA: the install explanation, not a silent failed prompt", async () => {
   const mock = seeded();
   const window = await bootCommunity(mock, { syncEnabled: false, localStorage: { "haimunia-demo:notifPushFlag": "1" } });
-  stubPushApis(window); // the browser APIs exist - iOS non-standalone is still blocked ahead of them
+  const push = stubPushApis(window); // the browser APIs exist - iOS non-standalone is still blocked ahead of them
   stubIOSNonStandalone(window);
   await openAccount(window);
 
-  const pushOption = notifPrefOption(window, "reactions", "push");
-  assert.ok(pushOption.disabled);
-  assert.match(notifPrefControl(window, "reactions").closest(".log-row").textContent, /להוסיף את האפליקציה למסך הבית/);
+  assert.match(window.document.querySelector("[data-notif-push-reason]").textContent, /להוסיף את האפליקציה למסך הבית/);
+  pickNotifPref(window, "reaction", true);
+  await waitFor(() => mock.db.notification_preferences.length === 1, 4000);
+  assert.equal(push.calls.requestPermission, 0, "no prompt outside the installed app");
 });
 
 // ===== revoke: never deletes the row ===================================
@@ -258,30 +288,88 @@ test("a permission revoked outside the app is detected on the next load and mark
   const push = stubPushApis(window);
   await openAccount(window);
 
-  pickNotifPref(window, "reactions", "push");
+  pickNotifPref(window, "reaction", true);
   await waitFor(() => mock.db.push_subscriptions.length === 1, 4000);
   assert.equal(mock.db.push_subscriptions[0].revoked_at, null);
 
-  // Simulate the OS/browser silently dropping the subscription (permission
-  // revoked from outside the app) - the object the browser hands back is
-  // just gone, the same way a real PushSubscription would be.
+  // The OS/browser silently drops the subscription, and the session ends
+  // without the member pressing sign-out (expiry): there is no session to
+  // delete the row with, so the next sign-in retires it.
   push.setSub(null);
-
-  // A full sign-out/sign-in cycle is what actually resets the lazy
-  // notifPushChecked guard (the same guard the ordinary once-per-session
-  // load uses) - there is no other externally-observable way to force a
-  // recheck, which is itself consistent with "checked once per session".
-  // (Re-triggers the exact same onAuthStateChange path
-  // community-live-sync-and-auth.test.mjs uses for its own sign-out/back-in
-  // cycle.)
-  window.document.querySelector('[data-community-action="sign-out"]').click();
+  await mock.client.auth.signOut();
   await waitForCommunityGate(window);
   await mock.client.auth.signInWithPassword({ email: "dana@members.haimuniya.invalid", password: "CorrectHorse9" });
   await waitFor(() => !!window.document.getElementById("communityHead"), 4000);
-  await waitFor(() => !!notifPrefControl(window, "reactions"), 4000);
+  await waitFor(() => !!notifPrefControl(window, "reaction"), 4000);
 
   await waitFor(() => mock.db.push_subscriptions[0].revoked_at, 5000);
-  assert.equal(mock.db.push_subscriptions.length, 1, "the row is never deleted, only marked");
+  assert.equal(mock.db.push_subscriptions.length, 1, "the row is kept, only marked");
+});
+
+// ===== a subscription does not outlive the session ========================
+
+test("SIGN-OUT removes this device's subscription: the server row is deleted and the browser's is dropped", async () => {
+  const mock = seeded();
+  mock.seedCredentials("u1", "dana@members.haimuniya.invalid", "CorrectHorse9");
+  const window = await bootCommunity(mock, { syncEnabled: false, localStorage: { "haimunia-demo:notifPushFlag": "1" } });
+  const push = stubPushApis(window);
+  await openAccount(window);
+  pickNotifPref(window, "reaction", true);
+  await waitFor(() => mock.db.push_subscriptions.length === 1, 4000);
+  assert.ok(push.getSub(), "subscribed before signing out");
+  window.localStorage.setItem("haimunia-demo:notifPushEndpoint", mock.db.push_subscriptions[0].endpoint);
+
+  window.document.querySelector('[data-community-action="sign-out"]').click();
+  await waitForCommunityGate(window);
+
+  assert.equal(mock.db.push_subscriptions.length, 0, "the server row is gone, not merely revoked");
+  assert.equal(push.getSub(), null, "the browser subscription was dropped");
+  assert.equal(window.localStorage.getItem("haimunia-demo:notifPushEndpoint"), null, "and the remembered endpoint with it");
+});
+
+test("signing out is never held up by a service worker that does not answer", async () => {
+  const mock = seeded();
+  const window = await bootCommunity(mock, { syncEnabled: false, localStorage: { "haimunia-demo:notifPushFlag": "1" } });
+  await openAccount(window);
+  window.navigator.serviceWorker = Object.assign(window.navigator.serviceWorker || {}, { ready: new Promise(() => {}) });
+
+  window.document.querySelector('[data-community-action="sign-out"]').click();
+  await waitForCommunityGate(window);
+  assert.equal(mock.getUser(), null, "the session ended");
+});
+
+test("a session that ends by itself (expiry, another tab) still drops this device's browser subscription", async () => {
+  const mock = seeded();
+  const window = await bootCommunity(mock, { syncEnabled: false, localStorage: { "haimunia-demo:notifPushFlag": "1" } });
+  const push = stubPushApis(window);
+  await openAccount(window);
+  pickNotifPref(window, "reaction", true);
+  await waitFor(() => mock.db.push_subscriptions.length === 1, 4000);
+
+  await mock.client.auth.signOut();
+  await waitFor(() => push.getSub() === null, 4000);
+  assert.equal(mock.db.push_subscriptions.length, 1, "no session to delete the row with: it stays for the next sign-in to retire");
+});
+
+test("ACCOUNT DELETION removes every push subscription the member has, then signs out", async () => {
+  const mock = seeded({ push_subscriptions: [
+    { id: "ps1", user_id: "u1", endpoint: "https://push.example/phone", keys: { p256dh: "a", auth: "b" }, revoked_at: null },
+    { id: "ps2", user_id: "u1", endpoint: "https://push.example/laptop", keys: { p256dh: "a", auth: "b" }, revoked_at: null },
+    { id: "ps3", user_id: "u2", endpoint: "https://push.example/someone-else", keys: { p256dh: "a", auth: "b" }, revoked_at: null },
+  ] });
+  mock.onRpc("request_account_deletion", () => ({ data: null, error: null }));
+  const window = await bootCommunity(mock, { syncEnabled: false, localStorage: { "haimunia-demo:notifPushFlag": "1" } });
+  const push = stubPushApis(window, { existingEndpoint: "https://push.example/phone" });
+  await openAccount(window);
+
+  window.handleCommunityClick({ dataset: { communityAction: "delete-account" } });
+  await waitFor(() => !!window.document.querySelector('[data-community-action="confirm-yes"]'), 4000);
+  window.document.querySelector('[data-community-action="confirm-yes"]').click();
+  await waitFor(() => mock.getUser() === null, 4000);
+
+  assert.equal(mock.callsTo("request_account_deletion").length, 1);
+  assert.deepEqual(mock.db.push_subscriptions.map((r) => r.id), ["ps3"], "both of the member's devices are gone; nobody else's is touched");
+  assert.equal(push.getSub(), null, "and this browser's subscription is dropped");
 });
 
 // ===== sw.js source-level handlers (jsdom cannot run a real SW) =========
@@ -305,7 +393,7 @@ test("sw.js registers a notificationclick handler that focuses an open window or
   assert.match(block, /deepLink/);
 });
 
-// ===== deep link resolution (COMM-143's mechanism, reused here) =======
+// ===== deep link receivers (the route format is /circles?c=&post=) =====
 
 test("window.communityHandlePushDeepLink opens the exact target screen and item, reusing resolveNotifTarget", async () => {
   const post = {
@@ -318,7 +406,7 @@ test("window.communityHandlePushDeepLink opens the exact target screen and item,
   const window = await bootCommunity(mock, { syncEnabled: false });
   window.document.getElementById("tabAddBtn").click(); // start off the community tab entirely
 
-  window.communityHandlePushDeepLink("/community/feed?post=p7&comment=c3");
+  window.communityHandlePushDeepLink("/circles?c=club-1&post=p7");
   await waitFor(() => window.document.getElementById("tabCommunityBtn").className.includes("active"), 4000);
 
   const communityBtn = window.document.getElementById("tabCommunityBtn");
@@ -333,7 +421,7 @@ test("a ?notif= cold start (sw.js's own-window fallback) is captured by app.js a
     reaction_count: 0, comment_count: 0, media: [], metadata: {},
   };
   const mock = seeded({ feed_page_rows: [post] });
-  const deepLink = encodeURIComponent("/community/feed?post=p9");
+  const deepLink = encodeURIComponent("/circles?c=club-1&post=p9");
   const window = await bootCommunity(mock, {
     syncEnabled: false,
     url: "https://example.test/index.html?tab=community&notif=" + deepLink,
@@ -362,21 +450,20 @@ test("app.js's own serviceWorker message listener reaches communityHandlePushDee
   window.document.getElementById("tabAddBtn").click();
 
   assert.ok(messageHandlers.length > 0, "app.js registered its own serviceWorker message listener");
-  for (const cb of messageHandlers) cb({ data: { type: "PUSH_NOTIFICATION_CLICK", deepLink: "/community/feed?post=p11" } });
+  for (const cb of messageHandlers) cb({ data: { type: "PUSH_NOTIFICATION_CLICK", deepLink: "/circles?c=club-1&post=p11" } });
 
   await waitFor(() => window.document.getElementById("tabCommunityBtn").className.includes("active"), 4000);
   assert.ok(window.document.getElementById("tabCommunityBtn").className.includes("active"));
 });
 
-test("the default is now ON: a member who set nothing sees the push option", async () => {
-  // The flip is the whole of B3 from the member's side. Booting with no
-  // localStorage at all is exactly what every real device does.
+test("the default is ON: a member who set nothing is offered push, behind a switch that is off", async () => {
+  // Booting with no localStorage at all is exactly what every real device does.
   const mock = seeded();
   const window = await bootCommunity(mock, { syncEnabled: false });
-  stubPushApis(window);
+  const push = stubPushApis(window);
   await openAccount(window);
 
-  const push = notifPrefOption(window, "reactions", "push");
-  assert.ok(push, "the push option renders for a member who has never touched the escape hatch");
-  assert.ok(!push.disabled, "and it is live, not the old 'בקרוב' placeholder");
+  assert.equal(notifPrefValue(window, "reaction"), "off");
+  assert.equal(window.document.querySelector("[data-notif-push-reason]"), null, "nothing stands in the way of push on a capable, installed browser");
+  assert.equal(push.calls.requestPermission, 0, "and nobody has been asked anything");
 });
