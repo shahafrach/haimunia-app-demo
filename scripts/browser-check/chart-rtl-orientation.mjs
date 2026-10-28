@@ -92,12 +92,12 @@ await switchTab(page, "tabHistoryBtn");
 await page.waitForTimeout(300);
 await page.click(`.exercise-row[data-action='select-history']:has-text("Strict Press")`);
 await page.waitForTimeout(300);
-await page.waitForSelector(".chart-card svg circle", { timeout: 5000 });
+await page.waitForSelector("#historyListArea .chart-card svg circle", { timeout: 5000 });
 
 // renderChart() emits its circles in data order — oldest first — so the
 // first and last circles are the two ends of the series.
 const plot = await page.evaluate(() => {
-  const card = document.querySelector(".chart-card");
+  const card = document.querySelector("#historyListArea .chart-card");
   // The card holds more than one <svg> — the trend arrow beside the "+5.8
   // ק"ג" headline is one too. The plot is the one with data points in it.
   const svg = [...card.querySelectorAll("svg")].find((s) => s.querySelector("circle"));
@@ -106,7 +106,7 @@ const plot = await page.evaluate(() => {
     const r = el.getBoundingClientRect();
     return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
   };
-  const texts = [...svg.querySelectorAll("text")];
+  const texts = [...svg.querySelectorAll("text")].filter((t) => !t.textContent.includes("שיא")); // PR labels are not date labels
   return {
     n: svg.querySelectorAll("circle").length,
     points: [...svg.querySelectorAll("circle")].map(box),

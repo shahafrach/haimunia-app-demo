@@ -123,7 +123,7 @@
     if (!b) return "";
     const where = b.names.length === 1 ? "ב" + b.names[0] : "ב-" + b.names.length + " מעגלים";
     const text = b.queued ? "האימון יישלח " + where + " כשהחיבור יחזור" : "האימון שותף " + where;
-    return `<div role="status" aria-live="polite" data-share-bar="1" style="position:fixed;left:0;right:0;bottom:calc(var(--bottom-nav-reserve) - 118px);display:flex;justify-content:center;padding:0 16px;z-index:60;">
+    return `<div role="status" aria-live="polite" data-share-bar="1" style="position:fixed;left:0;right:0;bottom:calc(var(--bottom-nav-reserve) - 108px);display:flex;justify-content:center;padding:0 16px;z-index:60;">
       <div style="max-width:448px;width:100%;background:var(--color-surface);border:1px solid var(--color-accent);border-radius:14px;padding:10px 14px;box-shadow:var(--card-shadow);display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
         <span style="font-size:13px;font-weight:700;flex:1 1 auto;min-width:0;">${bidiText(text)}</span>
         <button class="chip-btn" data-community-action="c-share-bar-change" data-day="${esc(b.day)}">שינוי</button>

@@ -7999,7 +7999,13 @@ function syncAppDialogHistoryState() {
     try { history.pushState({ appDialog: true }, ""); appDialogHistoryPushed = true; } catch (e) { /* history API unavailable in this embedding */ }
   } else if (!open && appDialogHistoryPushed && !appDialogClosingViaHistory) {
     appDialogHistoryPushed = false;
-    try { history.back(); } catch (e) {}
+    // Tell cloud.js this pop is the app's own, not a back-press meant for a cloud dialog.
+    // Events made the race visible: a cloud dialog that opens in the same tick as an app
+    // dialog closing (the Add to Home Screen steps after the welcome sheet) would
+    // otherwise be closed by the pop the welcome sheet's own close causes.
+    window.haimuniaOwnHistoryBack = true;
+    try { history.back(); } catch (e) { window.haimuniaOwnHistoryBack = false; }
+    setTimeout(() => { window.haimuniaOwnHistoryBack = false; }, 600); // never outlive a pop that did not come
   }
 }
 window.addEventListener("popstate", () => {

@@ -2301,6 +2301,7 @@
     }
   }
   window.addEventListener("popstate", () => {
+    if (window.haimuniaOwnHistoryBack) { window.haimuniaOwnHistoryBack = false; return; }
     if (!cloudDialogHistoryPushed) return;
     cloudDialogHistoryPushed = false;
     const dk = currentCloudDialog();
