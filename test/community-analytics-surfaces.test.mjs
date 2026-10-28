@@ -121,7 +121,7 @@ test("signing out and back in does not stack a second bus bridge", async () => {
 test("notification_opened fires once per opened row and carries the type, not the body", async () => {
   const mock = seeded([], {
     notifications: [{
-      id: "n1", user_id: "u1", type: "achievement_unlocked", category: "training",
+      id: "n1", user_id: "u1", type: "reaction", category: "community",
       title: "תגובה חדשה", body: "נועם הגיב/ה לך", deep_link: null,
       source_type: null, source_id: null, read_at: null, created_at: new Date(BASE).toISOString(),
     }],
@@ -136,7 +136,7 @@ test("notification_opened fires once per opened row and carries the type, not th
   window.document.querySelector('[data-community-action="notif-open"]').click();
   await waitFor(() => events(mock, "notification_opened").length === 1, 3000);
   const props = plain(events(mock, "notification_opened")[0].props);
-  assert.deepStrictEqual(props, { notification_id: "n1", type: "achievement_unlocked", target: "account", was_unread: true });
+  assert.deepStrictEqual(props, { notification_id: "n1", type: "reaction", target: "circle", was_unread: true });
   assert.ok(!JSON.stringify(props).includes("הגיב"), "the notification body never reaches analytics");
 });
 

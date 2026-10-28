@@ -144,6 +144,7 @@ select is((select string_agg(kind, ',' order by kind) from public.reactions wher
 -- =====================================================================
 -- 5. Trained together
 -- =====================================================================
+insert into public.notification_preferences (user_id, type, channel) values (tests.uid('m2'), 'trained_together', 'in_app');
 select tests.set_auth(tests.uid('m1'));
 select is(public.post_tag_training_partners('a1000000-0000-4000-8000-000000000001',
   array[tests.uid('m2'), tests.uid('m3'), 'bbbbbbbb-0000-4000-8000-0000000000b1', tests.uid('m1')]), 2,

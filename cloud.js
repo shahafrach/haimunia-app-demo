@@ -1442,6 +1442,7 @@
     // Before signOut(): its auth event is what repaints, and showToast()
     // only paints on the next render.
     if (typeof window.showToast === "function") window.showToast("בקשת המחיקה התקבלה. החשבון ומה שגובה לענן יימחקו לצמיתות בתוך 30 יום. האימונים במכשיר הזה נשארים.");
+    await removeDevicePushSubscription({ everyDevice: true });
     await client.auth.signOut();
   }
   // ---- S16: "download my data" ------------------------------------------
@@ -2563,7 +2564,7 @@
     else if (action === "retry-join-load") retryJoinFunnelLoad();
     else if (action === "outbox-retry") retryOutboxItem(el.dataset.id);
     else if (action === "outbox-discard") discardOutboxItem(el.dataset.id);
-    else if (action === "sign-out") client.auth.signOut();
+    else if (action === "sign-out") endSessionAndForgetPush();
     else if (action === "toggle-post-menu") togglePostMenu(el.dataset.id);
     else if (action === "post-edit-caption") postStartCaptionEdit(el.dataset.id);
     else if (action === "caption-cancel") { state.posts.captionEdit = null; rerender(); }
@@ -2593,7 +2594,6 @@
     else if (action === "notif-show-older") notifShowOlder();
     else if (action === "notif-mark-all") markAllNotifsRead();
     else if (action === "notif-open") openNotif(el.dataset.id);
-    else if (action === "notif-toggle-group") { const c = state.notif.center; if (c) { c.expanded[el.dataset.key] = !c.expanded[el.dataset.key]; rerender(); } }
     else if (action === "notif-push-disable") disableNotifPush();
     // The self-test is a click and nothing else reaches it, which is half of
     // what makes "never asked on first load" true of the permission prompt
@@ -2691,6 +2691,9 @@
         state.achievements.mine = []; state.achievements.unlock = null;
         state.notif.center = null; state.notif.unread = 0; state.notif.prefs = {}; state.notif.prefsLoaded = false;
         state.notif.prefSaving = {}; state.notif.pushSub = null; state.notif.pushChecked = false;
+        // However the session ended (sign-out, expiry, another tab), this
+        // device keeps no push subscription for a member who is gone from it.
+        if (_event === "SIGNED_OUT") forgetDevicePushLocally();
         anonSignInAttempted = false;
         recoveryVerifyAttempted = false;
         rerender();
@@ -2711,8 +2714,8 @@
   document.addEventListener("change", (e) => {
     const t = e.target;
     if (!t || !t.dataset) return;
-    if ("notifPrefSelect" in t.dataset) {
-      Promise.resolve(setNotifPref(t.dataset.type, t.value)).then(() => rerender());
+    if ("notifPrefToggle" in t.dataset) {
+      Promise.resolve(setNotifPref(t.dataset.type, !!t.checked)).then(() => rerender());
     }
     else if ("partnerPick" in t.dataset) toggleTrainingPartnerPick(t.dataset.partnerPick);
   });

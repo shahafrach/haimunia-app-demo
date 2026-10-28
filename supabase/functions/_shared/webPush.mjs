@@ -14,6 +14,12 @@
 
 const enc = new TextEncoder();
 
+// The VAPID subject (RFC 8292): who the push service can contact about this
+// sender. A URL, deliberately not an email address: the app stores no email
+// anywhere, and a mailto: here would be one in a file that is read by a third
+// party. It is the site the app is served from.
+export const VAPID_SUBJECT = "https://box-log.pages.dev";
+
 export function b64urlToBytes(s) {
   const pad = "=".repeat((4 - (s.length % 4)) % 4);
   const bin = atob(String(s).replace(/-/g, "+").replace(/_/g, "/") + pad);

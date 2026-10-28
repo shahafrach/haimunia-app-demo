@@ -12,28 +12,26 @@
 window.HAIMUNIA_CONFIG = Object.freeze({
   supabaseUrl: "https://hvwakffluwvegedefoth.supabase.co",
   supabasePublishableKey: "sb_publishable_MRSX0PLMZjoDIX4iuDbI2g_G2EdMRu6",
-  // VAPID public key, base64url, the uncompressed EC point (0x04 || X || Y)
-  // `PushManager.subscribe({applicationServerKey})` expects. A VAPID public
-  // key is MEANT to be exposed to the browser - it is the half that proves,
-  // to the push service, that a message came from the same sender the
-  // subscription was created for. The private half is the secret, and it is
-  // not in this repo.
+  // THE ONE PLACE THE CLIENT READS THE VAPID PUBLIC KEY (base64url, the
+  // uncompressed EC point 0x04 || X || Y that PushManager.subscribe wants as
+  // applicationServerKey). A public key is meant to be exposed to the browser;
+  // the private half is a Supabase Edge Function secret and is in no file.
   //
-  // REPLACED 2026-09-17 (B3). COMM-229 shipped a DEMO keypair whose private
-  // half was deliberately discarded rather than committed - correct at the
-  // time, and it meant no push could ever be sent with it. This is a real
-  // pair: the private half is a Supabase Edge Function secret
-  // (VAPID_PRIVATE_KEY, alongside VAPID_PUBLIC_KEY and VAPID_SUBJECT), set
-  // with `supabase secrets set --env-file`, never through a command line
-  // and never through this repo.
+  // IT IS A PLACEHOLDER UNTIL THE ROTATE-VAPID WORKFLOW HAS RUN. The key that
+  // used to be here belonged to the deleted Supabase project. To fill it in:
+  // run the "rotate-vapid" workflow (Actions, workflow_dispatch), copy the
+  // public key from that run's job summary over the placeholder below, commit,
+  // deploy. The private key is generated on the runner and set as the Edge
+  // Function secret there; no person or session ever sees it.
   //
-  // CHANGING THIS VALUE INVALIDATES EVERY EXISTING SUBSCRIPTION. A
-  // PushSubscription is bound to the key it was created with, so a rotation
-  // silently stops delivery to every device that subscribed under the old
-  // one until each re-subscribes. Safe to do here only because no real
-  // subscription ever existed - the feature flag was off. Treat any future
-  // rotation as a migration, not an edit.
-  notifPushVapidPublicKey: "BLC12QX-6raod1c8DtK_4a4YcZc_U2qOnfxDxWTpqlpixlfulGsgQaV_MQM_qOsOU4uNouub-2LD_o-12eVfnUw",
+  // WHILE THIS IS THE PLACEHOLDER (or anything that is not a 65-byte P-256
+  // point) THE CLIENT FAILS CLOSED: it makes no subscribe attempt, does not
+  // ask for notification permission, and says push is not set up yet.
+  //
+  // CHANGING THIS VALUE INVALIDATES EVERY EXISTING SUBSCRIPTION: a
+  // PushSubscription is bound to the key it was created with. The client
+  // notices a subscription made under another key and re-subscribes.
+  notifPushVapidPublicKey: "REPLACE_WITH_VAPID_PUBLIC_KEY",
 
   // Launch-readiness audit, SEC-004: bot protection on account creation.
   //

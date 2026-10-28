@@ -17,7 +17,7 @@ const VERIFIED = new Date().toISOString();
 const BASE = Date.now();
 function notif(i, extra) {
   return Object.assign({
-    id: `n${i}`, user_id: "u1", type: "comment_reply", category: "community",
+    id: `n${i}`, user_id: "u1", type: "reaction", category: "community",
     title: `התראה ${i}`, body: `גוף ${i}`, source_type: null, source_id: null,
     deep_link: null, read_at: null, created_at: new Date(BASE - i * 60000).toISOString(),
   }, extra || {});
@@ -29,8 +29,8 @@ const seedTables = {
   clubs: [{ id: "club-1", name: "מעגל הדגמה" }],
   circle_members: [{ club_id: "club-1", user_id: "u1", role: "owner", joined_at: "2026-10-01T00:00:00Z", share_defaults: {}, clubs: { id: "club-1", name: "מעגל הדגמה", type: "friends", emoji: "🔥", mode: "together", benchmark_enabled: false, invite_policy: "owner", welcome_line: "", benchmark: null, benchmark_month: null } }],
   notifications: [
-    notif(1, { type: "reaction", category: "community", title: "עידודים חדשים", body: "התקדמות חדשה נרשמה", source_type: "post", source_id: "p1", deep_link: "/community/feed?post=p1" }),
-    notif(2, { type: "achievement_unlocked", category: "training", title: "פתחת הישג חדש", body: "100 אימונים", deep_link: "/community/achievements" }),
+    notif(1, { type: "reaction", category: "community", title: "עידוד חדש", body: "התקדמות חדשה נרשמה", source_type: "post", source_id: "p1", deep_link: "/circles?c=club-1&post=p1" }),
+    notif(2, { type: "week_card", category: "community", title: "כרטיס השבוע מוכן", body: "כרטיס השבוע של החבר'ה מוכן לשיתוף", deep_link: "/circles?c=club-1&week=1" }),
   ],
   notification_preferences: [],
   feed_page_rows: [], follows: [], hidden_posts: [], saved_posts: [],
@@ -59,14 +59,10 @@ await page.waitForFunction(() => {
 }, { timeout: 5000 });
 
 const text = await page.textContent("[data-notif-center]");
-// reaction is a batched type (COMM-142) — it collapses into one group using
-// the type's own generic heading, not the seeded row's title, until expanded.
-check("the notification center shows a reactions group", text.includes("עידודים חדשים על הפוסט שלך"));
-check("the notification center shows the achievement notification", text.includes("פתחת הישג חדש"));
-
-await page.click('[data-community-action="notif-toggle-group"][data-key^="reaction"]');
-await page.waitForFunction(() => document.querySelector("[data-notif-center]").textContent.includes("התקדמות חדשה נרשמה"), { timeout: 5000 });
-check("expanding the reactions group reveals the individual notification's own body", true);
+// Every notification is its own row: no collapsed groups.
+check("the notification center shows the reaction, with its own body", text.includes("עידוד חדש על הפוסט שלך") && text.includes("התקדמות חדשה נרשמה"));
+check("the notification center shows the week card", text.includes("כרטיס השבוע מוכן"));
+check("nothing collapses into a group", (await page.$$('[data-community-action="notif-toggle-group"]')).length === 0);
 
 const dialogAttrs = await page.evaluate(() => {
   const dlg = document.querySelector("[data-notif-center]");

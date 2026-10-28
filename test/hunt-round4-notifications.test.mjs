@@ -27,17 +27,6 @@ function navBody() {
 
 
 
-test("a notification pointing at a revoked medal says so", () => {
-  const body = navBody();
-  const at = body.indexOf("target.achievement");
-  const branch = body.slice(at, body.indexOf("target.recapWeek", at));
-  assert.match(branch, /if \(!node\) setMessage\("המדליה הזו כבר לא זמינה"\);/,
-    "a missing achievement anchor must tell the member");
-  assert.match(branch, /else if \(node\.scrollIntoView\)/,
-    "and a present one is scrolled to, not reported missing");
-});
-
-
 test("closing a nested dialog returns focus to the control that opened IT", () => {
   // HIGH. The opener-restore path only ran when EVERY dialog closed. Close a
   // dialog opened from inside another - the share sheet on top of the PR

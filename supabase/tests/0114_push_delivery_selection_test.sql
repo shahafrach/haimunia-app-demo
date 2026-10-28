@@ -48,8 +48,8 @@ on conflict (user_id) do nothing;
 -- Explicit opt-in to push. A missing row means in_app (notif_pref_allows's
 -- rule), so this is the ONLY thing that makes a member reachable by push.
 insert into public.notification_preferences (user_id, type, channel) values
-  ('bbbbbbbb-0000-4000-8000-000000000001', 'streak_at_risk', 'push'),
-  ('bbbbbbbb-0000-4000-8000-000000000003', 'streak_at_risk', 'push')
+  ('bbbbbbbb-0000-4000-8000-000000000001', 'trained_together', 'push'),
+  ('bbbbbbbb-0000-4000-8000-000000000003', 'trained_together', 'push')
 on conflict (user_id, type) do update set channel = excluded.channel;
 
 insert into public.push_subscriptions (id, user_id, endpoint, keys) values
@@ -58,10 +58,19 @@ insert into public.push_subscriptions (id, user_id, endpoint, keys) values
   ('44444444-0000-4000-8000-000000000003', 'bbbbbbbb-0000-4000-8000-000000000003', 'https://push.example/deleted', '{"p256dh":"BPk","auth":"aGk"}'::jsonb)
 on conflict (endpoint) do nothing;
 
-insert into public.notifications (id, user_id, type, category, title, body, deep_link) values
-  ('55555555-0000-4000-8000-000000000001', 'bbbbbbbb-0000-4000-8000-000000000001', 'streak_at_risk', 'training', 'הרצף בסכנה', 'לא התאמנת היום', '/streak'),
-  ('55555555-0000-4000-8000-000000000002', 'bbbbbbbb-0000-4000-8000-000000000002', 'streak_at_risk', 'training', 'הרצף בסכנה', 'לא התאמנת היום', '/streak'),
-  ('55555555-0000-4000-8000-000000000003', 'bbbbbbbb-0000-4000-8000-000000000003', 'streak_at_risk', 'training', 'הרצף בסכנה', 'לא התאמנת היום', '/streak')
+-- A notification is about one circle, and is pushed only while its recipient is
+-- still in it (202610260001).
+insert into public.clubs (id, name, type, created_by)
+values ('66666666-0000-4000-8000-000000000001', 'Push circle', 'friends', 'bbbbbbbb-0000-4000-8000-000000000001');
+insert into public.circle_members (club_id, user_id, role) values
+  ('66666666-0000-4000-8000-000000000001', 'bbbbbbbb-0000-4000-8000-000000000001', 'owner'),
+  ('66666666-0000-4000-8000-000000000001', 'bbbbbbbb-0000-4000-8000-000000000002', 'member'),
+  ('66666666-0000-4000-8000-000000000001', 'bbbbbbbb-0000-4000-8000-000000000003', 'member');
+
+insert into public.notifications (id, user_id, type, category, title, body, deep_link, circle_id) values
+  ('55555555-0000-4000-8000-000000000001', 'bbbbbbbb-0000-4000-8000-000000000001', 'trained_together', 'community', 'תיוג מחכה לאישור', 'תייג אותך באימון', '/circles?c=66666666-0000-4000-8000-000000000001', '66666666-0000-4000-8000-000000000001'),
+  ('55555555-0000-4000-8000-000000000002', 'bbbbbbbb-0000-4000-8000-000000000002', 'trained_together', 'community', 'תיוג מחכה לאישור', 'תייג אותך באימון', '/circles?c=66666666-0000-4000-8000-000000000001', '66666666-0000-4000-8000-000000000001'),
+  ('55555555-0000-4000-8000-000000000003', 'bbbbbbbb-0000-4000-8000-000000000003', 'trained_together', 'community', 'תיוג מחכה לאישור', 'תייג אותך באימון', '/circles?c=66666666-0000-4000-8000-000000000001', '66666666-0000-4000-8000-000000000001')
 on conflict (id) do nothing;
 
 -- =====================================================================

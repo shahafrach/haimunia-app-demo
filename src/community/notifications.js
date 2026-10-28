@@ -30,30 +30,23 @@
     return `<button class="chip-btn" data-community-action="feed-notifications" aria-label="התראות${unread ? (unread === 1 ? ", התראה אחת חדשה" : `, ${unread} חדשות`) : ""}" aria-haspopup="dialog" style="position:relative;">${BELL_ICON}${unread ? `<span class="tab-badge" aria-hidden="true">${unread}</span>` : ""}</button>`;
   }
 
-  // ==== COMM-140..144 notifications ====================================
+  // ==== notifications ===================================================
   //
   // The client renders and marks read. Every notification row is created
-  // server-side by a trigger or an event-bus consumer (the table has no
-  // insert grant) - the full trigger set is documented in
-  // docs/community/contracts.md under "Needs from schema, notifications".
-  // Web push (COMM-229) is behind state.featureFlags.notifPush, which is
-  // DEFAULT ON as of 2026-09-17 (B3) now that there is something behind it:
-  // notif_push_send, the Edge Function that actually delivers, plus a real
-  // VAPID keypair whose private half is an Edge Function secret. It was
-  // default off for as long as a member choosing "Push" would have produced
-  // a subscription nothing ever sent to.
+  // server-side by a trigger or the hourly week-card job (the table has no
+  // insert grant). Four types exist, every one OFF until the member turns it
+  // on in Me, and every one belongs to exactly one circle:
+  //   reaction          someone reacted to my post (at most one per post per hour)
+  //   trained_together a tag is waiting for my confirmation
+  //   circle_joined     someone joined a circle I own
+  //   week_card         the week card of one of my circles is ready
+  // A toggle on means "tell me": by web push when this device can and the
+  // member allows it, otherwise in the bell. Nothing here prompts anybody: the
+  // browser permission request happens when a member turns a toggle on, which
+  // is the only time it should - a prompt fired on load is denied by reflex.
   //
-  // Turning it on prompts nobody. It adds a third button to the notification
-  // preferences panel; the browser permission request happens when a member
-  // picks that button, which is the only time it should - a permission
-  // prompt fired on load is denied by reflex, and a denial is close to
-  // unrecoverable without the member walking into browser settings.
-  //
-  // The localStorage escape hatch inverts with the default, matching
-  // coachEngage: set haimunia-demo:notifPushFlag to "0" to turn it back off
-  // on one device.
-  // featureFlags.notifPush is the build-level flag (a device escape hatch,
-  // default on).
+  // featureFlags.notifPush is a per-device escape hatch (default on): set
+  // haimunia-demo:notifPushFlag to "0" to turn push off on one device.
   function notifPushEnabled() {
     return !!(state.featureFlags && state.featureFlags.notifPush);
   }
@@ -61,54 +54,44 @@
   // COMM-141. Rows older than this are not walked by default.
   const NOTIF_RECENT_DAYS = 90;
 
-  // The five categories, in display order, with the Hebrew heading each
-  // shows in the centre.
+  // One category: everything is about a circle.
   const NOTIF_CATEGORIES = [
-    { id: "community", label: "מעגל" },
-    { id: "training", label: "אימונים" },
+    { id: "community", label: "מעגלים" },
   ];
 
-  // Every notification type the client renders. `mode` is how the centre
-  // draws it: an immediate row stands alone, a batched row is one collapsed
-  // group that expands. `pref` is the notification_preferences key its
-  // delivery is gated on. `icon` and `title` are the client copy; the server
-  // fills `body` and `deep_link`.
+  // Every notification type the client renders. `pref` is the
+  // notification_preferences key its delivery is gated on (the type itself).
+  // `icon` and `title` are the client copy; the server fills `body` and
+  // `deep_link`.
   const NOTIF_TYPES = {
-    reaction:              { category: "community",  mode: "batched",   pref: "reactions",           icon: "🔥", title: "עידודים חדשים על הפוסט שלך" },
-    // The author of a workout post named this member as somebody who trained
-    // with them. Immediate: it is one person naming one person.
-    trained_together:      { category: "community",  mode: "immediate", pref: "trained_together",    icon: "🤝", title: "תויגתם כמי שהתאמנו יחד" },
-    achievement_unlocked:  { category: "training",   mode: "immediate", pref: "achievement_unlocked",icon: "🏅", title: "פתחת הישג חדש" },
+    reaction:         { category: "community", pref: "reaction",         icon: "🔥", title: "עידוד חדש על הפוסט שלך" },
+    trained_together: { category: "community", pref: "trained_together", icon: "🤝", title: "תיוג לאימון משותף מחכה לאישור שלך" },
+    circle_joined:    { category: "community", pref: "circle_joined",    icon: "👋", title: "חבר/ה חדש/ה במעגל" },
+    week_card:        { category: "community", pref: "week_card",        icon: "📅", title: "כרטיס השבוע מוכן" },
   };
   function notifTypeDef(type) { return NOTIF_TYPES[type] || null; }
 
-  // The Preferences panel in Account lists exactly these, in this order.
-  // Defaults: everything in_app (a missing row means in_app).
+  // The toggles in Me, in this order. Every one is OFF until the member turns
+  // it on: a missing row means off, here and on the server (notif_pref_allows).
   const NOTIF_PREF_TYPES = [
-    { key: "trained_together",    label: "תיוג באימון משותף" },
-    { key: "reactions",           label: "עידודים" },
-    { key: "achievement_unlocked",label: "הישגים שנפתחו" },
+    { key: "reaction",         label: "עידוד על פוסט שלי" },
+    { key: "trained_together", label: "תיוג לאימון משותף שמחכה לאישור שלי" },
+    { key: "circle_joined",    label: "מישהו הצטרף למעגל שלי" },
+    { key: "week_card",        label: "כרטיס השבוע מוכן (מוצאי שבת)" },
   ];
   const NOTIF_PREF_KEYS = new Set(NOTIF_PREF_TYPES.map((t) => t.key));
   const NOTIF_CHANNELS = ["push", "in_app", "off"];
 
-  // The one place that says how a type is delivered given the member's
-  // stored preferences. The server trigger set applies the same rule
-  // (documented in contracts.md); this copy lets the centre explain a
-  // type and a test pin the mapping. Returns { channel, mode, suppressed }.
+  // The one place that says how a type is delivered given the member's stored
+  // preferences. Opt-in: no stored row, or an unknown channel, is off. Returns
+  // { channel, suppressed }.
   function notifRoute(type, prefs) {
     const def = NOTIF_TYPES[type];
-    if (!def) return { channel: "off", mode: "immediate", suppressed: true };
-    let channel = (prefs && prefs[def.pref]) || "in_app";
-    if (NOTIF_CHANNELS.indexOf(channel) < 0) channel = "in_app";
+    if (!def) return { channel: "off", suppressed: true };
+    let channel = (prefs && prefs[def.pref]) || "off";
+    if (NOTIF_CHANNELS.indexOf(channel) < 0) channel = "off";
     if (channel === "push" && !notifPushEnabled()) channel = "in_app";
-    // Operational announcements always land in-app, muted or not.
-    if (channel === "off" && def.operational) return { channel: "in_app", mode: def.mode, suppressed: false };
-    return { channel: channel, mode: def.mode, suppressed: channel === "off" };
-  }
-  function classifyNotification(row) {
-    const def = notifTypeDef(row && row.type);
-    return def ? def.mode : "immediate";
+    return { channel: channel, suppressed: channel === "off" };
   }
 
   function notifCutoffIso() {
@@ -258,13 +241,35 @@
   // Hebrew explanation otherwise, rendered as visible text under the Push
   // option (not just a title attribute) so a member on an unsupported
   // browser sees why, rather than a control that silently does nothing.
-  function notifPushUnsupportedReason() {
+  function notifPushBrowserUnsupportedReason() {
     if (communityIsIOSDevice() && !isStandalonePwa()) {
       return "כדי לקבל התראות דחיפה ב-iPhone/iPad יש קודם להוסיף את האפליקציה למסך הבית ולפתוח אותה משם.";
     }
     const hasApi = ("serviceWorker" in navigator) && (typeof window.PushManager !== "undefined") && (typeof Notification !== "undefined");
     if (!hasApi) return "הדפדפן הזה לא תומך בהתראות דחיפה.";
     return null;
+  }
+  // THE VAPID PUBLIC KEY, READ FROM ONE PLACE (cloud-config.js) AND CHECKED
+  // BEFORE ANYTHING USES IT. It is a placeholder until the rotate-vapid
+  // workflow has run and its public key has been pasted in; a placeholder, an
+  // empty value or anything that is not a 65-byte uncompressed P-256 point
+  // reads as "" and push FAILS CLOSED: no permission prompt, no subscribe
+  // attempt, and a visible reason.
+  const VAPID_PLACEHOLDER = "REPLACE_WITH_VAPID_PUBLIC_KEY";
+  const VAPID_NOT_SET_TEXT = "התראות דחיפה עדיין לא הוגדרו באפליקציה.";
+  function vapidPublicKey() {
+    const raw = window.HAIMUNIA_CONFIG && window.HAIMUNIA_CONFIG.notifPushVapidPublicKey;
+    const key = typeof raw === "string" ? raw.trim() : "";
+    if (!key || key === VAPID_PLACEHOLDER || !/^[A-Za-z0-9_-]{87}$/.test(key)) return "";
+    try {
+      const bytes = vapidKeyToUint8Array(key);
+      return (bytes.length === 65 && bytes[0] === 4) ? key : "";
+    } catch (e) { return ""; }
+  }
+  // null when push can be offered right now; a Hebrew sentence otherwise. The
+  // browser's own limits come first, then the missing key.
+  function notifPushUnsupportedReason() {
+    return notifPushBrowserUnsupportedReason() || (vapidPublicKey() ? null : VAPID_NOT_SET_TEXT);
   }
   // The VAPID public key ships base64url (cloud-config.js), the
   // uncompressed EC point PushManager.subscribe's applicationServerKey
@@ -336,6 +341,19 @@
   // the exact Hebrew copy the ticket specifies and leaves the stored
   // preference untouched, so the toggle reads whatever it already was
   // (in_app by default) - "reverts to In-app".
+  // True when the subscription was made under this key. A subscription that
+  // does not say (no options.applicationServerKey) is kept: only a key that is
+  // known to differ is a reason to drop it.
+  function subscriptionUsesKey(sub, key) {
+    try {
+      const k = sub && sub.options && sub.options.applicationServerKey;
+      if (!k) return true;
+      const have = new Uint8Array(k), want = vapidKeyToUint8Array(key);
+      if (have.length !== want.length) return false;
+      for (let i = 0; i < have.length; i++) if (have[i] !== want[i]) return false;
+      return true;
+    } catch (e) { return true; }
+  }
   async function enableNotifPush(source, prefType) {
     const reason = notifPushUnsupportedReason();
     if (reason) { setMessage(reason); return false; }
@@ -345,16 +363,24 @@
     // claim about it.
     const gate = pushAskGateReason({ userAction: true });
     if (gate) { setMessage(gate); return false; }
+    // Fail closed: no key, no prompt and no subscribe attempt.
+    const pubKey = vapidPublicKey();
+    if (!pubKey) { setMessage(VAPID_NOT_SET_TEXT); return false; }
     try {
       const reg = await navigator.serviceWorker.ready;
       let sub = await reg.pushManager.getSubscription();
+      // A subscription is bound to the key it was made with. After a rotation
+      // the old one can never be sent to again: drop it and make a new one.
+      if (sub && !subscriptionUsesKey(sub, pubKey)) {
+        await sub.unsubscribe().catch(() => {});
+        sub = null;
+      }
       if (!sub) {
         const perm = await Notification.requestPermission();
         // Recorded on BOTH branches, before the early return below: a denial
         // is the answer this event exists for.
         notePushPermission("prompt");
         if (perm !== "granted") { setMessage(NOTIF_PERMISSION_DENIED_TEXT); return false; }
-        const pubKey = (window.HAIMUNIA_CONFIG && window.HAIMUNIA_CONFIG.notifPushVapidPublicKey) || "";
         sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: vapidKeyToUint8Array(pubKey) });
       }
       const json = sub.toJSON ? sub.toJSON() : sub;
@@ -410,7 +436,7 @@
     const st = state.notif.selfTest;
     if (st.status === "sending" || st.status === "waiting") return;
     clearPushSelfTestTimer();
-    const unsupported = notifPushUnsupportedReason();
+    const unsupported = notifPushBrowserUnsupportedReason();
     if (unsupported) return pushSelfTestSet("failed", unsupported);
     // The self-test is a user action inside the app, so it is a legitimate
     // place to ask - the same gate enableNotifPush uses, stated the same way.
@@ -494,17 +520,88 @@
     rerender();
   }
 
-  async function setNotifPref(type, channel) {
+  // ---- A push subscription does not outlive the session -------------------
+  //
+  // Sign-out removes THIS device's subscription: the server row is deleted
+  // (own-row RLS, while the session still exists) and the browser's
+  // subscription is dropped, so the next person to sign in on a shared phone is
+  // not pushed the previous member's notifications. Account deletion removes
+  // every subscription the member has (also done server-side by
+  // request_account_deletion). Neither may block signing out: the service
+  // worker lookup is time-boxed, and every failure is swallowed.
+  function notifWithTimeout(promise, ms) {
+    return Promise.race([promise, new Promise((resolve) => setTimeout(() => resolve(null), ms))]);
+  }
+  async function dropBrowserPushSubscription() {
+    const endpoints = [];
+    try {
+      if ("serviceWorker" in navigator) {
+        const reg = await notifWithTimeout(navigator.serviceWorker.ready, 1500);
+        const sub = reg && reg.pushManager ? await reg.pushManager.getSubscription() : null;
+        if (sub) {
+          endpoints.push(sub.endpoint);
+          await sub.unsubscribe().catch(() => {});
+        }
+      }
+    } catch (e) { /* best effort */ }
+    return endpoints;
+  }
+  async function removeDevicePushSubscription(opts) {
+    const everyDevice = !!(opts && opts.everyDevice);
+    const endpoints = [];
+    try { const stored = localStorage.getItem(NOTIF_PUSH_ENDPOINT_KEY); if (stored) endpoints.push(stored); } catch (e) {}
+    // The server rows first: they need the session that is about to end.
+    try {
+      const live = await dropBrowserPushSubscription();
+      for (const ep of live) if (endpoints.indexOf(ep) < 0) endpoints.push(ep);
+      if (client && state.user) {
+        if (everyDevice) await client.from("push_subscriptions").delete().eq("user_id", state.user.id);
+        else for (const ep of endpoints) await client.from("push_subscriptions").delete().eq("endpoint", ep);
+      }
+    } catch (e) { /* best effort */ }
+    try { localStorage.removeItem(NOTIF_PUSH_ENDPOINT_KEY); } catch (e) {}
+    state.notif.pushSub = null;
+    state.notif.pushChecked = false;
+  }
+  // The session ended some other way (expired, signed out in another tab): no
+  // session to delete the row with, but the device still must not keep a
+  // subscription for a member who is no longer signed in here.
+  // The stored endpoint is kept on purpose: the next sign-in on this device
+  // finds no live subscription for it and retires the server row
+  // (loadNotifPushStatus).
+  async function forgetDevicePushLocally() {
+    await dropBrowserPushSubscription();
+    state.notif.pushSub = null;
+    state.notif.pushChecked = false;
+  }
+  async function endSessionAndForgetPush() {
+    await removeDevicePushSubscription();
+    await client.auth.signOut();
+  }
+
+  // A toggle in Me. On means "tell me": by push when this device can (the
+  // permission prompt appears here, on the tap), otherwise in the bell. Off
+  // writes an explicit off row.
+  async function setNotifPref(type, on) {
     if (!state.user || !NOTIF_PREF_KEYS.has(type)) return;          // unknown type is ignored
-    if (NOTIF_CHANNELS.indexOf(channel) < 0) return;
-    if (channel === "push") {
-      if (!notifPushEnabled()) return;                              // push is disabled in V1 default
-      if (notifPushUnsupportedReason()) return;                     // the control itself renders disabled for this case
-      if (!state.notif.pushSub) {
-        const ok = await enableNotifPush("notif_pref", type);
-        if (!ok) return;                                            // permission denied/failed: leaves the stored channel untouched
+    let channel = "off";
+    if (on) {
+      channel = "in_app";
+      if (notifPushEnabled()) {
+        const why = notifPushUnsupportedReason() || pushAskGateReason({ userAction: true });
+        if (!why) {
+          if (state.notif.pushSub || await enableNotifPush("notif_pref", type)) channel = "push";
+        } else {
+          // Say why this one will only appear in the bell.
+          setMessage(why);
+        }
       }
     }
+    await saveNotifPref(type, channel);
+  }
+  async function saveNotifPref(type, channel) {
+    if (!state.user || !NOTIF_PREF_KEYS.has(type)) return;
+    if (NOTIF_CHANNELS.indexOf(channel) < 0) return;
     const prev = state.notif.prefs[type];
     if (prev === channel) return;
     state.notif.prefs[type] = channel;
@@ -532,7 +629,7 @@
     if (!state.user || !client) return;
     state.notif.center = {
       loading: true, error: false, rows: [], cursor: null, end: false, hasOlder: false,
-      loadingMore: false, moreError: false, expanded: {}, showOlder: false, _focused: false,
+      loadingMore: false, moreError: false, showOlder: false, _focused: false,
       returnFocus: returnFocusSelector || '[data-community-action="feed-notifications"]',
     };
     rerender();
@@ -635,62 +732,53 @@
     }
   }
 
-  // --- COMM-140/141 deep links ---------------------------------------
-  // The one place that turns a stored in-app route into a real
-  // navigation. The route convention is documented in contracts.md;
-  // source_type/source_id is the fallback when deep_link is absent.
+  // --- deep links ----------------------------------------------------------
+  // The one place that turns a stored in-app route into a real navigation.
+  // Every route names a circle: /circles?c=<circle>[&post=<post>][&week=1].
+  // Both the bell and a tapped push come through here, so a push opens the
+  // right circle and, for a reaction or a tag, scrolls to the right post.
+  // circle_id/source_id on the row are the fallback when deep_link is absent.
   function resolveNotifTarget(row) {
     const link = String((row && row.deep_link) || "");
     const qi = link.indexOf("?");
-    const path = (qi >= 0 ? link.slice(0, qi) : link).replace(/\/+$/, "");
     const q = {};
     if (qi >= 0) for (const part of link.slice(qi + 1).split("&")) {
       const eqp = part.indexOf("=");
       if (eqp < 0) continue;
-      q[decodeURIComponent(part.slice(0, eqp))] = decodeURIComponent(part.slice(eqp + 1));
+      try { q[decodeURIComponent(part.slice(0, eqp))] = decodeURIComponent(part.slice(eqp + 1)); } catch (e) { /* a malformed pair is skipped */ }
     }
     const st = row && row.source_type;
     const sid = row && row.source_id;
-    // COMM-214/COMM-140. q.event has to be checked before the generic
-    // /feed path fallback, the same way q.announcement already is one line
-    // below: an event_cancelled notification's deep link is
-    // /community/feed?event=<id>, which matches /\/feed(\/|$)/ just as
-    // much as a plain feed link does. Without this guard it always fell
-    // into the first branch and opened plain feed instead of the event -
-    // found by the schema agent while building the cancellation trigger
-    // (202608290009).
-    if (q.post || st === "post" || /\/feed(\/|$)/.test(path)) {
-      return { tab: "account", post: q.post || (st === "post" ? sid : null) };
-    }
-    if (q.ma || q.achievement || st === "achievement" || /\/achievements(\/|$)/.test(path)) return { tab: "account", achievement: q.ma || q.achievement || sid };
-    return { tab: "account" };
+    return {
+      tab: "circle",
+      circle: q.c || (row && row.circle_id) || null,
+      post: q.post || (st === "post" ? sid : null) || null,
+      week: q.week === "1",
+    };
   }
-  function navigateToNotifTarget(target) {
+  async function navigateToNotifTarget(target) {
     if (typeof window.switchToCommunityTopTab === "function") window.switchToCommunityTopTab();
-    if (target.post) {
+    if (!target.circle) { rerender(); return; }
+    // A cold start gets here before the circles have loaded.
+    if (!state.circles.loaded && typeof loadMyCircles === "function") await loadMyCircles();
+    if (!circleById(target.circle)) {
+      setMessage("המעגל הזה כבר לא זמין לך");
       rerender();
+      return;
+    }
+    setCurrentCircle(target.circle);
+    state.circles.section = target.week ? "week" : "feed";
+    if (target.post) {
+      if (!feedState(target.circle).loaded) await loadFeed(target.circle);
+      setSection("feed");
       setTimeout(() => {
         const sel = '[data-post-id="' + cssSel(target.post) + '"]';
         const node = document.querySelector(sel);
-        if (node && node.scrollIntoView) {
-          node.scrollIntoView({ block: "center" });
-        } else {
-          setMessage("התוכן הזה לא נטען כרגע — אפשר לגלול או לרענן ולנסות שוב");
-          rerender();
-        }
-      }, 60);
-    } else if (target.achievement) {
-      // Medals live in Me (opened from the avatar on Home).
-      if (typeof window.switchAppTab === "function") window.switchAppTab("me");
-      rerender();
-      setTimeout(() => {
-        const sel = '[data-achievement-id="' + String(target.achievement).replace(/"/g, '\\"') + '"]';
-        const node = document.querySelector(sel);
-        if (!node) setMessage("המדליה הזו כבר לא זמינה");
-        else if (node.scrollIntoView) node.scrollIntoView({ block: "center" });
+        if (node && node.scrollIntoView) node.scrollIntoView({ block: "center" });
+        else { setMessage("התוכן הזה לא נטען כרגע — אפשר לגלול או לרענן ולנסות שוב"); rerender(); }
       }, 60);
     } else {
-      rerender();
+      setSection(state.circles.section);
     }
   }
 
@@ -705,22 +793,6 @@
     // the centre already marks every row it showed as seen, so read_at is
     // false for everything by the time a member taps one.
     track(A.NOTIFICATION_OPENED, { notification_id: id, type: row.type || null, target: target.tab || null, was_unread: !!row._wasUnread });
-    // The streak_risk_nudges module's one event, and the one place in this
-    // change where a second row is written for a single tap on purpose.
-    //
-    // streak_risk_nudges is a scheduled server job (notif_streak_at_risk,
-    // 202609100002) whose entire client footprint is a notification of one
-    // type. notification_opened above already records that tap, but it
-    // belongs to the `notifications` module in the event-to-module map, so
-    // without this line the nudge module stays exactly as unmeasurable as it
-    // was - the tap would be counted, just never against the thing that
-    // caused it. Two modules, two rows, and per-module unique_users stays
-    // correct for both; the totals in query 2 are per module, not a sum.
-    //
-    // It does NOT count for WCAM. notification_opened fires on the same tap
-    // and already counts that member once; counting again would change
-    // nothing except the number of ways one action can appear.
-    if (row.type === "streak_at_risk") track(A.STREAK_NUDGE_OPENED, { was_unread: !!row._wasUnread });
     await markNotifRead(id);
     closeNotifCenter();
     navigateToNotifTarget(target);
@@ -761,18 +833,12 @@
   function renderNotifRow(r) {
     const def = notifTypeDef(r.type) || { icon: "🔔", title: r.title || "התראה" };
     const emphasise = !!r._wasUnread;
-    // The client label wins over the stored one. notif_create() is called
-    // with a hardcoded ENGLISH title for every immediate type except
-    // announcement ('Achievement unlocked', 'New comment on your post',
-    // 'Event cancelled', ...), so taking r.title first leaked English into
-    // an otherwise all-Hebrew centre. announcement is the one type whose
-    // stored title is real per-row content rather than a type label, and
-    // NOTIF_TYPES marks it serverTitle. r.title remains the last resort for
-    // a future type this client does not know, the same fallback
-    // renderNotifBatchGroup already relies on.
-    const title = esc((def.serverTitle && r.title) || def.title || r.title || "");
+    // The client label wins over the stored one, so the centre reads the same
+    // whatever the server wrote; the server's body carries the names. r.title
+    // remains the last resort for a type this client does not know.
+    const title = esc(def.title || r.title || "");
     const bodyHtml = r.body ? `<span style="display:block;color:var(--steel);font-size:12.5px;margin-top:2px;">${esc(r.body)}</span>` : "";
-    return `<button class="log-row" data-community-action="notif-open" data-id="${esc(r.id)}" data-notif-mode="${esc(def.mode || "immediate")}" style="width:100%;text-align:right;background:none;border:0;border-inline-start:3px solid ${emphasise ? "var(--energy)" : "transparent"};padding:8px 10px;cursor:pointer;display:flex;gap:10px;align-items:flex-start;">
+    return `<button class="log-row" data-community-action="notif-open" data-id="${esc(r.id)}" style="width:100%;text-align:right;background:none;border:0;border-inline-start:3px solid ${emphasise ? "var(--energy)" : "transparent"};padding:8px 10px;cursor:pointer;display:flex;gap:10px;align-items:flex-start;">
       <span aria-hidden="true" style="font-size:18px;line-height:1.2;">${esc(def.icon)}</span>
       <span style="flex:1;min-width:0;">
         <span style="display:block;font-weight:${emphasise ? "800" : "600"};font-size:13px;">${title}</span>
@@ -781,52 +847,14 @@
       </span>
     </button>`;
   }
-  // COMM-142. A batched notification renders as one collapsed row that
-  // expands. Consecutive rows of the same batched type fold into one
-  // group. Windows are server-side; this only renders what came back.
-  function renderNotifBatchGroup(group, c) {
-    const def = notifTypeDef(group[0].type) || { icon: "🔔", title: group[0].title || "התראה" };
-    // Live bug hunt (2026-09-11): was group[0].id - a realtime INSERT
-    // unshift()s the new row onto the FRONT of c.rows (onNotifRealtime()
-    // above), which becomes the new group[0] on the very next render. That
-    // changed this key out from under an already-open group, so
-    // c.expanded[key] read undefined and a group a member was mid-reading
-    // silently snapped shut. The group's LAST (oldest) row's id is what
-    // actually stays stable when new rows get prepended to the front -
-    // confirmed live against the same mock.emitRealtime() harness
-    // test/community-notifications.test.mjs already uses.
-    const key = group[0].type + ":" + group[group.length - 1].id;
-    const open = !!c.expanded[key];
-    const emphasise = group.some((g) => g._wasUnread);
-    return `<div class="notif-group${emphasise ? " emphasise" : ""}" data-notif-group="${esc(key)}">
-      <button class="link-btn" data-community-action="notif-toggle-group" data-key="${esc(key)}" aria-expanded="${open ? "true" : "false"}" style="display:flex;gap:10px;align-items:center;width:100%;text-align:right;padding:8px 10px;">
-        <span aria-hidden="true" style="font-size:18px;">${esc(def.icon)}</span>
-        <span style="flex:1;min-width:0;">
-          <span style="display:block;font-weight:${emphasise ? "800" : "600"};font-size:13px;">${esc(def.title)}${group.length > 1 ? " · " + group.length : ""}</span>
-          <span style="display:block;color:var(--steel);font-size:11px;margin-top:3px;">${esc(relativeTime(group[0].created_at))}</span>
-        </span>
-        <span aria-hidden="true">${open ? "▲" : "▼"}</span>
-      </button>
-      ${open ? `<div class="notif-group-body">${group.map(renderNotifRow).join("")}</div>` : ""}
-    </div>`;
-  }
-  function renderNotifCategoryRows(rows, c) {
-    const out = [];
-    let i = 0;
-    while (i < rows.length) {
-      const r = rows[i];
-      if (classifyNotification(r) !== "batched") { out.push(renderNotifRow(r)); i++; continue; }
-      const group = [r];
-      let j = i + 1;
-      while (j < rows.length && rows[j].type === r.type) { group.push(rows[j]); j++; }
-      i = j;
-      out.push(renderNotifBatchGroup(group, c));
-    }
-    return out.join("");
+  function renderNotifCategoryRows(rows) {
+    return rows.map(renderNotifRow).join("");
   }
   function notifRowCategory(r) {
     const def = notifTypeDef(r.type);
-    return (def && def.category) || r.category || "community";
+    // One category exists. A row of a type this client does not know still
+    // shows, under the same heading, rather than vanishing.
+    return (def && def.category) || "community";
   }
   function renderNotificationCenter() {
     const c = state.notif.center;
@@ -842,7 +870,7 @@
       body = NOTIF_CATEGORIES.map((cat) => {
         const rows = c.rows.filter((r) => notifRowCategory(r) === cat.id);
         if (!rows.length) return "";
-        return `<div class="ach-section" style="margin-top:14px;">${sectionHead("var(--blue)", cat.label)}<div class="log-list">${renderNotifCategoryRows(rows, c)}</div></div>`;
+        return `<div class="ach-section" style="margin-top:14px;">${sectionHead("var(--blue)", cat.label)}<div class="log-list">${renderNotifCategoryRows(rows)}</div></div>`;
       }).join("");
     }
     const moreHtml = c.rows.length && !c.end
@@ -890,113 +918,37 @@
     </div>`;
   }
 
-  // COMM-144/229. The Preferences panel, rendered in the Account tab.
+  // The notification toggles, rendered in Me. One switch per type, every one
+  // off until the member turns it on (a missing row is off). Turning one on is
+  // the only thing that ever asks the browser for permission.
   function renderNotifPrefsPanel() {
-    // COMM-229. pushOn mirrors the state.featureFlags.notifPush check every
-    // other push code path uses.
-    //
-    // Real device feedback from when the flag was off by default (it is on
-    // as of 2026-09-17; this branch still runs for anyone who set the
-    // localStorage escape hatch, and on a browser with no push support):
-    // the push button used to still render - disabled, labelled "התראת
-    // דחיפה · בקרוב" - and that one long, non-functional label was roughly
-    // 3x the width of "באפליקציה"/"כבוי" beside it, unbalancing every row
-    // on the panel. The push OPTION itself is now omitted entirely while
-    // the flag is off, not just visually de-emphasized: two buttons
-    // (in_app/off), not three, and no "coming soon" mention anywhere on
-    // the panel. THE SUBSCRIBE/REVOKE/DEEP-LINK MACHINERY BELOW THIS
-    // FUNCTION IS UNTOUCHED - notifPushEnabled(), notifPushUnsupportedReason(),
-    // registerPushSubscription, disableNotifPush, sw.js's push/
-    // notificationclick handlers, communityHandlePushDeepLink - all of it
-    // stays exactly as built and exactly as tested. The moment
-    // state.featureFlags.notifPush is ever flipped on, this function's
-    // `pushOn` branch below renders the full three-button row again,
-    // badge/revoke-control/browser-unsupported-explanation included,
-    // unchanged from before this pass - nothing here is a deletion of
-    // that engineering, only of a button with nothing behind it yet.
     const pushOn = notifPushEnabled();
     const pushReason = pushOn ? notifPushUnsupportedReason() : null;
-    const pushDisabled = !!pushReason;
-    // ONE ROW, ONE CONTROL - the same three choices.
-    //
-    // Real phone screenshots at 390px: seventeen preference types, and every
-    // one of them a stacked block with its own 44px-tall chip-row of two or
-    // three buttons. A member scrolled past ~50 identical large buttons to
-    // find the one type they came to change, and because "התראת דחיפה" is
-    // roughly three times the width of "כבוי", the rows did not even line up
-    // with one another.
-    //
-    // A <select> is the compact form of exactly this question - pick one of
-    // three, mutually exclusive - and on both phone platforms it opens the
-    // native picker, which is a better target than a 13px chip either way.
-    // NOTHING ABOUT THE CHOICES CHANGED: the same three channels, the same
-    // NOTIF_CHANNELS values, the same setNotifPref() write, the same
-    // push-permission gate behind picking "push", the same staffOnly
-    // filtering, the same "פעיל" badge and the same browser-unsupported
-    // explanation. Only the control is different.
-    //
-    // The push OPTION is still omitted entirely (not disabled) while the
-    // module flag is off, for the reason the block above this one gives, and
-    // is rendered disabled - present but unpickable - when the flag is on and
-    // this browser cannot do push, so the explanation beside it has something
-    // to explain.
-    //
-    // .text-input, not a new class: the select then carries the app's own
-    // field styling (tokens for surface, border and text, so it themes
-    // itself and adds nothing to either dark block) and only its width and
-    // padding are overridden here, to keep the row one line.
     const rowFor = (t) => {
-      const stored = state.notif.prefs[t.key] || "in_app";
-      const eff = (stored === "push" && !pushOn) ? "in_app" : stored;
+      const stored = state.notif.prefs[t.key];
+      const on = stored === "push" || stored === "in_app";
       const saving = !!state.notif.prefSaving[t.key];
-      const opt = (ch, label, disabled) =>
-        `<option value="${ch}"${eff === ch ? " selected" : ""}${disabled ? " disabled" : ""}>${label}</option>`;
-      const noteHtml = t.note ? `<span style="color:var(--steel);font-size:11px;display:block;line-height:1.5;">${esc(t.note)}</span>` : "";
-      // Populated (COMM-229 frontend states): an active subscription on
-      // THIS device shows "פעיל" next to the push option, only for a row
-      // whose effective channel actually is push. Empty (push never opted
-      // into) renders no badge at all - the row looks exactly like any
-      // other channel, per the ticket's own wording.
-      const pushBadge = (pushOn && eff === "push" && state.notif.pushSub)
+      const pushBadge = (pushOn && stored === "push" && state.notif.pushSub)
         ? `<span style="color:var(--green);font-size:11px;"> · פעיל</span>` : "";
-      // Only reachable once pushOn is true (a browser-unsupported reason
-      // cannot exist while the flag itself is off) - the V1-default "בקרוב"
-      // case that used to live here has no button to explain any more.
-      const explainHtml = pushDisabled
-        ? `<span style="color:var(--steel);font-size:11px;display:block;line-height:1.5;">${esc(pushReason)}</span>` : "";
-      return `<label class="log-row" style="justify-content:space-between;gap:10px;align-items:center;cursor:pointer;">
-        <span style="font-size:13px;min-width:0;">${esc(t.label)}${pushBadge}${noteHtml}${explainHtml}</span>
-        <select class="text-input" data-notif-pref-select data-type="${t.key}" aria-label="${esc(t.label)}"${saving ? " disabled" : ""} style="width:auto;flex:0 0 auto;font-size:13px;padding:8px 10px;">
-          ${pushOn ? opt("push", "התראת דחיפה", pushDisabled) : ""}
-          ${opt("in_app", "באפליקציה", false)}
-          ${opt("off", "כבוי", false)}
-        </select>
+      return `<label class="log-row" data-notif-pref-row="${t.key}" style="justify-content:space-between;gap:12px;align-items:center;cursor:pointer;min-height:44px;">
+        <span style="font-size:13px;min-width:0;">${esc(t.label)}${pushBadge}</span>
+        <input type="checkbox" role="switch" data-notif-pref-toggle data-type="${t.key}" aria-label="${esc(t.label)}"${on ? " checked" : ""}${saving ? " disabled" : ""}/>
       </label>`;
     };
-    // `staffOnly` (currently just `new_report`) is hidden from a plain
-    // member: that type is never delivered to one (mod_alert_recipients()
-    // is moderators/admin/owner only), so showing the toggle to everyone
-    // would be a control that never does anything for most members. Same
-    // permission pair the moderation queue itself gates on (hasPerm/isAdmin
-    // above the queue render, and mod_alert_recipients() on the server).
-    const visiblePrefTypes = NOTIF_PREF_TYPES;
     const rows = state.notif.prefsLoaded
-      ? visiblePrefTypes.map(rowFor).join("")
-      : `<div class="log-row" aria-hidden="true"><span style="height:12px;width:60%;background:var(--border);border-radius:6px;display:inline-block;"></span></div>`.repeat(4);
-    // COMM-229. One device-level control, not one per row: a
-    // PushSubscription is per browser/device, so "turn push off" is a
-    // single action here rather than duplicated ten times. Shown only once
-    // the flag is on and this device actually has an active subscription.
+      ? NOTIF_PREF_TYPES.map(rowFor).join("")
+      : `<div class="log-row" aria-hidden="true"><span style="height:12px;width:60%;background:var(--border);border-radius:6px;display:inline-block;"></span></div>`.repeat(NOTIF_PREF_TYPES.length);
+    // A PushSubscription is per browser/device, so "turn push off" is a single
+    // action here rather than one per row.
     const deviceStatusHtml = (pushOn && state.notif.pushSub)
       ? `<div class="chip-row" style="margin-top:0;margin-bottom:8px;align-items:center;"><span style="font-size:12px;color:var(--steel);">התראות דחיפה פעילות במכשיר זה.</span><button type="button" class="link-btn" data-community-action="notif-push-disable">כיבוי במכשיר זה</button></div>`
       : "";
-    // The "push is coming in a future version" sentence only makes sense
-    // next to a push option a member can actually see - with the flag off
-    // (V1 default) there is no such option on this panel any more, so the
-    // copy no longer promises one.
-    const introHtml = "בחרו איך כל סוג התראה מגיע אליכם. הודעות תפעוליות מהאפליקציה תמיד יופיעו כאן, גם אם כיביתם אותן.";
-    return `<div class="ach-section" style="margin-top:18px;">${sectionHead("var(--brass)", "העדפות התראות")}
+    const reasonHtml = pushReason
+      ? `<div data-notif-push-reason style="color:var(--steel);font-size:12px;line-height:1.6;margin-bottom:8px;">${esc(pushReason)} ההתראות יופיעו בפעמון.</div>` : "";
+    const introHtml = "כל ההתראות כבויות עד שתדליקו אותן. מקבלים התראה רק על מעגל שעדיין חברים בו, ואף פעם לא ממי שחסמתם. עידוד על אותו פוסט מגיע לכל היותר פעם בשעה.";
+    return `<div class="ach-section" id="notifPrefs" style="margin-top:18px;">${sectionHead("var(--brass)", "התראות")}
       <div style="color:var(--steel);font-size:12px;line-height:1.6;margin-bottom:8px;">${introHtml}</div>
+      ${reasonHtml}
       ${deviceStatusHtml}
       <div class="log-list">${rows}</div>
       ${renderPushSelfTestPanel()}
@@ -1072,7 +1024,7 @@
   }
 
   window.communityHandlePushSelfTestReceipt = communityHandlePushSelfTestReceipt;
-  // Published beside notifRoute/classifyNotification/notifResolveTarget for
+  // Published beside notifRoute/notifResolveTarget for
   // the same reason those are: they are pure answers about the current
   // environment with no side effect, and the permission gate in particular is
   // a rule that has to be assertable from outside the scope it lives in.
@@ -1080,5 +1032,4 @@
   window.communityPlatformBucket = communityPlatformBucket;
   window.pushAskGateReason = pushAskGateReason;
   window.notifRoute = notifRoute;
-  window.classifyNotification = classifyNotification;
   window.notifResolveTarget = resolveNotifTarget;
