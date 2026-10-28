@@ -93,7 +93,7 @@ private circles for friends. It is not a gym app and not a product.
 
 ## Privacy decisions (2026-10-28)
 
-- **Body weight never leaves the device.** It is excluded from the `private_records` backup in the client (`isBackupRecordType`, `src/constants.js`). The rest of the private log is backed up after consent and can be turned off and deleted.
+- **Body weight never leaves the device.** It is excluded from the `private_records` backup in the client (`isBackupRecordType`, `src/constants.js`). Migration `202610280001` deletes existing bodyweight rows and the CHECK on `private_records.record_type` refuses the type. The rest of the private log is backed up after consent and can be turned off and deleted.
 - **hCaptcha is not used.** Turnstile is the only captcha and the only third-party script. The CSP names only the Turnstile host.
 - **`analytics_events` stays**: first-party, purged at 90 days, disclosed on the privacy pages.
 
