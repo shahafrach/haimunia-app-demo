@@ -5,17 +5,18 @@
 // It only stamps attributes; every color is a token in index.html's
 // <style id="tokens">. Same keys and defaults as src/theme.js, which owns the
 // logic once the app is running (test/theme-setting.test.mjs keeps them equal):
-//   data-palette       chalk | slate | cedar | sand | iris   (default chalk)
-//   data-theme         light | dark; left off to follow the system (default)
+//   data-palette       classic | chalk | slate | cedar | sand | iris   (default classic)
+//   data-theme         light | dark; left off to follow the system ("auto"). Default dark,
+//                      the look this app always opened in.
 //   data-transparency  on | off                              (default off)
 (function () {
   var root = document.documentElement;
-  var palette = "chalk", theme = "auto", transparency = "off", large = false;
+  var palette = "classic", theme = "dark", transparency = "off", large = false;
   try {
     var p = localStorage.getItem("haimunia-demo:palette");
-    if (p === "chalk" || p === "slate" || p === "cedar" || p === "sand" || p === "iris") palette = p;
+    if (p === "classic" || p === "chalk" || p === "slate" || p === "cedar" || p === "sand" || p === "iris") palette = p;
     var t = localStorage.getItem("haimunia-demo:theme");
-    if (t === "light" || t === "dark") theme = t;
+    if (t === "light" || t === "dark" || t === "auto") theme = t;
     if (localStorage.getItem("haimunia-demo:transparency") === "on") transparency = "on";
     large = localStorage.getItem("haimunia-demo:textScale") === "large";
   } catch (e) {}

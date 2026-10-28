@@ -56,17 +56,30 @@
 /* ---- Tier 1b: palette slots. Chalk and Brass is the default and the base for the
    other four, which override all eleven. Each pair is (light, dark). -------- */
 :root, [data-palette]{
-  --pal-bg:light-dark(#F6F3EC, #141312);
-  --pal-surface:light-dark(#FFFFFF, #1E1C1A);
-  --pal-text:light-dark(#1C1B19, #F2EEE6);
-  --pal-muted:light-dark(#5E5A52, #A8A194);
-  --pal-accent:light-dark(#87590B, #E0B25A);
-  --pal-accent-fill:light-dark(#B87F18, #E0B25A);
-  --pal-on-accent:light-dark(#1C1B19, #141312);
-  --pal-progress:light-dark(#0F766E, #4FD1C5);
-  --pal-pr:light-dark(#AB4E08, #F59E0B);
-  --pal-pr-fill:light-dark(#AB4E08, #F59E0B);
-  --pal-on-pr:light-dark(#FFFFFF, #141312);
+  --pal-bg:light-dark(#F2F5FA, #152342);
+  --pal-surface:light-dark(#FFFFFF, #1F3057);
+  --pal-text:light-dark(#1C2536, #F2ECE1);
+  --pal-muted:light-dark(#57627A, #A8B3C9);
+  --pal-accent:light-dark(#AD4023, #FF7F53);
+  --pal-accent-fill:light-dark(#E85D3D, #E85D3D);
+  --pal-on-accent:light-dark(#1A0D08, #1A0D08);
+  --pal-progress:light-dark(#1E7D76, #48B1A9);
+  --pal-pr:light-dark(#80551F, #E8B98A);
+  --pal-pr-fill:light-dark(#E8B98A, #E8B98A);
+  --pal-on-pr:light-dark(#241A0D, #241A0D);
+}
+[data-palette="classic"]{
+  --pal-bg:light-dark(#F2F5FA, #152342);
+  --pal-surface:light-dark(#FFFFFF, #1F3057);
+  --pal-text:light-dark(#1C2536, #F2ECE1);
+  --pal-muted:light-dark(#57627A, #A8B3C9);
+  --pal-accent:light-dark(#AD4023, #FF7F53);
+  --pal-accent-fill:light-dark(#E85D3D, #E85D3D);
+  --pal-on-accent:light-dark(#1A0D08, #1A0D08);
+  --pal-progress:light-dark(#1E7D76, #48B1A9);
+  --pal-pr:light-dark(#80551F, #E8B98A);
+  --pal-pr-fill:light-dark(#E8B98A, #E8B98A);
+  --pal-on-pr:light-dark(#241A0D, #241A0D);
 }
 [data-palette="chalk"]{
   --pal-bg:light-dark(#F6F3EC, #141312);
@@ -165,6 +178,12 @@
   --color-info:light-dark(#1D4ED8, #7FA8FF);
   --color-violet:light-dark(#6D3FC0, #B79CF0);
   --color-scrim:color-mix(in srgb, var(--p-black) 60%, transparent);
+  /* The scene: a deep tone behind every page header, dark in both themes, with white
+     type over it. It is the palette's own text (light theme) or page color (dark
+     theme) pushed toward black, so every palette gets a scene that belongs to it. */
+  --color-scene:light-dark(color-mix(in srgb, var(--pal-text) 72%, var(--p-black)), color-mix(in srgb, var(--pal-bg) 72%, var(--p-black)));
+  --color-on-scene:var(--p-white);
+  --color-celebrate:color-mix(in srgb, var(--pal-pr-fill) 34%, var(--pal-surface));
   --color-shadow:light-dark(color-mix(in srgb, var(--p-black) 14%, transparent), color-mix(in srgb, var(--p-black) 55%, transparent));
   --color-glass-card:color-mix(in srgb, var(--pal-surface) 72%, transparent);
   --color-glass-bar:color-mix(in srgb, var(--pal-surface) 82%, transparent);
@@ -199,6 +218,15 @@
   --tab-active:var(--color-accent);
   --tab-inactive:var(--color-text-muted);
   --avatar-bg:var(--color-surface-sunken);
+  /* Scene art: no photo yet, so the header scene is drawn from the palette (accent glow,
+     fine diagonal lines, deep tone). A photo goes in --scene-photo per tab (index.html,
+     .scene-page--home ... ) and is laid over this, which stays as its fallback. */
+  --scene-photo-height:clamp(280px, 40svh, 380px);
+  --scene-photo:none;
+  --scene-glow-x:85%; --scene-glow-y:8%;
+  --scene-art:radial-gradient(120% 70% at var(--scene-glow-x) var(--scene-glow-y), color-mix(in srgb, var(--pal-accent-fill) 38%, transparent), transparent 62%), repeating-linear-gradient(135deg, color-mix(in srgb, var(--p-white) 4.5%, transparent) 0 2px, transparent 2px 22px), linear-gradient(160deg, color-mix(in srgb, var(--color-scene) 80%, var(--pal-accent-fill)), var(--color-scene));
+  --scene-scrim:linear-gradient(180deg, color-mix(in srgb, var(--color-scene) 34%, transparent) 0, color-mix(in srgb, var(--color-scene) 8%, transparent) 25%, color-mix(in srgb, var(--color-scene) 70%, transparent) 62%, var(--color-scene) 100%);
+  --header-glass:color-mix(in srgb, var(--color-scene) 72%, transparent);
   /* Medal metals do not follow the palette: bronze, silver and gold mean the same thing in every one. */
   --bronze-lo:#8A6A1E; --bronze-mid:#C9A227; --bronze-hi:#F0DD9C;
   --silver-lo:#8A94A0; --silver-mid:#D8DEE4; --silver-hi:#FFFFFF;
@@ -233,16 +261,26 @@
 @supports not (color:light-dark(#000, #fff)){
   :root, :root[data-theme], [data-palette]{ color-scheme:light; }
   :root, [data-palette]{
-    --pal-bg:#F6F3EC; --pal-surface:#FFFFFF; --pal-text:#1C1B19; --pal-muted:#5E5A52; --pal-accent:#87590B; --pal-accent-fill:#B87F18; --pal-on-accent:#1C1B19; --pal-progress:#0F766E; --pal-pr:#AB4E08; --pal-pr-fill:#AB4E08; --pal-on-pr:#FFFFFF;
+    --pal-bg:#F2F5FA; --pal-surface:#FFFFFF; --pal-text:#1C2536; --pal-muted:#57627A; --pal-accent:#AD4023; --pal-accent-fill:#E85D3D; --pal-on-accent:#1A0D08; --pal-progress:#1E7D76; --pal-pr:#80551F; --pal-pr-fill:#E8B98A; --pal-on-pr:#241A0D;
     --color-surface-raised:color-mix(in srgb, var(--pal-surface) 55%, var(--p-white));
+    --color-scene:color-mix(in srgb, var(--pal-text) 72%, var(--p-black));
     --color-danger:#B3261E; --color-on-danger:#FFFFFF; --color-success:#1F6B3A; --color-warning:#8A5A00; --color-info:#1D4ED8; --color-violet:#6D3FC0;
     --color-shadow:color-mix(in srgb, var(--p-black) 14%, transparent);
   }
+  [data-palette="classic"]{ --pal-bg:#F2F5FA; --pal-surface:#FFFFFF; --pal-text:#1C2536; --pal-muted:#57627A; --pal-accent:#AD4023; --pal-accent-fill:#E85D3D; --pal-on-accent:#1A0D08; --pal-progress:#1E7D76; --pal-pr:#80551F; --pal-pr-fill:#E8B98A; --pal-on-pr:#241A0D; }
   [data-palette="chalk"]{ --pal-bg:#F6F3EC; --pal-surface:#FFFFFF; --pal-text:#1C1B19; --pal-muted:#5E5A52; --pal-accent:#87590B; --pal-accent-fill:#B87F18; --pal-on-accent:#1C1B19; --pal-progress:#0F766E; --pal-pr:#AB4E08; --pal-pr-fill:#AB4E08; --pal-on-pr:#FFFFFF; }
   [data-palette="slate"]{ --pal-bg:#F4F6F8; --pal-surface:#FFFFFF; --pal-text:#14181F; --pal-muted:#566070; --pal-accent:#C2410C; --pal-accent-fill:#C2410C; --pal-on-accent:#FFFFFF; --pal-progress:#1D4ED8; --pal-pr:#C2410C; --pal-pr-fill:#C2410C; --pal-on-pr:#FFFFFF; }
   [data-palette="cedar"]{ --pal-bg:#F4F1EC; --pal-surface:#E8E4DD; --pal-text:#1A2B22; --pal-muted:#52625A; --pal-accent:#2E6B4A; --pal-accent-fill:#2E6B4A; --pal-on-accent:#FFFFFF; --pal-progress:#2E6B4A; --pal-pr:#6B5B95; --pal-pr-fill:#6B5B95; --pal-on-pr:#FFFFFF; }
   [data-palette="sand"]{ --pal-bg:#F8F3EE; --pal-surface:#F0E8E0; --pal-text:#2A221C; --pal-muted:#6B5E54; --pal-accent:#3A5F8A; --pal-accent-fill:#3A5F8A; --pal-on-accent:#FFFFFF; --pal-progress:#3A5F8A; --pal-pr:#8B4E32; --pal-pr-fill:#8B4E32; --pal-on-pr:#FFFFFF; }
   [data-palette="iris"]{ --pal-bg:#F8F7F4; --pal-surface:#F0EEE9; --pal-text:#1C1B1A; --pal-muted:#6B6762; --pal-accent:#6B4C9A; --pal-accent-fill:#6B4C9A; --pal-on-accent:#FFFFFF; --pal-progress:#6B4C9A; --pal-pr:#7A5E00; --pal-pr-fill:#D4A017; --pal-on-pr:#1C1B1A; }
+}
+
+/* Classic is the palette with a scene: a tall header image behind each page title, a sheet
+   rising over it, and a dark bar below. The calm palettes keep the flat page. */
+[data-palette="classic"]{
+  --tab-inactive:color-mix(in srgb, var(--color-on-scene) 78%, transparent);
+  --tab-active:color-mix(in srgb, var(--pal-accent-fill) 70%, var(--p-white));
+  --bar-bg:color-mix(in srgb, var(--color-scene) 96%, transparent);
 }
 
 /* The explicit choice flips color-scheme and nothing else. */

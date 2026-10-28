@@ -7,11 +7,11 @@ import { test } from "node:test";
 import assert from "node:assert";
 import { bootApp } from "./helpers/boot.mjs";
 
-test("a first load follows the system: no data-theme, chalk palette, transparency off", async () => {
+test("a first load is Classic and dark, with transparency off", async () => {
   const window = await bootApp();
   const root = window.document.documentElement;
-  assert.equal(root.hasAttribute("data-theme"), false, "default is the system, not a forced theme");
-  assert.equal(root.getAttribute("data-palette"), "chalk");
+  assert.equal(root.getAttribute("data-theme"), "dark", "the look the app always opened in");
+  assert.equal(root.getAttribute("data-palette"), "classic");
   assert.equal(root.getAttribute("data-transparency"), "off");
 });
 
@@ -62,14 +62,14 @@ test("Settings shows all three controls and reflects the current choice", async 
   assert.equal(checked("[data-action='set-theme']").dataset.pref, "light");
   assert.equal(checked("[data-action='set-palette']").dataset.palette, "sand");
   assert.equal(checked("[data-action='set-transparency']").dataset.pref, "off");
-  assert.equal(doc.querySelectorAll("#settingsBody [data-action='set-palette']").length, 5, "five palettes");
+  assert.equal(doc.querySelectorAll("#settingsBody [data-action='set-palette']").length, 5, "six palettes");
   assert.equal(doc.querySelectorAll("#settingsBody [data-action='set-theme']").length, 3, "light, dark, system");
 });
 
 test("every palette option carries data-palette, so its miniature re-resolves the tokens", async () => {
   const window = await bootApp();
   const ids = [...window.document.querySelectorAll("#settingsBody .palette-opt")].map((el) => el.getAttribute("data-palette"));
-  assert.deepEqual(ids, ["chalk", "slate", "cedar", "sand", "iris"]);
+  assert.deepEqual(ids, ["classic", "chalk", "slate", "cedar", "sand", "iris"]);
 });
 
 test("the chrome color follows the page: one live theme-color tag replaces the two static ones", async () => {

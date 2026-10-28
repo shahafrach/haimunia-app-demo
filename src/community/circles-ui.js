@@ -33,7 +33,7 @@
   }
   // One page frame for Home, Circle and Me.
   function circleScene(tabKey, title, inner) {
-    return `<section class="scene-page ${window.PAGE_SCENES.community.className}" aria-labelledby="pageTitle-${tabKey}">
+    return `<section class="scene-page ${(window.PAGE_SCENES[tabKey] || window.PAGE_SCENES.community).className}" aria-labelledby="pageTitle-${tabKey}">
       <div class="scene-page__intro">
         <h1 id="pageTitle-${tabKey}" class="scene-page__title">${esc(title)}</h1>
       </div>

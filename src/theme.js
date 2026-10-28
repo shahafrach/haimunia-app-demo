@@ -26,6 +26,7 @@
 
   /** The palettes in picker order. `id` is the data-palette value. */
   const PALETTES = Object.freeze([
+    Object.freeze({ id: "classic", name: "קלאסי" }),
     Object.freeze({ id: "chalk", name: "גיר ופליז" }),
     Object.freeze({ id: "slate", name: "צפחה וגחלת" }),
     Object.freeze({ id: "cedar", name: "ארז וערפל" }),
@@ -38,7 +39,7 @@
     Object.freeze({ id: "dark", name: "כהה" }),
     Object.freeze({ id: "auto", name: "לפי המערכת" }),
   ]);
-  const DEFAULTS = Object.freeze({ palette: "chalk", theme: "auto", transparency: "off" });
+  const DEFAULTS = Object.freeze({ palette: "classic", theme: "dark", transparency: "off" });
 
   /** @param {unknown} v */
   function normalizePalette(v) {

@@ -21,26 +21,27 @@ function page(stored = {}, { matches = false, supports = true } = {}) {
 }
 const load = (w) => { w.eval(themeSrc); return w.BoxLogTheme; };
 
-test("five palettes, in picker order, each with a Hebrew name", () => {
+test("six palettes, in picker order, each with a Hebrew name", () => {
   const T = load(page());
-  assert.deepEqual(T.PALETTES.map((p) => p.id), ["chalk", "slate", "cedar", "sand", "iris"]);
+  assert.deepEqual(T.PALETTES.map((p) => p.id), ["classic", "chalk", "slate", "cedar", "sand", "iris"]);
   assert.ok(T.PALETTES.every((p) => /[֐-׿]/.test(p.name)));
   assert.deepEqual(T.THEMES.map((t) => t.id), ["light", "dark", "auto"]);
 });
 
-test("defaults: chalk, follow the system, transparency off", () => {
+test("defaults: Classic, dark (the look the app always opened in), transparency off", () => {
   const T = load(page());
-  assert.deepEqual({ ...T.DEFAULTS }, { palette: "chalk", theme: "auto", transparency: "off" });
-  assert.deepEqual(T.read(page().localStorage), { palette: "chalk", theme: "auto", transparency: "off" });
+  assert.deepEqual({ ...T.DEFAULTS }, { palette: "classic", theme: "dark", transparency: "off" });
+  assert.deepEqual(T.read(page().localStorage), { palette: "classic", theme: "dark", transparency: "off" });
 });
 
 test("normalizers reject anything outside the allowed values", () => {
   const T = load(page());
   assert.equal(T.normalizePalette("iris"), "iris");
-  assert.equal(T.normalizePalette("neon"), "chalk");
-  assert.equal(T.normalizePalette(undefined), "chalk");
+  assert.equal(T.normalizePalette("neon"), "classic");
+  assert.equal(T.normalizePalette(undefined), "classic");
   assert.equal(T.normalizeTheme("dark"), "dark");
-  assert.equal(T.normalizeTheme("sepia"), "auto");
+  assert.equal(T.normalizeTheme("sepia"), "dark");
+  assert.equal(T.normalizeTheme("auto"), "auto");
   assert.equal(T.normalizeTransparency("on"), "on");
   assert.equal(T.normalizeTransparency("maybe"), "off");
   assert.equal(T.isPalette("slate"), true);
@@ -55,15 +56,15 @@ test("write then read round-trips, and a bad stored value reads back as the defa
   T.write("transparency", "on", w.localStorage);
   assert.deepEqual(T.read(w.localStorage), { palette: "cedar", theme: "dark", transparency: "on" });
   w.localStorage.setItem("haimunia-demo:palette", "<script>");
-  assert.equal(T.read(w.localStorage).palette, "chalk");
+  assert.equal(T.read(w.localStorage).palette, "classic");
 });
 
 test("storage that throws never breaks the setting", () => {
   const T = load(page());
   const broken = { getItem() { throw new Error("denied"); }, setItem() { throw new Error("denied"); } };
-  assert.deepEqual(T.read(broken), { palette: "chalk", theme: "auto", transparency: "off" });
+  assert.deepEqual(T.read(broken), { palette: "classic", theme: "dark", transparency: "off" });
   assert.doesNotThrow(() => T.write("palette", "iris", broken));
-  assert.deepEqual(T.read(null), { palette: "chalk", theme: "auto", transparency: "off" });
+  assert.deepEqual(T.read(null), { palette: "classic", theme: "dark", transparency: "off" });
 });
 
 test("apply stamps data-palette and data-transparency always, data-theme only when forced", () => {
@@ -78,7 +79,7 @@ test("apply stamps data-palette and data-transparency always, data-theme only wh
   assert.equal(r.hasAttribute("data-theme"), false);
   assert.equal(r.getAttribute("data-transparency"), "off");
   T.apply(w.document, { palette: "nope" });
-  assert.equal(r.getAttribute("data-palette"), "chalk", "an unknown palette never reaches the attribute");
+  assert.equal(r.getAttribute("data-palette"), "classic", "an unknown palette never reaches the attribute");
 });
 
 test("resolveTheme: forced themes win; auto asks the system; no light-dark() means light only", () => {
@@ -108,10 +109,10 @@ function boot(stored) {
   return w.document.documentElement;
 }
 
-test("theme-init.js: nothing stored means chalk, system theme, transparency off", () => {
+test("theme-init.js: nothing stored means Classic, dark, transparency off", () => {
   const r = boot({});
-  assert.equal(r.getAttribute("data-palette"), "chalk");
-  assert.equal(r.hasAttribute("data-theme"), false);
+  assert.equal(r.getAttribute("data-palette"), "classic");
+  assert.equal(r.getAttribute("data-theme"), "dark");
   assert.equal(r.getAttribute("data-transparency"), "off");
 });
 
@@ -122,8 +123,8 @@ test("theme-init.js stamps the stored choice, and ignores values src/theme.js wo
   assert.equal(r.getAttribute("data-transparency"), "on");
   assert.equal(r.getAttribute("data-text-scale"), "large");
   const bad = boot({ palette: "neon", theme: "sepia", transparency: "yes" });
-  assert.equal(bad.getAttribute("data-palette"), "chalk");
-  assert.equal(bad.hasAttribute("data-theme"), false);
+  assert.equal(bad.getAttribute("data-palette"), "classic");
+  assert.equal(bad.getAttribute("data-theme"), "dark");
   assert.equal(bad.getAttribute("data-transparency"), "off");
   assert.equal(boot({ theme: "auto" }).hasAttribute("data-theme"), false, "the stored word for the system leaves the attribute off");
 });

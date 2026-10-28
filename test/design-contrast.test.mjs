@@ -68,6 +68,35 @@ for (const palette of PALETTE_IDS) {
       assert.deepEqual(failures, []);
     });
 
+    test(`${palette} ${mode}: type over the scene and the celebration card reads`, () => {
+      const { solid, tok } = resolver(palette, mode);
+      const white = tok("--color-on-scene");
+      const failures = [];
+      // The title sits on the scene art at its worst: the deep tone with the accent glow mixed in.
+      const worst = solid("color-mix(in srgb, var(--color-scene) 75%, var(--pal-accent-fill))");
+      for (const [name, bg] of [["scene", tok("--color-scene")], ["scene with glow", worst]]) {
+        const r = contrast(white, bg);
+        if (r < 7) failures.push(`on-scene on ${name}: ${r.toFixed(2)}`);
+      }
+      // The PR card is a bright wash of the PR color: all its type is the page text color.
+      const celebrate = tok("--color-celebrate");
+      const celebrate2 = solid("color-mix(in srgb, var(--pal-accent-fill) 26%, var(--pal-surface))");
+      for (const [name, bg] of [["celebrate", celebrate], ["celebrate end", celebrate2]]) {
+        const r = contrast(tok("--color-text", bg), bg);
+        if (r < TEXT) failures.push(`--color-text on ${name}: ${r.toFixed(2)}`);
+      }
+      assert.deepEqual(failures, []);
+    });
+
+    test(`${palette} ${mode}: tab labels read on the bar`, () => {
+      const { solid, tok } = resolver(palette, mode);
+      const bar = tok("--bar-bg");
+      for (const fg of ["--tab-inactive", "--tab-active"]) {
+        const r = contrast(solid(`var(${fg})`, bar), bar);
+        assert.ok(r >= TEXT, `${fg} on the bar: ${r.toFixed(2)}`);
+      }
+    });
+
     test(`${palette} ${mode}: filled controls carry readable labels`, () => {
       const { tok } = resolver(palette, mode);
       const pairs = [

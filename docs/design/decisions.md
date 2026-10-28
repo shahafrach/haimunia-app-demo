@@ -73,3 +73,19 @@ These came after the list above and win over it and over research.md.
   Every color literal lives there and nowhere else; `test/design-tokens-guard.test.mjs`
   enforces it and `test/design-contrast.test.mjs` computes WCAG 2.2 AA ratios
   for every palette in both modes.
+
+## Owner decisions, 2026-10-28 (after the preview)
+
+- **Classic is the default palette.** Dark navy scene with depth and warm coral, taken from
+  the app before the Rebrand (`c5855d3`): navy `#152342`, surface `#1F3057`, coral
+  `#E85D3D` with text coral `#FF7F53`, brass `#E8B98A` for PRs; light is `#F2F5FA` and white
+  with coral text `#AD4023`. It is the only palette with a scene (tall header image,
+  scrim, rounded sheet); the five calm palettes stay as options. The default theme is dark,
+  the look the app always opened in; "follow the system" is one tap away.
+- **Each tab has its own scene** (Home, Circle, Log, Progress), drawn from the palette until
+  photos exist, moving slowly on scroll (parallax and a fade), still under
+  `prefers-reduced-motion`. Photos: see [photos.md](photos.md).
+- **The PR moment is warm and bright**: a gold-and-coral card, a gold check, a pulse on the
+  badge, an exclamation in the headline. The three levels are unchanged.
+- **Bottom bar:** a tap on a tab is never lost to a re-render (the bar is rewritten only when
+  its markup changes).

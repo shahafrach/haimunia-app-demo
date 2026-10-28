@@ -60,7 +60,7 @@ export function splitTop(s, sep) {
   return out;
 }
 
-export const PALETTE_IDS = ["chalk", "slate", "cedar", "sand", "iris"];
+export const PALETTE_IDS = ["classic", "chalk", "slate", "cedar", "sand", "iris"];
 
 /** Custom properties in effect for `palette`: :root / [data-palette] base, then the palette's own rule. */
 export function scopeFor(palette, { fallback = false } = {}) {

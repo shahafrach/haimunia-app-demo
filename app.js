@@ -155,8 +155,8 @@ const PAGE_SCENES = Object.freeze({
   history: { className: "scene-page--progress" },
   wod: { className: "scene-page--library" },
   community: { className: "scene-page--community" },
-  home: { className: "scene-page--community" },
-  me: { className: "scene-page--community" },
+  home: { className: "scene-page--home" },
+  me: { className: "scene-page--home" },
 });
 // A plain top-level `const` does NOT become a window property the way a
 // `var`/function declaration does - cloud.js (its own IIFE) reaches this
@@ -1547,8 +1547,8 @@ function momentSet(w, r) { return w > 0 ? `<bdi class="num">${esc(String(w))} ק
 function renderMomentBody(m) {
   const burst = m.level === 2 ? `<span class="moment-burst" aria-hidden="true">${"<i></i>".repeat(12)}</span>` : "";
   const topPr = m.prs[0] || null;
-  const title = m.wodPr ? `שיא חדש ב${m.wodPr.name}`
-    : topPr ? `שיא חדש ב${topPr.name}`
+  const title = m.wodPr ? `שיא חדש ב${m.wodPr.name}!`
+    : topPr ? `שיא חדש ב${topPr.name}!`
     : m.week.weekJustMet ? "השבוע הושלם" : `אימון מספר ${m.sessionNumber}`;
   const sub = m.wodPr ? (m.wodPr.benchmark ? "בנצ'מרק" : "") : (topPr || m.week.weekJustMet) ? `אימון מספר ${m.sessionNumber} · ${fmtDate(m.date)}` : fmtDate(m.date);
   const prCards = m.wodPr
@@ -6933,6 +6933,7 @@ function findFieldByIdentity(key) {
     return form && form.elements ? form.elements[key.slice(at + 2)] : null;
   } catch (e) { return null; }
 }
+let lastTabBarHtml = null;
 function render() {
   let content;
   // WHICH TOP-LEVEL TAB IS ON SCREEN, published for cloud.js (2026-09-15).
@@ -7029,7 +7030,15 @@ function render() {
   }
   const bottomTabBarEl = document.getElementById("bottomTabBar");
   if (bottomTabBarEl) {
-    try { bottomTabBarEl.innerHTML = renderBottomTabBar(); }
+    // Written only when it changed. The Circle and Home tabs load their data
+    // asynchronously and re-render several times; rebuilding the bar each time
+    // replaced the very button a finger had just touched, so the tap ended on a
+    // detached node, its click was lost, and the app stayed where it was
+    // ("tapping another tab stays on Circle").
+    try {
+      const barHtml = renderBottomTabBar();
+      if (lastTabBarHtml !== barHtml || !bottomTabBarEl.firstChild) { bottomTabBarEl.innerHTML = barHtml; lastTabBarHtml = barHtml; }
+    }
     catch (err) { console.error("bottom tab bar render error:", err); }
   }
   // COMM-360: the save action only appears once something is actually
@@ -8787,6 +8796,28 @@ document.getElementById("wodPickerSearch").addEventListener("keydown", (e) => {
   if (exact) { choosePickedWod(exact.id); closeWodPicker(); renderWodContent(); }
   else openWodBuilder(q);
 });
+
+// ---------- The scene moves a little ----------
+// Classic's header scene drifts up slower than the page (parallax) and the title
+// fades as it scrolls away. Two custom properties on <html>, written from one
+// passive scroll listener, at most once a frame. Under prefers-reduced-motion
+// nothing is attached and the scene stays still; index.html also pins the
+// transform off in that media query, so the two cannot disagree.
+function setupSceneMotion() {
+  const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)");
+  if (!reduce || reduce.matches) return;
+  const root = document.documentElement;
+  let queued = false;
+  function paint() {
+    queued = false;
+    const y = Math.max(0, window.scrollY || 0);
+    root.style.setProperty("--scene-shift", Math.min(y * 0.35, 160).toFixed(1) + "px");
+    root.style.setProperty("--scene-fade", Math.min(1, y / 220).toFixed(3));
+  }
+  window.addEventListener("scroll", () => { if (!queued) { queued = true; requestAnimationFrame(paint); } }, { passive: true });
+  reduce.addEventListener("change", (e) => { if (e.matches) { root.style.removeProperty("--scene-shift"); root.style.removeProperty("--scene-fade"); } });
+}
+setupSceneMotion();
 
 // ---------- Init ----------
 async function init() {
