@@ -12,7 +12,7 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import fs from "node:fs";
-import { bootCommunity, waitFor, notifPrefControl, notifPrefOption, notifPrefValue, pickNotifPref } from "./helpers/boot.mjs";
+import { bootCommunity, waitFor, notifPrefControl, notifPrefValue, pickNotifPref } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
 import { cloudSource } from "./helpers/community-src.mjs";
 
@@ -60,7 +60,7 @@ async function openDirectory(window) {
 async function openAccount(window) {
   window.switchAppTab("me");
   await waitFor(() => !!window.document.getElementById("communityHead"), 4000);
-  await waitFor(() => !!notifPrefControl(window, "reactions"), 4000);
+  await waitFor(() => !!notifPrefControl(window, "reaction"), 4000);
 }
 
 const directoryIds = (window) =>
@@ -234,33 +234,35 @@ test("the permission sentence has exactly one definition", () => {
 // 6. One compact row per notification type, one control
 // =====================================================================
 
-test("each notification type is one row with one control offering the same three channels", async () => {
+test("each notification type is one row with one switch", async () => {
   const mock = club();
   const window = await bootCommunity(mock, { syncEnabled: false, localStorage: { "haimunia-demo:notifPushFlag": "1" } });
   await openAccount(window);
 
-  const selects = [...window.document.querySelectorAll("[data-notif-pref-select]")];
-  assert.ok(selects.length >= 3, "every member-visible type is listed");
+  const switches = [...window.document.querySelectorAll("[data-notif-pref-toggle]")];
+  assert.equal(switches.length, 4, "the four types, no more");
+  assert.equal(window.document.querySelectorAll("[data-notif-pref-select]").length, 0, "no select is left");
   assert.equal(window.document.querySelectorAll('[data-community-action="notif-pref"]').length, 0,
     "and none of them renders the old three-button row");
-  for (const s of selects) {
-    assert.deepEqual([...s.options].map((o) => o.value), ["push", "in_app", "off"],
-      "same three choices, same order, on every type");
-    assert.equal(s.closest(".log-row").querySelectorAll("select").length, 1, "one control per row");
+  for (const box of switches) {
+    assert.equal(box.type, "checkbox");
+    assert.equal(box.getAttribute("role"), "switch");
+    assert.equal(box.checked, false, "off until the member turns it on");
+    assert.equal(box.closest(".log-row").querySelectorAll("input").length, 1, "one control per row");
   }
 });
 
-test("changing the control writes the same own-row upsert the buttons did, and once", async () => {
+test("turning a switch on writes the own-row upsert, and once", async () => {
   const mock = club();
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openAccount(window);
 
-  pickNotifPref(window, "trained_together", "off");
-  await waitFor(() => mock.db.notification_preferences.some((r) => r.type === "trained_together" && r.channel === "off"), 4000);
+  pickNotifPref(window, "trained_together", true);
+  await waitFor(() => mock.db.notification_preferences.some((r) => r.type === "trained_together" && r.channel !== "off"), 4000);
   assert.equal(mock.db.notification_preferences.filter((r) => r.type === "trained_together").length, 1,
     "one row, not one per stacked listener - the handler is delegated, bound once for the document");
   assert.equal(mock.db.notification_preferences.find((r) => r.type === "trained_together").user_id, "u1");
-  await waitFor(() => notifPrefValue(window, "trained_together") === "off", 4000);
+  await waitFor(() => notifPrefValue(window, "trained_together") === "on", 4000);
 });
 
 

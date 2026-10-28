@@ -1,0 +1,91 @@
+name: rotate-vapid
+# Rotates the Web Push (VAPID) key pair without any person or session seeing
+# the private key.
+#
+# What it does, in order:
+#   1. generates a fresh P-256 key pair ON THE RUNNER
+#      (scripts/generate-vapid-keys.mjs) and writes both halves to a 0600 file
+#      in the runner's temp dir; the script prints only the PUBLIC key;
+#   2. sets VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY as Supabase Edge Function
+#      secrets with `supabase secrets set --env-file` (never on a command line,
+#      never echoed; the CLI's own output is discarded), against the project in
+#      supabase/PROJECT_REF, with the existing SUPABASE_ACCESS_TOKEN secret;
+#   3. writes ONLY the public key to the job summary;
+#   4. deletes the file, even when a step failed.
+# The sender (notif_push_send) reads the secrets at run time, so nothing needs
+# redeploying.
+#
+# AFTER IT RUNS (a person, once): copy the public key from the job summary into
+# `notifPushVapidPublicKey` in cloud-config.js, and ship that. Until then the
+# client refuses to subscribe (it fails closed on the placeholder). Rotating
+# invalidates every existing subscription: a PushSubscription is bound to the
+# key it was made with, so each device re-subscribes the next time the member
+# turns a notification on.
+#
+# Needs one repository secret, which the deploy workflows already use:
+#   SUPABASE_ACCESS_TOKEN - a Supabase personal access token.
+# Never add a step here that prints, uploads, caches or summarises the private
+# key or the env file; test/rotate-vapid-workflow.test.mjs fails if one appears.
+on:
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: rotate-vapid
+  cancel-in-progress: false
+jobs:
+  rotate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: refuse to run without the access token
+        run: |
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ]; then
+            echo "SUPABASE_ACCESS_TOKEN is not set. No key was generated and nothing was changed."
+            exit 1
+          fi
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - uses: supabase/setup-cli@45a513f8c64c0bc8e0e3dfe572b5c95be85f6359 # v3.0.1
+        with:
+          version: 2.116.0
+
+      - name: generate the pair on the runner and set the Edge Function secrets
+        id: rotate
+        run: |
+          set +x
+          umask 077
+          PROJECT_REF="$(tr -d '[:space:]' < supabase/PROJECT_REF)"
+          ENV_FILE="$RUNNER_TEMP/vapid.env"
+          # stdout is the PUBLIC key and nothing else; the private key only
+          # ever goes into $ENV_FILE.
+          PUBLIC_KEY="$(node scripts/generate-vapid-keys.mjs --env-file "$ENV_FILE")"
+          if ! supabase secrets set --env-file "$ENV_FILE" --project-ref "$PROJECT_REF" >/dev/null 2>&1; then
+            echo "supabase secrets set failed. Its output is discarded on purpose, so it cannot carry the key."
+            exit 1
+          fi
+          {
+            echo "## VAPID key rotated"
+            echo
+            echo "Project: \`$PROJECT_REF\`"
+            echo
+            echo "Public key (paste into \`notifPushVapidPublicKey\` in \`cloud-config.js\`):"
+            echo
+            echo '```'
+            echo "$PUBLIC_KEY"
+            echo '```'
+            echo
+            echo "The private key was set as the Edge Function secret \`VAPID_PRIVATE_KEY\` and was never printed."
+            echo "Every existing push subscription is now invalid; devices re-subscribe the next time a notification is turned on."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: delete the key file
+        if: always()
+        run: rm -f "$RUNNER_TEMP/vapid.env"

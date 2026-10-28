@@ -19,9 +19,12 @@
 // Secrets (Edge Function secrets, never the repo):
 //   VAPID_PRIVATE_KEY  the 32-byte d value, base64url
 //   VAPID_PUBLIC_KEY   must match cloud-config.js's notifPushVapidPublicKey
-//   VAPID_SUBJECT      mailto: or https: contact, per RFC 8292
+// Both are written by the rotate-vapid workflow, which generates the pair on
+// the runner so that no person and no session ever sees the private half.
+// The subject (RFC 8292 contact) is a URL, not an email address: VAPID_SUBJECT
+// in _shared/webPush.mjs.
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.57.4";
-import { encryptPushPayload, buildVapidAuth } from "../_shared/webPush.mjs";
+import { encryptPushPayload, buildVapidAuth, VAPID_SUBJECT } from "../_shared/webPush.mjs";
 
 // Same constant-shape comparison recap_weekly uses (SEC-017): a plain !==
 // short-circuits at the first differing byte, which is a timing channel for
@@ -103,8 +106,8 @@ export async function sendPending(
           "Content-Encoding": "aes128gcm",
           "Content-Type": "application/octet-stream",
           // Seconds the push service may hold this if the device is offline.
-          // 6 hours: a "your streak is at risk" that lands tomorrow morning
-          // is noise, and this is the only knob that bounds that.
+          // 6 hours: a reaction that lands tomorrow morning is noise, and
+          // this is the only knob that bounds that.
           TTL: "21600",
           Urgency: "normal",
         },
@@ -182,12 +185,11 @@ Deno.serve(async (req: Request) => {
 
   const publicKey = Deno.env.get("VAPID_PUBLIC_KEY");
   const privateKey = Deno.env.get("VAPID_PRIVATE_KEY");
-  const subject = Deno.env.get("VAPID_SUBJECT");
-  if (!publicKey || !privateKey || !subject) {
+  if (!publicKey || !privateKey) {
     // Refusing loudly rather than returning 200 with nothing sent. An
     // unprovisioned sender that reports success is the exact shape of failure
     // this project keeps finding (see docs/handover/SHARED_CONTEXT.md).
-    console.error("notif_push_send: VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY/VAPID_SUBJECT not provisioned");
+    console.error("notif_push_send: VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY not provisioned");
     return new Response(JSON.stringify({ error: "vapid keys not provisioned" }), {
       status: 503, headers: { "Content-Type": "application/json" },
     });
@@ -195,7 +197,7 @@ Deno.serve(async (req: Request) => {
 
   const supabase = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
   try {
-    const result = await sendPending(supabase, { publicKey, privateKey, subject });
+    const result = await sendPending(supabase, { publicKey, privateKey, subject: VAPID_SUBJECT });
     if (result.attempted) console.log("notif_push_send:", result);
     return new Response(JSON.stringify(result), { headers: { "Content-Type": "application/json" } });
   } catch (_err) {

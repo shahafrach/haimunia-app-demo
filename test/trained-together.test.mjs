@@ -263,15 +263,15 @@ test("trained_together is a real notification type with its own preference key",
   const at = layerJs.indexOf("trained_together:");
   assert.ok(at > -1, "NOTIF_TYPES carries the type");
   const row = layerJs.slice(at, layerJs.indexOf("\n", at));
-  assert.match(row, /mode: "immediate"/,
-    "immediate: it is the notification that tells a member the tag exists at all");
-  // notif_pref_key() has no arm for this type, so the server's identity
-  // fallback makes the real key the literal type name. Anything coarser
-  // here is a toggle that silently suppresses nothing - the exact bug
-  // feed_activity carried for weeks.
+  // Every notification is its own row now; the batched/immediate split went
+  // with the batch group.
+  assert.ok(!/mode:/.test(row), "no batched/immediate mode");
+  // notif_pref_key() is the identity, so the real key is the literal type
+  // name. Anything coarser here is a toggle that silently suppresses nothing -
+  // the exact bug feed_activity carried for weeks.
   assert.match(row, /pref: "trained_together"/,
-    "the preference key is the literal type name, matching notif_pref_key()'s identity fallback");
-  assert.ok(!/serverTitle/.test(row), "the client's Hebrew label wins over notif_create's fixed English title");
+    "the preference key is the literal type name, matching notif_pref_key()");
+  assert.ok(!/serverTitle/.test(row), "the client's Hebrew label wins over the stored title");
   assert.match(layerJs, /\{ key: "trained_together",\s*label: "[^"]*[֐-׿][^"]*" \}/,
     "and it has a Hebrew row in the Settings preference list");
   // The server side of the same claim.

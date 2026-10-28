@@ -56,8 +56,22 @@ name: scheduled-job-alert
 #     live until it's on `main` - a file existing on a feature branch does
 #     not satisfy go-live item A.5.
 on:
-  # Schedule removed 2026-10-25: the Supabase project this ran against was
-  # deleted. Re-enable after the new Supabase project exists.
+  schedule:
+    # Every six hours, on the hour. This was once a day while it cost a
+    # service-role key to run; it costs nothing now, and the in-database check
+    # it watches runs hourly, so a daily backstop would have left "the
+    # monitor itself is dead" undetected for up to 23 hours while the
+    # script's own staleness budget is two. Four runs a day bounds that at
+    # six.
+    #
+    # Re-enabled 2026-10-26 (it was paused 2026-10-25 while the old Supabase
+    # project was deleted). It needs no secret to run: the URL and the
+    # publishable key come from cloud-config.js, and ALERT_WEBHOOK_URL is
+    # optional. It reads job_health_status() on the project named there, so
+    # until the migrations have been applied to that project it fails, loudly,
+    # with "could not check"; that is the correct signal, not a reason to
+    # pause it again.
+    - cron: "0 */6 * * *"
   workflow_dispatch: {}
 permissions:
   contents: read
