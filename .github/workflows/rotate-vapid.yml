@@ -66,7 +66,7 @@ jobs:
           ENV_FILE="$RUNNER_TEMP/vapid.env"
           # stdout is the PUBLIC key and nothing else; the private key only
           # ever goes into $ENV_FILE.
-          PUBLIC_KEY="$(node scripts/generate-vapid-keys.mjs --env-file "$ENV_FILE")"
+          PUBLIC_KEY="$(node scripts/generate-vapid-keys.mjs --out "$ENV_FILE")"
           if ! supabase secrets set --env-file "$ENV_FILE" --project-ref "$PROJECT_REF" >/dev/null 2>&1; then
             echo "supabase secrets set failed. Its output is discarded on purpose, so it cannot carry the key."
             exit 1
