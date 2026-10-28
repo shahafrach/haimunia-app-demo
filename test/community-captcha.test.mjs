@@ -119,16 +119,16 @@ test("the token is single-use per call and never logged", () => {
     "and neither must any variable literally named token");
 });
 
-test("only the two supported providers can be loaded, and the URLs are pinned", () => {
+test("only Turnstile can be loaded, and the URLs are pinned", () => {
   assert.match(cloudJs, /turnstile: "https:\/\/challenges\.cloudflare\.com\/turnstile\/v0\/api\.js"/);
-  assert.match(cloudJs, /hcaptcha: "https:\/\/js\.hcaptcha\.com\/1\/api\.js"/);
+  assert.doesNotMatch(cloudJs, /hcaptcha\.com|window\.hcaptcha|"hcaptcha"/, "hCaptcha is not used");
   // An unknown provider must not silently resolve to "no captcha".
   assert.match(cloudJs, /if \(!url\) return Promise\.reject\(new Error\("unknown captcha provider"\)\);/);
 });
 
 test("the CSP allows exactly those provider hosts and does not widen connect-src to anything else", () => {
   const csp = indexHtml.slice(indexHtml.indexOf("Content-Security-Policy"), indexHtml.indexOf('referrer"'));
-  assert.match(csp, /script-src 'self' https:\/\/challenges\.cloudflare\.com https:\/\/js\.hcaptcha\.com/);
+  assert.match(csp, /script-src 'self' https:\/\/challenges\.cloudflare\.com;/);
   assert.match(csp, /frame-src https:\/\/challenges\.cloudflare\.com/);
   // SEC-015 leans on connect-src to stop an injected script exfiltrating a
   // stolen token. The captcha hosts are needed for verification traffic but
@@ -138,11 +138,10 @@ test("the CSP allows exactly those provider hosts and does not widen connect-src
   const hosts = connect[1].trim().split(/\s+/);
   assert.deepEqual(hosts.sort(), [
     "'self'",
-    "https://api.hcaptcha.com",
     "https://challenges.cloudflare.com",
     "https://hvwakffluwvegedefoth.supabase.co",
     "wss://hvwakffluwvegedefoth.supabase.co",
-  ].sort(), "connect-src holds only self, the Supabase project, and the two captcha verification hosts");
+  ].sort(), "connect-src holds only self, the Supabase project, and the Turnstile verification host");
   // The strict directives that were never weakened.
   assert.match(csp, /object-src 'none'/);
   assert.match(csp, /base-uri 'none'/);
