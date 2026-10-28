@@ -42,7 +42,7 @@ test("the only secret it reads is the existing SUPABASE_ACCESS_TOKEN, and the pr
 });
 
 test("the pair is generated on the runner and set with --env-file, never on a command line", () => {
-  assert.match(code, /node scripts\/generate-vapid-keys\.mjs --env-file "\$ENV_FILE"/);
+  assert.match(code, /node scripts\/generate-vapid-keys\.mjs --out "\$ENV_FILE"/);
   assert.match(code, /supabase secrets set --env-file "\$ENV_FILE" --project-ref "\$PROJECT_REF"/);
   assert.doesNotMatch(code, /VAPID_PRIVATE_KEY\s*=|\$\{?VAPID_PRIVATE/, "no runnable line assigns or expands the private key");
   assert.doesNotMatch(code, /secrets set[^\n]*VAPID_/, "no key=value argument on the command line");
@@ -97,7 +97,7 @@ test("the CLI writes both keys to a private file and prints only the public key"
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "vapid-"));
   const file = path.join(dir, "vapid.env");
   let out = "";
-  const code0 = main(["--env-file", file], { write: (s) => { out += s; } });
+  const code0 = main(["--out", file], { write: (s) => { out += s; } });
   assert.strictEqual(code0, 0);
   const body = fs.readFileSync(file, "utf8");
   const [pubLine, prvLine] = body.trim().split("\n");
@@ -106,14 +106,34 @@ test("the CLI writes both keys to a private file and prints only the public key"
   assert.strictEqual(out.trim(), pub, "stdout is the public key");
   assert.ok(!out.includes(prv), "the private key never reaches stdout");
   assert.strictEqual(fs.statSync(file).mode & 0o777, 0o600);
-  assert.throws(() => main(["--env-file", file], { write() {} }), /EEXIST/, "never overwrites a file");
+  assert.throws(() => main(["--out", file], { write() {} }), /EEXIST/, "never overwrites a file");
   fs.rmSync(dir, { recursive: true });
 });
 
-test("the CLI needs --env-file and prints nothing without it", () => {
+test("the CLI needs --out and prints nothing without it", () => {
   let out = "";
   const origErr = process.stderr.write;
   process.stderr.write = () => true;
   try { assert.strictEqual(main([], { write: (s) => { out += s; } }), 2); } finally { process.stderr.write = origErr; }
   assert.strictEqual(out, "");
+});
+
+test("the generator runs as a real process: node does not swallow its flag", async () => {
+  // Node 22 parses --env-file even after the script name and exits 9 before
+  // the script runs. Spawn the real CLI so a flag Node claims fails here,
+  // not on the runner.
+  const { spawnSync } = await import("node:child_process");
+  const { mkdtempSync, readFileSync: rf, rmSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const dir = mkdtempSync(join(tmpdir(), "vapid-"));
+  const file = join(dir, "vapid.env");
+  try {
+    const r = spawnSync(process.execPath, ["scripts/generate-vapid-keys.mjs", "--out", file], { encoding: "utf8" });
+    assert.equal(r.status, 0, `exit ${r.status}: ${r.stderr}`);
+    assert.match(r.stdout.trim(), /^[A-Za-z0-9_-]{87}$/, "stdout is the public key only");
+    assert.match(rf(file, "utf8"), /^VAPID_PUBLIC_KEY=.+\nVAPID_PRIVATE_KEY=.+\n$/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
