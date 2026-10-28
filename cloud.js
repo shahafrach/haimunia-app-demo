@@ -1006,6 +1006,9 @@
         if (!me) return;
         const rows = await window.dbLoadSyncOutbox();
         for (const row of rows) {
+          // Body weight never leaves the device. A row queued before it was
+          // excluded is discarded here, not uploaded.
+          if (!isBackupRecordType(row.recordType)) { await window.dbDeleteSyncOutbox(row.id); continue; }
           // A ROW BELONGS TO WHOEVER MADE IT, not to whoever is signed in
           // when it finally drains. Same hunt, also CRITICAL and also
           // reproduced live: member A logs a workout while offline, signs
@@ -1416,7 +1419,7 @@
     if (cursor) query = query.gt("updated_at", cursor);
     const { data, error } = await query;
     if (error) return;
-    for (const row of data || []) await window.applyRemotePrivateRecord(row);
+    for (const row of data || []) { if (isBackupRecordType(row.record_type)) await window.applyRemotePrivateRecord(row); }
     const newest = (data || []).length ? data[data.length - 1].updated_at : null;
     if (newest && typeof window.dbSetSetting === "function") await window.dbSetSetting(cursorKey, newest);
     if (typeof window.reloadFromDb === "function") { await window.reloadFromDb(); rerender(); }

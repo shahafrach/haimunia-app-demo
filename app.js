@@ -2489,6 +2489,7 @@ function endLadder() {
 const syncApplyingRemote = new Set();
 async function queueSyncRecord(recordType, record, deleted = false) {
   if (!record || !record.id) return;
+  if (!isBackupRecordType(recordType)) return;
   if (syncApplyingRemote.has(`${recordType}:${record.id}`)) return;
   // userId binds this row to the member who made it. Live bug hunt, fresh
   // round 2 (2026-09-15): without it, flushOutbox() stamped whoever was
@@ -2505,7 +2506,7 @@ async function queueSyncRecord(recordType, record, deleted = false) {
   } catch (e) { noteStorageError(e); }
 }
 async function queueAllLocalRecordsForSync() {
-  const groups = [["movement", customMovements], ["custom_wod", customWods], ["strength_entry", entries], ["wod_entry", wodEntries], ["bodyweight", bodyweightEntries], ["measure_type", measureTypes], ["measurement", measureEntries]];
+  const groups = [["movement", customMovements], ["custom_wod", customWods], ["strength_entry", entries], ["wod_entry", wodEntries], ["measure_type", measureTypes], ["measurement", measureEntries]];
   for (const [type, list] of groups) for (const record of list) await queueSyncRecord(type, record);
 }
 // Real conflict detection, not blind last-write-wins: for the four
@@ -2536,6 +2537,7 @@ function shouldApplyRemote(recordType, recordId, incomingTs) {
 }
 async function applyRemotePrivateRecord(row) {
   if (!row || !row.record_type || !row.record_id) return;
+  if (!isBackupRecordType(row.record_type)) return;
   const deleted = !!row.deleted_at;
   const payload = row.payload || {};
   const clean = row.record_type === "movement" ? sanitizeMovement(payload)
