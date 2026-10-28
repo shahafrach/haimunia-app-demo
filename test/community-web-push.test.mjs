@@ -179,9 +179,19 @@ for (const [label, key] of [
   });
 }
 
-test("the shipped cloud-config.js carries the placeholder, so a build that skipped the rotation cannot subscribe", async () => {
+test("the shipped cloud-config.js carries a real, valid VAPID public key from the rotate-vapid workflow", async () => {
+  // Rotated 2026-10-28 (rotate-vapid run #2). The key must be an uncompressed
+  // P-256 point (65 bytes, 0x04 prefix) that node:crypto accepts, so a typo in
+  // a future paste fails here instead of failing closed silently on devices.
   const cfg = fs.readFileSync(new URL("../cloud-config.js", import.meta.url), "utf8");
-  assert.match(cfg, /notifPushVapidPublicKey: "REPLACE_WITH_VAPID_PUBLIC_KEY"/);
+  const m = cfg.match(/notifPushVapidPublicKey: "([A-Za-z0-9_-]+)"/);
+  assert.ok(m, "the key is set");
+  assert.notEqual(m[1], "REPLACE_WITH_VAPID_PUBLIC_KEY");
+  const point = Buffer.from(m[1], "base64url");
+  assert.equal(point.length, 65);
+  assert.equal(point[0], 4);
+  const { createPublicKey } = await import("node:crypto");
+  assert.doesNotThrow(() => createPublicKey({ key: { kty: "EC", crv: "P-256", x: point.subarray(1, 33).toString("base64url"), y: point.subarray(33).toString("base64url") }, format: "jwk" }));
   assert.equal((cfg.match(/notifPushVapidPublicKey/g) || []).length >= 1, true);
   // The client reads the key from that one property and nowhere else.
   const reads = ["cloud.js", "app.js", "sw.js", "src/community/notifications.js"].flatMap((f) =>

@@ -31,7 +31,7 @@ window.HAIMUNIA_CONFIG = Object.freeze({
   // CHANGING THIS VALUE INVALIDATES EVERY EXISTING SUBSCRIPTION: a
   // PushSubscription is bound to the key it was created with. The client
   // notices a subscription made under another key and re-subscribes.
-  notifPushVapidPublicKey: "REPLACE_WITH_VAPID_PUBLIC_KEY",
+  notifPushVapidPublicKey: "BLhw6lvS2RbwEFSLw1HuHyCqfrdpGFzxvOa-M8fT6J0liZBSHsC5cfWWArpBUVZ0UNnpeuHp6gUlyAYcqedDQ7o",
 
   // Launch-readiness audit, SEC-004: bot protection on account creation.
   //
