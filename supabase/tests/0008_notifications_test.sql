@@ -67,7 +67,7 @@ select isnt(
 -- --- notification_preferences own-row --------------------
 select lives_ok(
   $$ insert into public.notification_preferences (user_id, type, channel)
-     values (tests.uid('m1'), 'community.reaction', 'off') $$,
+     values (tests.uid('m1'), 'reaction', 'off') $$,
   'a member writes their own preference row');
 select tests.set_auth(tests.uid('m2'));
 select is_empty(
@@ -75,7 +75,7 @@ select is_empty(
   'a member cannot read another member preference row');
 select throws_ok(
   $$ insert into public.notification_preferences (user_id, type, channel)
-     values (tests.uid('m1'), 'community.mention', 'off') $$,
+     values (tests.uid('m1'), 'trained_together', 'off') $$,
   '42501',
   null,
   'a member cannot write a preference row for another member');

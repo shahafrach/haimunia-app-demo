@@ -51,7 +51,7 @@ private circles for friends. It is not a gym app and not a product.
 
 - WhatsApp is the main channel: invite links, PR cards, the weekly circle card. Cards are drawn on canvas on the device, Hebrew RTL, built before the tap, shared as a file alone through Web Share, with a download fallback.
 - The week starts Sunday, Asia/Jerusalem, for everyone. The weekly card is ready Saturday night.
-- Notifications are off by default. Only two can be turned on: a reaction to your PR, and the weekly card. Optional quiet hours from Friday evening to Saturday night.
+- Notifications are off by default. Four can be turned on, each with its own switch in Me (2026-10-26, widening the earlier two): a reaction to your post (at most one per post per hour), a trained-together tag waiting for your confirmation, someone joined a circle you own, and the week card (Saturday night). Every one belongs to one circle: none after you leave it, none between blocked members. The VAPID subject is `https://box-log.pages.dev`, and the key pair is rotated by the `rotate-vapid` workflow so nobody sees the private key. Optional quiet hours from Friday evening to Saturday night are not built.
 - The invite page detects in-app browsers and asks to open in Safari or Chrome. After joining, a guided Add to Home Screen step.
 
 ## Lifecycle

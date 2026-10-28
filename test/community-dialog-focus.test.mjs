@@ -265,7 +265,7 @@ test("a background rerender does not throw the member back to the top of an open
     profiles: [{ id: "u1", handle: "dana", display_name: "דנה", is_admin: false, recovery_verified_at: VERIFIED, visible_to_club: true }],
     invite_redemptions: [{ user_id: "u1", invite_id: "inv-1", role: "member", redeemed_at: VERIFIED }],
     clubs: [{ id: "club-1", name: "מעגל הדגמה" }],
-    notifications: [{ id: "n1", user_id: "u1", type: "achievement_unlocked", category: "training", title: "הישג", body: "גוף", deep_link: null, source_type: null, source_id: null, read_at: null, created_at: new Date().toISOString() }],
+    notifications: [{ id: "n1", user_id: "u1", type: "reaction", category: "community", title: "הישג", body: "גוף", deep_link: null, source_type: null, source_id: null, read_at: null, created_at: new Date().toISOString() }],
     notification_preferences: [],
   });
   mock.setUser({ id: "u1", is_anonymous: false, email: "dana@members.haimuniya.invalid" });

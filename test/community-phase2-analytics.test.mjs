@@ -23,7 +23,7 @@
 // test/community-analytics-surfaces.test.mjs.
 import { test } from "node:test";
 import assert from "node:assert";
-import { bootCommunity, waitFor, notifPrefOption, pickNotifPref } from "./helpers/boot.mjs";
+import { bootCommunity, waitFor, notifPrefControl, pickNotifPref } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
 
 const VERIFIED = new Date().toISOString();
@@ -145,9 +145,9 @@ test("push_opt_in is recorded once the subscription row is written, with the con
   const window = await bootCommunity(mock, { syncEnabled: false, localStorage: { "haimunia-demo:notifPushFlag": "1" } });
   stubPushApis(window);
   await openCommunity(window);
-  await waitFor(() => !!notifPrefOption(window, "trained_together", "push"), 4000);
+  await waitFor(() => !!notifPrefControl(window, "trained_together"), 4000);
 
-  pickNotifPref(window, "trained_together", "push");
+  pickNotifPref(window, "trained_together", true);
   await waitFor(() => mock.db.push_subscriptions.length === 1, 4000);
   await waitFor(() => events(mock, "push_opt_in").length === 1, 4000);
 
@@ -157,8 +157,8 @@ test("push_opt_in is recorded once the subscription row is written, with the con
 
   // A device has one subscription however many types route through it, so
   // a second type switched to Push is not a second opt-in.
-  pickNotifPref(window, "reactions", "push");
-  await waitFor(() => mock.db.notification_preferences.some((r) => r.type === "reactions" && r.channel === "push"), 4000);
+  pickNotifPref(window, "reaction", true);
+  await waitFor(() => mock.db.notification_preferences.some((r) => r.type === "reaction" && r.channel === "push"), 4000);
   assert.equal(events(mock, "push_opt_in").length, 1);
 });
 
@@ -168,9 +168,9 @@ test("a denied permission records no opt-in", async () => {
   stubPushApis(window);
   window.Notification = { permission: "default", requestPermission: async () => "denied" };
   await openCommunity(window);
-  await waitFor(() => !!notifPrefOption(window, "trained_together", "push"), 4000);
+  await waitFor(() => !!notifPrefControl(window, "trained_together"), 4000);
 
-  pickNotifPref(window, "trained_together", "push");
+  pickNotifPref(window, "trained_together", true);
   await waitFor(() => window.document.body.textContent.includes("לא אושרה הרשאת התראות"), 4000);
   assert.equal(events(mock, "push_opt_in").length, 0);
   assert.equal(mock.db.push_subscriptions.length, 0);

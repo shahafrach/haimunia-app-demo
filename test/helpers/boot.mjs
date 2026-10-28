@@ -157,7 +157,8 @@ export async function bootCommunity(mock, opts = {}) {
     // COMM-229. Same shape cloud-config.js ships - a test that stubs the
     // Push API needs a real (if fake) key here for vapidKeyToUint8Array to
     // decode, matching what a real browser is handed.
-    notifPushVapidPublicKey: "BD16mHSAcS-jU5cV2xEqkNy09hCQ7MTjkY22CK8UrRw1JpI_5kjReL7tME6O4BFmQhuiaOVCWQ-nqsnoa1_0nAo" };
+    // opts.vapidKey overrides it, e.g. with the shipped placeholder.
+    notifPushVapidPublicKey: opts.vapidKey !== undefined ? opts.vapidKey : "BD16mHSAcS-jU5cV2xEqkNy09hCQ7MTjkY22CK8UrRw1JpI_5kjReL7tME6O4BFmQhuiaOVCWQ-nqsnoa1_0nAo" };
   // FIRST call gets the member client; every later one gets an independent
   // secondary. cloud.js creates exactly one extra client, lazily, when a
   // management panel is unlocked (makeMgmtClient()), so the ordering here is
@@ -314,30 +315,25 @@ export function chooseFeedScope(window, scope) {
 // the next change to this control should have one shape to update, not
 // forty-five.
 //
-// notifPrefControl  - the row's control, or null when that type is not shown
-//                     (the staffOnly rows for a plain member).
-// notifPrefOption   - one channel's <option>, or null when that channel is
-//                     not offered at all (push, while the module flag is off).
-// notifPrefValue    - the channel the control currently reads.
-// pickNotifPref     - choose a channel the way a member does.
+// notifPrefControl  - the type's switch in Me, or null when it is not on screen.
+// notifPrefValue    - "on" or "off".
+// pickNotifPref     - flip it the way a member does.
 export function notifPrefControl(window, type) {
-  return window.document.querySelector(`[data-notif-pref-select][data-type="${type}"]`);
+  return window.document.querySelector(`[data-notif-pref-toggle][data-type="${type}"]`);
 }
-export function notifPrefOption(window, type, channel) {
-  const select = notifPrefControl(window, type);
-  if (!select) return null;
-  return [...select.options].find((o) => o.value === channel) || null;
-}
+// "on" or "off", as the member sees it: a switch is on when it is checked.
 export function notifPrefValue(window, type) {
-  const select = notifPrefControl(window, type);
-  return select ? select.value : null;
+  const box = notifPrefControl(window, type);
+  return box ? (box.checked ? "on" : "off") : null;
 }
-export function pickNotifPref(window, type, channel) {
-  const select = notifPrefControl(window, type);
-  if (!select) throw new Error(`the ${type} notification preference is not on screen`);
-  select.value = channel;
-  select.dispatchEvent(new window.Event("change", { bubbles: true }));
-  return select;
+// Turn a switch on or off the way a member does. Accepts true/false or
+// "on"/"off" ("push" and "in_app" read as on).
+export function pickNotifPref(window, type, value) {
+  const box = notifPrefControl(window, type);
+  if (!box) throw new Error(`the ${type} notification toggle is not on screen`);
+  box.checked = !(value === false || value === "off");
+  box.dispatchEvent(new window.Event("change", { bubbles: true }));
+  return box;
 }
 
 // EVERY waitFor DEADLINE IS WALL-CLOCK, AND THAT MAKES IT LOAD SENSITIVE.

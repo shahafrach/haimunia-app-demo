@@ -165,37 +165,36 @@ check("the display-name field sits above the emoji field, not over it",
 check("and is clear of it by a readable gap", !!hint && hint.gap >= 4, JSON.stringify(hint));
 
 // =====================================================================
-// 6. One compact row per notification type, one control, three choices
+// 6. One compact row per notification type, one switch
 // =====================================================================
 const prefs = await page.evaluate(() => {
-  const selects = [...document.querySelectorAll("[data-notif-pref-select]")];
+  const boxes = [...document.querySelectorAll("[data-notif-pref-toggle]")];
   return {
-    count: selects.length,
-    optionSets: selects.map((s) => [...s.options].map((o) => o.value).join("|")),
+    count: boxes.length,
+    selects: document.querySelectorAll("[data-notif-pref-select]").length,
     rowsWithButtons: document.querySelectorAll('[data-community-action="notif-pref"]').length,
-    rowHeights: selects.map((s) => Math.round(s.closest(".log-row").getBoundingClientRect().height)),
+    allOff: boxes.every((b) => !b.checked),
+    rowHeights: boxes.map((b) => Math.round(b.closest(".log-row").getBoundingClientRect().height)),
   };
 });
-check("every notification type has exactly one control", prefs.count >= 3, String(prefs.count));
-check("no type renders the old button row any more", prefs.rowsWithButtons === 0, String(prefs.rowsWithButtons));
-check("every control offers the same three choices",
-  prefs.optionSets.every((o) => o === "push|in_app|off"),
-  [...new Set(prefs.optionSets)].join(" / "));
-// "Compact" measured, not asserted: a row with a label and one select fits
-// on one line, so it is well under the ~140px the stacked block took.
-check("each row is one compact line", prefs.rowHeights.every((h) => h > 0 && h <= 80),
+check("every notification type has exactly one switch (four)", prefs.count === 4, String(prefs.count));
+check("no type renders the old button row or select any more", prefs.rowsWithButtons === 0 && prefs.selects === 0, JSON.stringify(prefs));
+check("every switch starts off", prefs.allOff);
+// "Compact" measured, not asserted: a row with a label and one switch fits
+// on one or two lines, so it is well under the ~140px the stacked block took.
+check("each row is compact", prefs.rowHeights.every((h) => h > 0 && h <= 90),
   prefs.rowHeights.join(","));
 
-// Changing one writes the same preference row the buttons used to.
+// Turning one on writes a preference row.
 await page.evaluate(() => {
-  const s = document.querySelector('[data-notif-pref-select][data-type="reactions"]');
-  s.value = "off";
+  const s = document.querySelector('[data-notif-pref-toggle][data-type="reaction"]');
+  s.checked = true;
   s.dispatchEvent(new Event("change", { bubbles: true }));
 });
 await page.waitForFunction(
-  () => window.__mock.db.notification_preferences.some((r) => r.type === "reactions" && r.channel === "off"),
+  () => window.__mock.db.notification_preferences.some((r) => r.type === "reaction" && r.channel !== "off"),
   { timeout: 5000 });
-check("picking a channel writes the same notification_preferences row", true);
+check("turning a switch on writes the notification_preferences row", true);
 await noHorizontalOverflow("notification preferences");
 
 // =====================================================================
