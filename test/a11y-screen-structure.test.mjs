@@ -259,18 +259,11 @@ test("focus rings are drawn from a theme token, in both themes", () => {
   }
   assert.ok(tokens.size > 0, "no focus ring found at all");
 
-  // The CLAUDE.md theme rule, applied to exactly the tokens the focus ring
-  // depends on: a token defined for light and for only ONE of the two dark
-  // blocks draws the focus ring in the wrong colour - possibly the
-  // background's own - for whichever dark path was missed.
-  const light = /:root\s*\{([\s\S]*?)\}/.exec(css);
-  const osDark = /@media\s*\(prefers-color-scheme:\s*dark\)\s*\{\s*:root:not\(\[data-theme="light"\]\)\s*\{([\s\S]*?)\}/.exec(css);
-  const pickedDark = /:root\[data-theme="dark"\]\s*\{([\s\S]*?)\}/.exec(css);
-  assert.ok(light && osDark && pickedDark, "the three theme blocks CLAUDE.md describes are not all present");
+  // One token source: a focus token only has to exist once, in the token block,
+  // where light-dark() gives it both themes (test/design-contrast.test.mjs holds
+  // its ratio against every page color in every palette).
+  const tokensCss = fs.readFileSync(path.join(root, "tokens.css"), "utf8");
   for (const token of tokens) {
-    for (const [name, block] of [["light :root", light[1]], ["prefers-color-scheme:dark", osDark[1]], ['[data-theme="dark"]', pickedDark[1]]]) {
-      assert.ok(new RegExp(`${token}\\s*:`).test(block),
-        `the focus ring uses ${token}, which the ${name} theme block never defines`);
-    }
+    assert.ok(new RegExp(`${token}\\s*:`).test(tokensCss), `the focus ring uses ${token}, which tokens.css never defines`);
   }
 });

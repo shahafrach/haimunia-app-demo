@@ -29,7 +29,7 @@ test("the bottom bar has four items in order: Home, Circle, the centre Log butto
   const window = await bootCommunity(mock, { syncEnabled: false });
   const tabs = [...window.document.querySelectorAll("#bottomTabBar .tabbtn")];
   assert.deepEqual(tabs.map((t) => t.id), ["tabHomeBtn", "tabCommunityBtn", "tabAddBtn", "tabHistoryBtn"]);
-  assert.deepEqual(tabs.map((t) => t.querySelector("span:last-child").textContent.trim()), ["בית", "מעגל", "רישום", "התקדמות"]);
+  assert.deepEqual(tabs.map((t) => t.querySelector(":scope > span:last-child").textContent.trim()), ["בית", "מעגל", "רישום", "התקדמות"]);
   assert.ok(tabs[2].classList.contains("tabbtn--log"), "the Log button is the centre one");
   assert.ok(!window.document.querySelector("#bottomTabBar #tabMeBtn"), "Me is not a tab");
 });

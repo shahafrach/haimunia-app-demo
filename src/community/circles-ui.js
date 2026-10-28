@@ -213,7 +213,7 @@ ${uiToastHtml()}${renderOutboxBanner()}${inner}</div></section>`;
       </div>
       <div style="min-width:0;"><div style="font-weight:800;font-size:15px;">השבוע שלי</div>
         <div style="font-weight:800;margin-top:4px;">${esc(copy.title)}</div>
-        <div style="color:var(--color-text-muted);font-size:12.5px;margin-top:2px;">${esc(copy.sub)}</div>
+        <div style="color:var(--color-text-muted);font-size:12.5px;margin-top:2px;">${esc(done + " מתוך " + mine.target + " אימונים השבוע")}</div>
         <div class="mono" style="color:var(--color-accent);font-weight:800;margin-top:6px;"><bdi>${pct}%</bdi> <span style="font-weight:600;color:var(--color-text-muted);">מהיעד</span></div></div>
     </div></div>`;
   }
