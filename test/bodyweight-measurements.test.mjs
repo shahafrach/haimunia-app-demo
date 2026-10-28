@@ -293,7 +293,7 @@ test("the save-measurement button is disabled at the default 0 value, and re-ena
 // bodyweight row's remote deletion (e.g. deleted from another device, or by
 // a coach through the Supabase dashboard) silently did nothing at all,
 // leaving the entry stuck on this device forever.
-test("a remote bodyweight deletion actually removes the local entry", async () => {
+test("a remote bodyweight row, deletion or upsert, is ignored: body weight never syncs", async () => {
   const window = await bootApp();
   window.document.getElementById("tabHistoryBtn").click();
   window.document.querySelector("[data-action='toggle-bodyweight']").click();
@@ -304,8 +304,11 @@ test("a remote bodyweight deletion actually removes the local entry", async () =
   assert.ok(entry, "the entry saved locally first");
 
   await window.applyRemotePrivateRecord({ record_type: "bodyweight", record_id: entry.id, payload: {}, deleted_at: new Date().toISOString() });
+  await window.applyRemotePrivateRecord({ record_type: "bodyweight", record_id: "bw-remote", payload: { id: "bw-remote", date: "2026-01-01", ts: 1, weight: 90 }, deleted_at: null });
 
-  assert.ok(!(await window.dbLoadBodyweight()).some((e) => e.id === entry.id), "the remote deletion removed the local entry");
+  const after = await window.dbLoadBodyweight();
+  assert.ok(after.some((e) => e.id === entry.id), "the remote deletion did not touch the local entry");
+  assert.ok(!after.some((e) => e.id === "bw-remote"), "a remote body weight row was not applied");
 });
 
 // Launch-readiness audit bug fix: syncApplyingRemote used to be a single

@@ -78,7 +78,7 @@ window.HAIMUNIA_CONFIG = Object.freeze({
   // ORDER MATTERS IF THIS IS EVER RE-DONE: deploy the site key FIRST, then
   // enable enforcement in the Supabase dashboard. Backwards, the server
   // demands a token the client is not sending yet and every signup fails.
-  captchaProvider: "turnstile", // "turnstile" | "hcaptcha"
+  captchaProvider: "turnstile", // Turnstile is the only provider
   captchaSiteKey: "0x4AAAAAAE6mfjw79idh0ptH",
 
   // Support and bug reporting (2026-09-15), added after the first real-phone
