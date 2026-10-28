@@ -46,6 +46,10 @@ alter table public.notifications
   add column actor_id uuid references public.profiles(id) on delete set null;
 create index notifications_circle_user_idx on public.notifications(circle_id, user_id)
   where circle_id is not null;
+-- Every foreign key column leads an index (0081): a cascade from profiles
+-- would otherwise scan notifications for the actor.
+create index notifications_actor_idx on public.notifications(actor_id)
+  where actor_id is not null;
 
 create or replace function public.protect_notification_content()
 returns trigger language plpgsql set search_path = '' as $$
