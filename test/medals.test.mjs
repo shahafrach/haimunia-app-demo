@@ -23,9 +23,9 @@ function badgeByName(window, text) {
 }
 
 test("an earned medal's glow is a drop-shadow on its own SVG, colored by the tier's glow token", () => {
-  assert.match(indexHtml, /\.medal-badge\.earned \.medal-shape:not\(\.medal-shape-plate\) \{[^}]*filter:drop-shadow\(0 0 5px var\(--glow-color\)\)/);
+  assert.match(indexHtml, /\.medal-badge\.earned \.medal-shape:not\(\.medal-shape-plate\)\{[^}]*filter:drop-shadow\(0 0 5px var\(--glow-color\)\)/);
   for (const tier of ["bronze", "silver", "gold"]) {
-    assert.match(indexHtml, new RegExp(`\\.tier-${tier} \\{[^}]*--glow-color:color-mix\\(in srgb, var\\(--${tier}-mid\\)`), `${tier} glow is a color-mix of its metal token`);
+    assert.match(indexHtml, new RegExp(`\\.tier-${tier}\\{[^}]*--glow-color:color-mix\\(in srgb, var\\(--${tier}-mid\\)`), `${tier} glow is a color-mix of its metal token`);
   }
   assert.ok(!fs.existsSync(new URL("../assets/medal-bronze.png", import.meta.url)), "the photographed plates are gone");
 });
