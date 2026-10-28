@@ -5,8 +5,10 @@
 // Measured, not asserted from source: all four are present and OFF, the label
 // is on the right and the switch on the left (RTL), nothing scrolls sideways,
 // each row is a comfortable touch target, the text is legible in both themes,
-// and turning one on writes the preference row. cloud-config.js still carries
-// the VAPID placeholder, so the screen must also say push is not set up.
+// and turning one on writes the preference row. cloud-config.js carries the
+// real VAPID key since rotate-vapid run #2, so the screen must NOT say push is
+// not set up. The fail-closed path (placeholder, empty, bad key) is covered by
+// test/community-web-push.test.mjs.
 import { chromium } from "playwright";
 import { resolveLocalOnlyTarget } from "./lib/target.mjs";
 import { consoleErrorCollector, dismissWelcomeModal } from "./lib/actions.mjs";
@@ -74,7 +76,7 @@ check("RTL: the label is on the right and the switch on the left", m.rows.every(
 check("each row is a touch target (height >= 44px)", m.rows.every((r) => r.rowH >= 44), m.rows.map((r) => r.rowH).join(","));
 check("each row stays inside the 390px viewport", m.rows.every((r) => r.rowL >= 0 && r.rowR <= 391), m.rows.map((r) => `${r.rowL}..${r.rowR}`).join(" "));
 check("no horizontal overflow", m.scrollWidth <= m.clientWidth + 1, `${m.scrollWidth} vs ${m.clientWidth}`);
-check("while the VAPID key is the placeholder the screen says push is not set up", /עדיין לא הוגדרו/.test(m.reason), m.reason);
+check("with the shipped VAPID key the screen does not say push is not set up", !/עדיין לא הוגדרו/.test(m.reason), m.reason);
 check("the intro says everything is off until turned on", /כבויות עד שתדליקו/.test(m.panelText));
 
 // Legible in both themes: label colour against the row's resolved background.
