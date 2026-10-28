@@ -24,7 +24,7 @@ test("editing a WOD result never re-fires the personal-record celebration", () =
   assert.match(body, /const celebratePR = isPR && !existing;/,
     "an edit of an existing entry must not count as a new record");
   assert.match(body, /if \(celebratePR\) flashWodPR\(entry\.rx\);/, "the flash is gated");
-  assert.match(body, /celebrateAfterSave\(celebratePR \?/, "and so is the full celebration");
+  assert.match(body, /if \(celebratePR\) \{\s*const model = buildMomentModel/, "and so is the full moment");
   assert.ok(!/if \(isPR\) flashWodPR\(entry\.rx\);/.test(appJs),
     "the ungated flash must be gone");
   // The strength side's own guard must still be there - they are siblings and

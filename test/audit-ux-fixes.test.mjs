@@ -27,8 +27,8 @@ test("bodyweight gets its own section label, matching measurements", async () =>
 
 test("the main tab bar and community sub-tab bar meet the 44px touch-target baseline (--hit-min)", () => {
   assert.match(fs.readFileSync(new URL("../tokens.css", import.meta.url), "utf8"), /--hit-min:44px/);
-  assert.match(indexHtml, /\.tabbtn\s*\{[^}]*min-height:var\(--hit-min\)/);
-  assert.match(indexHtml, /\.subtabbtn\s*\{[^}]*min-height:var\(--hit-min\)/);
+  assert.match(indexHtml, /\.tabbtn\s*\{[^}]*min-height:44px/);
+  assert.match(indexHtml, /\.subtabbtn\s*\{[^}]*min-height:44px/);
 });
 
 test("onboarding mentions circles, not just the offline screens", () => {

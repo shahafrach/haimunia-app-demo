@@ -223,11 +223,11 @@
   // sheet, a PR prompt, any circle sheet). Until the screen is clear they wait,
   // and the wait is not a dismissal: only closing the steps themselves is.
   // The wait is an event, not a timer: app.js and cloud.js each announce
-  // "boxlog:dialog-closed" (and "-opened") on window the moment their own dialog
+  // "haimunia-dialog-closed" (and "-opened") on window the moment their own dialog
   // registry changes, and the steps are tried again then. Nothing polls.
   let sharingInstallPending = false;
   function sharingOtherDialogOpen() {
-    return !!document.querySelector('.modal-overlay.open, [data-cloud-dialog]:not([data-cloud-dialog="sharingSheet"])');
+    return !!document.querySelector('.modal-overlay.open:not([data-cloud-dialog="sharingSheet"]), [data-cloud-dialog]:not([data-cloud-dialog="sharingSheet"])');
   }
   // Runs on each dialog event until the steps are answered (closed, installed)
   // or the member signs out. If something else opens while the steps are up
@@ -243,8 +243,8 @@
     if (sheet && busy) { state.circles.sharingSheet = null; rerender(); return; }
     if (!sheet && !busy) { state.circles.sharingSheet = { kind: "install", mode: mode }; rerender(); }
   }
-  window.addEventListener("boxlog:dialog-closed", sharingTryShowInstall);
-  window.addEventListener("boxlog:dialog-opened", sharingTryShowInstall);
+  window.addEventListener("haimunia-dialog-closed", sharingTryShowInstall);
+  window.addEventListener("haimunia-dialog-opened", sharingTryShowInstall);
   function sharingInstallNative() {
     sharingSet(SHARING_INSTALL_DONE_KEY, "1");
     state.circles.sharingSheet = null;

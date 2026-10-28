@@ -1394,7 +1394,15 @@ function blockingDialogOpen() {
   }
   return false;
 }
+// The post-workout moment waits behind a blocking dialog the same way a badge does.
+let deferredMoment = null;
 function flushDeferredCelebration() {
+  if (deferredMoment && !blockingDialogOpen()) {
+    const held = deferredMoment;
+    deferredMoment = null;
+    openWorkoutMoment(held.model, held.opts);
+    return;
+  }
   if (!deferredCelebration || blockingDialogOpen()) return;
   const held = deferredCelebration;
   deferredCelebration = null;
@@ -1589,6 +1597,7 @@ function renderMomentActions(m) {
 function openWorkoutMoment(model, opts) {
   const overlay = document.getElementById("momentOverlay");
   if (!overlay || !model) return;
+  if (blockingDialogOpen()) { deferredMoment = { model, opts }; return; }
   const sharable = !!(model.prs[0] || model.wodPr) && typeof window.communityMomentPrFile === "function";
   momentState = { model, share: sharable ? "preparing" : "none", file: null, opener: document.activeElement, manual: !!(opts && opts.manual) };
   const body = document.getElementById("momentBody");
@@ -7966,7 +7975,7 @@ registerAppDialog("welcome", { overlayId: "welcomeOverlay", isOpen: () => docume
 // left pointing at a dead state that requires two presses to get past.
 let appDialogHistoryPushed = false;
 let appDialogClosingViaHistory = false;
-// "boxlog:dialog-opened" / "boxlog:dialog-closed" on window: the one signal
+// "haimunia-dialog-opened" / "haimunia-dialog-closed" on window: the one signal
 // that something which has to wait for a clear screen (the Add to Home Screen
 // steps, src/community/sharing.js) listens for instead of polling. cloud.js
 // announces the same two for its own dialogs.
@@ -7975,7 +7984,7 @@ function syncAppDialogHistoryState() {
   const open = !!currentAppDialog();
   if (open !== appDialogWasOpen) {
     appDialogWasOpen = open;
-    try { window.dispatchEvent(new CustomEvent(open ? "boxlog:dialog-opened" : "boxlog:dialog-closed")); } catch (e) { /* never break a dialog for a notification */ }
+    try { window.dispatchEvent(new CustomEvent(open ? "haimunia-dialog-opened" : "haimunia-dialog-closed")); } catch (e) { /* never break a dialog for a notification */ }
   }
   if (open && !appDialogHistoryPushed) {
     try { history.pushState({ appDialog: true }, ""); appDialogHistoryPushed = true; } catch (e) { /* history API unavailable in this embedding */ }

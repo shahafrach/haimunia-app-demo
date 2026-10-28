@@ -55,9 +55,14 @@ test("the WOD-builder call to action uses the text-safe accent, not the fill", (
   // 14px bold. --energy-text exists precisely for this and measures 5.20:1;
   // index.html's own note says every small-text use "routes around this fill".
   // These two call sites did not.
-  const uses = appJs.split('font-size:14px; color:var(--energy-text);').length - 1;
-  assert.equal(uses, 2, `both halves of the CTA must use the text token, found ${uses}`);
-  assert.ok(!/font-size:14px; color:var\(--energy\);/.test(appJs),
+  // Renamed by the Design session: the text-safe accent is --color-accent, the
+  // fill is --color-accent-fill.
+  for (const label of ["+ הוספת תרגיל/סקילס חדש", "+ הוספת תרגיל חדש"]) {
+    const at = appJs.indexOf(label);
+    assert.ok(at > 0, label);
+    assert.match(appJs.slice(at - 120, at), /font-size:14px; color:var\(--color-accent\);/, `${label}: the CTA uses the text token`);
+  }
+  assert.ok(!/font-size:14px; color:var\(--color-accent-fill\);/.test(appJs),
     "no small text may sit on the raw fill colour");
 });
 

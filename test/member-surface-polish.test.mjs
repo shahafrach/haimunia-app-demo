@@ -277,19 +277,19 @@ test("there is one checkbox rule, it covers the WOD builder's box too, and it is
   const rule = html.match(/input\[type="checkbox"\],\s*\.movecheck-box\{[^}]*\}/);
   assert.ok(rule, "one rule names both the native checkbox and the WOD builder's box");
   assert.match(rule[0], /appearance:none/, "the platform stops drawing its own");
-  assert.match(rule[0], /width:18px/);
-  assert.match(rule[0], /var\(--border\)/, "from tokens, so it needs no entry in either dark block");
+  assert.match(rule[0], /width:20px/);
+  assert.match(rule[0], /var\(--color-border-strong\)/, "from tokens: one source, no per-theme copy");
 
   const checked = html.match(/input\[type="checkbox"\]:checked,\s*\.movecheck-row\.checked \.movecheck-box\{[^}]*\}/);
   assert.ok(checked, "and one rule for the checked state of both");
-  assert.match(checked[0], /var\(--brass\)/);
+  assert.match(checked[0], /var\(--color-accent-fill\)/);
 
   // Every colour in all three rules is a token. A literal here would be a
   // rule that needs duplicating into both dark blocks, which is the rule
   // CLAUDE.md names first.
   const tick = html.match(/input\[type="checkbox"\]::after\{[^}]*\}/);
   assert.ok(tick);
-  assert.match(tick[0], /var\(--avatar-ink\)/, "the ink token .tag-brass already pairs with --brass");
+  assert.match(tick[0], /var\(--color-on-accent\)/, "the ink token that pairs with the accent fill");
   for (const r of [rule[0], checked[0], tick[0]]) {
     assert.doesNotMatch(r, /#[0-9a-f]{3,8}\b/i, `a literal colour would need a copy in both dark blocks: ${r}`);
   }
@@ -298,6 +298,6 @@ test("there is one checkbox rule, it covers the WOD builder's box too, and it is
 test("the WOD builder's tick is a token, not the hardcoded near-black it was on light-theme brass", () => {
   const src = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
   const box = src.slice(src.indexOf('<div class="movecheck-box">'), src.indexOf('<div class="movecheck-box">') + 300);
-  assert.match(box, /stroke="var\(--avatar-ink\)"/);
+  assert.match(box, /stroke="var\(--color-on-accent\)"/);
   assert.doesNotMatch(box, /#1a1a1a/);
 });

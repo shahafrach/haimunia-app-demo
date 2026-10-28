@@ -286,7 +286,7 @@ test("the iOS install hint says notifications need the installed app, and the Ch
 
   // Built from tokens already used by the two lines above it, so it themes
   // itself and needs no rule in either dark block (CLAUDE.md).
-  assert.match(iosCard, /color:var\(--steel\); margin-bottom:12px;">גם התראות/);
+  assert.match(iosCard, /color:var\(--color-text-muted\); margin-bottom:12px;">גם התראות/);
 });
 
 test("the iOS banner renders that line to a member on iOS Safari, and never in the installed app", async () => {

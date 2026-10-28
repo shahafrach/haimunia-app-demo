@@ -84,7 +84,7 @@ test("TIER 1: the four glosses the app already wrote are still there, verbatim, 
   // app must not be the smallest type in the app.
   const rule = indexHtml.match(/\.format-chip-sub, \.term-sub\{([^}]*)\}/);
   assert.ok(rule, ".format-chip-sub and .term-sub must share one rule, so the two cannot drift");
-  assert.match(rule[1], /font-size:13px/);
+  assert.match(rule[1], /font-size:(13px|var\(--text-label\))/);
 });
 
 // ---- The vocabulary itself ----------------------------------------------

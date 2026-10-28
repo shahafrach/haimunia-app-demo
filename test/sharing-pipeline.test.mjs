@@ -434,6 +434,7 @@ test("the install steps wait for any open dialog to close, and waiting is not di
   assert.equal(window.document.querySelector("[data-install-steps]"), null, "never under the welcome sheet");
   assert.equal(window.localStorage.getItem("haimunia-demo:circleInstallDone"), null, "the wait is not a dismissal");
   welcome.remove(); // the member closes it
+  window.dispatchEvent(new window.Event("haimunia-dialog-closed")); // what the dialog registry announces
   await waitFor(() => !!window.document.querySelector('[data-install-steps="ios"]'), 4000);
   assert.equal(window.localStorage.getItem("haimunia-demo:circleInstallDone"), null, "closing the welcome sheet did not count as a no");
   click(window, '[data-install-steps="ios"] [data-community-action="sh-close"]');
@@ -449,9 +450,20 @@ test("steps already on screen step back when another dialog opens over the join,
   const late = window.document.createElement("div");
   late.className = "modal-overlay open";
   window.document.body.appendChild(late);
+  window.dispatchEvent(new window.Event("haimunia-dialog-opened"));
   await waitFor(() => !window.document.querySelector("[data-install-steps]"), 4000);
   assert.equal(window.localStorage.getItem("haimunia-demo:circleInstallDone"), null, "stepping back is not a no");
   late.remove();
+  window.dispatchEvent(new window.Event("haimunia-dialog-closed"));
   await waitFor(() => !!window.document.querySelector("[data-install-steps]"), 4000);
   click(window, '[data-install-steps] [data-community-action="sh-close"]');
+});
+
+test("the install steps wait on a dialog event, not on a timer", () => {
+  const src = readFileSync(new URL("../src/community/sharing.js", import.meta.url), "utf8");
+  assert.ok(!/setInterval|clearInterval/.test(src), "no polling interval left in sharing.js");
+  assert.match(src, /addEventListener\("haimunia-dialog-closed", sharingTryShowInstall\)/);
+  for (const f of ["app.js", "cloud.js"]) {
+    assert.match(readFileSync(new URL("../" + f, import.meta.url), "utf8"), /haimunia-dialog-opened" : "haimunia-dialog-closed"|haimunia-dialog-opened"[^\n]*haimunia-dialog-closed/, `${f} announces dialog open and close`);
+  }
 });

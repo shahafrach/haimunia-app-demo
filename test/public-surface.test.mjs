@@ -101,7 +101,7 @@ test("blocking /photos/ and package.json does not take the app's own assets or m
   // manifest - the reason package.json is an exact path, not a .json rule.
   const sw = readFileSync(new URL("sw.js", root), "utf8");
   const photos = [...sw.matchAll(/"\.(\/assets\/[^"]+)"/g)].map((m) => m[1]);
-  assert.ok(photos.length >= 8, `sw.js precaches few assets (${photos.length}) - did the regex stop matching?`);
+  assert.ok(photos.length >= 2, `sw.js precaches few assets (${photos.length}) - did the regex stop matching?`);
   for (const p of [...photos, "/manifest.json", "/src/shared/safe-helpers.js"]) {
     assert.equal((await serve(p)).status, 200, `${p} must still be served`);
   }

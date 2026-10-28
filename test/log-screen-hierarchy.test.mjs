@@ -44,10 +44,9 @@ test("the exercise picker is styled as the screen's primary action while nothing
   assert.ok(picker.classList.contains("pick-hero"),
     "the app's primary action must not render as another flat row in a list of flat rows");
   // The class has to mean something, or it is decoration on a decoration.
-  assert.match(indexHtml, /\.exercise-select\.pick-hero\{[^}]*--energy/,
-    ".pick-hero must actually carry the energy accent");
-  assert.match(indexHtml, /\.pick-hero::before\{[^}]*var\(--stripe\)/,
-    "the hazard stripe is the app's own motif and is what makes this card recognisably this app's");
+  assert.match(indexHtml, /\.exercise-select\.pick-hero\{[^}]*--color-accent-fill/,
+    ".pick-hero must actually carry the accent");
+  assert.doesNotMatch(indexHtml, /--stripe/, "the hazard stripe was a gym-era motif and is gone");
 });
 
 test("...and stops being the primary the moment one is, because the save button now is", async () => {
@@ -125,8 +124,7 @@ test("the empty-state text block is width-bounded, so it does not lie adrift in 
   // The other half of the same finding cloud.js's emptyStateHtml() records:
   // centred text with no width bound is fine in a 390px phone column and
   // reads as a pane that failed to load in a 900px one.
-  assert.match(indexHtml, /\.log-empty-text\{[^}]*max-width:34ch/);
-  assert.match(indexHtml, /\.log-empty-when\{[^}]*max-width:34ch/);
+  assert.match(indexHtml, /\.log-empty-text, \.log-empty-when\{[^}]*max-width:34ch/);
 });
 
 test("the day's own empty log is quieter than the pick-an-exercise state, because on a first run both render at once", async () => {

@@ -2291,7 +2291,7 @@
   function syncCloudDialogHistoryState(openKey) {
     if (!!openKey !== cloudDialogWasOpen) {
       cloudDialogWasOpen = !!openKey;
-      try { window.dispatchEvent(new CustomEvent(openKey ? "boxlog:dialog-opened" : "boxlog:dialog-closed")); } catch (e) { /* never break a dialog for a notification */ }
+      try { window.dispatchEvent(new CustomEvent(openKey ? "haimunia-dialog-opened" : "haimunia-dialog-closed")); } catch (e) { /* never break a dialog for a notification */ }
     }
     if (openKey && !cloudDialogHistoryPushed) {
       try { history.pushState({ cloudDialog: true }, ""); cloudDialogHistoryPushed = true; } catch (e) { /* history API unavailable in this embedding */ }

@@ -153,7 +153,7 @@ async function logSets(page, query, kgs) {
   }
 }
 for (const reduced of ["no-preference", "reduce"]) {
-  const { ctx, page, errors } = await open({ palette: "cedar", scheme: "dark", reducedMotion: reduced });
+  const { ctx, page, errors } = await open({ palette: "cedar", scheme: "dark", reducedMotion: reduced, signedIn: false });
   await logSets(page, "Back Squat", [100, 100, 102.5, 105, 110]);
   await page.waitForSelector("#momentOverlay.open", { timeout: 5000 });
   const tag = `moment (${reduced === "reduce" ? "reduced motion" : "motion on"})`;

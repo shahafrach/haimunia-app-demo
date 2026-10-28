@@ -19,7 +19,8 @@ disagree, decisions.md wins.
 **Buildless vanilla JavaScript, Supabase, Cloudflare Pages, Hebrew RTL PWA.**
 
 No framework. No bundler. No build step. No TypeScript, no JSX, no Sass, no
-PostCSS. `index.html` carries the entire stylesheet inline, and `app.js`,
+PostCSS. `index.html` carries the app stylesheet inline and links `tokens.css`
+(fonts and every design token, shared with the legal pages), and `app.js`,
 `cloud.js` and `src/*.js` are classic `<script>` tags that share one global
 scope. **The repository root is the website** — Cloudflare Pages serves it
 verbatim, which is why `functions/_middleware.js` exists to 404 the paths
