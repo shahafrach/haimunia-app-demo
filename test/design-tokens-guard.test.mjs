@@ -101,7 +101,8 @@ test("every var(--name) used anywhere resolves to a token or a locally declared 
   for (const text of corpus) { let m; while ((m = decl.exec(text))) defined.add(m[1]); }
   const missing = new Set();
   for (const text of corpus) {
-    const use = /var\(\s*(--[\w-]+)/g; let m;
+    // a var() with a fallback is optional by design, so only the bare form must resolve
+    const use = /var\(\s*(--[\w-]+)\s*\)/g; let m;
     while ((m = use.exec(text))) if (!defined.has(m[1])) missing.add(m[1]);
   }
   assert.deepEqual([...missing], [], "var() references with no definition");

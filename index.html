@@ -178,6 +178,12 @@
   [data-palette="classic"] .header{ position:absolute; z-index:20; inset-block-start:env(safe-area-inset-top, 0px); inset-inline:0; margin:0; padding-inline:var(--page-inline); }
   [data-palette="classic"] .header .icon-chip{ background:var(--header-glass); color:var(--color-on-scene); border-color:color-mix(in srgb, var(--color-on-scene) 22%, transparent); }
   [data-palette="classic"] .header-logo{ color:var(--color-on-scene); }
+  /* Inside the welcome sheet and the medals list the page is a plain column: no scene, a normal title. */
+  [data-palette="classic"] #welcomeOverlay .scene-page, [data-palette="classic"] #achievementsList .scene-page{ padding-block-start:0; margin-inline:0; min-height:0; }
+  [data-palette="classic"] #welcomeOverlay .scene-page::before, [data-palette="classic"] #welcomeOverlay .scene-page::after, [data-palette="classic"] #achievementsList .scene-page::before, [data-palette="classic"] #achievementsList .scene-page::after{ content:none; }
+  [data-palette="classic"] #welcomeOverlay .scene-page__intro, [data-palette="classic"] #achievementsList .scene-page__intro{ position:static; color:var(--color-text); opacity:1; margin:0 0 var(--space-md); }
+  [data-palette="classic"] #welcomeOverlay .scene-page__title, [data-palette="classic"] #achievementsList .scene-page__title{ color:var(--color-text); font-size:var(--text-display); }
+  [data-palette="classic"] #welcomeOverlay .scene-sheet, [data-palette="classic"] #achievementsList .scene-sheet{ margin-block-start:0; min-height:0; padding:0; border-radius:0; box-shadow:none; background:none; }
   .scene-page--home{ --scene-glow-x:80%; --scene-glow-y:10%; }
   .scene-page--community{ --scene-glow-x:18%; --scene-glow-y:14%; }
   .scene-page--add{ --scene-glow-x:50%; --scene-glow-y:4%; --scene-photo-height:clamp(260px, 38svh, 360px); }

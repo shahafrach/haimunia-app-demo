@@ -62,7 +62,7 @@ test("Settings shows all three controls and reflects the current choice", async 
   assert.equal(checked("[data-action='set-theme']").dataset.pref, "light");
   assert.equal(checked("[data-action='set-palette']").dataset.palette, "sand");
   assert.equal(checked("[data-action='set-transparency']").dataset.pref, "off");
-  assert.equal(doc.querySelectorAll("#settingsBody [data-action='set-palette']").length, 5, "six palettes");
+  assert.equal(doc.querySelectorAll("#settingsBody [data-action='set-palette']").length, 6, "six palettes");
   assert.equal(doc.querySelectorAll("#settingsBody [data-action='set-theme']").length, 3, "light, dark, system");
 });
 
