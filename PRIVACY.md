@@ -6,7 +6,8 @@ BOX-LOG is a free training-log app, a personal project by Shahaf Rachmany, used 
 
 ## In short
 
-- The app keeps your log on your device. An automatic private backup to your own account starts after your first saved workout, and you can turn it off in Settings.
+- Body weight never leaves your device.
+- The rest of your log is kept on your device and backed up to your own private account after you agree. You can turn the backup off and delete it in Settings.
 - Only members of the same circle see anything, and only what you shared there.
 - No email address, no phone, no payment data, no health data.
 - No ads and no third-party analytics.
@@ -21,13 +22,13 @@ BOX-LOG is a free training-log app, a personal project by Shahaf Rachmany, used 
 - **Notifications:** your preferences and, if you turn push on, your browser's push subscription at its push service.
 - **Blocks and bug reports** you submitted.
 - **Usage events:** an action name and small properties, with no workout content. Deleted after 90 days.
-- **Private backup:** your full log, custom exercises, body weight and measurements. Stored under your account only. No circle member sees it and it is never sent to a circle.
+- **Private backup:** your workout log, custom exercises and measurements, without body weight. Stored under your account only. No circle member sees it and it is never sent to a circle.
 
 ## What stays on the device
 
 - Display choices and device settings.
-- If you turn the backup off, from then on your log, body weight included, stays on the device only. What was already uploaded stays in the cloud until you delete the backup or the account.
-- Body weight is never shared with a circle. It reaches the cloud only inside the private backup, if the backup is on.
+- **Body weight never leaves your device.** It is not shared with a circle and is not part of the backup.
+- If you turn the backup off, from then on your log stays on the device only. What was already uploaded stays in the cloud until you delete the backup or the account.
 - No email, phone, payment or health data is collected.
 
 ## Who sees what

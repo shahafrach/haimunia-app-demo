@@ -333,6 +333,13 @@ function catLabel(cat) {
   return Object.prototype.hasOwnProperty.call(CATEGORY_LABELS, cat) ? CATEGORY_LABELS[cat] : String(cat ?? "");
 }
 const WOD_SCORE_TYPES = ["time", "amrap", "load", "emom"];
+// Record types that never leave the device. Body weight is private to the
+// phone: it is excluded from the private_records backup (queue, flush, pull)
+// and docs/circles/decisions.md records why. Every path that writes or reads
+// private_records for backup goes through isBackupRecordType().
+const DEVICE_ONLY_RECORD_TYPES = Object.freeze(["bodyweight"]);
+function isBackupRecordType(recordType) { return !DEVICE_ONLY_RECORD_TYPES.includes(recordType); }
+
 const LIMITS = {
   // idLen is read back off the shared module rather than restated here:
   // cleanId() enforces it as a security boundary and there must be exactly
