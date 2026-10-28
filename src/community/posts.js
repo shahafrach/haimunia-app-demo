@@ -89,14 +89,14 @@
     return (post && (post.created_at || post.published_at || post.occurred_on)) || null;
   }
   // Authorless posts render the club mark, never a broken avatar (COMM-107).
-  const CLUB_MARK_HTML = `<span aria-hidden="true" class="avatar-badge" style="width:40px;height:40px;font-size:16px;background:var(--brass);">◎</span>`;
+  const CLUB_MARK_HTML = `<span aria-hidden="true" class="avatar-badge" style="width:40px;height:40px;font-size:16px;background:var(--color-accent);">◎</span>`;
 
   // Members have an emoji, not a photo (decisions.md: Profile). The circle feed
   // carries it on the post; anything without one falls back to the initial.
   function memberAvatarHtml(post, name, size) {
     const emoji = post && post.author && post.author.emoji;
     if (!emoji) return avatarHtml(name, size);
-    return `<span aria-hidden="true" class="avatar-badge" style="width:${size}px;height:${size}px;font-size:${Math.round(size * 0.55)}px;background:var(--surface);border:1px solid var(--border);">${esc(emoji)}</span>`;
+    return `<span aria-hidden="true" class="avatar-badge" style="width:${size}px;height:${size}px;font-size:${Math.round(size * 0.55)}px;background:var(--color-surface);border:1px solid var(--color-border);">${esc(emoji)}</span>`;
   }
 
   function postHeadHtml(post, opts) {
@@ -237,7 +237,7 @@
 
   function captionEditPanel() {
     const e = state.posts.captionEdit;
-    return `<div class="post-inline-edit" style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px;">
+    return `<div class="post-inline-edit" style="margin-top:10px;border-top:1px solid var(--color-border);padding-top:10px;">
       <label class="field"><span class="field-label">עריכת כיתוב</span>
         <textarea class="text-input" data-caption-edit maxlength="${POST_BODY_MAX}" rows="3">${esc(e.body || "")}</textarea></label>
       <div class="chip-row"><button class="chip-btn" data-community-action="caption-cancel">ביטול</button><button class="chip-btn primary" data-community-action="caption-save"${captionSaveBlocked() ? " disabled" : ""}>שמירה</button></div>
@@ -364,7 +364,7 @@
     const rows = (loaded || []).filter((r) => !(typeof isBlockedUser === "function" && isBlockedUser(r.user_id)));
     if (!loaded || !rows.length) return "";
     const pid = esc(post.id);
-    const names = rows.map((r) => `<span style="color:var(--chalk);font-weight:700;">${esc(trainingPartnerName(r))}</span>`)
+    const names = rows.map((r) => `<span style="color:var(--color-text);font-weight:700;">${esc(trainingPartnerName(r))}</span>`)
       .join(`<span aria-hidden="true">, </span>`);
     // The member's own escape hatch, on the card rather than behind the
     // author's sheet: being able to remove the tag is the whole reason being
@@ -373,8 +373,8 @@
     const untag = taggedMe
       ? `<button class="link-btn" data-community-action="partner-untag-self" data-id="${pid}" style="font-size:12px;">הסרת התיוג שלי</button>`
       : "";
-    return `<div class="post-partners" data-post-partners="ready" data-post-id="${pid}" style="margin-top:8px;display:flex;flex-wrap:wrap;align-items:center;gap:6px;color:var(--steel);font-size:12.5px;line-height:1.6;">
-      <span aria-hidden="true">🤝</span><span style="font-weight:800;color:var(--chalk);">התאמנו יחד</span>${names}${untag}
+    return `<div class="post-partners" data-post-partners="ready" data-post-id="${pid}" style="margin-top:8px;display:flex;flex-wrap:wrap;align-items:center;gap:6px;color:var(--color-text-muted);font-size:12.5px;line-height:1.6;">
+      <span aria-hidden="true">🤝</span><span style="font-weight:800;color:var(--color-text);">התאמנו יחד</span>${names}${untag}
     </div>`;
   }
 
@@ -394,7 +394,7 @@
       const on = picked.indexOf(o.user_id) >= 0;
       return `<label class="field flex gap-6" style="align-items:center;">
         <input type="checkbox" data-partner-pick="${esc(o.user_id)}"${on ? " checked" : ""}${!on && atCap ? " disabled" : ""}/>
-        <span style="font-size:13px;">${esc(trainingPartnerName(o))}${(p.pending || []).indexOf(o.user_id) >= 0 ? ` <span style="color:var(--steel);font-size:11.5px;">(ממתין לאישור)</span>` : ""}</span>
+        <span style="font-size:13px;">${esc(trainingPartnerName(o))}${(p.pending || []).indexOf(o.user_id) >= 0 ? ` <span style="color:var(--color-text-muted);font-size:11.5px;">(ממתין לאישור)</span>` : ""}</span>
       </label>`;
     }).join("");
     const body = p.loading
@@ -406,11 +406,11 @@
         // it reads as broken. The two real causes are named, because one of
         // them is the member's own setting and they can change it.
         : `<div class="empty">אין עוד חברים במעגל הזה.</div>`;
-    return `<div class="post-inline-edit" data-partners-panel="${esc(post.id)}" style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px;">
+    return `<div class="post-inline-edit" data-partners-panel="${esc(post.id)}" style="margin-top:10px;border-top:1px solid var(--color-border);padding-top:10px;">
       <div class="field-label" style="margin-bottom:6px;">מי התאמן/ה איתכם?</div>
-      <div style="color:var(--steel);font-size:12px;margin-bottom:8px;">התיוג ממתין לאישור של מי שסימנתם. רק אחרי האישור האימון נספר גם לשבוע שלו/שלה.</div>
+      <div style="color:var(--color-text-muted);font-size:12px;margin-bottom:8px;">התיוג ממתין לאישור של מי שסימנתם. רק אחרי האישור האימון נספר גם לשבוע שלו/שלה.</div>
       ${body}
-      ${atCap ? `<div style="color:var(--steel);font-size:12px;margin-top:6px;">אפשר לתייג עד ${TRAINING_PARTNERS_MAX} חברים.</div>` : ""}
+      ${atCap ? `<div style="color:var(--color-text-muted);font-size:12px;margin-top:6px;">אפשר לתייג עד ${TRAINING_PARTNERS_MAX} חברים.</div>` : ""}
       ${p.error ? `<div class="field-error" role="alert" style="margin-top:8px;">${esc(p.error)}</div>` : ""}
       <div class="chip-row" style="margin-top:8px;">
         <button class="chip-btn" data-community-action="partners-cancel">ביטול</button>
@@ -554,9 +554,9 @@
     // already-built strings rather than .map(esc).
     const metaParts = [scoreTypeHtml(scoreType), effortHtml(effort, m.level)].filter(Boolean);
     const detail = `<div class="post-title">${bidiText(name)}${prBadge}</div>
-      ${when ? `<div style="color:var(--steel);font-size:12px;">${esc(shortHebDate(when))}</div>` : ""}
+      ${when ? `<div style="color:var(--color-text-muted);font-size:12px;">${esc(shortHebDate(when))}</div>` : ""}
       ${result ? `<div class="mono post-result">${esc(result)}</div>` : ""}
-      ${metaParts.length ? `<div style="color:var(--steel);font-size:12px;">${metaParts.join(" · ")}</div>` : ""}`;
+      ${metaParts.length ? `<div style="color:var(--color-text-muted);font-size:12px;">${metaParts.join(" · ")}</div>` : ""}`;
     // `detail` is this type's RESULT BLOCK and so goes last, after the photo
     // and after whatever the member wrote about it.
     return postCardShell(post, postCardBody(post, `<div class="post-result-block">${detail}</div>`));
@@ -583,7 +583,7 @@
       ["תאריך", (m.achieved_on || post.occurred_on) ? String(m.achieved_on || post.occurred_on).slice(0, 10) : ""],
     ].filter((r) => r[1] != null && r[1] !== "");
     const result = `<div class="post-result-block"><div class="post-title">${bidiText(movement)} <span class="pr-badge badge-tag">PR</span></div>
-      <div class="log-list" style="margin-top:6px;">${rows.map((r) => `<div class="log-row"><span>${esc(r[0])}</span><span class="mono" style="color:var(--brass);">${esc(r[1])}</span></div>`).join("")}</div></div>`;
+      <div class="log-list" style="margin-top:6px;">${rows.map((r) => `<div class="log-row"><span>${esc(r[0])}</span><span class="mono" style="color:var(--color-accent);">${esc(r[1])}</span></div>`).join("")}</div></div>`;
     return postCardShell(post, postCardBody(post, result));
   }
 
@@ -595,9 +595,9 @@
     const why = m.explanation || post.result_text || "";
     const result = `<div class="post-result-block"><div class="flex gap-10" style="align-items:center;">
         <span aria-hidden="true" style="font-size:26px;">${esc(icon)}</span>
-        <div><div class="post-title" style="margin:0;">${bidiText(title)}</div>${when ? `<div style="color:var(--steel);font-size:12px;">${esc(shortHebDate(when))}</div>` : ""}</div>
+        <div><div class="post-title" style="margin:0;">${bidiText(title)}</div>${when ? `<div style="color:var(--color-text-muted);font-size:12px;">${esc(shortHebDate(when))}</div>` : ""}</div>
       </div>
-      ${why ? `<div style="color:var(--steel);font-size:13px;margin-top:6px;">${bidiText(why)}</div>` : ""}</div>`;
+      ${why ? `<div style="color:var(--color-text-muted);font-size:13px;margin-top:6px;">${bidiText(why)}</div>` : ""}</div>`;
     return postCardShell(post, postCardBody(post, result));
   }
 
@@ -901,12 +901,12 @@
     const p = state.posts.prPrompt;
     if (!p) return "";
     const r = p.record;
-    const line = (label, val) => (val != null && val !== "") ? `<div style="font-size:12.5px;color:var(--steel);">${esc(label)}: <span class="mono" style="color:var(--brass);">${esc(val)}</span></div>` : "";
+    const line = (label, val) => (val != null && val !== "") ? `<div style="font-size:12.5px;color:var(--color-text-muted);">${esc(label)}: <span class="mono" style="color:var(--color-accent);">${esc(val)}</span></div>` : "";
     return `<div class="modal-overlay open" role="dialog" aria-modal="true" aria-labelledby="prPromptTitle" data-cloud-dialog="prPrompt" style="align-items:center;padding:0 16px;">
       <div class="modal-sheet" id="prPrompt" style="border-radius:22px;max-height:90vh;overflow:auto;">
         <div style="padding:22px 20px calc(env(safe-area-inset-bottom,0px) + 18px);">
-          <h2 id="prPromptTitle" style="margin-top:0;color:var(--chalk);font-weight:800;font-size:17px;margin-bottom:6px;">שיא חדש! לשתף עם המעגלים?</h2>
-          <div style="display:inline-block;font-size:11px;font-weight:800;color:#0c0c0c;background:var(--brass);border-radius:999px;padding:2px 8px;margin-bottom:8px;">PR</div>
+          <h2 id="prPromptTitle" style="margin-top:0;color:var(--color-text);font-weight:800;font-size:17px;margin-bottom:6px;">שיא חדש! לשתף עם המעגלים?</h2>
+          <div style="display:inline-block;font-size:11px;font-weight:800;color:var(--color-on-pr);background:var(--color-pr-fill);border:2px solid var(--color-pr);border-radius:999px;padding:0 8px;margin-bottom:8px;">★ שיא</div>
           ${line("תרגיל", r.movement || r.movement_name)}
           ${line("תוצאה חדשה", r.new_result || r.new_value)}
           ${line("תוצאה קודמת", r.previous_result || r.previous_value)}

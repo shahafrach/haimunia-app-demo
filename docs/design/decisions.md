@@ -38,3 +38,38 @@ logs, sees what they achieved and how far they progressed, and leaves pleased.
 - **Already settled elsewhere:** the week starts Sunday, Asia/Jerusalem. The
   circle sees the lift and percent improvement, not the absolute weight,
   unless the member chose to show it. Rx and scaled are separate lists.
+
+## Owner decisions, 2026-10-28
+
+These came after the list above and win over it and over research.md.
+
+- **Five palettes, not four.** The member picks one in Settings, Appearance; each has
+  light and dark. 1 Chalk and Brass and 2 Slate and Ember come from research.md
+  with its corrected text colors (brass text `#87590B`, ember fill `#C2410C`);
+  their dark modes are defined in the token block. 3 Cedar and Fog, 4 Sand and
+  Horizon and 5 Ivory and Iris use the owner's values. Cedar's light muted
+  (`#5A6A60`, 4.52:1 on surface) is darkened for headroom. In four of the five,
+  accent and PR have nearly equal lightness, so a PR always carries a shape and
+  a label, never color alone.
+- **Transparency:** a Settings switch for translucent cards and bars with
+  backdrop blur. Off by default; forced off under `prefers-reduced-transparency`
+  and solid where `backdrop-filter` is unsupported.
+- **Font:** Heebo only, self-hosted variable woff2 (Hebrew and Latin subsets),
+  no Google Fonts request and no third-party origin. Tabular digits for weights,
+  reps and times; numbers and units sit in `bdi`.
+- **Tabs:** Home, Circle, a raised center Log button, Progress. Me opens from
+  the avatar on Home.
+- **Charts:** time axes run right to left.
+- **Older browsers:** no `light-dark()` means the light theme only, through an
+  `@supports not` block whose values a test keeps equal to the light halves.
+- **Logging friction** is the biggest complaint users of other apps report, so
+  taps to log one set are measured before and after and reduced.
+- **Storage:** palette, theme and transparency live in `localStorage` on the
+  device (keys `haimunia-demo:palette`, `:theme`, `:transparency`), because
+  `theme-init.js` must read them before first paint. They never sync.
+- **Token source:** one `<style id="tokens">` block in `index.html`: primitives
+  (`--p-*`), semantic (`--color-*`, `--space-*`, `--radius-*`, `--text-*`,
+  `--motion-*`) and component (`--btn-*`, `--card-*`, `--ring-*`, `--tab-*`).
+  Every color literal lives there and nowhere else; `test/design-tokens-guard.test.mjs`
+  enforces it and `test/design-contrast.test.mjs` computes WCAG 2.2 AA ratios
+  for every palette in both modes.

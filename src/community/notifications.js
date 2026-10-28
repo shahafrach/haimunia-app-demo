@@ -837,13 +837,13 @@
     // whatever the server wrote; the server's body carries the names. r.title
     // remains the last resort for a type this client does not know.
     const title = esc(def.title || r.title || "");
-    const bodyHtml = r.body ? `<span style="display:block;color:var(--steel);font-size:12.5px;margin-top:2px;">${esc(r.body)}</span>` : "";
-    return `<button class="log-row" data-community-action="notif-open" data-id="${esc(r.id)}" style="width:100%;text-align:right;background:none;border:0;border-inline-start:3px solid ${emphasise ? "var(--energy)" : "transparent"};padding:8px 10px;cursor:pointer;display:flex;gap:10px;align-items:flex-start;">
+    const bodyHtml = r.body ? `<span style="display:block;color:var(--color-text-muted);font-size:12.5px;margin-top:2px;">${esc(r.body)}</span>` : "";
+    return `<button class="log-row" data-community-action="notif-open" data-id="${esc(r.id)}" style="width:100%;text-align:right;background:none;border:0;border-inline-start:3px solid ${emphasise ? "var(--color-accent-fill)" : "transparent"};padding:8px 10px;cursor:pointer;display:flex;gap:10px;align-items:flex-start;">
       <span aria-hidden="true" style="font-size:18px;line-height:1.2;">${esc(def.icon)}</span>
       <span style="flex:1;min-width:0;">
         <span style="display:block;font-weight:${emphasise ? "800" : "600"};font-size:13px;">${title}</span>
         ${bodyHtml}
-        <span style="display:block;color:var(--steel);font-size:11px;margin-top:3px;">${esc(relativeTime(r.created_at))}</span>
+        <span style="display:block;color:var(--color-text-muted);font-size:11px;margin-top:3px;">${esc(relativeTime(r.created_at))}</span>
       </span>
     </button>`;
   }
@@ -861,7 +861,7 @@
     if (!c) return "";
     let body;
     if (c.loading && !c.rows.length) {
-      body = `<div class="log-list" aria-busy="true">${`<div class="log-row" aria-hidden="true"><span style="height:12px;width:70%;background:var(--border);border-radius:6px;display:inline-block;"></span></div>`.repeat(5)}</div>`;
+      body = `<div class="log-list" aria-busy="true">${`<div class="log-row" aria-hidden="true"><span style="height:12px;width:70%;background:var(--color-border);border-radius:6px;display:inline-block;"></span></div>`.repeat(5)}</div>`;
     } else if (c.error && !c.rows.length) {
       body = `<div class="empty">לא ניתן לטעון התראות.<div class="chip-row" style="justify-content:center;"><button class="chip-btn primary" data-community-action="notif-retry">ניסיון חוזר</button></div></div>`;
     } else if (!c.rows.length) {
@@ -870,7 +870,7 @@
       body = NOTIF_CATEGORIES.map((cat) => {
         const rows = c.rows.filter((r) => notifRowCategory(r) === cat.id);
         if (!rows.length) return "";
-        return `<div class="ach-section" style="margin-top:14px;">${sectionHead("var(--blue)", cat.label)}<div class="log-list">${renderNotifCategoryRows(rows)}</div></div>`;
+        return `<div class="ach-section" style="margin-top:14px;">${sectionHead("var(--color-info)", cat.label)}<div class="log-list">${renderNotifCategoryRows(rows)}</div></div>`;
       }).join("");
     }
     const moreHtml = c.rows.length && !c.end
@@ -896,8 +896,6 @@
     // achievements mini-scene needed (z-index:-3 media otherwise escapes
     // behind the modal's own opaque background).
     const headerStrip = `<div class="scene-page--community" style="position:relative; isolation:isolate; margin:-18px -18px 14px; height:100px; overflow:hidden;">
-      <div class="scene-page__media" style="height:100px;" aria-hidden="true"></div>
-      <div class="scene-page__scrim" aria-hidden="true"></div>
     </div>`;
     return `<div class="modal-overlay open" role="dialog" aria-modal="true" aria-labelledby="notifCenterTitle" data-notif-center data-cloud-dialog="notifCenter" style="align-items:center;padding:20px 12px;">
       <div class="modal-sheet" style="border-radius:20px;max-height:88vh;overflow:auto;width:100%;max-width:520px;">
@@ -929,7 +927,7 @@
       const on = stored === "push" || stored === "in_app";
       const saving = !!state.notif.prefSaving[t.key];
       const pushBadge = (pushOn && stored === "push" && state.notif.pushSub)
-        ? `<span style="color:var(--green);font-size:11px;"> · פעיל</span>` : "";
+        ? `<span style="color:var(--color-success);font-size:11px;"> · פעיל</span>` : "";
       return `<label class="log-row" data-notif-pref-row="${t.key}" style="justify-content:space-between;gap:12px;align-items:center;cursor:pointer;min-height:44px;">
         <span style="font-size:13px;min-width:0;">${esc(t.label)}${pushBadge}</span>
         <input type="checkbox" role="switch" data-notif-pref-toggle data-type="${t.key}" aria-label="${esc(t.label)}"${on ? " checked" : ""}${saving ? " disabled" : ""}/>
@@ -937,17 +935,17 @@
     };
     const rows = state.notif.prefsLoaded
       ? NOTIF_PREF_TYPES.map(rowFor).join("")
-      : `<div class="log-row" aria-hidden="true"><span style="height:12px;width:60%;background:var(--border);border-radius:6px;display:inline-block;"></span></div>`.repeat(NOTIF_PREF_TYPES.length);
+      : `<div class="log-row" aria-hidden="true"><span style="height:12px;width:60%;background:var(--color-border);border-radius:6px;display:inline-block;"></span></div>`.repeat(NOTIF_PREF_TYPES.length);
     // A PushSubscription is per browser/device, so "turn push off" is a single
     // action here rather than one per row.
     const deviceStatusHtml = (pushOn && state.notif.pushSub)
-      ? `<div class="chip-row" style="margin-top:0;margin-bottom:8px;align-items:center;"><span style="font-size:12px;color:var(--steel);">התראות דחיפה פעילות במכשיר זה.</span><button type="button" class="link-btn" data-community-action="notif-push-disable">כיבוי במכשיר זה</button></div>`
+      ? `<div class="chip-row" style="margin-top:0;margin-bottom:8px;align-items:center;"><span style="font-size:12px;color:var(--color-text-muted);">התראות דחיפה פעילות במכשיר זה.</span><button type="button" class="link-btn" data-community-action="notif-push-disable">כיבוי במכשיר זה</button></div>`
       : "";
     const reasonHtml = pushReason
-      ? `<div data-notif-push-reason style="color:var(--steel);font-size:12px;line-height:1.6;margin-bottom:8px;">${esc(pushReason)} ההתראות יופיעו בפעמון.</div>` : "";
+      ? `<div data-notif-push-reason style="color:var(--color-text-muted);font-size:12px;line-height:1.6;margin-bottom:8px;">${esc(pushReason)} ההתראות יופיעו בפעמון.</div>` : "";
     const introHtml = "כל ההתראות כבויות עד שתדליקו אותן. מקבלים התראה רק על מעגל שעדיין חברים בו, ואף פעם לא ממי שחסמתם. עידוד על אותו פוסט מגיע לכל היותר פעם בשעה.";
-    return `<div class="ach-section" id="notifPrefs" style="margin-top:18px;">${sectionHead("var(--brass)", "התראות")}
-      <div style="color:var(--steel);font-size:12px;line-height:1.6;margin-bottom:8px;">${introHtml}</div>
+    return `<div class="ach-section" id="notifPrefs" style="margin-top:18px;">${sectionHead("var(--color-accent)", "התראות")}
+      <div style="color:var(--color-text-muted);font-size:12px;line-height:1.6;margin-bottom:8px;">${introHtml}</div>
       ${reasonHtml}
       ${deviceStatusHtml}
       <div class="log-list">${rows}</div>
@@ -975,9 +973,9 @@
   // place, instead of asking the member to scroll back up past the failure.
   function pushPermissionHelpHtml() {
     const line = (device, steps) =>
-      `<div style="margin-top:6px;"><b style="color:var(--chalk);">${device}</b><div>${steps}</div></div>`;
-    return `<div data-push-permission-help="1" style="color:var(--steel);font-size:12px;line-height:1.6;margin-top:8px;border-top:1px solid var(--border);padding-top:8px;">
-      <div style="font-weight:700;color:var(--chalk);">איך מאשרים התראות</div>
+      `<div style="margin-top:6px;"><b style="color:var(--color-text);">${device}</b><div>${steps}</div></div>`;
+    return `<div data-push-permission-help="1" style="color:var(--color-text-muted);font-size:12px;line-height:1.6;margin-top:8px;border-top:1px solid var(--color-border);padding-top:8px;">
+      <div style="font-weight:700;color:var(--color-text);">איך מאשרים התראות</div>
       ${line("אייפון", "קודם מוסיפים את האפליקציה למסך הבית: בספארי, כפתור השיתוף ← „הוספה למסך הבית”. אחר כך פותחים אותה משם, ובהגדרות המכשיר: הגדרות ← התראות ← BOX-LOG ← „אפשר התראות”.")}
       ${line("אנדרואיד", "הגדרות ← אפליקציות ← BOX-LOG ← התראות ← מפעילים „הצג התראות”. בכרום אפשר גם: ⋮ ← הגדרות אתר ← התראות.")}
       <div class="chip-row" style="margin-top:8px;">
@@ -1004,18 +1002,18 @@
     // the next step.
     let resultHtml = "";
     if (st.status === "received") {
-      resultHtml = `<div role="status" style="color:var(--green);font-size:12px;margin-top:6px;">התראה התקבלה במכשיר הזה.</div>`;
+      resultHtml = `<div role="status" style="color:var(--color-success);font-size:12px;margin-top:6px;">התראה התקבלה במכשיר הזה.</div>`;
     } else if (st.status === "not_received") {
-      resultHtml = `<div role="status" style="color:var(--steel);font-size:12px;margin-top:6px;">לא התקבלה התראה. בדקו שהתראות מהאפליקציה מאושרות בהגדרות המכשיר, ושהאפליקציה פתוחה מהמסך הבית ולא מהדפדפן.</div>${pushPermissionHelpHtml()}`;
+      resultHtml = `<div role="status" style="color:var(--color-text-muted);font-size:12px;margin-top:6px;">לא התקבלה התראה. בדקו שהתראות מהאפליקציה מאושרות בהגדרות המכשיר, ושהאפליקציה פתוחה מהמסך הבית ולא מהדפדפן.</div>${pushPermissionHelpHtml()}`;
     } else if (st.status === "failed") {
-      resultHtml = `<div role="alert" style="color:var(--steel);font-size:12px;margin-top:6px;">${esc(st.reason || "לא ניתן היה לשלוח התראת בדיקה.")}</div>`
+      resultHtml = `<div role="alert" style="color:var(--color-text-muted);font-size:12px;margin-top:6px;">${esc(st.reason || "לא ניתן היה לשלוח התראת בדיקה.")}</div>`
         + (st.reason === NOTIF_PERMISSION_DENIED_TEXT ? pushPermissionHelpHtml() : "");
     } else if (busy) {
-      resultHtml = `<div role="status" style="color:var(--steel);font-size:12px;margin-top:6px;">ממתינים להתראה…</div>`;
+      resultHtml = `<div role="status" style="color:var(--color-text-muted);font-size:12px;margin-top:6px;">ממתינים להתראה…</div>`;
     }
     return `<div class="chart-card" style="margin-top:10px;" data-push-self-test="${esc(st.status)}">
       <div style="font-weight:800;font-size:13px;">בדיקת התראות במכשיר הזה</div>
-      <div style="color:var(--steel);font-size:12px;line-height:1.6;margin-top:4px;">שליחת התראת בדיקה למכשיר הזה בלבד. הבדיקה מוודאת שההרשאה ניתנה ושהאפליקציה יכולה להציג התראה — היא לא בודקת התראות שנשלחות מהשרת.</div>
+      <div style="color:var(--color-text-muted);font-size:12px;line-height:1.6;margin-top:4px;">שליחת התראת בדיקה למכשיר הזה בלבד. הבדיקה מוודאת שההרשאה ניתנה ושהאפליקציה יכולה להציג התראה — היא לא בודקת התראות שנשלחות מהשרת.</div>
       <div class="chip-row" style="margin-top:8px;">
         <button type="button" class="chip-btn primary" data-community-action="notif-push-self-test"${busy ? " disabled" : ""}>${busy ? "שולח…" : "שליחת התראת בדיקה"}</button>
       </div>

@@ -26,23 +26,27 @@
   // ---- Constants: the one place to change look and feel -------------------
   const CARD = Object.freeze({ WIDTH: 1080, HEIGHT: 1350, PAD: 84, MIME: "image/png" });
 
-  // The app's current font stack (index.html: body is Rubik, numbers are
-  // JetBrains Mono). The Design session changes these two lines.
-  const FONT_SANS = "Rubik, sans-serif";
-  const FONT_MONO = "'JetBrains Mono', Rubik, monospace";
+  // Heebo for everything (tokens.css --font-body). Its digits are all one
+  // width, so numbers need no second family.
+  const FONT_SANS = "Heebo, system-ui, sans-serif";
+  const FONT_MONO = FONT_SANS;
 
-  // CSS custom properties read at render time, with the dark palette's values
-  // as the fallback when there is no document (tests, workers) or a token is
-  // missing. Keys are the names used in the painters below.
+  // Design tokens read at render time, so a card is drawn in the member's own
+  // palette and theme. Keys are the names the painters use; values are the
+  // token (tokens.css). With no document (tests, workers) or a token that does
+  // not resolve, the fallback is a CSS system color keyword: never a literal.
   const TOKENS = Object.freeze({
-    bg: ["--bg", "#152342"],
-    surface: ["--surface", "#1F3057"],
-    border: ["--border", "#425481"],
-    chalk: ["--chalk", "#F2ECE1"],
-    steel: ["--steel", "#A8B3C9"],
-    energy: ["--energy", "#E85D3D"],
-    brass: ["--brass", "#E8B98A"],
-    green: ["--green", "#4B9B5F"],
+    bg: ["--color-bg", "Canvas"],
+    surface: ["--color-surface", "Canvas"],
+    border: ["--color-border-strong", "GrayText"],
+    text: ["--color-text", "CanvasText"],
+    muted: ["--color-text-muted", "GrayText"],
+    accent: ["--color-accent", "CanvasText"],
+    accentFill: ["--color-accent-fill", "Highlight"],
+    onAccent: ["--color-on-accent", "HighlightText"],
+    pr: ["--color-pr", "CanvasText"],
+    progress: ["--color-progress", "Highlight"],
+    success: ["--color-success", "Highlight"],
   });
   const MARK_TEXT = "BOX-LOG";
   const FILE_NAME = "box-log.png";
@@ -225,17 +229,31 @@
   }
 
   // ---- Canvas plumbing ----------------------------------------------------
-  /** Colours from the document's CSS tokens, read now. */
+  /**
+   * Colours from the document's tokens, read now. A custom property reads back
+   * unresolved (light-dark(...), color-mix(...)), so each is resolved the way
+   * the page resolves it: through a probe element's computed color.
+   */
   function readColors() {
     /** @type {Record<string, string>} */
     const out = {};
-    let cs = null;
-    try { if (typeof document !== "undefined" && typeof getComputedStyle === "function") cs = getComputedStyle(document.documentElement); } catch (e) { cs = null; }
+    let probe = null;
+    try {
+      if (typeof document !== "undefined" && document.body && typeof getComputedStyle === "function") {
+        probe = document.createElement("span");
+        probe.style.cssText = "position:absolute;visibility:hidden;width:0;height:0";
+        document.body.appendChild(probe);
+      }
+    } catch (e) { probe = null; }
     for (const key of Object.keys(TOKENS)) {
       const [name, fallback] = TOKENS[/** @type {keyof typeof TOKENS} */ (key)];
-      const v = cs ? cs.getPropertyValue(name).trim() : "";
+      let v = "";
+      if (probe) {
+        try { probe.style.color = ""; probe.style.color = `var(${name})`; v = getComputedStyle(probe).color; } catch (e) { v = ""; }
+      }
       out[key] = v || fallback;
     }
+    if (probe) probe.remove();
     return out;
   }
   function newCanvas() {
@@ -276,12 +294,12 @@
   /** Small BOX-LOG mark: a rounded box outline and the wordmark, right-aligned at x. @param {CanvasRenderingContext2D} ctx @param {Record<string,string>} c */
   function drawMark(ctx, c, x, baseline, size) {
     ctx.textAlign = "right";
-    ctx.fillStyle = c.brass;
+    ctx.fillStyle = c.accent;
     ctx.font = `800 ${size}px ${FONT_SANS}`;
     ctx.fillText(MARK_TEXT, x, baseline);
     const w = ctx.measureText(MARK_TEXT).width;
     const s = size * 0.82;
-    ctx.strokeStyle = c.brass;
+    ctx.strokeStyle = c.accent;
     ctx.lineWidth = Math.max(3, size / 10);
     roundRect(ctx, x - w - 16 - s, baseline - s + 2, s, s, s * 0.22);
     ctx.stroke();
@@ -291,27 +309,27 @@
     const { WIDTH: W, HEIGHT: H, PAD } = CARD;
     ctx.fillStyle = c.bg;
     ctx.fillRect(0, 0, W, H);
-    ctx.fillStyle = c.energy;
+    ctx.fillStyle = c.accentFill;
     ctx.fillRect(0, 0, W, 14);
     drawMark(ctx, c, W - PAD, 112, 38);
     ctx.font = `800 30px ${FONT_SANS}`;
     const chipText = isolate(chip);
     const chipW = ctx.measureText(chipText).width + 52;
-    ctx.fillStyle = c.energy;
+    ctx.fillStyle = c.accentFill;
     roundRect(ctx, PAD, 74, chipW, 52, 26);
     ctx.fill();
-    ctx.fillStyle = c.bg;
+    ctx.fillStyle = c.onAccent;
     ctx.textAlign = "center";
     ctx.fillText(chipText, PAD + chipW / 2, 111);
   }
   /** @param {CanvasRenderingContext2D} ctx @param {Record<string,string>} c */
   function drawFooter(ctx, c, left) {
     const { WIDTH: W, HEIGHT: H, PAD } = CARD;
-    ctx.fillStyle = c.energy;
+    ctx.fillStyle = c.accentFill;
     ctx.fillRect(PAD, H - 140, W - PAD * 2, 3);
     if (left) {
       ctx.textAlign = "left";
-      ctx.fillStyle = c.steel;
+      ctx.fillStyle = c.muted;
       ctx.font = `500 28px ${FONT_MONO}`;
       ctx.fillText(ltr(left), PAD, H - 80);
     }
@@ -325,22 +343,22 @@
     const { canvas, ctx } = newCanvas();
     const { WIDTH: W, PAD } = CARD;
     const cx = W / 2, maxW = W - PAD * 2;
-    drawFrame(ctx, c, L.chip);
+    drawFrame(ctx, c, L.kind === "lift" || L.kind === "benchmark" ? "★ " + L.chip : L.chip);
 
     ctx.textAlign = "center";
     ctx.font = `400 150px ${FONT_SANS}`;
-    ctx.fillStyle = c.chalk;
+    ctx.fillStyle = c.text;
     if (L.member.emoji) ctx.fillText(L.member.emoji, cx, 400);
 
-    ctx.fillStyle = c.chalk;
+    ctx.fillStyle = c.text;
     ctx.font = `800 60px ${FONT_SANS}`;
     ctx.fillText(fitText(ctx, isolate(L.member.name), maxW), cx, 500);
 
-    ctx.fillStyle = c.steel;
+    ctx.fillStyle = c.muted;
     ctx.font = `600 38px ${FONT_SANS}`;
     ctx.fillText(L.kind === "benchmark" ? "סיימ/ה בנצ'מרק" : "שבר/ה שיא אישי", cx, 566);
 
-    ctx.fillStyle = c.chalk;
+    ctx.fillStyle = c.text;
     ctx.font = `800 78px ${FONT_SANS}`;
     ctx.fillText(fitText(ctx, prose(L.title), maxW), cx, 690);
 
@@ -349,11 +367,11 @@
     const heroFont = (/** @type {number} */ px) => `800 ${px}px ${FONT_MONO}`;
     const px = fitSize(ctx, heroText, 230, maxW, heroFont);
     ctx.font = heroFont(px);
-    ctx.fillStyle = c.energy;
+    ctx.fillStyle = c.pr;
     ctx.fillText(heroText, cx, 900);
 
     if (L.heroLabel) {
-      ctx.fillStyle = c.steel;
+      ctx.fillStyle = c.muted;
       ctx.font = `600 38px ${FONT_SANS}`;
       ctx.fillText(L.heroLabel, cx, 970);
     }
@@ -367,7 +385,7 @@
       ctx.strokeStyle = c.border;
       ctx.lineWidth = 2;
       ctx.stroke();
-      ctx.fillStyle = c.brass;
+      ctx.fillStyle = c.accent;
       ctx.fillText(t, cx, 1049);
     }
     if (L.weightText) {
@@ -380,7 +398,7 @@
       ctx.strokeStyle = c.border;
       ctx.lineWidth = 2;
       ctx.stroke();
-      ctx.fillStyle = c.brass;
+      ctx.fillStyle = c.accent;
       ctx.fillText(t, cx, 1098);
     }
     drawFooter(ctx, c, L.dateText);
@@ -398,7 +416,7 @@
 
     ctx.textAlign = "center";
     ctx.font = `400 110px ${FONT_SANS}`;
-    ctx.fillStyle = c.chalk;
+    ctx.fillStyle = c.text;
     if (L.circle.emoji) ctx.fillText(L.circle.emoji, W / 2, 310);
     ctx.font = `800 68px ${FONT_SANS}`;
     ctx.fillText(fitText(ctx, isolate(L.circle.name), W - PAD * 2), W / 2, 400);
@@ -415,7 +433,7 @@
       let y = top;
       if (col.title) {
         ctx.textAlign = "right";
-        ctx.fillStyle = c.steel;
+        ctx.fillStyle = c.muted;
         ctx.font = `600 32px ${FONT_SANS}`;
         ctx.fillText(fitText(ctx, isolate(col.title), colW), right, y + 24);
         y += 54;
@@ -429,18 +447,18 @@
         const ry = y + k * rowH;
         const base = ry + rowH * 0.44;
         ctx.textAlign = "right";
-        ctx.fillStyle = r.paused ? c.steel : c.chalk;
+        ctx.fillStyle = r.paused ? c.muted : c.text;
         ctx.font = `700 ${nameSize}px ${FONT_SANS}`;
         const label = (r.emoji ? r.emoji + " " : "") + isolate(r.name);
         const pctW = compact ? 120 : 170;
         ctx.fillText(fitText(ctx, label, colW - pctW - 12), right, base);
         ctx.textAlign = "left";
         if (r.paused) {
-          ctx.fillStyle = c.steel;
+          ctx.fillStyle = c.muted;
           ctx.font = `600 ${nameSize}px ${FONT_SANS}`;
           ctx.fillText("מושהה", left, base);
         } else if (r.percentText) {
-          ctx.fillStyle = r.done ? c.green : c.energy;
+          ctx.fillStyle = r.done ? c.success : c.progress;
           ctx.font = `800 ${Math.round(nameSize * 1.2)}px ${FONT_MONO}`;
           ctx.fillText(ltr(r.percentText), left, base);
         }
@@ -451,13 +469,13 @@
         roundRect(ctx, left, by, colW, bh, bh / 2);
         ctx.fill();
         if (!r.paused && r.fraction > 0) {
-          ctx.fillStyle = r.done ? c.green : c.energy;
+          ctx.fillStyle = r.done ? c.success : c.progress;
           roundRect(ctx, right - colW * r.fraction, by, colW * r.fraction, bh, bh / 2);
           ctx.fill();
         }
         if (r.metText && rowH >= 70) {
           ctx.textAlign = "right";
-          ctx.fillStyle = c.steel;
+          ctx.fillStyle = c.muted;
           ctx.font = `500 ${Math.max(20, Math.round(nameSize * 0.7))}px ${FONT_SANS}`;
           ctx.fillText(r.metText, right, by + bh + Math.max(22, nameSize * 0.8));
         }
@@ -529,7 +547,7 @@
   /** Warm the webfonts the cards use; a canvas paints only what is already loaded. */
   async function ensureFonts() {
     if (typeof document === "undefined" || !document.fonts || typeof document.fonts.load !== "function") return;
-    const faces = ["800 60px Rubik", "600 38px Rubik", "400 32px Rubik", "800 200px 'JetBrains Mono'", "500 28px 'JetBrains Mono'"];
+    const faces = ["800 60px Heebo", "600 38px Heebo", "400 32px Heebo", "500 28px Heebo"];
     try { await Promise.all(faces.map((f) => document.fonts.load(f, "אב0123"))); } catch (e) { /* fallback face */ }
   }
 

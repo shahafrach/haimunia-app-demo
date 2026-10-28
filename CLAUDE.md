@@ -39,14 +39,18 @@ certainly already does what you are about to add.
 
 These are the ones that have been broken before. Each has a guard.
 
-**Every new CSS rule goes in both dark-theme blocks.** The app ships light
-and dark, and the theme is declared three times: `:root{…}` for light,
-`@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){…} }`
-for the OS default, and `:root[data-theme="dark"]{…}` so an explicit choice
-wins. A rule that sets a colour in only one of the last two renders one
-theme's text on the other theme's background. *Prefer existing tokens*
-(`--surface`, `--border`, `--steel`, `--chalk`, `--brass`…) — a rule built
-from tokens themes itself and needs no duplicate at all.
+**Colors live in one place: the token block.** `index.html` carries a single
+`<style id="tokens">` with primitives (`--p-*`), semantic tokens (`--color-*`)
+and component tokens (`--btn-*`, `--card-*`…). Theme-dependent values are
+written once with `light-dark()`, derived ones with `color-mix()`; `data-theme`
+(light, dark, or absent for the system) switches `color-scheme` and
+`data-palette` picks one of five palettes. A rule outside the block uses
+`var(--color-…)` only, never a hex, `rgb()`, `hsl()` or named color, in CSS, in
+an inline `style`, or in JS. Canvas code (share cards) reads tokens through
+`getComputedStyle` at render time. There are no per-theme color blocks to keep
+in sync. `test/design-tokens-guard.test.mjs` fails on a color literal outside
+the block, and `test/design-contrast.test.mjs` fails if a palette drops below
+WCAG 2.2 AA (4.5:1 text, 3:1 UI parts).
 
 **Migrations reach the database through `npm run push:prod`, never by hand.**
 It refuses unless you are on a clean, in-sync `main`, both migration guards

@@ -190,9 +190,12 @@ window.switchAppTab = function (name) {
 function renderBottomTabBar() {
   return getNavItems().filter((item) => item.main).map((item) => {
     const isActive = tab === item.tab;
+    // The Log button is raised: its icon sits in a filled disc that stands above
+    // the bar, the label stays on the bar's baseline like the other three.
+    const iconHtml = item.center ? `<span class="tab-log-disc">${item.icon}</span>` : item.icon;
     return `
       <button class="tabbtn${isActive ? " active" : ""}${item.center ? " tabbtn--log" : ""}" id="${item.rowId}" data-action="switch-tab" data-tab="${item.tab}" role="tab" aria-selected="${isActive}" aria-controls="content" tabindex="${isActive ? "0" : "-1"}"${item.badge ? ` aria-label="${esc(item.label)}, ${item.badge} דיווחים ממתינים"` : ""}>
-        <span style="position:relative;display:inline-flex;">${item.icon}${item.badge ? `<span class="tab-badge" aria-hidden="true" style="position:absolute;top:-4px;left:-8px;margin:0;min-width:14px;height:14px;font-size:9px;">${item.badge}</span>` : ""}</span>
+        <span style="position:relative;display:inline-flex;">${iconHtml}${item.badge ? `<span class="tab-badge" aria-hidden="true" style="position:absolute;top:-4px;left:-8px;margin:0;min-width:14px;height:14px;font-size:9px;">${item.badge}</span>` : ""}</span>
         <span>${esc(item.label)}</span>
       </button>`;
   }).join("");
@@ -257,7 +260,7 @@ function renderNavWho() {
              "בואו נתחיל" to the two buttons that actually ask for a tap. -->
         <div class="who-sub">${streak > 0 ? `${streak} ${streak === 1 ? "יום" : "ימים"} ברצף` : "הרצף מתחיל באימון הבא"}</div>
       </div>
-      <div class="flex items-center gap-6" style="flex-shrink:0; color:var(--steel); font-size:12px; font-weight:700;" aria-hidden="true">
+      <div class="flex items-center gap-6" style="flex-shrink:0; color:var(--color-text-muted); font-size:12px; font-weight:700;" aria-hidden="true">
         <span>מדליות</span>
         <span style="transform:scaleX(-1); display:inline-flex;">${ICONS.chevron}</span>
       </div>
@@ -271,7 +274,7 @@ function renderNavWho() {
 // leftward in an RTL document; see the note above renderWodBenchmarksSection
 // for the same rule stated for the literal "›".
 function navChevronHtml() {
-  return `<span style="transform:scaleX(-1); display:inline-flex; color:var(--steel); flex-shrink:0;" aria-hidden="true">${ICONS.chevron}</span>`;
+  return `<span style="transform:scaleX(-1); display:inline-flex; color:var(--color-text-muted); flex-shrink:0;" aria-hidden="true">${ICONS.chevron}</span>`;
 }
 // The nav menu's rows: one pass over getNavItems(). withIds carries the real
 // tabAddBtn/tabHistoryBtn/etc ids and the "tabbtn" class. onlyOther restricts
@@ -990,9 +993,9 @@ function renderNextAchievementNudge() {
   const { ach, remaining } = next;
   const pct = Math.min(100, Math.round((ach.current() / ach.need) * 100));
   return `<div class="ach-section" style="margin-top:0;">
-    <div class="ach-section-head"><span class="ach-section-dot" style="background:var(--brass);"></span><h2 class="ach-section-title">המדליה הבאה שלך</h2></div>
+    <div class="ach-section-head"><span class="ach-section-dot" style="background:var(--color-accent);"></span><h2 class="ach-section-title">המדליה הבאה שלך</h2></div>
     <div class="chart-card" style="text-align:center;">
-      <div style="font-weight:800; font-size:14px; color:var(--chalk); margin-bottom:6px;">${esc(ach.name)}</div>
+      <div style="font-weight:800; font-size:14px; color:var(--color-text); margin-bottom:6px;">${esc(ach.name)}</div>
       <div class="ach-level-bar"><div class="ach-level-fill" style="width:${pct}%;"></div></div>
       <div class="ach-summary-label" style="margin-top:6px;">עוד ${remaining} להשלמה</div>
     </div>
@@ -1000,19 +1003,14 @@ function renderNextAchievementNudge() {
 }
 function renderMedal(ach, earned) {
   const shape = ach.group === "pr" || ach.group === "streak" ? "shield" : "circle";
-  const glowMap = { bronze: "rgba(201,162,39,.7)", silver: "rgba(216,222,228,.8)", gold: "rgba(242,185,12,.8)" };
-  const glow = ach.group === "capstone" ? "rgba(255,180,60,.85)"
-    : ach.tier ? glowMap[ach.tier]
-    : (ach.group === "rx" ? "rgba(62,111,217,.6)" : "rgba(232,93,61,.6)");
   const tierClass = ach.group === "capstone" ? "medal-capstone" : ach.tier ? `tier-${ach.tier}` : (ach.group === "rx" ? "medal-rx" : "medal-milestone");
   const glyphId = ach.glyph === "home" ? "Home" : ach.glyph === "chevrons" ? "Chevrons" : ach.glyph === "bar" ? "Bar" : "Flame";
   const glyphUse = shape === "shield"
     ? `<use href="#glyph${glyphId}" transform="translate(19,16) scale(0.62)"/>`
     : `<use href="#glyph${glyphId}" transform="translate(15,15) scale(0.7)"/>`;
-  const plateMap = { bronze: "assets/medal-bronze.png", silver: "assets/medal-silver.png", gold: "assets/medal-gold.png" };
-  const symbol = ach.tier
-    ? `<div class="medal-shape medal-shape-plate ${tierClass}"><div class="medal-plate"><img src="${plateMap[ach.tier]}" alt="" /><span class="medal-plate-shine" aria-hidden="true"></span></div></div>`
-    : shape === "shield"
+  // Tier medals are drawn, not pictures: metal ramps are tokens, the glow is
+  // a class, and the medal reads in every palette.
+  const symbol = shape === "shield"
       ? `<svg class="medal-shape ${tierClass}" viewBox="0 0 100 112"><use href="#medalShield"/>${glyphUse}</svg>`
       : `<svg class="medal-shape shape-circle ${tierClass}" viewBox="0 0 100 100"><use href="#medalCircle"/>${glyphUse}</svg>`;
   // title is a nice-to-have for desktop; it never shows on a touch screen,
@@ -1029,7 +1027,7 @@ function renderMedal(ach, earned) {
   // title, which is the same defect the comment directly above this one was
   // already written about - the fix had simply only ever been applied to the
   // locked half.
-  return `<div class="medal-badge ${ach.group === "capstone" ? "capstone-badge" : ""} ${earned ? "earned" : "locked"}" style="--glow-color:${glow};" title="${esc(ach.rule)}">
+  return `<div class="medal-badge ${ach.group === "capstone" ? "capstone-badge" : ""} ${earned ? "earned" : "locked"}" title="${esc(ach.rule)}">
     ${symbol}
     <div class="medal-name">${esc(ach.name)}</div>
     <div class="medal-rule">${esc(ach.rule)}</div>
@@ -1066,26 +1064,26 @@ function renderAchievementsContent() {
 
   const streakSection = `
     <div class="ach-section">
-      <div class="ach-section-head"><span class="ach-section-dot" style="background:var(--energy);"></span><h2 class="ach-section-title">רצף אימונים</h2></div>
+      <div class="ach-section-head"><span class="ach-section-dot" style="background:var(--color-accent-fill);"></span><h2 class="ach-section-title">רצף אימונים</h2></div>
       <div class="ach-row">${ACHIEVEMENTS.filter((a) => a.group === "streak").map((a) => renderMedal(a, earnedMap[a.id])).join("")}</div>
     </div>`;
 
   const boxStartPrompt = boxStartDate ? "" : `
     <button data-action="open-profile-from-achievements" class="card flex items-center justify-between gap-10" style="width:100%; text-align:right; margin-bottom:12px;">
-      <span style="font-size:12.5px; color:var(--chalk); font-weight:600;">הוסיפו תאריך התחלה כדי לפתוח את מדליות הוותק</span>
-      <span style="color:var(--steel); flex-shrink:0;">${ICONS.chevronsLeft}</span>
+      <span style="font-size:12.5px; color:var(--color-text); font-weight:600;">הוסיפו תאריך התחלה כדי לפתוח את מדליות הוותק</span>
+      <span style="color:var(--color-text-muted); flex-shrink:0;">${ICONS.chevronsLeft}</span>
     </button>`;
 
   const milestoneSection = `
     <div class="ach-section">
-      <div class="ach-section-head"><span class="ach-section-dot" style="background:var(--brass);"></span><h2 class="ach-section-title">אבני דרך</h2></div>
+      <div class="ach-section-head"><span class="ach-section-dot" style="background:var(--color-accent);"></span><h2 class="ach-section-title">אבני דרך</h2></div>
       ${boxStartPrompt}
       <div class="ach-grid">${ACHIEVEMENTS.filter((a) => a.group === "milestone").map((a) => renderMedal(a, earnedMap[a.id])).join("")}</div>
     </div>`;
 
   const rxSection = `
     <div class="ach-section">
-      <div class="ach-section-head"><span class="ach-section-dot" style="background:var(--blue);"></span><h2 class="ach-section-title">Rx לכל אימון</h2></div>
+      <div class="ach-section-head"><span class="ach-section-dot" style="background:var(--color-info);"></span><h2 class="ach-section-title">Rx לכל אימון</h2></div>
       <div class="ach-grid">${ACHIEVEMENTS.filter((a) => a.group === "rx").map((a) => renderMedal(a, earnedMap[a.id])).join("")}</div>
     </div>`;
 
@@ -1108,8 +1106,6 @@ function renderAchievementsContent() {
   // edges rather than floating as a bordered card.
   return `
     <section class="scene-page scene-page--achievements" aria-labelledby="achievementsSceneTitle">
-      <div class="scene-page__media" aria-hidden="true"></div>
-      <div class="scene-page__scrim" aria-hidden="true"></div>
       <div class="scene-page__intro"><h2 id="achievementsSceneTitle" class="scene-page__title">מדליות</h2></div>
       <div class="scene-sheet">
     <div class="ach-summary">
@@ -1484,6 +1480,195 @@ function closeCelebration() {
   render();
 }
 
+// ---------- The post-workout moment ----------
+// What a member sees after logging, in the order they want it: did it save,
+// what did I achieve (the PR first), how does today compare with last time, where
+// am I this week, and one thing to share. The numbers come from src/progress.js;
+// this draws them. Three levels, in proportion to how rare the thing is:
+//   0  a quiet check on the save button (no screen)
+//   1  a PR: the PR card slides in
+//   2  the week is met, or a benchmark PR: the PR card and a short burst
+// Every animation is a CSS animation on a token duration, so prefers-reduced-motion
+// turns all of it into an instant state change. Haptics: Android only, never iOS,
+// and never under reduced motion.
+const DEFAULT_WEEKLY_TARGET = 3;
+const MOMENT_WEEK_KEY = "haimunia-demo:momentWeekMet";
+let momentState = null;
+function weeklyTargetForRing() {
+  const t = typeof window.communityWeeklyTarget === "function" ? window.communityWeeklyTarget() : 0;
+  return t > 0 ? t : DEFAULT_WEEKLY_TARGET;
+}
+function hapticsAllowed() {
+  try {
+    if (typeof navigator.vibrate !== "function") return false;
+    const ua = navigator.userAgent || "";
+    if (/iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) return false;
+    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return false;
+    return true;
+  } catch (e) { return false; }
+}
+const HAPTIC = { tap: 10, success: [12, 40, 18], pr: [20, 60, 30], week: [20, 60, 30, 60, 40] };
+function haptic(kind) { if (hapticsAllowed()) { try { navigator.vibrate(HAPTIC[kind]); } catch (e) { /* optional */ } } }
+function weekMetSeen(weekStart) {
+  try { return !!(JSON.parse(localStorage.getItem(MOMENT_WEEK_KEY) || "{}")[weekStart]); } catch (e) { return false; }
+}
+function markWeekMetSeen(weekStart) {
+  try {
+    const seen = JSON.parse(localStorage.getItem(MOMENT_WEEK_KEY) || "{}");
+    seen[weekStart] = true;
+    // Keep the map small: only the recent weeks matter.
+    const keep = Object.keys(seen).sort().slice(-12);
+    localStorage.setItem(MOMENT_WEEK_KEY, JSON.stringify(Object.fromEntries(keep.map((k) => [k, true]))));
+  } catch (e) { /* the burst may repeat once; harmless */ }
+}
+// extra: { wodPr: { name, result, benchmark, rx } } when the save was a WOD.
+function buildMomentModel(date, extra) {
+  const target = weeklyTargetForRing();
+  const days = typeof window.communityTrainingDays === "function" ? window.communityTrainingDays() : [];
+  const model = BoxLogProgress.workoutMoment({
+    entries, date, target, trainingDays: days, minPrior: MIN_ENTRIES_BEFORE_PR,
+    nameOf: (id) => { const m = movementById(id); return m ? m.name : id; },
+    benchmarkPr: !!(extra && extra.wodPr && extra.wodPr.benchmark),
+  });
+  model.wodPr = extra && extra.wodPr ? extra.wodPr : null;
+  if (model.wodPr && model.level === 0) model.level = 1;
+  return model;
+}
+const MOMENT_STAR = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m12 2 3 7 7 .6-5.3 4.7 1.6 7.2L12 17.8 5.7 21.5l1.6-7.2L2 9.6 9 9z"/></svg>';
+function momentSet(w, r) { return w > 0 ? `<bdi class="num">${esc(String(w))} ק״ג × ${esc(String(r))}</bdi>` : `<bdi class="num">${esc(String(r))} חזרות</bdi>`; }
+function renderMomentBody(m) {
+  const burst = m.level === 2 ? `<span class="moment-burst" aria-hidden="true">${"<i></i>".repeat(12)}</span>` : "";
+  const topPr = m.prs[0] || null;
+  const title = m.wodPr ? `שיא חדש ב${m.wodPr.name}`
+    : topPr ? `שיא חדש ב${topPr.name}`
+    : m.week.weekJustMet ? "השבוע הושלם" : `אימון מספר ${m.sessionNumber}`;
+  const sub = m.wodPr ? (m.wodPr.benchmark ? "בנצ'מרק" : "") : (topPr || m.week.weekJustMet) ? `אימון מספר ${m.sessionNumber} · ${fmtDate(m.date)}` : fmtDate(m.date);
+  const prCards = m.wodPr
+    ? `<section class="moment-pr" aria-label="שיא חדש"><span class="pr-badge">${MOMENT_STAR}<span>שיא חדש</span></span><div class="moment-pr-lift">${bidiText(m.wodPr.name)}</div><div class="moment-pr-value num"><bdi>${esc(m.wodPr.result)}</bdi></div><div class="moment-pr-prev">${esc(m.wodPr.rx === false ? "מותאם (Scaled)" : "Rx")}</div>${burst}</section>`
+    : m.prs.slice(0, 3).map((p, i) => `<section class="moment-pr" aria-label="שיא חדש"><span class="pr-badge">${MOMENT_STAR}<span>שיא חדש</span></span>
+        <div class="moment-pr-lift">${bidiText(p.name)}</div>
+        <div class="moment-pr-value num"><bdi>${esc(String(p.weight))}</bdi></div>
+        <div class="moment-pr-prev">${esc("ק״ג × " + p.reps)}</div>
+        <div class="moment-pr-delta"><bdi class="num">+${esc(String(p.pct))}%</bdi> לעומת השיא הקודם</div>
+        <div class="moment-pr-prev">קודם: ${momentSet(p.prev, p.reps)}</div>${i === 0 ? burst : ""}</section>`).join("");
+  const arrow = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5m6-6-6 6 6 6"/></svg>';
+  const rows = m.lifts.filter((l) => l.cmp).map((l) => {
+    const c = l.cmp;
+    const delta = c.trend === "new" ? `<span class="delta flat">פעם ראשונה</span>`
+      : c.trend === "up" ? `<span class="delta up"><span aria-hidden="true">▲</span> ${c.deltaKg > 0 ? `<bdi class="num">+${esc(String(c.deltaKg))} ק״ג</bdi>` : "יותר חזרות"}</span>`
+      : c.trend === "flat" ? `<span class="delta flat">ללא שינוי</span>`
+      : `<span class="delta flat"><bdi class="num">${esc(String(c.deltaKg).replace("-", "−"))} ק״ג</bdi></span>`;
+    return `<div class="moment-compare-row"><span class="moment-compare-name">${bidiText(l.name)}</span><span class="moment-compare-vals">${c.prev ? `${momentSet(c.prev.weight, c.prev.reps)}${arrow}` : ""}<b>${momentSet(c.now.weight, c.now.reps)}</b>${delta}</span></div>`;
+  }).join("");
+  const w = m.week;
+  const C = 326.73;
+  const ring = `<div class="moment-week" data-week-framing="${esc(w.framing)}">
+      <div class="week-ring" role="img" aria-label="${esc(w.title + ", " + w.sub)}">
+        <svg viewBox="0 0 120 120" aria-hidden="true"><circle class="ring-track" cx="60" cy="60" r="52" stroke-width="12"/><circle class="ring-fill" cx="60" cy="60" r="52" stroke-width="12" stroke-dasharray="${C}" stroke-dashoffset="${C}" data-offset="${(C * (1 - w.fraction)).toFixed(2)}"/></svg>
+        <div class="week-ring-label"><span class="big num">${esc(w.big)}</span><span class="small">${esc(w.small)}</span></div>
+      </div>
+      <div class="moment-week-text"><div class="moment-week-title">${esc(w.title)}</div><div class="moment-week-sub">${esc(w.sub)}</div></div>
+    </div>`;
+  const totals = m.sets ? `<div class="moment-totals"><span><bdi class="num">${m.sets}</bdi> סטים</span>${m.volume ? `<span>נפח <bdi class="num">${esc(m.volume.toLocaleString("he-IL"))} ק״ג</bdi></span>` : ""}</div>` : "";
+  return `<div class="moment-check" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+    <h2 class="moment-headline" id="momentTitle" tabindex="-1">${bidiText(title)}</h2>
+    ${sub ? `<div class="moment-sub">${esc(sub)}</div>` : ""}
+    ${prCards}
+    ${rows ? `<section aria-label="לעומת הפעם הקודמת"><h3 class="section-label">לעומת הפעם הקודמת</h3><div class="moment-compare">${rows}</div></section>` : ""}
+    ${ring}${totals}`;
+}
+function renderMomentActions(m) {
+  const sharable = !!(m.prs[0] || m.wodPr) && typeof window.communityMomentPrFile === "function";
+  const st = momentState ? momentState.share : "none";
+  const share = sharable
+    ? (st === "ready" ? `<button class="save-btn" data-action="moment-share">שיתוף כתמונה</button>`
+      : st === "failed" ? "" : `<button class="save-btn" type="button" disabled aria-busy="true">מכינים תמונה…</button>`)
+    : "";
+  return `${share}<button class="${share ? "chip-btn" : "save-btn"}" data-action="close-moment" style="${share ? "justify-content:center;" : ""}">סיום</button>`;
+}
+function openWorkoutMoment(model, opts) {
+  const overlay = document.getElementById("momentOverlay");
+  if (!overlay || !model) return;
+  const sharable = !!(model.prs[0] || model.wodPr) && typeof window.communityMomentPrFile === "function";
+  momentState = { model, share: sharable ? "preparing" : "none", file: null, opener: document.activeElement, manual: !!(opts && opts.manual) };
+  const body = document.getElementById("momentBody");
+  body.innerHTML = renderMomentBody(model);
+  document.getElementById("momentActions").innerHTML = renderMomentActions(model);
+  overlay.classList.toggle("moment-celebrate", model.level >= 1 && !(opts && opts.manual && model.level === 0));
+  overlay.classList.toggle("burst", model.level === 2);
+  overlay.dataset.level = String(model.level);
+  document.body.style.overflow = "hidden";
+  overlay.classList.add("open");
+  // Fill the ring on the next frame so the stroke animates from empty; under
+  // reduced motion the duration token is 0 and it just appears.
+  requestAnimationFrame(() => {
+    const fill = overlay.querySelector(".ring-fill");
+    if (fill) fill.style.strokeDashoffset = fill.dataset.offset;
+  });
+  if (model.week.weekJustMet) markWeekMetSeen(BoxLogProgress.weekStartOf(model.date));
+  haptic(model.level === 2 ? "week" : model.level === 1 ? "pr" : "success");
+  setTimeout(() => { const h = document.getElementById("momentTitle"); if (h) h.focus(); }, 50);
+  if (sharable) prepareMomentShare(model);
+}
+async function prepareMomentShare(model) {
+  const slot = momentState;
+  try {
+    const p = model.prs[0];
+    const rec = model.wodPr
+      ? { movement: model.wodPr.name, memberName: userName }
+      : { movement: p.name, new_value_numeric: p.weight, previous_value_numeric: p.prev, estimated: false, memberName: userName };
+    slot.file = await window.communityMomentPrFile(rec);
+    slot.share = slot.file ? "ready" : "failed";
+  } catch (e) { slot.share = "failed"; }
+  if (momentState === slot) document.getElementById("momentActions").innerHTML = renderMomentActions(slot.model);
+}
+async function shareMoment() {
+  if (!momentState || !momentState.file || !window.boxlogShareCards) return;
+  const result = await window.boxlogShareCards.shareCard(momentState.file);
+  if (result === "shared") showToast("התמונה נשלחה לאפליקציה שבחרתם.");
+  else if (result === "downloaded") showToast("התמונה נשמרה במכשיר, אפשר לצרף אותה ידנית.");
+  else if (result === "failed") showToast("לא הצלחנו לשתף את התמונה במכשיר הזה.");
+  closeMoment();
+}
+function closeMoment() {
+  const overlay = document.getElementById("momentOverlay");
+  if (!overlay) return;
+  overlay.classList.remove("open", "moment-celebrate", "burst");
+  releaseScrollLockIfLastDialog();
+  const opener = momentState && momentState.opener;
+  momentState = null;
+  if (opener && typeof opener.focus === "function" && document.contains(opener)) opener.focus();
+  // A badge earned by the same save waited behind this screen.
+  flushDeferredCelebration();
+  render();
+}
+// Level 0, the quiet check: the save button itself says it landed, for a moment.
+let savedFlashTimer = null;
+function flashSaved() {
+  const btn = document.getElementById("bottomBarBtn"), label = document.getElementById("saveBtnLabel");
+  if (!btn || !label) return;
+  const original = label.textContent;
+  btn.classList.add("is-saved");
+  label.textContent = "נשמר ✓";
+  haptic("success");
+  clearTimeout(savedFlashTimer);
+  savedFlashTimer = setTimeout(() => { btn.classList.remove("is-saved"); render(); }, 1400);
+  return original;
+}
+// After a set is saved: the moment for a PR or a met week, otherwise the quiet check.
+function momentAfterSet(entry, isEdit) {
+  if (isEdit) return false;
+  const model = buildMomentModel(entry.date);
+  const thisSetIsPr = model.prs.some((p) => p.id === entry.id);
+  const weekStart = BoxLogProgress.weekStartOf(entry.date);
+  const weekBurst = model.week.weekJustMet && !weekMetSeen(weekStart);
+  if (!thisSetIsPr && !weekBurst) return false;
+  model.level = weekBurst ? 2 : 1;
+  if (!thisSetIsPr) model.prs = [];
+  openWorkoutMoment(model);
+  return true;
+}
+
 // ---------- Update notifications ----------
 // Short, user-facing changelog — deliberately separate from CHANGES.md,
 // which is developer-facing, technical, and in English. Only add an entry
@@ -1570,9 +1755,9 @@ function renderNotificationsList() {
     <div class="cat-group">
       <div class="cat-head flex items-center gap-8">
         <span class="cat-name mono" style="direction:ltr; unicode-bidi:isolate;">${esc(r.version)}</span>
-        <span style="color:var(--steel); font-size:11px; margin-inline-start:auto;">${esc(fmtDate(r.date))}</span>
+        <span style="color:var(--color-text-muted); font-size:11px; margin-inline-start:auto;">${esc(fmtDate(r.date))}</span>
       </div>
-      <ul style="margin:6px 0 4px; padding-inline-start:20px; color:var(--chalk); font-size:13.5px; line-height:1.6;">
+      <ul style="margin:6px 0 4px; padding-inline-start:20px; color:var(--color-text); font-size:13.5px; line-height:1.6;">
         ${r.items.map((i) => `<li>${esc(i)}</li>`).join("")}
       </ul>
     </div>`).join("");
@@ -1783,7 +1968,7 @@ function renderSupportContent() {
     <div class="settings-block">
       <div class="settings-block-title">פרטים טכניים שיישלחו</div>
       <div class="footer-note" style="margin-bottom:6px;">אלה פרטים על המכשיר בלבד — בלי השם שלכם, בלי יומן האימונים ובלי שום נתון אישי.</div>
-      <pre class="mono" style="white-space:pre-wrap;word-break:break-word;font-size:11.5px;color:var(--steel);margin:0;">${esc(supportDiagnostics())}</pre>
+      <pre class="mono" style="white-space:pre-wrap;word-break:break-word;font-size:11.5px;color:var(--color-text-muted);margin:0;">${esc(supportDiagnostics())}</pre>
     </div>`;
 }
 let supportOpenerEl = null;
@@ -1898,7 +2083,7 @@ function applyOnboardingCopy() {
     // keeps it out of the innerHTML sink census entirely.
     const note = document.createElement("div");
     note.id = "onboardingReopenNote";
-    note.style.cssText = "color:var(--steel); font-size:12.5px; text-align:center; margin-top:10px;";
+    note.style.cssText = "color:var(--color-text-muted); font-size:12.5px; text-align:center; margin-top:10px;";
     note.textContent = "אפשר לחזור לזה מתי שרוצים — בהגדרות.";
     primary.insertAdjacentElement("afterend", note);
   }
@@ -2399,7 +2584,8 @@ async function saveSet(sanityConfirmed) {
   // otherwise this reset-to-today would silently misdate rungs 2+ of a
   // ladder logged for a past date.
   if (!ladderMode) { logDate = todayISO(); logDateExplicitlyChosen = false; }
-  if (celebratePR) flashPR();
+  // Only a real rep-max record earns the in-place flash: an estimate is not a lift.
+  if (celebratePR && (!prDetail || prDetail.repRecordPR)) flashPR();
   // Decided HERE, before the render below, not after it. That render is what
   // evaluates S5's consent card, so the debt has to already exist by the time
   // it runs — computing it afterwards is what made the ordering depend on
@@ -2423,8 +2609,12 @@ async function saveSet(sanityConfirmed) {
     if (isFirstLogArrival) {
       celebrateFirstLog(mov ? `${mov.name} — ${celebrationLabel}` : celebrationLabel);
     } else {
-      celebrateAfterSave(celebratePR && mov ? `${mov.name} — ${celebrationLabel}` : null,
-        mov ? `נשמר: ${mov.name} — ${celebrationLabel}` : "נשמר");
+      // The moment opens first, so a badge earned by the same save waits behind it
+      // (showCelebration defers while a blocking dialog is open). A save that earns
+      // neither gets the quiet check and the toast, nothing more.
+      const loud = momentAfterSet(entry, !!existing);
+      if (!loud) flashSaved();
+      celebrateAfterSave(null, loud ? null : (mov ? `נשמר: ${mov.name} — ${celebrationLabel}` : "נשמר"));
     }
     if (emitPR && prDetail) emitCommunityPrCreated(entry, mov, prDetail);
     // THE FEED FILLS ITSELF FROM REAL TRAINING. Last, deliberately, and after
@@ -2615,6 +2805,43 @@ function currentLadderRounds() {
 // close to last time, not random ones. Tapping the "last session" card
 // copies them into the steppers as a starting point instead of everyone
 // re-dragging from whatever was left over from the previous save.
+// LOGGING A SET IN THE FEWEST TAPS. The loudest complaint from users of other
+// training apps is friction, so the log screen starts where the member left off:
+// opening it with history selects the lift they logged last and fills weight,
+// reps and sets from that session (decisions.md: "Prefill from the last session
+// of that lift"). One more tap saves the same set again; one tap on a recent-lift
+// chip switches lifts and prefills those. scripts/browser-check/log-taps.mjs
+// counts it: 5 taps before, 2 after.
+function lastSetFor(id, wantDuration) {
+  return entriesFor(id).find((e) => (e.type === "duration") === wantDuration) || null;
+}
+function applyLastSessionValues(id) {
+  const wantDuration = logEntryType === "duration";
+  const last = lastSetFor(id, wantDuration);
+  if (!last) return;
+  weight = last.weight;
+  sets = last.sets;
+  if (wantDuration) durationSeconds = last.durationSeconds; else reps = last.reps;
+}
+function recentLiftIds(limit) {
+  const seen = [];
+  for (const e of entries) {
+    if (!seen.includes(e.exerciseId) && movementById(e.exerciseId)) seen.push(e.exerciseId);
+    if (seen.length >= limit) break;
+  }
+  return seen;
+}
+// Called from render() on the log screen. Never overrides a choice the member made,
+// never runs mid-ladder or while editing a set.
+function startLogFromLastLift() {
+  if (movementExplicitlyChosen || ladderMode || editingEntryId || !entries.length) return;
+  const last = entries[0];
+  if (!last || !movementById(last.exerciseId)) return;
+  selectedId = last.exerciseId;
+  movementExplicitlyChosen = true;
+  logEntryType = last.type === "duration" ? "duration" : "reps";
+  applyLastSessionValues(selectedId);
+}
 function prefillFromLast() {
   // Matches the currently toggled mode, not just whatever was logged most
   // recently — prefilling reps numbers into a duration hold (or vice versa)
@@ -2693,10 +2920,10 @@ function renderAppConfirmSheet() {
   // Markup mirrors cloud.js's renderConfirmSheet() field for field, so the
   // two halves of the app can never drift into looking like two products.
   return `<div class="modal-overlay open" id="appConfirmOverlay" data-action="close-app-confirm" role="dialog" aria-modal="true" aria-labelledby="appConfirmTitle" style="align-items:center;padding:0 20px;">
-      <div class="modal-sheet" style="border-radius:22px;border-bottom:1px solid var(--border);max-height:none;">
+      <div class="modal-sheet" style="border-radius:22px;border-bottom:1px solid var(--color-border);max-height:none;">
         <div style="padding:24px 22px calc(env(safe-area-inset-bottom,0px) + 20px);">
-          <h2 id="appConfirmTitle" style="margin-top:0;color:var(--chalk);font-weight:800;font-size:17px;margin-bottom:8px;">${bidiText(c.title)}</h2>
-          <div style="color:var(--steel);font-size:13.5px;line-height:1.6;margin-bottom:20px;">${bidiText(c.message)}</div>
+          <h2 id="appConfirmTitle" style="margin-top:0;color:var(--color-text);font-weight:800;font-size:17px;margin-bottom:8px;">${bidiText(c.title)}</h2>
+          <div style="color:var(--color-text-muted);font-size:13.5px;line-height:1.6;margin-bottom:20px;">${bidiText(c.message)}</div>
           <div class="chip-row" style="margin-top:0;">
             <button class="chip-btn" data-action="app-confirm-no">${esc(c.cancelLabel || "ביטול")}</button>
             <button class="chip-btn primary${c.destructive ? " danger" : ""}" data-action="app-confirm-yes">${esc(c.confirmLabel || "אישור")}</button>
@@ -2800,8 +3027,8 @@ function renderToastBar() {
   // role="status" so a screen reader hears it without focus being yanked
   // out of the list being edited.
   return `<div id="appToastBar" role="status" aria-live="polite" style="display:flex; justify-content:center; padding:0 16px; pointer-events:none;">
-      <div class="flex items-center gap-10" style="pointer-events:auto; width:100%; max-width:420px; min-height:56px; background:var(--surface); border:1px solid var(--brass); border-radius:14px; padding:10px 10px 10px 14px; box-shadow:0 10px 30px rgba(0,0,0,.35);">
-        <span style="flex:1; min-width:0; color:var(--chalk); font-size:13px; font-weight:700;">${bidiText(pendingToast.label)}</span>
+      <div class="flex items-center gap-10" style="pointer-events:auto; width:100%; max-width:420px; min-height:56px; background:var(--color-surface); border:1px solid var(--color-accent); border-radius:14px; padding:10px 10px 10px 14px; box-shadow:var(--shadow-2);">
+        <span style="flex:1; min-width:0; color:var(--color-text); font-size:13px; font-weight:700;">${bidiText(pendingToast.label)}</span>
         ${pendingToast.action ? `<button class="chip-btn" data-action="toast-action">${esc(pendingToast.action.label)}</button>` : ""}
       </div>
     </div>`;
@@ -3347,61 +3574,103 @@ function setPctIncrement(inc) {
   dbSetSetting(PCT_INCREMENT_KEY, inc).catch(noteStorageError);
 }
 
-// Theme preference lives in localStorage, not IndexedDB — it has to be
-// readable synchronously by theme-init.js before first paint, and it isn't
-// user training data, so "clear all data" deliberately leaves it alone.
-const THEME_KEY = "haimunia-demo:theme";
-let themePref = "dark";
+// ---- Appearance: palette, theme, transparency ----------------------------
+// The three choices live in localStorage, not IndexedDB: theme-init.js reads
+// them synchronously before first paint, they are not training data, and
+// "clear all data" leaves them alone. src/theme.js owns the keys, the
+// allowed values and the attribute stamping; this file only holds the state
+// and draws the controls. Every color is a token (tokens.css), so choosing a
+// palette is one attribute and the whole app re-resolves at once.
+const THEME_KEY = BoxLogTheme.KEYS.theme;
+let themePref = BoxLogTheme.DEFAULTS.theme;
+let palettePref = BoxLogTheme.DEFAULTS.palette;
+let transparencyPref = BoxLogTheme.DEFAULTS.transparency;
 function loadThemePref() {
-  try {
-    const stored = localStorage.getItem(THEME_KEY);
-    if (stored === "light" || stored === "dark" || stored === "auto") themePref = stored;
-  } catch (e) { /* keep the default */ }
+  const stored = BoxLogTheme.read(localStorage);
+  themePref = stored.theme; palettePref = stored.palette; transparencyPref = stored.transparency;
 }
-function resolvedTheme() {
-  if (themePref !== "auto") return themePref;
-  return (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) ? "dark" : "light";
-}
-function syncThemeColorMeta() {
-  const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute("content", resolvedTheme() === "light" ? "#F2F5FA" : "#152342");
-}
+function resolvedTheme() { return BoxLogTheme.resolveTheme(themePref); }
+function syncThemeColorMeta() { BoxLogTheme.syncChromeColor(document); }
 function applyThemePref() {
-  const root = document.documentElement;
-  if (themePref === "auto") root.removeAttribute("data-theme");
-  else root.setAttribute("data-theme", themePref);
-  syncThemeColorMeta();
+  BoxLogTheme.apply(document, { palette: palettePref, theme: themePref, transparency: transparencyPref });
+}
+// The whole Appearance field is replaced, in every place it is drawn (the
+// settings sheet and Me), and focus goes back to the control that was used.
+function refreshAppearanceFields() {
+  const active = document.activeElement;
+  const rootEl = active && active.closest ? active.closest("[data-appearance-root]") : null;
+  const scope = rootEl ? rootEl.dataset.appearanceRoot : null;
+  const focusKey = rootEl && active.dataset ? (active.dataset.palette ? "palette:" + active.dataset.palette : active.dataset.pref ? active.dataset.action + ":" + active.dataset.pref : null) : null;
+  document.querySelectorAll("[data-appearance-root]").forEach((el) => { el.outerHTML = renderAppearanceSection(el.dataset.appearanceRoot); });
+  if (!focusKey) return;
+  const [kind, val] = focusKey.split(":");
+  const root = `[data-appearance-root="${scope}"]`;
+  const again = kind === "palette" ? document.querySelector(`${root} [data-palette="${val}"][data-action="set-palette"]`) : document.querySelector(`${root} [data-action="${kind}"][data-pref="${val}"]`);
+  if (again) again.focus();
 }
 function setThemePref(pref) {
   if (pref !== "light" && pref !== "dark" && pref !== "auto") return;
   themePref = pref;
-  try { localStorage.setItem(THEME_KEY, pref); } catch (e) {}
+  BoxLogTheme.write("theme", pref, localStorage);
   applyThemePref();
-  // The whole field (visible label + segmented track) is what gets
-  // replaced, not just the track — the label lives inside renderThemeRow()
-  // now, so swapping only #themeRow would strand the old one and insert a
-  // second copy.
-  const field = document.getElementById("themeField");
-  if (field) field.outerHTML = renderThemeRow();
+  refreshAppearanceFields();
 }
-// Design spec 4.1/4.2. Was three .link-btn underlined links separated by
-// "·" dots — which read as three links, not as one control with one of
-// three states, and carried only an invisible aria-label. Now the shared
-// .segmented/.segmented-opt component index.html ships (its rule is grouped
-// with #themeRow/#textScaleRow precisely so this swap has no second copy of
-// the values to drift from), plus a real visible label that aria-labelledby
-// points at, so a sighted and a screen-reader user are told the same thing
-// by the same words. Selection is carried by background + weight + border,
-// never by color alone, so it survives greyscale and the light theme.
-function renderThemeRow() {
-  const opts = [["dark", "כהה"], ["light", "בהיר"], ["auto", "אוטומטי"]];
-  return `<div id="themeField" style="margin-bottom:12px;">
-    <div id="themeRowLabel" style="font-size:13px; font-weight:700; color:var(--chalk); margin-bottom:8px;">ערכת צבעים</div>
-    <div id="themeRow" class="segmented" role="radiogroup" aria-labelledby="themeRowLabel">
-      ${opts.map(([val, label]) => `<button class="segmented-opt" data-action="set-theme" data-pref="${val}" role="radio" aria-checked="${themePref === val}">${label}</button>`).join("")}
+function setPalettePref(id) {
+  if (!BoxLogTheme.isPalette(id)) return;
+  palettePref = id;
+  BoxLogTheme.write("palette", id, localStorage);
+  applyThemePref();
+  refreshAppearanceFields();
+}
+function setTransparencyPref(v) {
+  if (v !== "on" && v !== "off") return;
+  transparencyPref = v;
+  BoxLogTheme.write("transparency", v, localStorage);
+  applyThemePref();
+  refreshAppearanceFields();
+}
+// One shape for all three controls: a labelled radiogroup. Selection is
+// carried by border, weight and a check mark, never by color alone. The
+// palette options carry data-palette themselves, so the tokens re-resolve
+// inside each miniature and it previews that palette in the current theme.
+function renderAppearanceSection(scope) {
+  // Drawn in the settings sheet and on Me; ids carry a suffix so they never repeat.
+  const sx = scope ? "-" + scope : "";
+  const themeNote = BoxLogTheme.darkSupported() ? "" : `<div class="appearance-note">הדפדפן הזה תומך רק בערכת נושא בהירה.</div>`;
+  const glassOff = BoxLogTheme.reducedTransparency() || !BoxLogTheme.blurSupported();
+  const glassNote = BoxLogTheme.reducedTransparency()
+    ? "המכשיר מבקש פחות שקיפות, אז הכרטיסים נשארים אטומים."
+    : !BoxLogTheme.blurSupported() ? "הדפדפן הזה לא יודע לטשטש רקע, אז הכרטיסים נשארים אטומים."
+    : "כרטיסים ופסים שקופים למחצה, עם טשטוש של מה שמאחוריהם.";
+  const radio = (action, val, label, on, disabled) => `<button class="segmented-opt" data-action="${action}" data-pref="${val}" role="radio" aria-checked="${on}"${disabled ? " disabled" : ""}>${label}</button>`;
+  return `<div id="appearanceField${sx}" data-appearance-root="${esc(scope || "")}">
+    <div id="paletteLabel${sx}" class="appearance-label">פלטת צבעים</div>
+    <div class="palette-grid" role="radiogroup" aria-labelledby="paletteLabel${sx}">
+      ${BoxLogTheme.PALETTES.map((p) => {
+        const on = palettePref === p.id;
+        return `<button class="palette-opt" data-palette="${p.id}" data-action="set-palette" role="radio" aria-checked="${on}">
+          <span class="palette-prev" aria-hidden="true">
+            <span class="palette-prev-row"><span class="palette-prev-bar"><i></i></span><span class="palette-prev-btn"></span></span>
+            <span class="palette-prev-row"><span class="palette-prev-pr"><svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor"><path d="m12 2 3 7 7 .6-5.3 4.7 1.6 7.2L12 17.8 5.7 21.5l1.6-7.2L2 9.6 9 9z"/></svg>שיא</span></span>
+          </span>
+          <span class="palette-name"><span>${esc(p.name)}</span>${on ? `<span class="palette-check" aria-hidden="true">✓</span>` : ""}</span>
+        </button>`;
+      }).join("")}
     </div>
+    <div class="appearance-note">בכל פלטה יש מצב בהיר וכהה. שיא מסומן תמיד בצורה ובתווית, לא רק בצבע.</div>
+    <div id="themeRowLabel${sx}" class="appearance-label">ערכת נושא</div>
+    <div id="themeRow${sx}" class="segmented" role="radiogroup" aria-labelledby="themeRowLabel${sx}">
+      ${BoxLogTheme.THEMES.map((t) => radio("set-theme", t.id, t.name, themePref === t.id, false)).join("")}
+    </div>${themeNote}
+    <div id="transparencyRowLabel${sx}" class="appearance-label">שקיפות</div>
+    <div id="transparencyRow${sx}" class="segmented" role="radiogroup" aria-labelledby="transparencyRowLabel${sx}">
+      ${radio("set-transparency", "off", "כבויה", transparencyPref === "off" || glassOff, glassOff)}${radio("set-transparency", "on", "פעילה", transparencyPref === "on" && !glassOff, glassOff)}
+    </div>
+    <div class="appearance-note">${esc(glassNote)}</div>
   </div>`;
 }
+// Kept for the callers that drew the old three-state row.
+function renderThemeRow() { return renderAppearanceSection(); }
 
 const LAST_EXPORT_KEY = "haimunia-demo:lastExportAt";
 let lastExportAt = null;
@@ -4066,11 +4335,11 @@ function setTextScalePref(pref) {
 function renderTextScaleRow() {
   const opts = [["normal", "רגיל"], ["large", "גדול"]];
   return `<div id="textScaleField" style="margin-bottom:8px;">
-    <div id="textScaleRowLabel" style="font-size:13px; font-weight:700; color:var(--chalk); margin-bottom:8px;">גודל טקסט</div>
+    <div id="textScaleRowLabel" style="font-size:13px; font-weight:700; color:var(--color-text); margin-bottom:8px;">גודל טקסט</div>
     <div id="textScaleRow" class="segmented" role="radiogroup" aria-labelledby="textScaleRowLabel" style="margin-top:0;">
       ${opts.map(([val, label]) => `<button class="segmented-opt" data-action="set-text-scale" data-pref="${val}" role="radio" aria-checked="${textScalePref === val}">${label}</button>`).join("")}
     </div>
-    <div style="color:var(--steel); font-size:13px; margin-top:8px;">כך ייראה הטקסט באפליקציה</div>
+    <div style="color:var(--color-text-muted); font-size:13px; margin-top:8px;">כך ייראה הטקסט באפליקציה</div>
   </div>`;
 }
 
@@ -4165,13 +4434,13 @@ function renderWodBuilderFormats() {
   const hint = document.getElementById("wodBuilderFormatHint");
   if (hint) {
     hint.textContent = "חובה לבחור אחד";
-    hint.style.color = "var(--steel)";
+    hint.style.color = "var(--color-text-muted)";
   }
   const isEmom = builderFormat === "emom";
   const emomEl = document.getElementById("wodBuilderEmomOptions");
   if (emomEl) {
     emomEl.innerHTML = isEmom ? `
-      <div style="color:var(--steel); font-size:11px; font-weight:700; letter-spacing:.5px; margin-bottom:6px;">כמה דקות</div>
+      <div style="color:var(--color-text-muted); font-size:11px; font-weight:700; letter-spacing:.5px; margin-bottom:6px;">כמה דקות</div>
       <div class="steppers" style="margin-bottom:16px;">${renderStepper("emomMinutes", "דקות", builderEmomMinutes, 1, 1, "builder-emom-minutes")}</div>
     ` : "";
   }
@@ -4182,7 +4451,7 @@ function renderWodBuilderFormats() {
   const capEl = document.getElementById("wodBuilderTimeCapOptions");
   if (capEl) {
     capEl.innerHTML = (builderFormat && !isEmom) ? `
-      <div style="color:var(--steel); font-size:11px; font-weight:700; letter-spacing:.5px; margin-bottom:6px;">מגבלת זמן (אופציונלי, 0 = ללא)</div>
+      <div style="color:var(--color-text-muted); font-size:11px; font-weight:700; letter-spacing:.5px; margin-bottom:6px;">מגבלת זמן (אופציונלי, 0 = ללא)</div>
       <div class="steppers" style="margin-bottom:16px;">${renderStepper("timeCapMinutes", "דקות", builderTimeCapMinutes, 1, 0, "builder-time-cap")}</div>
     ` : "";
   }
@@ -4197,17 +4466,17 @@ function renderWodBuilderMovements(query) {
   const byCategory = bag();
   filtered.forEach((m) => { (byCategory[m.category] = byCategory[m.category] || []).push(m); });
   const addRow = builderMoveSearch.trim() && !exactMatch
-    ? `<div style="border:1px solid var(--brass); border-radius:12px; padding:10px 12px; margin-bottom:10px;">
-         <div style="font-weight:700; font-size:13px; color:var(--brass); margin-bottom:8px;">הוספת "${bidiText(builderMoveSearch.trim())}" — לאיזו קטגוריה?</div>
+    ? `<div style="border:1px solid var(--color-accent); border-radius:12px; padding:10px 12px; margin-bottom:10px;">
+         <div style="font-weight:700; font-size:13px; color:var(--color-accent); margin-bottom:8px;">הוספת "${bidiText(builderMoveSearch.trim())}" — לאיזו קטגוריה?</div>
          <div class="flex wrap gap-8">
            ${WOD_MOVE_CATEGORIES.map((cat) => `<button class="format-chip" style="flex:0 0 auto; padding:8px 14px;" data-action="add-builder-movement-tag" data-name="${esc(builderMoveSearch.trim())}" data-category="${cat}">${esc(catLabel(cat))}</button>`).join("")}
          </div>
        </div>`
-    : `<button class="movement-btn" data-action="focus-wod-builder-search" style="border-color:var(--brass); margin-bottom:10px;">
-         <span style="font-weight:700; font-size:14px; color:var(--brass);">+ הוספת תרגיל/סקילס חדש</span>
+    : `<button class="movement-btn" data-action="focus-wod-builder-search" style="border-color:var(--color-accent); margin-bottom:10px;">
+         <span style="font-weight:700; font-size:14px; color:var(--color-accent);">+ הוספת תרגיל/סקילס חדש</span>
        </button>`;
   if (Object.keys(byCategory).length === 0) {
-    const noneHtml = builderMoveSearch.trim() ? `<div style="color:var(--steel); text-align:center; padding:16px 0; font-size:13px;">לא נמצא תרגיל התואם ל-"${bidiText(builderMoveSearch)}"</div>` : "";
+    const noneHtml = builderMoveSearch.trim() ? `<div style="color:var(--color-text-muted); text-align:center; padding:16px 0; font-size:13px;">לא נמצא תרגיל התואם ל-"${bidiText(builderMoveSearch)}"</div>` : "";
     el.innerHTML = addRow + noneHtml;
     return;
   }
@@ -4233,8 +4502,8 @@ function renderWodBuilderMovements(query) {
         const rotationNum = isEmom && checked ? activeBuilderMovementNames().indexOf(m.name) + 1 : null;
         return `
         <button class="movecheck-row ${checked ? "checked" : ""}" data-action="toggle-builder-movement" data-name="${esc(m.name)}" role="checkbox" aria-checked="${checked}">
-          <span style="font-weight:600; font-size:14px;">${rotationNum ? `${rotationNum}. ` : ""}${bidiText(m.name)}${isRest ? ` <span style="background:var(--border); color:var(--chalk); border-radius:6px; padding:2px 6px; font-size:10.5px; font-weight:700;">מנוחה</span>` : ""}</span>
-          <div class="movecheck-box">${checked ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--avatar-ink)" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>' : ""}</div>
+          <span style="font-weight:600; font-size:14px;">${rotationNum ? `${rotationNum}. ` : ""}${bidiText(m.name)}${isRest ? ` <span style="background:var(--color-border); color:var(--color-text); border-radius:6px; padding:2px 6px; font-size:10.5px; font-weight:700;">מנוחה</span>` : ""}</span>
+          <div class="movecheck-box">${checked ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--color-on-accent)" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>' : ""}</div>
         </button>
         ${checked && isEmom ? `
         <div class="flex gap-8" style="margin:-2px 0 6px; padding:0 2px;">
@@ -4302,10 +4571,10 @@ function createWodFromBuilder() {
     const hint = document.getElementById("wodBuilderFormatHint");
     if (hint) {
       hint.textContent = "יש לבחור פורמט למעלה כדי להמשיך";
-      hint.style.color = "var(--red)";
+      hint.style.color = "var(--color-danger)";
     }
     document.querySelectorAll("#wodBuilderFormats .format-chip").forEach((btn) => {
-      btn.style.borderColor = "var(--red)";
+      btn.style.borderColor = "var(--color-danger)";
     });
     return;
   }
@@ -4313,7 +4582,7 @@ function createWodFromBuilder() {
     const emomMovements = activeBuilderMovementNames();
     if (emomMovements.length === 0) {
       const hint = document.getElementById("wodBuilderFormatHint");
-      if (hint) { hint.textContent = "יש לבחור לפחות תרגיל אחד לסיבוב"; hint.style.color = "var(--red)"; }
+      if (hint) { hint.textContent = "יש לבחור לפחות תרגיל אחד לסיבוב"; hint.style.color = "var(--color-danger)"; }
       return;
     }
     // Every field that does not belong to a station's own type is zeroed,
@@ -4490,8 +4759,15 @@ async function saveWod(sanityConfirmed) {
   if (isFirstLogArrival) {
     celebrateFirstLog(`${w.name} — ${formatWodEntry(entry)}`);
   } else {
-    celebrateAfterSave(celebratePR ? `${w.name} — ${formatWodEntry(entry)}` : null,
-      `נשמר: ${w.name} — ${formatWodEntry(entry)}`);
+    // A benchmark PR is level 2, any other WOD PR level 1; both open the moment.
+    if (celebratePR) {
+      const model = buildMomentModel(entry.date, { wodPr: { name: w.name, result: formatWodEntry(entry), benchmark: BENCHMARK_WOD_IDS.includes(w.id), rx: entry.rx } });
+      openWorkoutMoment(model);
+      celebrateAfterSave(null, null);
+    } else {
+      flashSaved();
+      celebrateAfterSave(null, `נשמר: ${w.name} — ${formatWodEntry(entry)}`);
+    }
   }
   // Same call, same position and the same reasoning as saveSet()'s - a logged
   // WOD is exactly as much a shareable session as a logged set, and the two
@@ -4650,15 +4926,15 @@ const ICONS = {
   // The inner arc used to carve a circular hole under nonzero winding, so
   // this rendered as a crescent, not a flame. Same drop shape as index.html's
   // #glyphFlame (used by the medal sprite), just as a standalone icon.
-  flame: '<svg width="15" height="15" viewBox="0 0 100 100" fill="var(--brass)" stroke="none"><path d="M50 14 C40 32 30 40 30 56 C30 72 40 84 50 84 C60 84 70 72 70 56 C70 46 64 40 60 44 C60 30 56 20 50 14 Z"/></svg>',
+  flame: '<svg width="15" height="15" viewBox="0 0 100 100" fill="var(--color-accent)" stroke="none"><path d="M50 14 C40 32 30 40 30 56 C30 72 40 84 50 84 C60 84 70 72 70 56 C70 46 64 40 60 44 C60 30 56 20 50 14 Z"/></svg>',
   trash: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>',
   edit: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
-  dumbbell: '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--border)" stroke-width="2" stroke-linecap="round"><path d="M4 9v6M20 9v6M2 10v4M22 10v4M7 12h10"/></svg>',
-  chevron: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--steel)" stroke-width="2" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg>',
-  up: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2.2" stroke-linecap="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M14 7h7v7"/></svg>',
-  down: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--steel)" stroke-width="2.2" stroke-linecap="round"><path d="M3 7l6 6 4-4 8 8"/><path d="M14 17h7v-7"/></svg>',
-  flat: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--steel)" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14"/></svg>',
-  chevronsLeft: '<img src="./assets/icon-chevrons.png" alt="" width="11" height="10" style="transform:scaleX(-1); vertical-align:middle;" />',
+  dumbbell: '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--color-border)" stroke-width="2" stroke-linecap="round"><path d="M4 9v6M20 9v6M2 10v4M22 10v4M7 12h10"/></svg>',
+  chevron: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" stroke-width="2" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg>',
+  up: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2.2" stroke-linecap="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M14 7h7v7"/></svg>',
+  down: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" stroke-width="2.2" stroke-linecap="round"><path d="M3 7l6 6 4-4 8 8"/><path d="M14 17h7v-7"/></svg>',
+  flat: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14"/></svg>',
+  chevronsLeft: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:middle;"><path d="m11 6-6 6 6 6M19 6l-6 6 6 6"/></svg>',
   // The two log-screen empty-state glyphs. Drawn to cloud.js's
   // EMPTY_STATE_ICONS conventions on purpose - 28-box, 1.8 stroke, round
   // caps and joins, currentColor - so the log screen's empty state and the
@@ -4680,7 +4956,7 @@ const ICONS = {
   calendarIcon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
   chartIcon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V12M12 20V4M20 20v-7"/></svg>',
   stopwatchIcon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6M12 2v3"/></svg>',
-  logIcon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9v6M7 7v10M17 7v10M20 9v6M7 12h10"/></svg>',
+  logIcon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
   homeIcon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11l8-7 8 7M6 10v10h12V10M10 20v-6h4v6"/></svg>',
   communityIcon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M2 20c0-3.5 3-6 7-6s7 2.5 7 6"/><circle cx="17" cy="9" r="2.3"/><path d="M16.3 14c2.6.2 4.5 2.1 5 5"/></svg>',
   settingsIcon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
@@ -4706,18 +4982,18 @@ const ICONS = {
 // that sentence is a product rule and not a caption: a member has to be able
 // to tell an Epley estimate from a tested single before loading a bar to it.
 function renderStrengthPctChips(est) {
-  const chipStyle = "background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:6px 10px; font-size:12.5px; font-weight:700; color:var(--steel); min-height:44px; cursor:pointer;";
+  const chipStyle = "background:var(--color-surface-sunken); border:1px solid var(--color-border); border-radius:10px; padding:6px 10px; font-size:12.5px; font-weight:700; color:var(--color-text-muted); min-height:44px; cursor:pointer;";
   return `
     <div style="margin-bottom:12px;" id="strengthPctChips">
-      <div style="color:var(--steel); font-size:11px; font-weight:700; letter-spacing:.5px; margin-bottom:6px;" id="strengthPctLabel">משקלי עבודה — אחוז מ־1RM משוער (${est} ק״ג)</div>
+      <div style="color:var(--color-text-muted); font-size:11px; font-weight:700; letter-spacing:.5px; margin-bottom:6px;" id="strengthPctLabel">משקלי עבודה — אחוז מ־1RM משוער (${est} ק״ג)</div>
       <div class="flex wrap gap-8" role="group" aria-labelledby="strengthPctLabel">
         ${STRENGTH_PCT_CHIPS.map((pct) => {
           const loadKg = roundToIncrement(est * pct / 100, pctIncrement);
           const shown = formatPlateKg(loadKg);
-          return `<button type="button" class="mono" data-action="set-weight-from-pct" data-pct="${pct}" data-kg="${esc(String(loadKg))}" aria-label="${esc(`${pct} אחוז — ${shown} ק״ג, מילוי מהיר`)}" style="${chipStyle}">${pct}% <span style="color:var(--chalk);">${shown}</span></button>`;
+          return `<button type="button" class="mono" data-action="set-weight-from-pct" data-pct="${pct}" data-kg="${esc(String(loadKg))}" aria-label="${esc(`${pct} אחוז — ${shown} ק״ג, מילוי מהיר`)}" style="${chipStyle}">${pct}% <span style="color:var(--color-text);">${shown}</span></button>`;
         }).join("")}
       </div>
-      <div style="color:var(--steel); font-size:11px; font-weight:700; letter-spacing:.5px; margin:10px 0 6px;" id="pctIncrementLabel">עיגול לקפיצה של</div>
+      <div style="color:var(--color-text-muted); font-size:11px; font-weight:700; letter-spacing:.5px; margin:10px 0 6px;" id="pctIncrementLabel">עיגול לקפיצה של</div>
       <div class="flex gap-8" role="radiogroup" aria-labelledby="pctIncrementLabel">
         ${PCT_INCREMENTS.map((inc) => `<button class="format-chip ${pctIncrement === inc ? "active" : ""}" data-action="set-pct-increment" data-inc="${inc}" role="radio" aria-checked="${pctIncrement === inc}">${formatPlateKg(inc)} ק״ג</button>`).join("")}
       </div>
@@ -4726,7 +5002,7 @@ function renderStrengthPctChips(est) {
 }
 function renderBarWeightRow() {
   return `<div id="barWeightRow">
-    <div style="color:var(--steel); font-size:11px; font-weight:700; letter-spacing:.5px; margin-bottom:6px;" id="barWeightLabel">משקל המוט</div>
+    <div style="color:var(--color-text-muted); font-size:11px; font-weight:700; letter-spacing:.5px; margin-bottom:6px;" id="barWeightLabel">משקל המוט</div>
     <div class="flex gap-8" style="margin-bottom:12px;" role="radiogroup" aria-labelledby="barWeightLabel">
       ${BAR_OPTIONS.map((kg) => `<button class="format-chip ${barWeight === kg ? "active" : ""}" data-action="set-bar-weight" data-kg="${kg}" role="radio" aria-checked="${barWeight === kg}">${kg} ק״ג</button>`).join("")}
     </div>
@@ -4786,10 +5062,10 @@ function renderCompactChart(data, chartLabel) {
     </div>`).join("");
   const missing = CHART_MIN_TREND_POINTS - data.length;
   return `<div class="chart-compact" role="img" aria-label="${esc(chartLabel)}">${rows}</div>
-    <div style="color:var(--steel); font-size:11.5px; text-align:center; margin-top:6px;">עוד ${missing} ${missing === 1 ? "נתון" : "נתונים"} ותראו כאן מגמה</div>`;
+    <div style="color:var(--color-text-muted); font-size:11.5px; text-align:center; margin-top:6px;">עוד ${missing} ${missing === 1 ? "נתון" : "נתונים"} ותראו כאן מגמה</div>`;
 }
 function renderChart(data) {
-  if (!data.length) return `<div class="flex col items-center" style="padding:32px 0; gap:8px;">${ICONS.dumbbell}<span style="color:var(--steel); font-size:13px;">אין עדיין נתונים לתרגיל הזה</span></div>`;
+  if (!data.length) return `<div class="flex col items-center" style="padding:32px 0; gap:8px;">${ICONS.dumbbell}<span style="color:var(--color-text-muted); font-size:13px;">אין עדיין נתונים לתרגיל הזה</span></div>`;
   const n = data.length;
   // Every point gets its own date label now (rotated, to fit more before they
   // overlap). Few points still render at the original full-width 300 viewBox;
@@ -4818,12 +5094,15 @@ function renderChart(data) {
     label: d.dateLabel,
   }));
   const polyline = pts.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
-  const dots = pts.map((p) => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${p.isPR ? 5 : 2.5}" fill="${p.isPR ? "var(--brass)" : "var(--chalk)"}" ${p.isPR ? 'stroke="var(--surface)" stroke-width="2"' : ""}/>`).join("");
+  // A PR is a ringed, filled dot with a star-and-word label above it: shape and text, never color alone.
+  const dots = pts.map((p) => p.isPR
+    ? `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="6" fill="var(--color-pr-fill)" stroke="var(--chart-pr)" stroke-width="2.5"/><text x="${p.x.toFixed(1)}" y="${(p.y - 11).toFixed(1)}" font-size="9.5" font-weight="800" fill="var(--color-pr)" text-anchor="middle">★ שיא</text>`
+    : `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="var(--color-surface)" stroke="var(--chart-line)" stroke-width="2"/>`).join("");
   const labelY = padTop + plotH + 12;
   // Rotation and anchor mirror with the axis above: rotate(+45)/anchor start
   // tilts each date away from its point in the same direction the plot now
   // runs, instead of leaning back across the line it belongs to.
-  const labels = pts.map((p) => `<text x="${p.x.toFixed(1)}" y="${labelY}" font-size="9" fill="var(--steel)" text-anchor="start" transform="rotate(45 ${p.x.toFixed(1)} ${labelY})">${esc(p.label)}</text>`).join("");
+  const labels = pts.map((p) => `<text x="${p.x.toFixed(1)}" y="${labelY}" font-size="9" fill="var(--color-text-muted)" text-anchor="start" transform="rotate(45 ${p.x.toFixed(1)} ${labelY})">${esc(p.label)}</text>`).join("");
   // COMM-359. This SVG carries the same progression a sighted user reads
   // visually (range, trend, which points are PRs) with nothing exposed to
   // assistive tech before this - role="img" + a computed summary stands in
@@ -4838,14 +5117,14 @@ function renderChart(data) {
   // fewer than three points is not drawn at all. See renderCompactChart().
   if (n < CHART_MIN_TREND_POINTS) return renderCompactChart(data, chartLabel);
   const svg = `<svg role="img" aria-label="${esc(chartLabel)}" viewBox="0 0 ${w} ${h}" style="${wide ? `width:${w}px;` : "width:100%;"} height:${h}px; display:block;">
-    <polyline points="${polyline}" fill="none" stroke="var(--brass)" stroke-width="2"/>
+    <polyline points="${polyline}" fill="none" stroke="var(--chart-line)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
     ${dots}${labels}
   </svg>`;
   // Which way the picture runs is not self-evident from a line alone, and
   // the app's own best habit is telling the member what a number is built
   // from. Only worth saying once there are two points to have a direction.
   // Unconditional now: nothing below this line runs for n < 3.
-  const axisNote = `<div style="color:var(--steel); font-size:11px; text-align:center; margin-top:4px;">מימין לשמאל: מהישן לחדש.</div>`;
+  const axisNote = `<div style="color:var(--color-text-muted); font-size:11px; text-align:center; margin-top:4px;">מימין לשמאל: מהישן לחדש.</div>`;
   // dir="ltr" on the scroll box only, never on the SVG: a wide chart in an
   // RTL container opens scrolled to its right edge, which after the mirror
   // above is the OLDEST data. Flipping the scroll container's own direction
@@ -4898,13 +5177,13 @@ function renderTourCard() {
   return `
     <button class="exercise-row tour-offer" data-action="open-onboarding" style="min-height:64px; margin-bottom:12px;">
       <div style="text-align:right;">
-        <div style="font-weight:700; font-size:13.5px; color:var(--chalk);">סיור קצר במסכים</div>
+        <div style="font-weight:700; font-size:13.5px; color:var(--color-text);">סיור קצר במסכים</div>
         <!-- "חמשת" is a claim about the explainer's contents, so it is pinned
              rather than trusted: scripts/browser-check/first-run-sequence.mjs
              asserts the overlay still has exactly five rows. -->
-        <div style="color:var(--steel); font-size:12.5px; margin-top:2px;">דקה, ומכירים את חמשת המסכים</div>
+        <div style="color:var(--color-text-muted); font-size:12.5px; margin-top:2px;">דקה, ומכירים את חמשת המסכים</div>
       </div>
-      <span style="color:var(--steel); flex-shrink:0;">${ICONS.chevronsLeft}</span>
+      <span style="color:var(--color-text-muted); flex-shrink:0;">${ICONS.chevronsLeft}</span>
     </button>`;
 }
 
@@ -4923,8 +5202,8 @@ function renderBackupConsentCard() {
   if (!shouldShowBackupConsent()) return "";
   return `
     <div class="card" style="margin-top:12px;">
-      <div style="font-weight:700; font-size:14px; color:var(--chalk); margin-bottom:4px;">לגבות את האימונים לענן?</div>
-      <div style="color:var(--steel); font-size:12.5px; margin-bottom:12px;">הגיבוי פרטי — רק את/ה רואה אותו — ומאפשר לשחזר הכול אם מחליפים מכשיר.</div>
+      <div style="font-weight:700; font-size:14px; color:var(--color-text); margin-bottom:4px;">לגבות את האימונים לענן?</div>
+      <div style="color:var(--color-text-muted); font-size:12.5px; margin-bottom:12px;">הגיבוי פרטי — רק את/ה רואה אותו — ומאפשר לשחזר הכול אם מחליפים מכשיר.</div>
       <div class="flex items-center gap-10">
         <button class="chip-btn" data-action="backup-consent-yes" style="flex:1; min-height:44px;">כן, לגבות</button>
         <button class="chip-btn" data-action="backup-consent-no" style="flex:1; min-height:44px;">לא עכשיו</button>
@@ -4952,20 +5231,17 @@ function renderLogTab() {
   const hasLoggedToday = dayEntries.length > 0;
   return `
     <section class="scene-page ${PAGE_SCENES.add.className}" aria-labelledby="pageTitle-add">
-      <div class="scene-page__media" aria-hidden="true"></div>
-      <div class="scene-page__scrim" aria-hidden="true"></div>
       <div class="scene-page__intro">
-        <div class="scene-page__brand">${esc(brandWordmark())}</div>
-        <h1 id="pageTitle-add" class="scene-page__title">${hasLoggedToday ? `<span aria-hidden="true" style="display:inline-flex; align-items:center; justify-content:center; width:30px; height:30px; border-radius:999px; background:var(--club-success); flex-shrink:0;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>` : ""}<span>סיכום אימון</span></h1>
+        <h1 id="pageTitle-add" class="scene-page__title">${hasLoggedToday ? `<span aria-hidden="true"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>` : ""}<span>סיכום אימון</span></h1>
         <p class="scene-page__subtitle">${hasLoggedToday ? "עבודה מעולה!" : "מוכנים להתחיל?"}</p>
       </div>
       <div class="scene-sheet">
-    <div class="stripe-ribbon" aria-hidden="true"></div>
-    ${!storageOK ? `<div class="footer-note" style="color:var(--red-text); background:rgba(216,69,60,.1); border:1px solid var(--red); border-radius:12px; padding:10px 14px; margin-bottom:12px;" role="alert">${esc(storageErrMsg)}</div>` : ""}
+
+    ${!storageOK ? `<div class="footer-note" style="color:var(--color-danger); background:color-mix(in srgb, var(--color-danger) 10%, var(--color-surface)); border:1px solid var(--color-danger); border-radius:12px; padding:10px 14px; margin-bottom:12px;" role="alert">${esc(storageErrMsg)}</div>` : ""}
     ${editingEntryId ? `
-    <div style="background:rgba(232,185,138,.12); border:1px solid var(--brass); border-radius:12px; padding:10px 14px; margin-bottom:12px; display:flex; align-items:center; justify-content:space-between;">
-      <span style="color:var(--brass); font-weight:700; font-size:13px;">עריכת סט קיים</span>
-      <button data-action="cancel-edit-entry" style="color:var(--steel); font-size:12px; text-decoration:underline;">ביטול</button>
+    <div style="background:var(--color-accent-soft); border:1px solid var(--color-accent); border-radius:12px; padding:10px 14px; margin-bottom:12px; display:flex; align-items:center; justify-content:space-between;">
+      <span style="color:var(--color-accent); font-weight:700; font-size:13px;">עריכת סט קיים</span>
+      <button data-action="cancel-edit-entry" style="color:var(--color-text-muted); font-size:12px; text-decoration:underline;">ביטול</button>
     </div>` : ""}
 
     <div class="scene-summary-meta"><bdi>${esc(fmtDate(logDate))}</bdi></div>
@@ -4974,6 +5250,7 @@ function renderLogTab() {
     <div class="day-empty">${ICONS.emptyDay}<span>${isToday ? "עדיין לא נרשמו סטים היום. כאן מתעדים את האימון שהושלם." : `עדיין לא נרשמו סטים ב-${esc(dayLabel)}.`}</span></div>` : `
     <h2 class="section-label">${isToday ? "סיכום האימון" : `סיכום ${esc(dayLabel)}`}</h2>
     <div class="chart-card" style="margin-bottom:8px;">${renderDayEntriesListHtml(dayEntries, [])}</div>
+    <button class="chip-btn primary" data-action="open-moment" style="width:100%; margin-bottom:8px;">סיכום האימון והשבוע</button>
     <button class="link-btn link-btn--tap" data-action="view-log-date-calendar" style="display:flex; align-items:center; justify-content:space-between; width:100%; margin-bottom:0;">
       <span>הערות לאימון ופרטי היום · ${bidiText(entrySummary(dayEntries[0]))}</span>
       <span class="flex items-center gap-6">לוח השנה${ICONS.chevronsLeft}</span>
@@ -4990,12 +5267,19 @@ function renderLogTab() {
         <div class="dot" style="background:${esc(catColor(selected.category))}"></div>
         <span style="font-weight:800; font-size:16px;">${bidiText(selected.name)}</span>
       </div>
-      <span class="flex items-center gap-6" style="color:var(--steel); font-size:12px; font-weight:600;">שינוי${ICONS.chevronsLeft}</span>` : `
+      <span class="flex items-center gap-6" style="color:var(--color-text-muted); font-size:12px; font-weight:600;">שינוי${ICONS.chevronsLeft}</span>` : `
       <span class="pick-hero-title">מה עשינו היום?</span>
       <span class="pick-hero-cta">בחירת תרגיל${ICONS.chevronsLeft}</span>`}
     </button>
 
 
+
+    ${(() => {
+      // One tap to switch lifts, prefilled from that lift's last session.
+      const ids = recentLiftIds(6).filter((id) => !(movementExplicitlyChosen && id === selectedId));
+      if (!ids.length || ladderMode || editingEntryId) return "";
+      return `<div class="chip-row" role="group" aria-label="תרגילים אחרונים" style="margin:-4px 0 12px;">${ids.map((id) => `<button type="button" class="chip-btn" data-action="pick-recent-lift" data-id="${esc(id)}">${bidiText(movementById(id).name)}</button>`).join("")}</div>`;
+    })()}
 
     ${renderTourCard()}
 
@@ -5023,18 +5307,18 @@ function renderLogTab() {
     </div>
 
     <div class="flex items-center gap-8" style="margin-bottom:12px;">
-      <input type="date" id="logDateInput" value="${esc(logDate)}" max="${todayISO()}" aria-label="תאריך רישום הסט" style="flex:1; min-width:0; background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:12px 14px; color:var(--chalk); font-size:14px; font-weight:700; font-family:inherit;" />
+      <input type="date" id="logDateInput" value="${esc(logDate)}" max="${todayISO()}" aria-label="תאריך רישום הסט" style="flex:1; min-width:0; background:var(--color-surface); border:1px solid var(--color-border); border-radius:14px; padding:12px 14px; color:var(--color-text); font-size:14px; font-weight:700; font-family:inherit;" />
       ${logDate !== todayISO() ? `<button data-action="reset-log-date" class="reset-date-btn">היום</button>` : ""}
     </div>
 
     ${(est || bestHold || last) ? `
     <div class="stat-row">
-      ${est ? `<div class="stat-card stat-hero"><div class="stat-label">1RM משוער</div><div class="stat-value mono" style="color:var(--brass);">${est} ק״ג</div></div>` : ""}
-      ${bestHold ? `<div class="stat-card stat-hero"><div class="stat-label">שיא החזקה</div><div class="stat-value mono" style="color:var(--brass);">${formatDuration(bestHold)}</div></div>` : ""}
+      ${est ? `<div class="stat-card stat-hero"><div class="stat-label">1RM משוער</div><div class="stat-value mono" style="color:var(--color-accent);">${est} ק״ג</div></div>` : ""}
+      ${bestHold ? `<div class="stat-card stat-hero"><div class="stat-label">שיא החזקה</div><div class="stat-value mono" style="color:var(--color-accent);">${formatDuration(bestHold)}</div></div>` : ""}
       ${last ? `<button data-action="prefill-last" class="stat-card stat-hero" style="text-align:right;" aria-label="מילוי הנתונים מהאימון האחרון — ${isDuration ? formatDuration(last.durationSeconds) : `${last.weight} על ${last.reps}`}">
         <div class="flex items-center justify-between gap-6">
           <span class="stat-label">אימון אחרון</span>
-          <span style="color:var(--steel);">${ICONS.repeat}</span>
+          <span style="color:var(--color-text-muted);">${ICONS.repeat}</span>
         </div>
         <div class="stat-value mono">${isDuration ? formatDuration(last.durationSeconds) : `${last.weight}×${last.reps}`}</div>
       </button>` : ""}
@@ -5047,7 +5331,7 @@ function renderLogTab() {
       if (recent.length === 0) return "";
       return `
       <div style="margin-bottom:12px;">
-        <div style="color:var(--steel); font-size:11px; font-weight:700; letter-spacing:.5px; margin-bottom:6px;">ב-14 הימים האחרונים</div>
+        <div style="color:var(--color-text-muted); font-size:11px; font-weight:700; letter-spacing:.5px; margin-bottom:6px;">ב-14 הימים האחרונים</div>
         <div class="flex wrap gap-8">
           ${recent.map((e) => {
             // TAP TO PREFILL (2026-09-15). These chips existed already and were
@@ -5066,9 +5350,9 @@ function renderLogTab() {
             // weight/reps/sets triple to copy, so a tap would silently do
             // nothing, which is worse than a chip that plainly isn't a button.
             const fillable = !isDuration && typeof e.weight === "number" && typeof e.reps === "number";
-            const label = `${esc(fmtDate(e.date))}: <span style="color:var(--chalk);">${esc(entrySummary(e))}</span>`;
-            if (!fillable) return `<span class="mono" style="background:var(--surface2); border-radius:10px; padding:6px 10px; font-size:12.5px; font-weight:700; color:var(--steel);">${label}</span>`;
-            return `<button type="button" class="mono" data-action="prefill-from-recent" data-weight="${esc(String(e.weight))}" data-reps="${esc(String(e.reps))}" data-sets="${esc(String(e.sets || 1))}" aria-label="${esc(`מילוי מהיר — ${entrySummary(e)} מ־${fmtDate(e.date)}`)}" style="background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:6px 10px; font-size:12.5px; font-weight:700; color:var(--steel); min-height:44px; cursor:pointer;">${label}</button>`;
+            const label = `${esc(fmtDate(e.date))}: <span style="color:var(--color-text);">${esc(entrySummary(e))}</span>`;
+            if (!fillable) return `<span class="mono" style="background:var(--color-surface-sunken); border-radius:10px; padding:6px 10px; font-size:12.5px; font-weight:700; color:var(--color-text-muted);">${label}</span>`;
+            return `<button type="button" class="mono" data-action="prefill-from-recent" data-weight="${esc(String(e.weight))}" data-reps="${esc(String(e.reps))}" data-sets="${esc(String(e.sets || 1))}" aria-label="${esc(`מילוי מהיר — ${entrySummary(e)} מ־${fmtDate(e.date)}`)}" style="background:var(--color-surface-sunken); border:1px solid var(--color-border); border-radius:10px; padding:6px 10px; font-size:12.5px; font-weight:700; color:var(--color-text-muted); min-height:44px; cursor:pointer;">${label}</button>`;
           }).join("")}
         </div>
       </div>`;
@@ -5108,16 +5392,16 @@ function renderLogTab() {
       return `
       <button data-action="toggle-ladder-mode" class="movement-btn active" aria-pressed="true" style="margin-bottom:0;">
         <div class="flex items-center gap-8">
-          <span style="display:inline-flex; color:var(--brass); flex-shrink:0;">${ICONS.ladder}</span>
+          <span style="display:inline-flex; color:var(--color-accent); flex-shrink:0;">${ICONS.ladder}</span>
           <div style="text-align:right;">
-            <div aria-live="polite" style="font-weight:700; font-size:14px; color:var(--brass);">${rounds.length ? `${modeLabel} פעיל — ${rounds.length === 1 ? "סט אחד נרשם" : `${rounds.length} סטים נרשמו`} · הבא: ${nextNum}` : `${modeLabel} פעיל — קבעו את הסט הראשון למטה`}</div>
+            <div aria-live="polite" style="font-weight:700; font-size:14px; color:var(--color-accent);">${rounds.length ? `${modeLabel} פעיל — ${rounds.length === 1 ? "סט אחד נרשם" : `${rounds.length} סטים נרשמו`} · הבא: ${nextNum}` : `${modeLabel} פעיל — קבעו את הסט הראשון למטה`}</div>
           </div>
         </div>
-        <span style="color:var(--brass); font-size:12px; font-weight:700; flex-shrink:0;">סיום</span>
+        <span style="color:var(--color-accent); font-size:12px; font-weight:700; flex-shrink:0;">סיום</span>
       </button>
-      <div style="border:1px solid var(--brass); border-top:none; border-radius:0 0 12px 12px; padding:10px 12px; margin-bottom:12px; margin-top:-1px;">
+      <div style="border:1px solid var(--color-accent); border-top:none; border-radius:0 0 12px 12px; padding:10px 12px; margin-bottom:12px; margin-top:-1px;">
         <div class="flex items-center gap-8" style="margin-bottom:10px;" role="radiogroup" aria-label="תווית בלוק (לא חובה)">
-          <span style="color:var(--steel); font-size:11px; font-weight:700;">בלוק:</span>
+          <span style="color:var(--color-text-muted); font-size:11px; font-weight:700;">בלוק:</span>
           ${["A", "B", "C", "D"].map((l) => `<button class="format-chip ${ladderBlockLabel === l ? "active" : ""}" style="flex:0 0 auto; padding:5px 12px; font-size:12px;" data-action="set-ladder-block-label" data-label="${l}" role="radio" aria-checked="${ladderBlockLabel === l}">${l}</button>`).join("")}
           ${ladderBlockLabel ? `<button class="format-chip" style="flex:0 0 auto; padding:5px 12px; font-size:12px;" data-action="set-ladder-block-label" data-label="">ללא</button>` : ""}
         </div>
@@ -5132,13 +5416,13 @@ function renderLogTab() {
         <button data-action="open-picker" data-target="partner" class="link-btn link-btn--tap" style="display:block; margin-bottom:10px; font-size:12.5px;">${ICONS.repeat} הוספת תרגיל שני (סופרסט)</button>`}
         ${rounds.length ? `<div class="flex wrap gap-8">
           ${rounds.map((r, i) => `
-            <span class="flex items-center gap-6 mono" style="background:var(--surface2); border-radius:10px; padding:6px 10px; font-size:13px; font-weight:700;">
+            <span class="flex items-center gap-6 mono" style="background:var(--color-surface-sunken); border-radius:10px; padding:6px 10px; font-size:13px; font-weight:700;">
               ${i + 1}. ${esc(ladderRoundSummary(r, isSuperset))}
-              <button data-action="delete-entry" data-id="${esc(r.id)}" aria-label="מחיקת סט ${i + 1} מה${modeLabel}" style="color:var(--steel); padding:0; display:inline-flex;">
+              <button data-action="delete-entry" data-id="${esc(r.id)}" aria-label="מחיקת סט ${i + 1} מה${modeLabel}" style="color:var(--color-text-muted); padding:0; display:inline-flex;">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
               </button>
             </span>`).join("")}
-        </div>` : `<div style="color:var(--steel); font-size:12px;">אפשר לשנות משקל וחזרות לכל סט בנפרד — לחצו על כפתור השמירה בכל פעם שסט מוכן</div>`}
+        </div>` : `<div style="color:var(--color-text-muted); font-size:12px;">אפשר לשנות משקל וחזרות לכל סט בנפרד — לחצו על כפתור השמירה בכל פעם שסט מוכן</div>`}
       </div>`;
     })()}
     `}
@@ -5225,7 +5509,7 @@ function renderDetailCard(m) {
       <div class="rep-table">
         ${STANDARD_REPS.map((r) => {
           const rec = repRecordFor(m.id, r);
-          return `<div class="rep-cell"><div class="rep-cell-label">${r}RM</div><div class="rep-cell-val mono" style="color:${rec ? "var(--chalk)" : "var(--border)"};">${rec ?? "—"}</div></div>`;
+          return `<div class="rep-cell"><div class="rep-cell-label">${r}RM</div><div class="rep-cell-val mono" style="color:${rec ? "var(--color-text)" : "var(--color-border)"};">${rec ?? "—"}</div></div>`;
         }).join("")}
       </div>
       ${est1rm ? `<div class="footer-note" style="margin-top:10px; text-align:center;">1RM משוער: <span class="mono">${bidiUnit(`${est1rm} ק״ג`)}</span> — חישוב מהסט הטוב ביותר, לא הרמה שבוצעה</div>` : ""}
@@ -5255,7 +5539,7 @@ function renderDurationDetailCard(m, durationEntries) {
         </div>
       </div>
       ${renderChart(chartData)}
-      ${best ? `<div class="rep-table"><div class="rep-cell"><div class="rep-cell-label">שיא החזקה</div><div class="rep-cell-val mono" style="color:var(--chalk);">${formatDuration(best)}</div></div></div>` : ""}
+      ${best ? `<div class="rep-table"><div class="rep-cell"><div class="rep-cell-label">שיא החזקה</div><div class="rep-cell-val mono" style="color:var(--color-text);">${formatDuration(best)}</div></div></div>` : ""}
     </div>`;
 }
 
@@ -5265,11 +5549,11 @@ function renderHistoryListArea() {
   const q = historySearch.trim().toLowerCase();
   const active = activeExercises().filter((m) => m.name.toLowerCase().includes(q)).sort((a, b) => a.name.localeCompare(b.name));
   if (activeExercises().length === 0) {
-    area.innerHTML = `<div class="flex col items-center" style="padding:40px 0; gap:8px;">${ICONS.dumbbell}<span style="color:var(--steel); font-size:13px;">רשמו סט כדי להתחיל לראות התקדמות</span></div>`;
+    area.innerHTML = `<div class="flex col items-center" style="padding:40px 0; gap:8px;">${ICONS.dumbbell}<span style="color:var(--color-text-muted); font-size:13px;">רשמו סט כדי להתחיל לראות התקדמות</span></div>`;
     return;
   }
   if (active.length === 0) {
-    const noneHtml = `<div style="color:var(--steel); text-align:center; padding:20px 0; font-size:13px;">לא נמצא תרגיל התואם ל-"${bidiText(historySearch)}"</div>`;
+    const noneHtml = `<div style="color:var(--color-text-muted); text-align:center; padding:20px 0; font-size:13px;">לא נמצא תרגיל התואם ל-"${bidiText(historySearch)}"</div>`;
     area.innerHTML = noneHtml;
     return;
   }
@@ -5302,8 +5586,8 @@ function renderHistoryListArea() {
           const hold = bestDurationFor(m.id, undefined, byExercise);
           const headline = bestSet ? formatLiftedSet(bestSet) : hold ? formatDuration(hold) : "—";
           return `<span style="text-align:left;">
-          <span class="mono" style="display:block; color:var(--brass); font-weight:700; font-size:14px;">${bidiUnit(headline)}</span>
-          ${bestSet && est ? `<span class="mono" style="display:block; color:var(--steel); font-weight:600; font-size:11px;">${bidiUnit(`1RM משוער ${est} ק״ג`)}</span>` : ""}
+          <span class="mono" style="display:block; color:var(--color-accent); font-weight:700; font-size:14px;">${bidiUnit(headline)}</span>
+          ${bestSet && est ? `<span class="mono" style="display:block; color:var(--color-text-muted); font-weight:600; font-size:11px;">${bidiUnit(`1RM משוער ${est} ק״ג`)}</span>` : ""}
         </span>`;
         })()}
       </button>`;
@@ -5523,7 +5807,7 @@ function renderDayEntriesListHtml(dayEntries, dayWods) {
             <span style="font-weight:700; font-size:14px;">${bidiText(movementById(e.exerciseId) ? movementById(e.exerciseId).name : "?")}</span>
           </div>
           <div class="flex items-center gap-10">
-            <span class="mono" style="color:var(--steel); font-size:13px;">${esc(entrySummary(e))}</span>
+            <span class="mono" style="color:var(--color-text-muted); font-size:13px;">${esc(entrySummary(e))}</span>
             ${typeof window.renderShareControl === "function" ? window.renderShareControl("strength_entry", e.id) : ""}
             <button data-action="edit-entry" data-id="${esc(e.id)}" aria-label="עריכת סט" class="icon-btn-sm">${ICONS.edit}</button>
             <button data-action="delete-entry" data-id="${esc(e.id)}" aria-label="מחיקת סט" class="icon-btn-sm">${ICONS.trash}</button>
@@ -5546,12 +5830,12 @@ function renderDayEntriesListHtml(dayEntries, dayWods) {
           <div class="flex items-center gap-8">
             ${anyPR ? ICONS.flame : ""}
             <span style="font-weight:700; font-size:14px;">${name}</span>
-            <span style="color:var(--steel); font-size:11px;">${isSuperset ? "סופרסט" : "סולם"} · ${group.length} סטים${blockTag}</span>
+            <span style="color:var(--color-text-muted); font-size:11px;">${isSuperset ? "סופרסט" : "סולם"} · ${group.length} סטים${blockTag}</span>
           </div>
           <div class="flex col gap-6">
             ${group.map((e, i) => `
             <div class="flex items-center justify-between">
-              <span class="mono flex items-center gap-6" style="color:var(--steel); font-size:13px;">${bidiUnit(`${i + 1}. ${ladderRoundSummary(e, isSuperset)}`)}${isFlameworthyEntry(e, celebratableIds) ? ICONS.flame : ""}</span>
+              <span class="mono flex items-center gap-6" style="color:var(--color-text-muted); font-size:13px;">${bidiUnit(`${i + 1}. ${ladderRoundSummary(e, isSuperset)}`)}${isFlameworthyEntry(e, celebratableIds) ? ICONS.flame : ""}</span>
               <div class="flex items-center gap-6">
                 <button data-action="edit-entry" data-id="${esc(e.id)}" aria-label="עריכת סט ${i + 1}" class="icon-btn-sm">${ICONS.edit}</button>
                 <button data-action="delete-entry" data-id="${esc(e.id)}" aria-label="מחיקת סט ${i + 1}" class="icon-btn-sm">${ICONS.trash}</button>
@@ -5568,16 +5852,16 @@ function renderDayEntriesListHtml(dayEntries, dayWods) {
             <div class="flex items-center gap-8">
               ${e.isPR ? ICONS.flame : ""}
               <span style="font-weight:700; font-size:14px;">${bidiText(w ? w.name : "?")}</span>
-              <span style="color:var(--steel); font-size:11px;">${wodEffortLabel(e.rx)}${e.partnerTag ? ` · ${bidiText(e.partnerTag)}` : ""}</span>
+              <span style="color:var(--color-text-muted); font-size:11px;">${wodEffortLabel(e.rx)}${e.partnerTag ? ` · ${bidiText(e.partnerTag)}` : ""}</span>
             </div>
             <div class="flex items-center gap-10">
-              <span class="mono" style="color:var(--steel); font-size:13px;">${bidiUnit(formatWodEntry(e))}</span>
+              <span class="mono" style="color:var(--color-text-muted); font-size:13px;">${bidiUnit(formatWodEntry(e))}</span>
               ${typeof window.renderShareControl === "function" ? window.renderShareControl("wod_entry", e.id) : ""}
               <button data-action="edit-wod-entry" data-id="${esc(e.id)}" aria-label="עריכת אימון" class="icon-btn-sm">${ICONS.edit}</button>
               <button data-action="delete-wod-entry" data-id="${esc(e.id)}" aria-label="מחיקת אימון" class="icon-btn-sm">${ICONS.trash}</button>
             </div>
           </div>
-          ${e.notes ? `<div style="color:var(--steel); font-size:12px; padding-inline-start:23px;">${bidiText(e.notes)}</div>` : ""}
+          ${e.notes ? `<div style="color:var(--color-text-muted); font-size:12px; padding-inline-start:23px;">${bidiText(e.notes)}</div>` : ""}
         </div>`;
       }).join("")}
     </div>`;
@@ -5663,9 +5947,9 @@ function renderVolumeReport() {
     // technically passing but with no real margin. .10 clears both with
     // headroom (4.78/4.81) and improves every other state too, checked
     // against both themes' real token values, not assumed.
-    let flagColor = "var(--steel)", flagBg = "rgba(138,143,151,.10)", flagText = daysAgoLabel(lastDate);
+    let flagColor = "var(--color-text-muted)", flagBg = "var(--color-surface-sunken)", flagText = daysAgoLabel(lastDate);
     // UX REVIEW, FINDING 2. `diff === null` used to take this row's
-    // var(--red-text) on rgba(216,69,60,.10) - byte-for-byte the `diff > 14`
+    // var(--color-danger) on rgba(216,69,60,.10) - byte-for-byte the `diff > 14`
     // styling below it - so a category the member has never logged and a
     // category they have let lapse for a month rendered as the same alarm.
     // Measured at 390x844 with a single set logged, five of the six rows
@@ -5704,8 +5988,8 @@ function renderVolumeReport() {
     // rule this block settled on last time and is just being applied to one
     // more state.
     if (diff !== null) {
-      if (diff <= 7) { flagColor = "var(--green-text)"; flagBg = "rgba(75,155,95,.10)"; }
-      else if (diff > VOLUME_OVERDUE_DAYS) { flagColor = "var(--red-text)"; flagBg = "rgba(216,69,60,.10)"; }
+      if (diff <= 7) { flagColor = "var(--color-success)"; flagBg = "color-mix(in srgb, var(--color-success) 10%, var(--color-surface))"; }
+      else if (diff > VOLUME_OVERDUE_DAYS) { flagColor = "var(--color-danger)"; flagBg = "color-mix(in srgb, var(--color-danger) 10%, var(--color-surface))"; }
     }
     return `
       <div class="report-row">
@@ -5714,7 +5998,7 @@ function renderVolumeReport() {
           <span style="font-weight:700; font-size:14px;">${esc(catLabel(cat))}</span>
         </div>
         <div class="flex items-center gap-10">
-          <span class="mono" style="color:var(--steel); font-size:12px;">${bidiUnit(volumeCountsLabel(setsWeek, setsMonth))}</span>
+          <span class="mono" style="color:var(--color-text-muted); font-size:12px;">${bidiUnit(volumeCountsLabel(setsWeek, setsMonth))}</span>
           <span class="report-flag" style="color:${flagColor}; background:${flagBg};">${flagText}</span>
         </div>
       </div>`;
@@ -5723,7 +6007,7 @@ function renderVolumeReport() {
   return `
     <div class="chart-card">
     <h2 class="section-label">נפח ותדירות לפי קטגוריה</h2>
-    <div style="color:var(--steel); font-size:11px; margin-bottom:10px;">מספר הסטים ב-7 וב-30 הימים האחרונים, וזמן מאז האימון האחרון</div>
+    <div style="color:var(--color-text-muted); font-size:11px; margin-bottom:10px;">מספר הסטים ב-7 וב-30 הימים האחרונים, וזמן מאז האימון האחרון</div>
     ${rows}
     </div>
   `;
@@ -5735,23 +6019,20 @@ function renderCalendarTab() {
   const listHtml = calView === "list" ? `<div class="history-month-list">${dates.length ? dates.map(date => `<section aria-label="${esc(fmtDate(date))}"><h2 class="section-label">${esc(fmtDate(date))}</h2>${renderDayEntriesListHtml(entries.filter(e => e.date === date), wodEntries.filter(e => e.date === date))}</section>`).join("") : `<div class="empty">לא נרשמו אימונים בחודש הזה.</div>`}</div>` : "";
   return `
     <section class="scene-page ${PAGE_SCENES.calendar.className}" aria-labelledby="pageTitle-calendar">
-      <div class="scene-page__media" aria-hidden="true"></div>
-      <div class="scene-page__scrim" aria-hidden="true"></div>
       <div class="scene-page__intro">
-        <div class="scene-page__brand">${esc(brandWordmark())}</div>
         <h1 id="pageTitle-calendar" class="scene-page__title">לוח שנה</h1>
       </div>
       <div class="scene-sheet">
-    <div class="stripe-ribbon" aria-hidden="true"></div>
+
     <div class="cal-panel" data-calendar-view="${calView}">
       <div class="cal-header">
         <button class="cal-nav-btn" data-action="cal-prev" aria-label="חודש קודם">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--chalk)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-text)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
         </button>
         <span class="cal-month-label" id="calMonthLabel"></span>
         <button class="cal-view-btn" data-action="cal-toggle-view" aria-pressed="${calView === "list"}" aria-label="${calView === "list" ? "לוח, הצגת לוח השנה" : "רשימה, הצגת האימונים כרשימה"}">${calView === "list" ? "לוח" : "רשימה"}</button>
         <button class="cal-nav-btn" data-action="cal-next" aria-label="חודש הבא">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--chalk)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-text)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
         </button>
       </div>
       <div class="cal-weekdays">${["א","ב","ג","ד","ה","ו","ש"].map((d) => `<div class="cal-weekday">${d}</div>`).join("")}</div>
@@ -5782,11 +6063,11 @@ function renderBodyweightArea() {
         <span style="display:inline-flex; transition:transform .2s; transform:rotate(${bodyweightExpanded ? "90deg" : "180deg"});">${ICONS.chevron}</span>
         <span style="font-weight:700; font-size:14px;">משקל גוף</span>
       </div>
-      ${last ? `<span class="mono" style="color:var(--brass); font-weight:700; font-size:14px;">${bidiUnit(`${last.weight} ק״ג`)}</span>` : `<span style="color:var(--steel); font-size:12px;">אין עדיין מדידות</span>`}
+      ${last ? `<span class="mono" style="color:var(--color-accent); font-weight:700; font-size:14px;">${bidiUnit(`${last.weight} ק״ג`)}</span>` : `<span style="color:var(--color-text-muted); font-size:12px;">אין עדיין מדידות</span>`}
     </button>`;
   const detail = bodyweightExpanded ? `
     <div class="chart-card" style="margin-top:-4px; border-top-left-radius:0; border-top-right-radius:0; border-top:none;">
-      ${last ? `<div style="color:var(--steel); font-size:12px; margin-bottom:${chartData.length ? "12px" : "0"};">עודכן לאחרונה: ${fmtDate(last.date)}</div>` : ""}
+      ${last ? `<div style="color:var(--color-text-muted); font-size:12px; margin-bottom:${chartData.length ? "12px" : "0"};">עודכן לאחרונה: ${fmtDate(last.date)}</div>` : ""}
       ${chartData.length ? renderChart(chartData) : ""}
       <div class="steppers" style="margin-top:14px; margin-bottom:0;">
         ${renderStepper("bwWeight", "משקל (ק\"ג)", bwWeight, 0.5, 0, "bw-step")}
@@ -5808,11 +6089,11 @@ function renderMeasureArea() {
   // outranking the actual measurements below it - now it's a plain row
   // after the real data, same weight as everything else on screen.
   const addRow = measureAddOpen
-    ? `<div style="border:1px solid var(--brass); border-radius:12px; padding:10px 12px; margin-top:${types.length ? "8px" : "0"};">
+    ? `<div style="border:1px solid var(--color-accent); border-radius:12px; padding:10px 12px; margin-top:${types.length ? "8px" : "0"};">
          <input id="measureTypeInput" class="text-input" dir="auto" maxlength="80" autocomplete="off" placeholder="לדוגמה: היקף מותן" aria-label="שם מדד חדש" style="margin-bottom:8px;" />
          <div class="flex gap-8">
            <button data-action="confirm-add-measure-type" class="save-btn" style="max-width:none; flex:1;">הוספה</button>
-           <button data-action="cancel-add-measure-type" style="color:var(--steel); font-size:13px; padding:0 10px;">ביטול</button>
+           <button data-action="cancel-add-measure-type" style="color:var(--color-text-muted); font-size:13px; padding:0 10px;">ביטול</button>
          </div>
        </div>`
     : `<button class="link-btn" data-action="open-add-measure-type" style="margin-top:${types.length ? "8px" : "0"};">+ הוספת מדד חדש</button>`;
@@ -5826,7 +6107,7 @@ function renderMeasureArea() {
           <span style="display:inline-flex; transition:transform .2s; transform:rotate(${expanded ? "90deg" : "180deg"});">${ICONS.chevron}</span>
           <span style="font-weight:700; font-size:14px;">${bidiText(t.name)}</span>
         </div>
-        ${last ? `<span class="mono" style="color:var(--brass); font-weight:700; font-size:14px;">${bidiUnit(`${last.value} ס״מ`)}</span>` : `<span style="color:var(--steel); font-size:12px;">אין עדיין מדידות</span>`}
+        ${last ? `<span class="mono" style="color:var(--color-accent); font-weight:700; font-size:14px;">${bidiUnit(`${last.value} ס״מ`)}</span>` : `<span style="color:var(--color-text-muted); font-size:12px;">אין עדיין מדידות</span>`}
       </button>`;
     if (!expanded) return header;
 
@@ -5837,7 +6118,7 @@ function renderMeasureArea() {
     const detail = `
       <div class="chart-card" style="margin-top:-4px; border-top-left-radius:0; border-top-right-radius:0; border-top:none;">
         <div class="flex items-center justify-between" style="margin-bottom:${chartData.length ? "12px" : "0"};">
-          ${last ? `<span style="color:var(--steel); font-size:12px;">עודכן לאחרונה: ${fmtDate(last.date)}</span>` : `<span style="color:var(--steel); font-size:12px;">אין עדיין מדידות</span>`}
+          ${last ? `<span style="color:var(--color-text-muted); font-size:12px;">עודכן לאחרונה: ${fmtDate(last.date)}</span>` : `<span style="color:var(--color-text-muted); font-size:12px;">אין עדיין מדידות</span>`}
           <button data-action="delete-measure-type" data-id="${esc(t.id)}" aria-label="מחיקת מדד" class="icon-btn-sm">${ICONS.trash}</button>
         </div>
         ${chartData.length ? renderChart(chartData) : ""}
@@ -5849,7 +6130,7 @@ function renderMeasureArea() {
         <div class="log-list" style="margin-top:14px;">
           ${recent.map((e) => `
             <div class="log-row">
-              <span style="color:var(--steel); font-size:12px;">${fmtDate(e.date)}</span>
+              <span style="color:var(--color-text-muted); font-size:12px;">${fmtDate(e.date)}</span>
               <div class="flex items-center gap-10">
                 <span class="mono" style="font-size:13px;">${bidiUnit(`${e.value} ס״מ`)}</span>
                 <button data-action="delete-measurement-entry" data-id="${esc(e.id)}" aria-label="מחיקת מדידה" class="icon-btn-sm">${ICONS.trash}</button>
@@ -6011,11 +6292,11 @@ function renderBenchmarkAttemptRow(item, attempt) {
   // rounds+reps pair, a kilo figure) and the run-level isolation rule keeps
   // those bare - see the bidi binding's own comment. The date and effort tag
   // are this file's own strings with no member input in them at all.
-  return `<div data-benchmark-attempt="${esc(attempt.id)}" class="flex items-center justify-between" style="padding:7px 0; border-bottom:1px solid var(--border);">
-    <span style="color:var(--steel); font-size:12px;">${esc(fmtDate(attempt.date))}${esc(wodEffortTag(attempt.effort))}</span>
+  return `<div data-benchmark-attempt="${esc(attempt.id)}" class="flex items-center justify-between" style="padding:7px 0; border-bottom:1px solid var(--color-border);">
+    <span style="color:var(--color-text-muted); font-size:12px;">${esc(fmtDate(attempt.date))}${esc(wodEffortTag(attempt.effort))}</span>
     <span class="flex items-center gap-6">
-      ${isBest ? `<span style="color:var(--brass); font-size:11px; font-weight:700;">שיא</span>` : ""}
-      <span class="mono" style="font-weight:700; font-size:13px; color:${isBest ? "var(--brass)" : "var(--chalk)"};">${bidiUnit(attempt.text)}</span>
+      ${isBest ? `<span style="color:var(--color-accent); font-size:11px; font-weight:700;">שיא</span>` : ""}
+      <span class="mono" style="font-weight:700; font-size:13px; color:${isBest ? "var(--color-accent)" : "var(--color-text)"};">${bidiUnit(attempt.text)}</span>
     </span>
   </div>`;
 }
@@ -6038,10 +6319,15 @@ function renderBenchmarkCard(item) {
     <div class="chart-card" style="margin-top:-4px; border-top-left-radius:0; border-top-right-radius:0; border-top:none;">
       ${item.subtitle ? `<div class="wod-desc" style="margin-bottom:10px;">${bidiText(item.subtitle)}</div>` : ""}
       ${item.retestDue ? `<div class="footer-note" style="margin:0 0 10px; text-align:center;">עברו ${item.daysSince} יום מאז הניסיון האחרון — זה הזמן לבדוק שוב.</div>` : ""}
-      ${item.tracked.length ? renderChart(chartData) : `<div style="color:var(--steel); font-size:13px; text-align:center; padding:18px 0;">אין עדיין תוצאה לבנצ'מרק הזה</div>`}
+      ${item.tracked.length ? renderChart(chartData) : `<div style="color:var(--color-text-muted); font-size:13px; text-align:center; padding:18px 0;">אין עדיין תוצאה לבנצ'מרק הזה</div>`}
       ${item.effort !== null && item.tracked.length < item.all.length
         ? `<div class="footer-note" style="margin-top:10px; text-align:center;">הגרף והשיא מציגים את הניסיונות ב${esc(wodEffortLabel(item.effort))} בלבד — תוצאות בדרגות מאמץ שונות אינן ברות השוואה. כל הניסיונות מופיעים ברשימה למטה.</div>` : ""}
-      ${attempts.length ? `<h3 class="section-label" style="margin-top:14px;">כל הניסיונות</h3>${attempts.map((a) => renderBenchmarkAttemptRow(item, a)).join("")}` : ""}
+      ${(() => {
+        // Rx and scaled are two lists: a scaled result is never a row on the Rx line, and never a failure.
+        const split = BoxLogProgress.splitBenchmarkAttempts(attempts);
+        const list = (title, cls, rows) => rows.length ? `<h3 class="section-label" style="margin-top:14px;"><span class="bench-lvl ${cls}">${title}</span></h3>${rows.map((a) => renderBenchmarkAttemptRow(item, a)).join("")}` : "";
+        return list("Rx", "rx", split.rx) + list("מותאם (Scaled)", "scaled", split.scaled);
+      })()}
       <button class="link-btn" data-action="log-benchmark" data-id="${esc(item.refId)}" style="display:block; margin:12px auto 0;">רישום ניסיון ב-${esc(item.name)}</button>
     </div>
     <div style="height:8px;"></div>`;
@@ -6055,12 +6341,12 @@ function renderBenchmarkRow(item) {
       <div class="flex items-center gap-8">
         <span style="display:inline-flex; transition:transform .2s; transform:rotate(${open ? "90deg" : "180deg"});">${ICONS.chevron}</span>
         <span style="font-weight:700; font-size:14px;">${bidiText(item.name)}</span>
-        ${item.retestDue ? `<span data-benchmark-retest="${esc(item.id)}" style="color:var(--brass); border:1px solid var(--brass); border-radius:999px; padding:1px 7px; font-size:10px; font-weight:700;">לבדיקה מחדש</span>` : ""}
+        ${item.retestDue ? `<span data-benchmark-retest="${esc(item.id)}" style="color:var(--color-accent); border:1px solid var(--color-accent); border-radius:999px; padding:1px 7px; font-size:10px; font-weight:700;">לבדיקה מחדש</span>` : ""}
       </div>
       <span style="text-align:left;">
         ${best
-          ? `<span class="mono" style="display:block; color:var(--brass); font-weight:700; font-size:14px;">${bidiUnit(best)}</span>`
-          : `<span style="display:block; color:var(--steel); font-size:12px;">טרם נוסה</span>`}
+          ? `<span class="mono" style="display:block; color:var(--color-accent); font-weight:700; font-size:14px;">${bidiUnit(best)}</span>`
+          : `<span style="display:block; color:var(--color-text-muted); font-size:12px;">טרם נוסה</span>`}
       </span>
     </button>`;
 }
@@ -6095,11 +6381,131 @@ function benchmarkSectionHtml() {
     ${items.map((item) => renderBenchmarkRow(item) + (benchmarkExpandedId === item.id ? renderBenchmarkCard(item) : "")).join("")}`;
 }
 
+// ---------- Progress: weeks met, PRs, estimated 1RM ----------
+// The numbers come from src/progress.js; this draws them. Every chart here runs
+// right to left (oldest at the right edge), a PR is a ringed dot with a star and
+// the word "שיא", and a quiet stretch is an empty outline, never a warning.
+let progressLiftId = null;
+function weekRingSvg(copy) {
+  const C = 326.73;
+  return `<div class="week-ring" role="img" aria-label="${esc(copy.title + ", " + copy.sub)}">
+      <svg viewBox="0 0 120 120" aria-hidden="true"><circle class="ring-track" cx="60" cy="60" r="52" stroke-width="12"/><circle class="ring-fill" cx="60" cy="60" r="52" stroke-width="12" stroke-dasharray="${C}" stroke-dashoffset="${(C * (1 - copy.fraction)).toFixed(2)}"/></svg>
+      <div class="week-ring-label"><span class="big num">${esc(copy.big)}</span><span class="small">${esc(copy.small)}</span></div>
+    </div>`;
+}
+function currentWeekCopy() {
+  const target = weeklyTargetForRing();
+  const days = typeof window.communityTrainingDays === "function" ? window.communityTrainingDays() : [];
+  return BoxLogProgress.ringCopy(BoxLogProgress.daysInWeek(days, BoxLogProgress.weekStartOf(todayISO())), target);
+}
+function renderWeeksSection() {
+  const target = weeklyTargetForRing();
+  const days = typeof window.communityTrainingDays === "function" ? window.communityTrainingDays() : [];
+  const year = BoxLogProgress.weeksYear(days, target, todayISO());
+  const copy = currentWeekCopy();
+  const squares = year.weeks.map((w) => {
+    const cls = w.before ? "before" : w.met ? "met" : w.count > 0 ? "partial" : "";
+    return `<i class="week-sq ${cls}"${cls === "partial" ? ` style="--fill:${Math.round(w.fraction * 100)}%"` : ""}></i>`;
+  }).join("");
+  const metLabel = year.metCount === 1 ? "שבוע אחד ביעד" : `${year.metCount} שבועות ביעד`;
+  return `<section class="progress-section" aria-labelledby="progWeeks">
+    <div class="progress-head"><h2 class="progress-title" id="progWeeks">שבועות ביעד</h2><span class="progress-note">52 השבועות האחרונים</span></div>
+    <div class="chart-card">
+      <div class="week-card">${weekRingSvg(copy)}
+        <div style="min-width:0;"><div class="moment-week-title">${esc(copy.title)}</div><div class="moment-week-sub">${esc(copy.sub)}</div>
+          <div style="margin-top:10px;font-weight:800;"><bdi class="num">${esc(metLabel)}</bdi></div>
+          <div class="moment-week-sub">${year.bestRun > 0 ? `הרצף הארוך ביותר: <bdi class="num">${year.bestRun}</bdi>` : "כל שבוע ביעד נספר, ושום דבר לא מתאפס"}</div></div>
+      </div>
+      <div class="weeks-grid" role="img" aria-label="${esc(`${metLabel} מתוך 52 השבועות האחרונים. מימין לשמאל: מהישן לחדש.`)}" style="margin-top:14px;">${squares}</div>
+      <div class="chart-legend"><span><i class="lg-line"></i>שבוע ביעד</span><span><i class="lg-neutral" style="opacity:.55"></i>חלקי</span><span><i style="border:1.5px solid var(--color-border-strong);border-radius:2px;"></i>שבוע ריק</span></div>
+    </div></section>`;
+}
+function prItems() {
+  const items = [];
+  for (const id of recentLiftIds(200)) {
+    const prs = BoxLogProgress.repMaxPrs(entriesFor(id), { minPrior: MIN_ENTRIES_BEFORE_PR });
+    if (!prs.length) continue;
+    const m = movementById(id);
+    items.push({ id, name: m ? m.name : id, pr: prs[prs.length - 1], count: prs.length });
+  }
+  return items.sort((a, b) => b.pr.date.localeCompare(a.pr.date) || b.pr.ts - a.pr.ts);
+}
+function renderPrSection() {
+  const items = prItems().slice(0, 6);
+  const rows = items.map((it) => `<button class="pr-item" data-action="progress-lift" data-id="${esc(it.id)}" style="width:100%;text-align:start;">
+      <span class="pr-item-main"><span class="pr-item-name">${bidiText(it.name)}</span>
+        <span class="pr-item-meta">${momentSet(it.pr.weight, it.pr.reps)} · ${esc(fmtDate(it.pr.date))}</span></span>
+      <span style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;"><span class="pr-badge">${MOMENT_STAR}<span>שיא</span></span><span class="pr-pct"><bdi class="num">+${esc(String(it.pr.pct))}%</bdi></span></span>
+    </button>`).join("");
+  return `<section class="progress-section" aria-labelledby="progPrs">
+    <div class="progress-head"><h2 class="progress-title" id="progPrs">שיאים</h2><span class="progress-note">אחוז שיפור לעומת השיא הקודם באותו מספר חזרות</span></div>
+    ${rows ? `<div class="pr-list">${rows}</div>` : `<div class="day-empty">עוד אין שיאים. הם מופיעים אחרי כמה אימונים באותו תרגיל.</div>`}
+  </section>`;
+}
+function e1rmChartSvg(series, prDates, name) {
+  const w = 320, h = 190, padT = 22, padB = 28, padL = 14, padR = 46;
+  const plotW = w - padL - padR, plotH = h - padT - padB;
+  const t = (d) => Date.parse(d + "T00:00:00Z");
+  const t0 = t(series[0].date), t1 = t(series[series.length - 1].date);
+  const vals = series.map((p) => p.e1rm);
+  let lo = Math.min(...vals), hi = Math.max(...vals);
+  const pad = Math.max(2, (hi - lo) * 0.15); lo -= pad; hi += pad;
+  const x = (d) => (t1 === t0 ? padL + plotW / 2 : w - padR - ((t(d) - t0) / (t1 - t0)) * plotW);
+  const y = (v) => padT + plotH - ((v - lo) / (hi - lo)) * plotH;
+  const grid = [lo + (hi - lo) * 0.1, (lo + hi) / 2, hi - (hi - lo) * 0.1].map((v) => `<line class="grid" x1="${padL}" x2="${w - padR}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}"/><text x="${w - padR + 8}" y="${(y(v) + 4).toFixed(1)}" text-anchor="start" direction="ltr">${Math.round(v)}</text>`).join("");
+  const path = series.map((p) => `${x(p.date).toFixed(1)},${y(p.e1rm).toFixed(1)}`).join(" ");
+  const pts = series.map((p) => {
+    const isPr = prDates.has(p.date);
+    const cx = x(p.date).toFixed(1), cy = y(p.e1rm).toFixed(1);
+    if (isPr) return `<circle class="pt-pr" cx="${cx}" cy="${cy}" r="6.5"/><text class="pr-label" x="${cx}" y="${(y(p.e1rm) - 12).toFixed(1)}" text-anchor="middle">★ שיא</text>`;
+    return `<circle class="pt${p.real ? " real" : ""}" cx="${cx}" cy="${cy}" r="${p.real ? 4 : 3.5}"/>`;
+  }).join("");
+  const first = series[0], last = series[series.length - 1];
+  const label = `הערכת 1RM ב${name}: ${series.length} נקודות בין ${fmtDate(first.date)} (${first.e1rm} ק״ג) ל-${fmtDate(last.date)} (${last.e1rm} ק״ג)${prDates.size ? `, כולל ${prDates.size === 1 ? "שיא אחד" : prDates.size + " שיאים"}` : ""}. מימין לשמאל: מהישן לחדש.`;
+  return `<svg class="chart-svg" viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(label)}">${grid}
+    <polyline class="line" points="${path}"/>${pts}
+    <text x="${w - padR}" y="${h - 8}" text-anchor="end">${esc(fmtDate(first.date))}</text><text x="${padL}" y="${h - 8}" text-anchor="start">${esc(fmtDate(last.date))}</text></svg>`;
+}
+function renderE1rmSection() {
+  const lifts = recentLiftIds(200).map((id) => ({ id, series: BoxLogProgress.e1rmSeries(entriesFor(id)) })).filter((l) => l.series.length >= 2);
+  const head = `<div class="progress-head"><h2 class="progress-title" id="progE1rm">1RM משוער</h2><span class="progress-note">רק מסטים של עד ${BoxLogProgress.E1RM_MAX_REPS} חזרות</span></div>`;
+  if (!lifts.length) return `<section class="progress-section" aria-labelledby="progE1rm">${head}<div class="day-empty">המגמה מופיעה אחרי שתי נקודות באותו תרגיל, בסטים של עד ${BoxLogProgress.E1RM_MAX_REPS} חזרות.</div></section>`;
+  const cur = lifts.find((l) => l.id === progressLiftId) || lifts[0];
+  const m = movementById(cur.id);
+  const name = m ? m.name : cur.id;
+  const prDates = new Set(BoxLogProgress.repMaxPrs(entriesFor(cur.id), { minPrior: MIN_ENTRIES_BEFORE_PR }).map((p) => p.date));
+  const first = cur.series[0], last = cur.series[cur.series.length - 1];
+  const pct = BoxLogProgress.percentImprovement(first.e1rm, last.e1rm);
+  const chips = lifts.map((l) => { const mm = movementById(l.id); return `<button type="button" class="chip-btn${l.id === cur.id ? " selected" : ""}" data-action="progress-lift" data-id="${esc(l.id)}" aria-pressed="${l.id === cur.id}">${bidiText(mm ? mm.name : l.id)}</button>`; }).join("");
+  return `<section class="progress-section" aria-labelledby="progE1rm">${head}
+    <div class="chip-row" role="group" aria-label="בחירת תרגיל" style="margin:0 0 10px;flex-wrap:nowrap;overflow-x:auto;">${chips}</div>
+    <div class="chart-card e1rm-card">
+      <div class="e1rm-top"><div><div class="stat-label">${bidiText(name)}</div><div class="e1rm-value num"><bdi>${esc(String(last.e1rm))} ק״ג</bdi></div></div>
+        <div style="text-align:end;"><div class="stat-label">מאז ${esc(fmtDate(first.date))}</div><div class="${pct > 0 ? "delta up" : "delta flat"}">${pct > 0 ? `<span aria-hidden="true">▲</span> <bdi class="num">+${esc(String(pct))}%</bdi>` : "ללא שינוי"}</div></div></div>
+      ${e1rmChartSvg(cur.series, prDates, name)}
+      <div class="chart-legend"><span><i class="lg-line" style="background:none;border:2px solid var(--chart-line);"></i>הערכה</span><span><i class="lg-line"></i>מבחן 1RM</span><span><i class="lg-pr"></i>★ שיא</span></div>
+      <div class="progress-note" style="margin-top:8px;">הערכה בלבד. מימין לשמאל: מהישן לחדש.</div>
+    </div></section>`;
+}
+function renderProgressOverview() {
+  if (!entries.length && !wodEntries.length) return "";
+  return renderWeeksSection() + renderPrSection() + renderE1rmSection();
+}
+
+// What Home shows besides the week: the way back into logging and the latest PR.
+window.homeSummary = function () {
+  const last = entries[0];
+  const m = last && movementById(last.exerciseId);
+  const pr = prItems()[0] || null;
+  return {
+    last: last && m ? { name: m.name, text: formatLiftedSet(last), date: last.date } : null,
+    pr: pr ? { name: pr.name, text: pr.pr.weight > 0 ? `${pr.pr.weight} ק״ג × ${pr.pr.reps}` : `${pr.pr.reps} חזרות`, pct: pr.pr.pct } : null,
+  };
+};
 function renderHistoryTab() {
   const now = new Date();
   const monthPrefix = localISODate(now).slice(0, 7);
-  const celebratablePrIds = celebratablePrEntryIds();
-  const prCountThisMonth = entries.filter((e) => celebratablePrIds.has(e.id) && e.date.startsWith(monthPrefix)).length;
+  const prCountThisMonth = prItems().reduce((n, it) => n + BoxLogProgress.repMaxPrs(entriesFor(it.id), { minPrior: MIN_ENTRIES_BEFORE_PR }).filter((p) => p.date.startsWith(monthPrefix)).length, 0);
   const start = new Date(now); start.setDate(now.getDate() - now.getDay());
   const startISO = localISODate(start);
   const sessionsThisWeek = new Set(entries.filter((e) => e.date >= startISO).map((e) => e.date)).size;
@@ -6107,25 +6513,24 @@ function renderHistoryTab() {
 
   return `
     <section class="scene-page ${PAGE_SCENES.history.className}" aria-labelledby="pageTitle-history">
-      <div class="scene-page__media" aria-hidden="true"></div>
-      <div class="scene-page__scrim" aria-hidden="true"></div>
       <div class="scene-page__intro">
-        <div class="scene-page__brand">${esc(brandWordmark())}</div>
         <h1 id="pageTitle-history" class="scene-page__title">התקדמות</h1>
       </div>
       <div class="scene-sheet">
-    <div class="stripe-ribbon" aria-hidden="true"></div>
-    ${!storageOK ? `<div class="footer-note" style="color:var(--red-text); background:rgba(216,69,60,.1); border:1px solid var(--red); border-radius:12px; padding:10px 14px; margin-bottom:12px;" role="alert">${esc(storageErrMsg)}</div>` : ""}
+
+    ${!storageOK ? `<div class="footer-note" style="color:var(--color-danger); background:color-mix(in srgb, var(--color-danger) 10%, var(--color-surface)); border:1px solid var(--color-danger); border-radius:12px; padding:10px 14px; margin-bottom:12px;" role="alert">${esc(storageErrMsg)}</div>` : ""}
     <div class="stat-row">
-      <div class="stat-card stat-hero" style="text-align:center;"><div class="stat-value mono" style="color:var(--brass); font-size:20px;">${prCountThisMonth}</div><div class="stat-label">שיאים החודש</div></div>
+      <div class="stat-card stat-hero" style="text-align:center;"><div class="stat-value mono" style="color:var(--color-accent); font-size:20px;">${prCountThisMonth}</div><div class="stat-label">שיאים החודש</div></div>
       <div class="stat-card" style="text-align:center;"><div class="stat-value mono" style="font-size:20px;">${sessionsThisWeek}</div><div class="stat-label">אימונים השבוע</div></div>
       <div class="stat-card" style="text-align:center;"><div class="stat-value mono" style="font-size:20px;">${totalSetsLogged}</div><div class="stat-label">סטים שנרשמו</div></div>
     </div>
 
+    ${renderProgressOverview()}
+
     ${activeExercises().length > 0 ? `
     <h2 class="section-label">שיאים כלל-זמנים</h2>
     <div class="search-box" style="margin:0 0 12px;">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--steel)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
       <input id="historySearch" dir="auto" placeholder="חיפוש בתרגילים שלך" aria-label="חיפוש בתרגילים שלך" value="${esc(historySearch)}" />
     </div>` : ""}
 
@@ -6188,7 +6593,7 @@ function renderSettingsBody() {
 
       <div class="settings-block">
         <div class="settings-block-title">מראה</div>
-        ${renderThemeRow()}
+        ${renderAppearanceSection()}
         ${renderTextScaleRow()}
       </div>
 
@@ -6203,7 +6608,7 @@ function renderSettingsBody() {
         <div class="settings-block-title">עזרה והתאמה</div>
         <button class="exercise-row" data-action="open-onboarding" style="margin-bottom:8px;">
           <span style="font-weight:700; font-size:13.5px;">סיור באפליקציה</span>
-          <span style="color:var(--steel); flex-shrink:0;">${ICONS.chevronsLeft}</span>
+          <span style="color:var(--color-text-muted); flex-shrink:0;">${ICONS.chevronsLeft}</span>
         </button>
         <!-- Fresh-eyes audit: this used to be the header's always-visible
              icon, which meant the least exciting thing in the app (a
@@ -6213,19 +6618,19 @@ function renderSettingsBody() {
              one slot every screen shares. -->
         <button class="exercise-row" data-action="open-release-notes" style="margin-bottom:8px;">
           <span style="font-weight:700; font-size:13.5px;">מה חדש באפליקציה</span>
-          <span class="flex items-center gap-6" style="flex-shrink:0;">${unseenReleaseNotes().length ? `<span class="tab-badge" aria-hidden="true">${unseenReleaseNotes().length}</span>` : ""}<span style="color:var(--steel);">${ICONS.chevronsLeft}</span></span>
+          <span class="flex items-center gap-6" style="flex-shrink:0;">${unseenReleaseNotes().length ? `<span class="tab-badge" aria-hidden="true">${unseenReleaseNotes().length}</span>` : ""}<span style="color:var(--color-text-muted);">${ICONS.chevronsLeft}</span></span>
         </button>
         ${isStandalone() ? "" : `
         <button class="exercise-row" data-action="show-install-hint" style="margin-bottom:8px;">
           <span style="font-weight:700; font-size:13.5px;">התקנה במסך הבית</span>
-          <span style="color:var(--steel); flex-shrink:0;">${ICONS.chevronsLeft}</span>
+          <span style="color:var(--color-text-muted); flex-shrink:0;">${ICONS.chevronsLeft}</span>
         </button>`}
         <button class="exercise-row" data-action="edit-box-start-date" style="margin-bottom:8px;">
           <div style="text-align:right;">
             <div style="font-weight:700; font-size:13.5px;">מתי התחלתי להתאמן</div>
-            <div style="color:var(--steel); font-size:12px; margin-top:2px;">${boxStartDate ? esc(fmtDate(boxStartDate)) : "לא הוגדר — פותח את מדליות הוותק"}</div>
+            <div style="color:var(--color-text-muted); font-size:12px; margin-top:2px;">${boxStartDate ? esc(fmtDate(boxStartDate)) : "לא הוגדר — פותח את מדליות הוותק"}</div>
           </div>
-          <span style="color:var(--steel); flex-shrink:0;">${ICONS.chevronsLeft}</span>
+          <span style="color:var(--color-text-muted); flex-shrink:0;">${ICONS.chevronsLeft}</span>
         </button>
         <!-- Real device report, 2026-09-15. Until this row existed the app
              had no route at all for "this is broken" or "I need help" - the
@@ -6237,9 +6642,9 @@ function renderSettingsBody() {
         <button class="exercise-row" data-action="open-support" style="margin-bottom:0;">
           <div style="text-align:right;">
             <div style="font-weight:700; font-size:13.5px;">תמיכה ודיווח על תקלה</div>
-            <div style="color:var(--steel); font-size:12px; margin-top:2px;">משהו לא עובד? ספרו לנו</div>
+            <div style="color:var(--color-text-muted); font-size:12px; margin-top:2px;">משהו לא עובד? ספרו לנו</div>
           </div>
-          <span style="color:var(--steel); flex-shrink:0;">${ICONS.chevronsLeft}</span>
+          <span style="color:var(--color-text-muted); flex-shrink:0;">${ICONS.chevronsLeft}</span>
         </button>
       </div>
 
@@ -6255,14 +6660,14 @@ function renderSettingsBody() {
              each other. This half is a file you download and keep yourself,
              and the title now says so. The cloud half is cloud.js's to word. -->
         <div class="settings-block-title">קובץ גיבוי להורדה</div>
-        <div class="footer-note"${storageOK ? "" : ' style="color:var(--red-text);" role="alert"'}>${storageOK ? esc(typeof cloudStorageStatusText === "function" ? cloudStorageStatusText() : "נשמר במכשיר הזה בלבד, ללא שרת") : esc(storageErrMsg || "שמירה נכשלה — בדקו את מקום האחסון")}</div>
+        <div class="footer-note"${storageOK ? "" : ' style="color:var(--color-danger);" role="alert"'}>${storageOK ? esc(typeof cloudStorageStatusText === "function" ? cloudStorageStatusText() : "נשמר במכשיר הזה בלבד, ללא שרת") : esc(storageErrMsg || "שמירה נכשלה — בדקו את מקום האחסון")}</div>
         ${staleBackupNote}
         <div class="flex items-center justify-center gap-10" style="margin-bottom:8px; flex-wrap:wrap;">
           <button class="link-btn" data-action="export-data">ייצוא גיבוי</button>
-          <span style="color:var(--border); font-size:11px;">·</span>
+          <span style="color:var(--color-border); font-size:11px;">·</span>
           <button class="link-btn" data-action="import-data">ייבוא גיבוי</button>
         </div>
-        ${importMessage ? `<div class="footer-note" role="status" aria-live="polite" style="color:var(--brass); margin-bottom:8px;">${esc(importMessage)}</div>` : ""}
+        ${importMessage ? `<div class="footer-note" role="status" aria-live="polite" style="color:var(--color-accent); margin-bottom:8px;">${esc(importMessage)}</div>` : ""}
         <div class="footer-note" style="margin-bottom:0;">קובץ הגיבוי הוא טקסט פשוט (JSON) וכולל את יומן האימונים המלא, התרגילים והאימונים שהוספתם, משקל גוף ומדידות — בלי השם שלכם ובלי הגדרות. הוא יורד לתיקיית ההורדות של המכשיר ונשאר שם: במכשיר משותף כל מי שמשתמש בו יכול לפתוח אותו. שמרו אותו במקום בטוח, ומחקו אותו מההורדות אם אינכם צריכים אותו שם</div>
       </div>
 
@@ -6274,7 +6679,7 @@ function renderSettingsBody() {
 
       <div class="settings-block">
         <!-- Design spec §4.4. The title here was "אזור מסוכן", a calque of
-             the developer idiom "danger zone", printed in var(--red-text).
+             the developer idiom "danger zone", printed in var(--color-danger).
              The beginner persona read it as the app reporting a fault with
              her PHONE, not as a heading over a control to approach slowly:
              a red warning that fires before she has touched anything is
@@ -6296,7 +6701,7 @@ function renderSettingsBody() {
           ? `<div style="text-align:center;"><button class="chip-btn danger" data-action="ask-clear">מחיקת כל הנתונים</button></div>`
           : `
           <div class="flex items-center justify-center gap-10">
-            <span style="color:var(--steel); font-size:11px;">למחוק את הכל מהמכשיר הזה?</span>
+            <span style="color:var(--color-text-muted); font-size:11px;">למחוק את הכל מהמכשיר הזה?</span>
             <button class="chip-btn primary danger" data-action="do-clear">כן, מחיקה</button>
             <button class="chip-btn" data-action="cancel-clear">ביטול</button>
           </div>`}
@@ -6541,6 +6946,7 @@ function render() {
   window.haimuniaActiveTab = tab;
   try {
     if (tab === "add") {
+      startLogFromLastLift();
       const selected = movementById(selectedId);
       content = renderLogTab();
       // COMM-360: only name the save action once a movement is actually
@@ -6578,7 +6984,6 @@ function render() {
       // the signed-in feed, without changing their forms or auth flow.
       if (!content.includes('class="scene-page ')) {
         content = `<section class="scene-page ${PAGE_SCENES.community.className}" aria-labelledby="pageTitle-community">
-          <div class="scene-page__media" aria-hidden="true"></div><div class="scene-page__scrim" aria-hidden="true"></div>
           <div class="scene-page__intro"><h1 id="pageTitle-community" class="scene-page__title">מעגל</h1></div>
           <div class="scene-sheet">${content}</div></section>`;
       }
@@ -6593,8 +6998,8 @@ function render() {
     // still gets the full detail for debugging; the screen gets a plain,
     // non-revealing line instead.
     content = `<div style="padding:40px 16px; text-align:center;">
-      <div style="color:var(--red-text); font-weight:700; margin-bottom:8px;">משהו השתבש בהצגת הטאב הזה</div>
-      <div style="color:var(--steel); font-size:12px;">אפשר לנסות לרענן את האפליקציה או לעבור לטאב אחר.</div>
+      <div style="color:var(--color-danger); font-weight:700; margin-bottom:8px;">משהו השתבש בהצגת הטאב הזה</div>
+      <div style="color:var(--color-text-muted); font-size:12px;">אפשר לנסות לרענן את האפליקציה או לעבור לטאב אחר.</div>
     </div>`;
   }
   const navMenuListEl = document.getElementById("navMenuList");
@@ -6844,12 +7249,12 @@ function renderWodLogSection() {
   // the picker.
   if (!w) return `
     <div class="flex col items-center" style="padding:32px 20px; gap:10px; text-align:center;">
-      <span style="display:inline-flex; width:28px; height:28px; color:var(--steel);">${ICONS.stopwatchIcon}</span>
-      <h2 style="font-size:15px; font-weight:700; color:var(--chalk);">בחרו אימון ונרשום אותו</h2>
-      <div style="font-size:13px; color:var(--steel);">אימונים מוכרים, או אימון משלכם.</div>
+      <span style="display:inline-flex; width:28px; height:28px; color:var(--color-text-muted);">${ICONS.stopwatchIcon}</span>
+      <h2 style="font-size:15px; font-weight:700; color:var(--color-text);">בחרו אימון ונרשום אותו</h2>
+      <div style="font-size:13px; color:var(--color-text-muted);">אימונים מוכרים, או אימון משלכם.</div>
       <button class="exercise-select" data-action="open-wod-picker" style="width:100%; min-height:56px; margin-top:4px;">
         <span style="font-weight:800; font-size:16px;">בחירת אימון</span>
-        <span class="flex items-center gap-6" style="color:var(--steel); font-size:12px; font-weight:600;">${ICONS.chevronsLeft}</span>
+        <span class="flex items-center gap-6" style="color:var(--color-text-muted); font-size:12px; font-weight:600;">${ICONS.chevronsLeft}</span>
       </button>
       <button class="link-btn" data-action="open-wod-builder" data-name="" style="min-height:44px;">יצירת אימון משלי</button>
     </div>`;
@@ -6884,7 +7289,7 @@ function renderWodLogSection() {
     // A rest station gets a label and no stepper; a timed station steps in
     // seconds. Its target weight, when it has one, goes in the label.
     inputsHtml = `
-    <div style="color:var(--steel); font-size:11px; font-weight:700; letter-spacing:.5px; margin-bottom:6px;">EMOM ${w.emomMinutes} — לפי תרגיל, לכל סבב</div>
+    <div style="color:var(--color-text-muted); font-size:11px; font-weight:700; letter-spacing:.5px; margin-bottom:6px;">EMOM ${w.emomMinutes} — לפי תרגיל, לכל סבב</div>
     <div class="steppers">
       ${w.emomMovements.map((name, i) => {
         const type = w.emomMovementTypes?.[i] || "reps";
@@ -6904,9 +7309,9 @@ function renderWodLogSection() {
   return `
     <h2 class="sr-only">רישום תוצאת אימון</h2>
     ${editingWodEntryId ? `
-    <div style="background:rgba(232,185,138,.12); border:1px solid var(--brass); border-radius:12px; padding:10px 14px; margin-bottom:12px; display:flex; align-items:center; justify-content:space-between;">
-      <span style="color:var(--brass); font-weight:700; font-size:13px;">עריכת אימון קיים</span>
-      <button data-action="cancel-edit-wod-entry" style="color:var(--steel); font-size:12px; text-decoration:underline;">ביטול</button>
+    <div style="background:var(--color-accent-soft); border:1px solid var(--color-accent); border-radius:12px; padding:10px 14px; margin-bottom:12px; display:flex; align-items:center; justify-content:space-between;">
+      <span style="color:var(--color-accent); font-weight:700; font-size:13px;">עריכת אימון קיים</span>
+      <button data-action="cancel-edit-wod-entry" style="color:var(--color-text-muted); font-size:12px; text-decoration:underline;">ביטול</button>
     </div>` : ""}
 
     <button class="exercise-select" data-action="open-wod-picker">
@@ -6915,24 +7320,24 @@ function renderWodLogSection() {
         <div>
           <span style="font-weight:800; font-size:16px;">${bidiText(w.name)}</span>
           ${w.desc ? `<div class="wod-desc">${bidiText(w.desc)}</div>` : ""}
-          ${w.timeCapSeconds ? `<div class="wod-desc" style="color:var(--brass);">מגבלת זמן: ${formatClock(w.timeCapSeconds)}</div>` : ""}
+          ${w.timeCapSeconds ? `<div class="wod-desc" style="color:var(--color-accent);">מגבלת זמן: ${formatClock(w.timeCapSeconds)}</div>` : ""}
         </div>
       </div>
-      <span class="flex items-center gap-6" style="color:var(--steel); font-size:12px; font-weight:600;">שינוי${ICONS.chevronsLeft}</span>
+      <span class="flex items-center gap-6" style="color:var(--color-text-muted); font-size:12px; font-weight:600;">שינוי${ICONS.chevronsLeft}</span>
     </button>
 
     <div class="flex items-center gap-8" style="margin-bottom:12px;">
-      <input type="date" id="wodLogDateInput" value="${esc(wodLogDate)}" max="${todayISO()}" aria-label="תאריך רישום האימון" style="flex:1; min-width:0; background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:12px 14px; color:var(--chalk); font-size:14px; font-weight:700; font-family:inherit;" />
+      <input type="date" id="wodLogDateInput" value="${esc(wodLogDate)}" max="${todayISO()}" aria-label="תאריך רישום האימון" style="flex:1; min-width:0; background:var(--color-surface); border:1px solid var(--color-border); border-radius:14px; padding:12px 14px; color:var(--color-text); font-size:14px; font-weight:700; font-family:inherit;" />
       ${wodLogDate !== todayISO() ? `<button data-action="reset-wod-log-date" class="reset-date-btn">היום</button>` : ""}
     </div>
 
     ${history.length > 0 ? `
-    <div style="background:rgba(232,185,138,.12); border:1px solid var(--brass); border-radius:14px; padding:12px 14px; margin-bottom:16px;">
-      <div style="color:var(--brass); font-weight:800; font-size:13px; margin-bottom:8px;">↺ עשית את זה ${history.length === 1 ? "פעם אחת" : `${history.length} פעמים`} בעבר — השוואה למטה</div>
+    <div style="background:var(--color-accent-soft); border:1px solid var(--color-accent); border-radius:14px; padding:12px 14px; margin-bottom:16px;">
+      <div style="color:var(--color-accent); font-weight:800; font-size:13px; margin-bottom:8px;">↺ עשית את זה ${history.length === 1 ? "פעם אחת" : `${history.length} פעמים`} בעבר — השוואה למטה</div>
       <div class="flex items-center justify-between">
         <div>
           <div class="stat-label">שיא</div>
-          <div class="mono" style="color:var(--brass); font-weight:800; font-size:16px;">${bidiUnit(best)}</div>
+          <div class="mono" style="color:var(--color-accent); font-weight:800; font-size:16px;">${bidiUnit(best)}</div>
         </div>
         <div style="text-align:left;">
           <div class="stat-label">אחרון (${fmtDate(history[0].date)})</div>
@@ -6941,7 +7346,7 @@ function renderWodLogSection() {
       </div>
     </div>` : `
     <div class="stat-row">
-      <div class="stat-card"><div class="stat-label">שיא</div><div class="stat-value mono" style="color:var(--brass);">${best}</div></div>
+      <div class="stat-card"><div class="stat-label">שיא</div><div class="stat-value mono" style="color:var(--color-accent);">${best}</div></div>
       <div class="stat-card"><div class="stat-label">איך מודדים</div><div class="stat-value" style="font-size:14px;">${esc(SCORE_TYPE_LABELS[w.scoreType] || "")}<span class="term-sub">${esc(SCORE_TYPE_GLOSS[w.scoreType] || "")}</span></div></div>
     </div>`}
 
@@ -6950,14 +7355,14 @@ function renderWodLogSection() {
       if (recent.length === 0) return "";
       return `
       <div style="margin-bottom:16px;">
-        <div style="color:var(--steel); font-size:11px; font-weight:700; letter-spacing:.5px; margin-bottom:6px;">ב-14 הימים האחרונים</div>
+        <div style="color:var(--color-text-muted); font-size:11px; font-weight:700; letter-spacing:.5px; margin-bottom:6px;">ב-14 הימים האחרונים</div>
         <div class="flex wrap gap-8">
-          ${recent.map((e) => `<span class="mono" style="background:var(--surface2); border-radius:10px; padding:6px 10px; font-size:12.5px; font-weight:700; color:var(--steel);">${bidiUnitHtml(`${esc(fmtDate(e.date))}: <span style="color:var(--chalk);">${esc(formatWodEntry(e))}</span>${esc(wodEffortTag(e.rx))}`)}</span>`).join("")}
+          ${recent.map((e) => `<span class="mono" style="background:var(--color-surface-sunken); border-radius:10px; padding:6px 10px; font-size:12.5px; font-weight:700; color:var(--color-text-muted);">${bidiUnitHtml(`${esc(fmtDate(e.date))}: <span style="color:var(--color-text);">${esc(formatWodEntry(e))}</span>${esc(wodEffortTag(e.rx))}`)}</span>`).join("")}
         </div>
       </div>`;
     })()}
 
-    <div id="wodFlashBox" class="flex items-center justify-center" style="display:none; gap:6px; color:#fff; font-weight:800; font-size:14px; background-image:var(--stripe); border-radius:14px; padding:10px 0; margin-bottom:16px; text-shadow:0 1px 3px rgba(0,0,0,.5);">${ICONS.flame}<span data-wod-flash-label>שיא חדש!</span></div>
+    <div id="wodFlashBox" class="flex items-center justify-center" style="display:none; gap:6px; color:var(--color-on-pr); font-weight:800; font-size:14px; background:var(--color-pr-fill); border:2px solid var(--color-pr); border-radius:14px; padding:10px 0; margin-bottom:16px;">${ICONS.flame}<span data-wod-flash-label>שיא חדש!</span></div>
 
     <!-- Design spec §3.6. Hebrew-first with the English kept in parentheses,
          so Rx and Scaled stay LEARNABLE rather than disappearing - the member
@@ -6971,13 +7376,13 @@ function renderWodLogSection() {
          unmade choice must not look like a made one, which is precisely how
          the old pre-selected Rx read. All of this CSS already shipped in
          index.html and was inert until these labels existed. -->
-    <div style="color:var(--chalk); font-weight:700; font-size:13px; margin-bottom:6px;">איך ביצעתם את האימון?</div>
+    <div style="color:var(--color-text); font-weight:700; font-size:13px; margin-bottom:6px;">איך ביצעתם את האימון?</div>
     <div class="rx-toggle ${wodRx === null ? "unset" : ""}" role="radiogroup" aria-label="איך ביצעתם את האימון">
       <button class="rx-btn ${wodRx === true ? "active-rx" : ""}" data-action="set-rx" data-rx="1" role="radio" aria-checked="${wodRx === true}">מלא (Rx)<span class="term-sub">בדיוק כפי שנכתב</span></button>
       <button class="rx-btn ${wodRx === false ? "active-scaled" : ""}" data-action="set-rx" data-rx="0" role="radio" aria-checked="${wodRx === false}">מותאם (Scaled)<span class="term-sub">במשקלים שמתאימים לי</span></button>
       <button class="rx-btn ${wodRx === WOD_EFFORT_PLUS ? "active-plus" : ""}" data-action="set-rx" data-rx="plus" role="radio" aria-checked="${wodRx === WOD_EFFORT_PLUS}">מוגבר (Rx+)<span class="term-sub">כבד מהמוגדר</span></button>
     </div>
-    ${wodRx === null ? `<div class="footer-note" role="status" style="color:var(--brass); margin-top:-10px; margin-bottom:16px;">בחרו איך ביצעתם את האימון</div>` : ""}
+    ${wodRx === null ? `<div class="footer-note" role="status" style="color:var(--color-accent); margin-top:-10px; margin-bottom:16px;">בחרו איך ביצעתם את האימון</div>` : ""}
 
     <input id="wodPartnerTagInput" class="text-input" dir="auto" maxlength="${LIMITS.partnerTag}" style="margin-bottom:16px;" placeholder="עם פרטנר? (אופציונלי, לדוגמה עם דנה)" aria-label="שם הפרטנר (אופציונלי)" value="${esc(wodPartnerTag)}" />
 
@@ -6987,7 +7392,7 @@ function renderWodLogSection() {
     </div>
     <input id="wodNotesInput" class="text-input" dir="auto" style="margin-bottom:8px;" placeholder="שינוי בתרגיל? (אופציונלי, לדוגמה מתח עם רצועה)" aria-label="שינוי בתרגיל (אופציונלי)" value="${esc(wodNotes)}" />
     <div class="flex items-center justify-between" style="margin-bottom:16px;">
-      ${lastScaled ? `<button data-action="copy-last-scaled" style="color:var(--steel); font-size:12px; text-align:right;">↺ בפעם הקודמת: ${lastScaled.notes ? bidiText(lastScaled.notes) + " — " : ""}${formatWodEntry(lastScaled)}</button>` : `<span style="color:var(--steel); font-size:12px;">פעם ראשונה שמתאימים את זה</span>`}
+      ${lastScaled ? `<button data-action="copy-last-scaled" style="color:var(--color-text-muted); font-size:12px; text-align:right;">↺ בפעם הקודמת: ${lastScaled.notes ? bidiText(lastScaled.notes) + " — " : ""}${formatWodEntry(lastScaled)}</button>` : `<span style="color:var(--color-text-muted); font-size:12px;">פעם ראשונה שמתאימים את זה</span>`}
     </div>` : ""}
 
     ${inputsHtml}
@@ -6999,10 +7404,10 @@ function renderWodLogSection() {
         ${dayWods[0].isPR ? ICONS.flame : ""}
         <div style="text-align:right;">
           <div style="font-weight:700; font-size:13px;">אחרון: ${bidiText(wodById(dayWods[0].wodId) ? wodById(dayWods[0].wodId).name : "?")} — ${formatWodEntry(dayWods[0])} (${wodEffortLabel(dayWods[0].rx)})</div>
-          <div style="color:var(--steel); font-size:11px;">${dayWods.length} אימון${dayWods.length === 1 ? "" : "ים"} נרשמו ${isToday ? "היום" : `ב-${esc(dayLabel)}`}</div>
+          <div style="color:var(--color-text-muted); font-size:11px;">${dayWods.length} אימון${dayWods.length === 1 ? "" : "ים"} נרשמו ${isToday ? "היום" : `ב-${esc(dayLabel)}`}</div>
         </div>
       </div>
-      <span class="flex items-center gap-6" style="color:var(--steel); font-size:12px; font-weight:600;">צפייה ביום${ICONS.chevronsLeft}</span>
+      <span class="flex items-center gap-6" style="color:var(--color-text-muted); font-size:12px; font-weight:600;">צפייה ביום${ICONS.chevronsLeft}</span>
     </button>`}
   `;
 }
@@ -7052,7 +7457,7 @@ function renderWodDetailCard(w) {
     <div class="chart-card" style="margin-top:-4px; border-top-left-radius:0; border-top-right-radius:0; border-top:none;">
       <div class="flex items-center justify-between" style="margin-bottom:12px;">
         <span style="font-weight:800; font-size:15px;">${bidiText(w.name)}</span>
-        ${isEmom ? "" : `<span class="mono" style="color:var(--brass); font-weight:700; font-size:13px;">${bidiUnit(`שיא: ${formatWodBest(w.id)}`)}</span>`}
+        ${isEmom ? "" : `<span class="mono" style="color:var(--color-accent); font-weight:700; font-size:13px;">${bidiUnit(`שיא: ${formatWodBest(w.id)}`)}</span>`}
       </div>
       ${chartHtml}
       <div class="log-list" style="margin-top:12px;">
@@ -7061,15 +7466,15 @@ function renderWodDetailCard(w) {
             <div class="flex items-center justify-between" style="width:100%;">
               <div class="flex items-center gap-8">
                 ${e.isPR ? ICONS.flame : ""}
-                <span style="color:var(--steel); font-size:12px;">${fmtDate(e.date)}</span>
-                <span style="color:var(--steel); font-size:11px;">${wodEffortLabel(e.rx)}${e.partnerTag ? ` · ${bidiText(e.partnerTag)}` : ""}</span>
+                <span style="color:var(--color-text-muted); font-size:12px;">${fmtDate(e.date)}</span>
+                <span style="color:var(--color-text-muted); font-size:11px;">${wodEffortLabel(e.rx)}${e.partnerTag ? ` · ${bidiText(e.partnerTag)}` : ""}</span>
               </div>
               <span class="flex items-center gap-6">
                 <span class="mono" style="font-size:13px;">${bidiUnit(formatWodEntry(e))}</span>
                 ${typeof window.renderShareControl === "function" ? window.renderShareControl("wod_entry", e.id) : ""}
               </span>
             </div>
-            ${e.notes ? `<div style="color:var(--steel); font-size:12px;">${bidiText(e.notes)}</div>` : ""}
+            ${e.notes ? `<div style="color:var(--color-text-muted); font-size:12px;">${bidiText(e.notes)}</div>` : ""}
           </div>`).join("")}
       </div>
     </div>`;
@@ -7091,11 +7496,11 @@ function renderWodHistoryListArea() {
     // Its twin on the progress tab (renderHistoryListArea, "רשמו סט כדי
     // להתחיל לראות התקדמות") is deliberately NOT changed: that screen really
     // is about progress, and there the sentence is correct.
-    area.innerHTML = `<div class="flex col items-center" style="padding:40px 0; gap:8px;">${ICONS.dumbbell}<span style="color:var(--steel); font-size:13px;">עוד לא נרשם כאן אימון — כל אימון שתרשמו יופיע כאן עם השיא שלכם בו</span></div>`;
+    area.innerHTML = `<div class="flex col items-center" style="padding:40px 0; gap:8px;">${ICONS.dumbbell}<span style="color:var(--color-text-muted); font-size:13px;">עוד לא נרשם כאן אימון — כל אימון שתרשמו יופיע כאן עם השיא שלכם בו</span></div>`;
     return;
   }
   if (active.length === 0) {
-    const noneHtml = `<div style="color:var(--steel); text-align:center; padding:20px 0; font-size:13px;">לא נמצא אימון התואם ל-"${bidiText(wodHistorySearch)}"</div>`;
+    const noneHtml = `<div style="color:var(--color-text-muted); text-align:center; padding:20px 0; font-size:13px;">לא נמצא אימון התואם ל-"${bidiText(wodHistorySearch)}"</div>`;
     area.innerHTML = noneHtml;
     return;
   }
@@ -7107,7 +7512,7 @@ function renderWodHistoryListArea() {
           <div class="dot" style="background:${esc(catColor(w.category))}"></div>
           <span style="font-weight:700; font-size:14px;">${bidiText(w.name)}</span>
         </div>
-        <span class="mono" style="color:var(--brass); font-weight:700; font-size:14px;">${bidiUnit(formatWodBest(w.id))}</span>
+        <span class="mono" style="color:var(--color-accent); font-weight:700; font-size:14px;">${bidiUnit(formatWodBest(w.id))}</span>
       </button>`;
     const detail = wodHistoryId === w.id ? renderWodDetailCard(w) + `<div style="height:8px;"></div>` : "";
     return row + detail;
@@ -7119,7 +7524,7 @@ function renderWodHistorySection() {
     ${activeWods().length > 0 ? `
     <h2 class="section-label">שיאים כלל-זמנים</h2>
     <div class="search-box" style="margin:0 0 12px;">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--steel)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
       <input id="wodHistorySearch" dir="auto" placeholder="חיפוש באימונים שלך" aria-label="חיפוש באימונים שלך" value="${esc(wodHistorySearch)}" />
     </div>` : `<h2 class="sr-only">שיאים כלל-זמנים</h2>`}
     <div id="wodHistoryListArea" role="region" aria-label="שיאים כלל-זמנים"></div>
@@ -7199,14 +7604,12 @@ function renderWodBenchmarksSection() {
 function renderWodTab() {
   return `
     <section class="scene-page ${PAGE_SCENES.wod.className}" aria-labelledby="pageTitle-wod">
-      <div class="scene-page__media" aria-hidden="true"></div>
-      <div class="scene-page__scrim" aria-hidden="true"></div>
       <div class="scene-page__intro">
         <h1 id="pageTitle-wod" class="scene-page__title">ספריית אימונים</h1>
       </div>
       <div class="scene-sheet">
-    <div class="stripe-ribbon" aria-hidden="true"></div>
-    ${!storageOK ? `<div class="footer-note" style="color:var(--red-text); background:rgba(216,69,60,.1); border:1px solid var(--red); border-radius:12px; padding:10px 14px; margin-bottom:12px;" role="alert">${esc(storageErrMsg)}</div>` : ""}
+
+    ${!storageOK ? `<div class="footer-note" style="color:var(--color-danger); background:color-mix(in srgb, var(--color-danger) 10%, var(--color-surface)); border:1px solid var(--color-danger); border-radius:12px; padding:10px 14px; margin-bottom:12px;" role="alert">${esc(storageErrMsg)}</div>` : ""}
     <div class="subtabbar" role="tablist" aria-label="תצוגת ספריית האימונים">
       <button class="subtabbtn ${wodSubTab === "log" ? "active" : ""}" id="wodSubtab-log" data-action="switch-wod-subtab" data-subtab="log" role="tab" aria-selected="${wodSubTab === "log"}" aria-controls="wodContent" tabindex="${wodSubTab === "log" ? "0" : "-1"}">רישום</button>
       <button class="subtabbtn ${wodSubTab === "history" ? "active" : ""}" id="wodSubtab-history" data-action="switch-wod-subtab" data-subtab="history" role="tab" aria-selected="${wodSubTab === "history"}" aria-controls="wodContent" tabindex="${wodSubTab === "history" ? "0" : "-1"}">היסטוריה</button>
@@ -7276,6 +7679,7 @@ function choosePickedMovement(id) {
   selectedId = id;
   movementExplicitlyChosen = true; // COMM-360
   syncLogEntryTypeToSelection();
+  applyLastSessionValues(id);
   endLadder();
 }
 
@@ -7382,6 +7786,7 @@ registerAppDialog("appConfirm", { overlayId: "appConfirmOverlay", isOpen: () => 
 // after "settings" below would make Escape and the phone's back button close
 // the sheet underneath and leave the visible one - which is the exact defect
 // openAchievements()'s own comment above describes, reached a second way.
+registerAppDialog("moment", { overlayId: "momentOverlay", isOpen: () => { const el = document.getElementById("momentOverlay"); return !!el && el.classList.contains("open"); }, close: closeMoment });
 registerAppDialog("support", { overlayId: "supportOverlay", isOpen: () => document.getElementById("supportOverlay").classList.contains("open"), close: closeSupport });
 
 // COMM-358. Every role="tablist" group in this app (the fixed bottom tab
@@ -7561,8 +7966,17 @@ registerAppDialog("welcome", { overlayId: "welcomeOverlay", isOpen: () => docume
 // left pointing at a dead state that requires two presses to get past.
 let appDialogHistoryPushed = false;
 let appDialogClosingViaHistory = false;
+// "boxlog:dialog-opened" / "boxlog:dialog-closed" on window: the one signal
+// that something which has to wait for a clear screen (the Add to Home Screen
+// steps, src/community/sharing.js) listens for instead of polling. cloud.js
+// announces the same two for its own dialogs.
+let appDialogWasOpen = false;
 function syncAppDialogHistoryState() {
   const open = !!currentAppDialog();
+  if (open !== appDialogWasOpen) {
+    appDialogWasOpen = open;
+    try { window.dispatchEvent(new CustomEvent(open ? "boxlog:dialog-opened" : "boxlog:dialog-closed")); } catch (e) { /* never break a dialog for a notification */ }
+  }
   if (open && !appDialogHistoryPushed) {
     try { history.pushState({ appDialog: true }, ""); appDialogHistoryPushed = true; } catch (e) { /* history API unavailable in this embedding */ }
   } else if (!open && appDialogHistoryPushed && !appDialogClosingViaHistory) {
@@ -7611,17 +8025,17 @@ function renderPickerList(query) {
   filtered.forEach((m) => { (byCategory[m.category] = byCategory[m.category] || []).push(m); });
   const list = document.getElementById("pickerList");
   const addRow = query.trim() && !exactMatch
-    ? `<div style="border:1px solid var(--brass); border-radius:12px; padding:10px 12px; margin-top:4px; margin-bottom:8px;">
-         <div style="font-weight:700; font-size:13px; color:var(--brass); margin-bottom:8px;">הוספת "${bidiText(query.trim())}" — לאיזו קטגוריה?</div>
+    ? `<div style="border:1px solid var(--color-accent); border-radius:12px; padding:10px 12px; margin-top:4px; margin-bottom:8px;">
+         <div style="font-weight:700; font-size:13px; color:var(--color-accent); margin-bottom:8px;">הוספת "${bidiText(query.trim())}" — לאיזו קטגוריה?</div>
          <div class="flex wrap gap-8">
            ${MOVEMENT_CATEGORIES.map((cat) => `<button class="format-chip" style="flex:0 0 auto; padding:8px 14px;" data-action="add-movement" data-name="${esc(query.trim())}" data-category="${cat}">${cat}</button>`).join("")}
          </div>
        </div>`
-    : `<button class="movement-btn" data-action="focus-picker-search" style="border-color:var(--brass); margin-top:4px; margin-bottom:8px;">
-         <span style="font-weight:700; font-size:14px; color:var(--brass);">+ הוספת תרגיל חדש</span>
+    : `<button class="movement-btn" data-action="focus-picker-search" style="border-color:var(--color-accent); margin-top:4px; margin-bottom:8px;">
+         <span style="font-weight:700; font-size:14px; color:var(--color-accent);">+ הוספת תרגיל חדש</span>
        </button>`;
   if (Object.keys(byCategory).length === 0) {
-    list.innerHTML = addRow + `<div style="color:var(--steel); text-align:center; padding:16px 0; font-size:13px;">לא נמצא תרגיל</div>`;
+    list.innerHTML = addRow + `<div style="color:var(--color-text-muted); text-align:center; padding:16px 0; font-size:13px;">לא נמצא תרגיל</div>`;
     return;
   }
   list.innerHTML = addRow + Object.entries(byCategory).map(([cat, items]) => `
@@ -7630,7 +8044,7 @@ function renderPickerList(query) {
       ${items.map((m) => `
         <button class="movement-btn ${selectedId === m.id ? "active" : ""}" data-action="pick-movement" data-id="${esc(m.id)}">
           <span style="font-weight:600; font-size:14px;">${bidiText(m.name)}</span>
-          ${selectedId === m.id ? `<div class="dot" style="background:var(--brass);"></div>` : ""}
+          ${selectedId === m.id ? `<div class="dot" style="background:var(--color-accent);"></div>` : ""}
         </button>`).join("")}
     </div>`).join("");
 }
@@ -7678,14 +8092,14 @@ function renderWodPickerList(query) {
   filtered.forEach((w) => { (byCategory[w.category] = byCategory[w.category] || []).push(w); });
   const list = document.getElementById("wodPickerList");
   const addRow = query.trim() && !exactMatch
-    ? `<button class="movement-btn" data-action="open-wod-builder" data-name="${esc(query.trim())}" style="border-color:var(--energy); margin-top:4px;">
-         <span style="font-weight:700; font-size:14px; color:var(--energy-text);">+ בניית "${bidiText(query.trim())}" כאימון חדש</span>
+    ? `<button class="movement-btn" data-action="open-wod-builder" data-name="${esc(query.trim())}" style="border-color:var(--color-accent-fill); margin-top:4px;">
+         <span style="font-weight:700; font-size:14px; color:var(--color-accent);">+ בניית "${bidiText(query.trim())}" כאימון חדש</span>
        </button>`
-    : `<button class="movement-btn" data-action="open-wod-builder" data-name="" style="border-color:var(--energy); margin-top:4px;">
-         <span style="font-weight:700; font-size:14px; color:var(--energy-text);">+ בניית אימון מותאם אישית</span>
+    : `<button class="movement-btn" data-action="open-wod-builder" data-name="" style="border-color:var(--color-accent-fill); margin-top:4px;">
+         <span style="font-weight:700; font-size:14px; color:var(--color-accent);">+ בניית אימון מותאם אישית</span>
        </button>`;
   if (Object.keys(byCategory).length === 0) {
-    list.innerHTML = addRow + `<div style="color:var(--steel); text-align:center; padding:16px 0; font-size:13px;">לא נמצא אימון</div>`;
+    list.innerHTML = addRow + `<div style="color:var(--color-text-muted); text-align:center; padding:16px 0; font-size:13px;">לא נמצא אימון</div>`;
     return;
   }
   const order = ["Girls", "Heroes", "Custom"];
@@ -7700,9 +8114,9 @@ function renderWodPickerList(query) {
             <span style="font-weight:600; font-size:14px;">${bidiText(w.name)}</span>
             ${w.desc ? `<div class="wod-desc">${bidiText(w.desc)}</div>` : ""}
           </div>
-          ${selectedWodId === w.id ? `<div class="dot" style="background:var(--brass);"></div>` : ""}
+          ${selectedWodId === w.id ? `<div class="dot" style="background:var(--color-accent);"></div>` : ""}
         </button>
-        ${w.category === "Custom" && wodEntriesFor(w.id).length === 0 ? `<button data-action="delete-custom-wod" data-id="${esc(w.id)}" aria-label="מחיקת ${esc(w.name)}" style="padding:12px; color:var(--red-text);">✕</button>` : ""}
+        ${w.category === "Custom" && wodEntriesFor(w.id).length === 0 ? `<button data-action="delete-custom-wod" data-id="${esc(w.id)}" aria-label="מחיקת ${esc(w.name)}" style="padding:12px; color:var(--color-danger);">✕</button>` : ""}
         </div>`).join("")}
     </div>`).join("");
 }
@@ -7983,6 +8397,7 @@ document.addEventListener("click", (e) => {
     closePicker();
   }
   else if (action === "pick-movement") { choosePickedMovement(el.dataset.id); closePicker(); render(); }
+  else if (action === "pick-recent-lift") { if (movementById(el.dataset.id)) { choosePickedMovement(el.dataset.id); render(); } }
   else if (action === "add-movement") { addMovement(el.dataset.name, el.dataset.category); }
   else if (action === "focus-picker-search") { document.getElementById("pickerSearch").focus(); }
   else if ((action === "step" || action === "wod-step" || action === "bw-step" || action === "builder-movement-reps" || action === "builder-movement-weight" || action === "builder-movement-duration" || action === "builder-emom-minutes" || action === "builder-time-cap" || action === "wod-emom-step" || action === "measure-step") && el.classList.contains("stepper-btn")) {
@@ -7995,6 +8410,12 @@ document.addEventListener("click", (e) => {
   else if (action === "save-set") { saveSet(); }
   else if (action === "set-bar-weight") { setBarWeight(+el.dataset.kg); }
   else if (action === "set-theme") { setThemePref(el.dataset.pref); }
+  else if (action === "set-palette") { setPalettePref(el.dataset.palette); }
+  else if (action === "close-moment") { closeMoment(); }
+  else if (action === "progress-lift") { progressLiftId = el.dataset.id; render(); }
+  else if (action === "moment-share") { shareMoment(); }
+  else if (action === "open-moment") { openWorkoutMoment(buildMomentModel(logDate === todayISO() ? todayISO() : logDate), { manual: true }); }
+  else if (action === "set-transparency") { setTransparencyPref(el.dataset.pref); }
   else if (action === "set-text-scale") { setTextScalePref(el.dataset.pref); }
   else if (action === "delete-entry") { askDeleteEntry(el.dataset.id); }
   else if (action === "app-confirm-yes") { runAppConfirm(); }
@@ -8365,9 +8786,14 @@ async function init() {
   loadTextScalePref();
   applyTextScalePref();
   if (window.matchMedia) {
+    // The system flipped light/dark while the app is open: the chrome color
+    // follows, and a switch the OS now forbids (reduced transparency) is redrawn.
     window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
       if (themePref === "auto") syncThemeColorMeta();
     });
+    try {
+      window.matchMedia("(prefers-reduced-transparency: reduce)").addEventListener("change", () => refreshAppearanceFields());
+    } catch (e) { /* older engines have no such query */ }
   }
   document.getElementById("dateLabel").textContent = new Date().toLocaleDateString("he-IL", { weekday: "short", day: "numeric", month: "short" });
   await reloadFromDb();

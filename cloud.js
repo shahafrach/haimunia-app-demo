@@ -542,7 +542,7 @@
   }
   // Compact, deterministic per-identity color so the same person always
   // gets the same avatar color across the feed, comments and search.
-  const AVATAR_PALETTE = ["var(--energy)", "var(--blue)", "var(--teal)", "var(--purple)", "var(--green)", "var(--brass)"];
+  const AVATAR_PALETTE = ["var(--color-accent-fill)", "var(--color-info)", "var(--color-progress)", "var(--color-violet)", "var(--color-success)", "var(--color-accent)"];
   function avatarHtml(name, size) {
     const px = size || 36;
     // Two conventions call this: some sites pass the bare handle
@@ -1697,10 +1697,10 @@
     const c = state.ui.confirmDialog;
     if (!c) return "";
     return `<div class="modal-overlay open" role="dialog" aria-modal="true" aria-labelledby="communityConfirmTitle" data-cloud-dialog="confirmSheet" style="align-items:center;padding:0 20px;">
-      <div class="modal-sheet" style="border-radius:22px;border-bottom:1px solid var(--border);max-height:none;">
+      <div class="modal-sheet" style="border-radius:22px;border-bottom:1px solid var(--color-border);max-height:none;">
         <div style="padding:24px 22px calc(env(safe-area-inset-bottom,0px) + 20px);">
-          <h2 id="communityConfirmTitle" style="margin-top:0;color:var(--chalk);font-weight:800;font-size:17px;margin-bottom:8px;">${esc(c.title || "אישור פעולה")}</h2>
-          <div style="color:var(--steel);font-size:13.5px;line-height:1.6;margin-bottom:20px;"${c.subject !== undefined ? ' data-confirm-subject="1"' : ""}>${subjectSentenceHtml(c.message, c.subject)}</div>
+          <h2 id="communityConfirmTitle" style="margin-top:0;color:var(--color-text);font-weight:800;font-size:17px;margin-bottom:8px;">${esc(c.title || "אישור פעולה")}</h2>
+          <div style="color:var(--color-text-muted);font-size:13.5px;line-height:1.6;margin-bottom:20px;"${c.subject !== undefined ? ' data-confirm-subject="1"' : ""}>${subjectSentenceHtml(c.message, c.subject)}</div>
           <div class="chip-row" style="margin-top:0;">
             <button class="chip-btn" data-community-action="confirm-no">ביטול</button>
             <button class="chip-btn primary${c.destructive ? " danger" : ""}" data-community-action="confirm-yes">${esc(c.confirmLabel || "אישור")}</button>
@@ -1779,7 +1779,7 @@
   // would have left five, so all six call this, and this is the only
   // definition. Listed in the PR.
   function sheetCloseBtnHtml(action) {
-    return `<button class="icon-btn" data-community-action="${esc(action)}" aria-label="סגירה" style="color:var(--steel);">`
+    return `<button class="icon-btn" data-community-action="${esc(action)}" aria-label="סגירה" style="color:var(--color-text-muted);">`
       + `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>`
       + `</button>`;
   }
@@ -1803,11 +1803,11 @@
   // CLOUD_DIALOGS. There is no confirm button: nothing here is a decision.
   function renderTermGlossaryPage() {
     const items = TERM_GLOSSARY.map((t) => `<div class="term-glossary-item">
-      <div style="font-weight:800;font-size:15px;color:var(--chalk);"><bdi>${esc(t.term)}</bdi></div>
-      <div style="font-size:13px;color:var(--steel);margin-top:2px;line-height:1.4;">${bidiText(t.gloss)}</div>
+      <div style="font-weight:800;font-size:15px;color:var(--color-text);"><bdi>${esc(t.term)}</bdi></div>
+      <div style="font-size:13px;color:var(--color-text-muted);margin-top:2px;line-height:1.4;">${bidiText(t.gloss)}</div>
     </div>`).join("");
     return `<button class="gate-back" data-community-action="term-glossary-back">‹ חזרה</button>
-      <h2 id="termSheetTitle" style="margin-top:0;margin-bottom:4px;color:var(--chalk);font-weight:800;font-size:18px;">כל המונחים</h2>
+      <h2 id="termSheetTitle" style="margin-top:0;margin-bottom:4px;color:var(--color-text);font-weight:800;font-size:18px;">כל המונחים</h2>
       <div style="max-height:52vh;overflow-y:auto;margin-top:8px;">${items}</div>`;
   }
   function renderTermSheet() {
@@ -1835,7 +1835,7 @@
     return `<div class="modal-overlay open" role="dialog" aria-modal="true" aria-labelledby="termSheetTitle" data-cloud-dialog="termSheet" style="align-items:flex-end;padding:0;">
       <div class="modal-sheet" data-term-sheet style="max-height:none;">
         <div class="modal-head">
-          <span class="modal-title" style="font-size:13px;color:var(--steel);">${state.ui.termGlossaryOpen ? "מונחים" : "מה זה?"}</span>
+          <span class="modal-title" style="font-size:13px;color:var(--color-text-muted);">${state.ui.termGlossaryOpen ? "מונחים" : "מה זה?"}</span>
           ${sheetCloseBtnHtml("term-close")}
         </div>
         <div style="padding:4px 18px calc(env(safe-area-inset-bottom,0px) + 22px);">${page}</div>
@@ -1895,18 +1895,18 @@
     if (!pending && !failed.length) return "";
     let html = "";
     if (pending) {
-      html += `<div class="chart-card" role="status" style="margin-bottom:10px;border-color:var(--brass);">
+      html += `<div class="chart-card" role="status" style="margin-bottom:10px;border-color:var(--color-accent);">
         <div class="flex items-center gap-8"><span class="icon-chip icon-chip-brass" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.2 2"/></svg></span><div style="font-weight:800;font-size:13.5px;">${pending} ${pending === 1 ? "פעולה ממתינה" : "פעולות ממתינות"} לשליחה</div></div>
-        <div style="color:var(--steel);font-size:12.5px;margin-top:4px;">יישלחו אוטומטית כשהחיבור יחזור.</div>
+        <div style="color:var(--color-text-muted);font-size:12.5px;margin-top:4px;">יישלחו אוטומטית כשהחיבור יחזור.</div>
       </div>`;
     }
     if (failed.length) {
-      html += `<div class="chart-card" role="alert" style="margin-bottom:10px;border-color:var(--red);">
-        <div class="flex items-center gap-8" style="margin-bottom:2px;"><span class="icon-chip" style="background:color-mix(in srgb, var(--red) 16%, transparent);color:var(--red-text);" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 2.5 18a2 2 0 0 0 1.7 3h15.6a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div style="font-weight:800;font-size:13.5px;color:var(--red-text);">${failed.length} ${failed.length === 1 ? "פעולה נכשלה" : "פעולות נכשלו"}</div></div>
-        <div style="color:var(--steel);font-size:12.5px;margin:4px 0 8px;">${failed.some((r) => serverErrorIsRetryable(r.lastError)) ? "אפשר לנסות שוב או להסיר מהתור." : "אף אחת מהן לא תעבור בניסיון חוזר — הסבר לכל פעולה למטה."}</div>
-        ${failed.map((r) => `<div style="border-top:1px solid var(--border);padding-top:8px;margin-top:8px;">
+      html += `<div class="chart-card" role="alert" style="margin-bottom:10px;border-color:var(--color-danger);">
+        <div class="flex items-center gap-8" style="margin-bottom:2px;"><span class="icon-chip" style="background:color-mix(in srgb, var(--color-danger) 16%, transparent);color:var(--color-danger);" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 2.5 18a2 2 0 0 0 1.7 3h15.6a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span><div style="font-weight:800;font-size:13.5px;color:var(--color-danger);">${failed.length} ${failed.length === 1 ? "פעולה נכשלה" : "פעולות נכשלו"}</div></div>
+        <div style="color:var(--color-text-muted);font-size:12.5px;margin:4px 0 8px;">${failed.some((r) => serverErrorIsRetryable(r.lastError)) ? "אפשר לנסות שוב או להסיר מהתור." : "אף אחת מהן לא תעבור בניסיון חוזר — הסבר לכל פעולה למטה."}</div>
+        ${failed.map((r) => `<div style="border-top:1px solid var(--color-border);padding-top:8px;margin-top:8px;">
           <div style="font-weight:700;font-size:12.5px;">${bidiText(outboxActionLabel(r.action))}</div>
-          <div style="color:var(--steel);font-size:12px;margin-top:2px;">${bidiText(serverErrorText(r.lastError))}</div>
+          <div style="color:var(--color-text-muted);font-size:12px;margin-top:2px;">${bidiText(serverErrorText(r.lastError))}</div>
           <div class="chip-row" style="margin-top:6px;">
             ${serverErrorIsRetryable(r.lastError) ? `<button class="chip-btn" data-community-action="outbox-retry" data-id="${esc(r.id)}">ניסיון חוזר</button>` : ""}
             <button class="chip-btn danger" data-community-action="outbox-discard" data-id="${esc(r.id)}">הסרה</button>
@@ -2031,11 +2031,11 @@
   function backupDeleteHtml() {
     if (!state.user) return "";
     if (!state.ui.backupDeleteConfirm) {
-      return `<button class="link-btn" data-community-action="backup-delete" style="display:block;margin-top:10px;color:var(--red-text);">מחיקת הגיבוי מהענן</button>`;
+      return `<button class="link-btn" data-community-action="backup-delete" style="display:block;margin-top:10px;color:var(--color-danger);">מחיקת הגיבוי מהענן</button>`;
     }
     const alsoProfile = state.profile ? " גם הפרופיל והשיתופים במעגלים יוסרו מיד." : "";
-    return `<div class="footer-note" role="group" aria-labelledby="backupDeleteTitle" style="margin-top:12px;padding:10px;border-radius:8px;border:1px solid var(--red-text);">
-      <h2 id="backupDeleteTitle" style="margin-top:0;margin-bottom:4px;font-size:13.5px;font-weight:800;color:var(--red-text);">מחיקת הגיבוי מהענן</h2>
+    return `<div class="footer-note" role="group" aria-labelledby="backupDeleteTitle" style="margin-top:12px;padding:10px;border-radius:8px;border:1px solid var(--color-danger);">
+      <h2 id="backupDeleteTitle" style="margin-top:0;margin-bottom:4px;font-size:13.5px;font-weight:800;color:var(--color-danger);">מחיקת הגיבוי מהענן</h2>
       <div style="margin-bottom:10px;">כל מה שגובה לענן, יחד עם החשבון שנפתח לגיבוי, יימחק לצמיתות בתוך 30 יום.${esc(alsoProfile)} האימונים שבמכשיר הזה נשארים, והגיבוי האוטומטי ייכבה כדי שהשמירה הבאה לא תפתח גיבוי חדש.</div>
       <div class="chip-row" style="margin-top:0;">
         <button class="chip-btn" data-community-action="backup-delete-cancel">ביטול</button>
@@ -2046,7 +2046,7 @@
   window.renderBackupSettingsPanel = function () {
     if (!configured) return "";
     if (backupOptedOut()) {
-      return `${BACKUP_PANEL_TITLE}<div class="footer-note" style="margin-bottom:8px;">כבוי. מהשמירה הבאה האימונים נשמרים במכשיר הזה בלבד.</div>${BACKUP_OPTOUT_TRUTHS}<button class="link-btn" data-community-action="backup-enable">הפעלת גיבוי אוטומטי</button>${selfExportButtonHtml()}${backupDeleteHtml()}${state.ui.message ? `<div class="footer-note" role="status" style="margin-top:10px;color:var(--brass);">${esc(state.ui.message)}</div>` : ""}`;
+      return `${BACKUP_PANEL_TITLE}<div class="footer-note" style="margin-bottom:8px;">כבוי. מהשמירה הבאה האימונים נשמרים במכשיר הזה בלבד.</div>${BACKUP_OPTOUT_TRUTHS}<button class="link-btn" data-community-action="backup-enable">הפעלת גיבוי אוטומטי</button>${selfExportButtonHtml()}${backupDeleteHtml()}${state.ui.message ? `<div class="footer-note" role="status" style="margin-top:10px;color:var(--color-accent);">${esc(state.ui.message)}</div>` : ""}`;
     }
     if (!state.user) {
       return `${BACKUP_PANEL_TITLE}<div class="footer-note" style="margin-bottom:8px;">${backupConsentPending() ? "אחרי השמירה הבאה נשאל אתכם אם לגבות את האימונים לענן. עד שתענו הכול נשאר במכשיר הזה בלבד." : "מהשמירה הראשונה האימונים שלכם מתחילים להיות מגובים לענן ברקע, אוטומטית ופרטית — רק אתם רואים אותם."} הסנכרון קורה מעצמו ואין כאן קובץ להוריד; „קובץ גיבוי להורדה" הוא דבר נפרד במסך הזה. אפשר לכבות בכל שלב.</div><button class="link-btn" data-community-action="backup-optout">כיבוי גיבוי אוטומטי</button>`;
@@ -2073,12 +2073,12 @@
       });
     })();
     const unreachableWarning = backupRisk.level === "urgent"
-      ? `<div class="footer-note" role="status" style="margin:0 0 10px;padding:10px;border-radius:8px;border:1px solid var(--red-text);color:var(--red-text);">האימונים שלכם מגובים לחשבון אנונימי — אין אליו שם משתמש או סיסמה, והדרך היחידה אליו היא הדפדפן הזה. אם תנקו את נתוני האתר, תחליפו מכשיר או תאבדו את הטלפון, הגיבוי יישאר בשרת ולא תוכלו להגיע אליו. אף אחד לא ימחק אותו — פשוט לא תוכלו לפתוח אותו.<div style="margin-top:8px;"><button class="chip-btn" data-community-action="backup-download-copy">הורדת עותק עכשיו</button></div></div>`
+      ? `<div class="footer-note" role="status" style="margin:0 0 10px;padding:10px;border-radius:8px;border:1px solid var(--color-danger);color:var(--color-danger);">האימונים שלכם מגובים לחשבון אנונימי — אין אליו שם משתמש או סיסמה, והדרך היחידה אליו היא הדפדפן הזה. אם תנקו את נתוני האתר, תחליפו מכשיר או תאבדו את הטלפון, הגיבוי יישאר בשרת ולא תוכלו להגיע אליו. אף אחד לא ימחק אותו — פשוט לא תוכלו לפתוח אותו.<div style="margin-top:8px;"><button class="chip-btn" data-community-action="backup-download-copy">הורדת עותק עכשיו</button></div></div>`
       : "";
     const credentialsCta = state.user.is_anonymous
       ? `<div style="margin-top:12px;">${unreachableWarning}<div class="footer-note" style="margin-bottom:6px;">${backupRisk.level === "urgent" ? "הפתרון הקבוע: שם לכניסה וסיסמה. אחריהם אפשר להיכנס לאותם נתונים מכל מכשיר." : "גישה לאותם נתונים ממכשיר אחר דורשת שם לכניסה וסיסמה."}</div><form id="backupCredentials">${field("backupCredentials", "username", LOGIN_NAME_LABEL, `<input class="text-input" name="username" dir="ltr" autocapitalize="off" autocomplete="username" placeholder="${esc(USERNAME_RULE_TEXT)}" data-live-validate="username" data-live-validate-form="backupCredentials" required/>`)}${field("backupCredentials", "password", "סיסמה", `<input class="text-input" name="password" type="password" dir="ltr" autocomplete="new-password" placeholder="${esc(PASSWORD_RULE_TEXT)}" data-live-validate="password" data-live-validate-form="backupCredentials" required/>`)}${field("backupCredentials", "passwordConfirm", "אימות סיסמה", `<input class="text-input" name="passwordConfirm" type="password" dir="ltr" autocomplete="new-password" placeholder="הקלידו שוב" data-live-validate="passwordConfirm" data-live-validate-form="backupCredentials" required/>`)}<button class="chip-btn primary" type="submit" style="margin-top:6px;">שמירת גישה ממכשיר אחר</button></form></div>`
       : "";
-    return `${BACKUP_PANEL_TITLE}<div class="footer-note" style="margin-bottom:8px;">${esc(state.syncEnabled ? "פעיל. האימונים שלכם מגובים לענן ברקע, אוטומטית ופרטית — רק אתם רואים אותם. הסנכרון קורה מעצמו ואין כאן קובץ להוריד; „קובץ גיבוי להורדה\" הוא דבר נפרד במסך הזה." : "מוגדר אך טרם הופעל.")}</div><button class="link-btn" data-community-action="backup-optout">כיבוי גיבוי אוטומטי</button>${credentialsCta}${selfExportButtonHtml()}${backupDeleteHtml()}${state.ui.message ? `<div class="footer-note" role="status" style="margin-top:10px;color:var(--brass);">${esc(state.ui.message)}</div>` : ""}`;
+    return `${BACKUP_PANEL_TITLE}<div class="footer-note" style="margin-bottom:8px;">${esc(state.syncEnabled ? "פעיל. האימונים שלכם מגובים לענן ברקע, אוטומטית ופרטית — רק אתם רואים אותם. הסנכרון קורה מעצמו ואין כאן קובץ להוריד; „קובץ גיבוי להורדה\" הוא דבר נפרד במסך הזה." : "מוגדר אך טרם הופעל.")}</div><button class="link-btn" data-community-action="backup-optout">כיבוי גיבוי אוטומטי</button>${credentialsCta}${selfExportButtonHtml()}${backupDeleteHtml()}${state.ui.message ? `<div class="footer-note" role="status" style="margin-top:10px;color:var(--color-accent);">${esc(state.ui.message)}</div>` : ""}`;
   };
   // ---- Shared Phase 1 dialog focus + keyboard management (COMM-190) -----
   // Every Phase 1 overlay dialog behaves the same way: focus moves in on
@@ -2287,7 +2287,12 @@
   // two presses to get past.
   let cloudDialogHistoryPushed = false;
   let cloudDialogClosingViaHistory = false;
+  let cloudDialogWasOpen = false;
   function syncCloudDialogHistoryState(openKey) {
+    if (!!openKey !== cloudDialogWasOpen) {
+      cloudDialogWasOpen = !!openKey;
+      try { window.dispatchEvent(new CustomEvent(openKey ? "boxlog:dialog-opened" : "boxlog:dialog-closed")); } catch (e) { /* never break a dialog for a notification */ }
+    }
     if (openKey && !cloudDialogHistoryPushed) {
       try { history.pushState({ cloudDialog: true }, ""); cloudDialogHistoryPushed = true; } catch (e) { /* history API unavailable in this embedding */ }
     } else if (!openKey && cloudDialogHistoryPushed && !cloudDialogClosingViaHistory) {
