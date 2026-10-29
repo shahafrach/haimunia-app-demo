@@ -39,6 +39,23 @@ tone) and lays a photo over it when one is set. Each tab has its own slot:
 
 If the owner supplies his own photos they replace these files under the same names.
 
+## Still to add: welcome screen and Calendar scene (2026-10-29)
+
+Two more slots were asked for in the Pilot readiness session: the welcome sheet
+and the Calendar scene (`.scene-page--history`, which today draws from the
+palette only). **Not added.** That session's network policy answered refused to
+`images.unsplash.com`, `unsplash.com`, `images.pexels.com` and `www.pexels.com`
+(checked again; nothing hotlinked, nothing faked, and none of the four tab photos
+was reused to fill the gap). Same rules when it can: free-license photo, no faces,
+no gym name or logo, WebP under 120 KB, `assets/scenes/welcome.webp` and
+`assets/scenes/calendar.webp`, license row below, `--scene-photo` on the rule
+(`.scene-page--history` and `.welcome-scene`), and a line in `OPTIONAL_ASSETS` in `sw.js`.
+
+| Slot | Scene class | File (to add) | Subject to look for |
+|------|-------------|---------------|----------------------|
+| Welcome | `.welcome-scene` | `assets/scenes/welcome.webp` | early light on an empty track or a quiet road |
+| Calendar | `.scene-page--history` | `assets/scenes/calendar.webp` | a chalked board, a wall of plates, or a sunrise horizon, no text |
+
 ## Licenses
 
 Unsplash License and Pexels License both allow free use, including commercial use, with no

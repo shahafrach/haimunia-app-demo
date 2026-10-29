@@ -10,11 +10,15 @@ name: backup-database
 # needed it.
 #
 # ---------------------------------------------------------------------------
-# TWO REQUIRED SECRETS, in Settings -> Secrets and variables -> Actions:
+# TWO REQUIRED SECRETS, in Settings -> Secrets and variables -> Actions
+# (the owner's steps are in docs/ops/BACKUPS.md):
 #
-#   SUPABASE_DB_URL    the direct Postgres connection string, from
-#                      Dashboard -> Project Settings -> Database -> Connection
-#                      string -> URI. It contains the database password, so
+#   SUPABASE_DB_URL    the SESSION POOLER connection string of the box-log
+#                      project, from Dashboard -> Connect -> Session pooler
+#                      (host aws-...pooler.supabase.com, port 5432). NOT the
+#                      "Direct connection": that host is IPv6-only on the
+#                      free plan and GitHub's runners are IPv4-only, so it
+#                      cannot connect. It contains the database password, so
 #                      it is a secret in the strongest sense: it reads and
 #                      writes every member's data.
 #
@@ -25,12 +29,12 @@ name: backup-database
 #                      cannot decrypt is not a backup, and one anybody can
 #                      decrypt is a leak.
 #
-# THE ENCRYPTION IS NOT OPTIONAL, AND HERE IS WHY. This repository has been
-# PRIVATE since 2026-09-17, and that changes the size of the audience, not the
-# argument. A workflow artifact is readable by everyone who can read this
-# repository and by anything holding a token with `actions: read` on it - every
-# collaborator, every PAT one of them has issued, and every third-party action
-# any workflow here runs. It sits in GitHub's storage for the 90 days set
+# THE ENCRYPTION IS NOT OPTIONAL, AND HERE IS WHY. This repository is PUBLIC
+# (keepalive.yml says so), and the artifacts of a public repository can be
+# downloaded by any signed-in GitHub account. A workflow artifact is also
+# readable by anything holding a token with `actions: read` on the repository -
+# every collaborator, every PAT one of them has issued, and every third-party
+# action any workflow here runs. It sits in GitHub's storage for the 90 days set
 # below, which outlives any later change to who has access or to whether this
 # repository is private at all. An unencrypted dump would put every member's
 # profile, handle, invite history and private training records behind nothing
@@ -80,7 +84,9 @@ name: backup-database
 # restore. Do NOT leave it set.
 #
 # The schema half is also reconstructible from supabase/migrations/ alone, so
-# the irreplaceable part of what this captures is the DATA.
+# the irreplaceable part of what this captures is the DATA. There are no photo
+# buckets any more (post-photos and avatar-photos were dropped), so the dump is
+# the whole backup; the old storage half was removed with them.
 #
 # NOT YET DONE, and worth knowing: nothing has actually restored one of these.
 # The job proves the ciphertext decrypts and that the dump is non-empty and
@@ -88,8 +94,14 @@ name: backup-database
 # backup jobs prove and still not the same as a rehearsed restore.
 # ---------------------------------------------------------------------------
 on:
-  # Schedule removed 2026-10-25: the Supabase project this ran against was
-  # deleted. Re-enable after the new Supabase project exists.
+  # SCHEDULE KEPT COMMENTED until the owner confirms both secrets exist
+  # (docs/ops/BACKUPS.md, step 5). Uncomment it only after one manual run of
+  # this workflow, with the drill ticked, has gone green. Six days a week a
+  # backup; Sunday a backup plus the restore drill (the drill job's `if` below
+  # matches the Sunday expression exactly, so change them together).
+  # schedule:
+  #   - cron: "17 2 * * 1-6"
+  #   - cron: "17 2 * * 0"
   workflow_dispatch:
     inputs:
       drill:
@@ -107,8 +119,6 @@ jobs:
     env:
       SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
       BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
-      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -120,33 +130,28 @@ jobs:
         run: |
           missing=0
           if [ -z "$SUPABASE_DB_URL" ]; then
-            echo "SUPABASE_DB_URL is not set."; missing=1
+            echo "::error::SUPABASE_DB_URL is not set. Add it as a repository secret: the box-log project's Session pooler connection string (docs/ops/BACKUPS.md, step 2)."
+            missing=1
           fi
           if [ -z "$BACKUP_PASSPHRASE" ]; then
-            echo "BACKUP_PASSPHRASE is not set. Refusing to produce a dump"
-            echo "that could only be uploaded in the clear - this repository"
-            echo "is private, but an artifact is still readable by everyone"
-            echo "with access to it, for 90 days, and this one is every"
-            echo "member's data."
+            echo "::error::BACKUP_PASSPHRASE is not set. Refusing to produce a dump that could only be uploaded in the clear: this repository is public and an artifact is readable by any signed-in GitHub account, for 90 days, and this one is every member's data (docs/ops/BACKUPS.md, step 3)."
             missing=1
           fi
-          # Added 2026-09-23. The database half alone is NOT a backup of this
-          # app: the 2026-09-23 restore drill established that `supabase db
-          # dump` captures storage.objects ROWS and not the files, so a
-          # database-only archive restores perfectly and leaves every member
-          # photo pointing at bytes that no longer exist. Refusing is
-          # deliberate, and follows this file's own rule: a backup job that
-          # reports green while backing up half of the data is worse than no
-          # job, because it converts "we have no photo backup" into "we think
-          # we do".
-          if [ -z "$SUPABASE_ACCESS_TOKEN" ] || [ -z "$SUPABASE_PROJECT_REF" ]; then
-            echo "SUPABASE_ACCESS_TOKEN or SUPABASE_PROJECT_REF is not set."
-            echo "Both are needed to download the photo buckets. Without them"
-            echo "this job would back up the database only, which the restore"
-            echo "drill showed is not a recoverable backup of this app."
-            missing=1
+          if [ "$missing" -ne 0 ]; then
+            echo "Nothing was backed up. Set the missing secret(s) and run this workflow again."
+            exit 1
           fi
-          exit $missing
+          # A value that cannot work gets a clear refusal here instead of a
+          # connection timeout two minutes later.
+          case "$SUPABASE_DB_URL" in
+            postgres://*|postgresql://*) ;;
+            *) echo "::error::SUPABASE_DB_URL is not a postgres:// connection string."; exit 1 ;;
+          esac
+          case "$SUPABASE_DB_URL" in
+            *@db.*.supabase.co*)
+              echo "::error::SUPABASE_DB_URL is the Direct connection (db.<ref>.supabase.co). It is IPv6-only and GitHub runners are IPv4-only. Use the Session pooler string instead (docs/ops/BACKUPS.md, step 2)."
+              exit 1 ;;
+          esac
 
       - uses: supabase/setup-cli@45a513f8c64c0bc8e0e3dfe572b5c95be85f6359 # v3.0.1
         with:
@@ -163,17 +168,6 @@ jobs:
           supabase db dump --db-url "$SUPABASE_DB_URL" -f backup/schema.sql
           supabase db dump --db-url "$SUPABASE_DB_URL" -f backup/data.sql --data-only
           supabase db dump --db-url "$SUPABASE_DB_URL" -f backup/roles.sql --role-only
-
-      # THE OTHER HALF OF THE BACKUP (2026-09-23). Downloads every object in
-      # post-photos and avatar-photos into backup/storage/, with a manifest
-      # carrying a sha256 per file so a restore can be checked rather than
-      # hoped at. Photos do not compress - measured at a ratio of 1.000 on
-      # real JPEGs - so the archive grows by very close to the raw byte total.
-      - name: photos and avatars
-        run: |
-          set -euo pipefail
-          supabase link --project-ref "$SUPABASE_PROJECT_REF"
-          node scripts/backup-storage.mjs backup backup
 
       # A DUMP THAT SUCCEEDED IS NOT A DUMP THAT CONTAINS ANYTHING. pg_dump
       # exits 0 on an empty result, so size is checked before anything is
@@ -206,7 +200,7 @@ jobs:
           # does not fail a good dump again. Verified against a real dump
           # before shipping this time, including that it still REJECTS a dump
           # of some other database.
-          for t in profiles invite_redemptions workout_posts private_records; do
+          for t in profiles clubs circle_members workout_posts private_records invite_codes; do
             grep -Eq "CREATE TABLE( IF NOT EXISTS)? \"?public\"?\.\"?${t}\"?" backup/schema.sql || {
               echo "schema.sql has no public.$t - the dump is not this project."
               exit 1
@@ -215,13 +209,18 @@ jobs:
 
           # AND THE DATA HALF CARRIES ROWS, not just a valid file. schema.sql
           # is reproducible from supabase/migrations/; data.sql is the part
-          # that cannot be rebuilt from anything, so "it is over 1 KB" is too
-          # weak a claim to rest a backup on.
-          grep -q 'INSERT INTO "public"."clubs"' backup/data.sql || {
-            echo "data.sql has no rows for public.clubs - a club with no club row is not a backup."
+          # that cannot be rebuilt from anything. Before the first member signs
+          # up the project holds only seeded reference rows, so "has members"
+          # is reported, not required; "has any rows at all" is required.
+          n=$(grep -c 'INSERT INTO' backup/data.sql || true)
+          echo "data.sql INSERT statements: $n"
+          if [ "$n" -lt 1 ]; then
+            echo "data.sql has no rows at all - that is not a backup."
             exit 1
-          }
-          echo "data.sql INSERT statements: $(grep -c 'INSERT INTO' backup/data.sql)"
+          fi
+          grep -q 'INSERT INTO "public"."profiles"' backup/data.sql \
+            && echo "profiles: present" \
+            || echo "::warning::data.sql has no profiles yet (expected only before the first sign-up)."
 
       - name: encrypt
         run: |
@@ -421,13 +420,14 @@ jobs:
 
       # THE ASSERTION THAT MAKES THIS A DRILL. Restoring without an error is
       # not the same as restoring the data: an empty data.sql would also load
-      # without an error.
+      # without an error. Every table that had rows in the dump must have rows
+      # again; the list comes from the dump, not from a list that rots.
       - name: prove the rows are actually there
         run: |
           set -euo pipefail
           DB="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
           fail=0
-          for t in clubs profiles invite_redemptions; do
+          for t in $(grep -oE 'INSERT INTO "public"\."[a-z_]+"' data.sql | sed 's/.*\."\([a-z_]*\)"/\1/' | sort -u); do
             n=$(psql "$DB" -tAc "select count(*) from public.$t")
             echo "  public.$t: $n rows"
             if [ "$n" -lt 1 ]; then
@@ -435,25 +435,20 @@ jobs:
               fail=1
             fi
           done
-          # The self-referencing constraints must be satisfiable again once
-          # enforcement is back on. This is the half that would silently rot:
-          # session_replication_role lets the data IN regardless, so a restore
-          # can succeed and still leave a profile pointing at a coach that
-          # never arrived. A plain query, not a plpgsql block - dollar quoting
-          # inside a YAML block inside a double-quoted shell string is three
-          # layers of escaping and I got it wrong the first time.
+          # session_replication_role lets the data IN regardless of foreign
+          # keys, so a restore can succeed and still leave a row pointing at a
+          # parent that never arrived. Check the two relations circles hang on.
           orphans=$(psql "$DB" -tAc "
-            select count(*) from public.profiles p
-             where p.assigned_coach_id is not null
-               and not exists (select 1 from public.profiles c where c.id = p.assigned_coach_id)")
-          echo "  profiles pointing at a coach that did not restore: $orphans"
+            select count(*) from public.circle_members m
+             where not exists (select 1 from public.clubs c where c.id = m.club_id)
+                or not exists (select 1 from public.profiles p where p.id = m.user_id)")
+          echo "  circle_members pointing at a missing circle or profile: $orphans"
           [ "$orphans" = "0" ] || fail=1
 
-          orphan_replies=$(psql "$DB" -tAc "
-            select count(*) from public.post_comments pc
-             where pc.parent_comment_id is not null
-               and not exists (select 1 from public.post_comments p where p.id = pc.parent_comment_id)")
-          echo "  replies whose parent comment did not restore: $orphan_replies"
-          [ "$orphan_replies" = "0" ] || fail=1
+          orphan_posts=$(psql "$DB" -tAc "
+            select count(*) from public.workout_posts w
+             where not exists (select 1 from public.clubs c where c.id = w.club_id)")
+          echo "  posts whose circle did not restore: $orphan_posts"
+          [ "$orphan_posts" = "0" ] || fail=1
 
           exit $fail

@@ -123,6 +123,14 @@
       else if (error && isOfflineError(error)) status = "offline";
     } catch (e) { status = "offline"; }
     j.busy = false;
+    // Not a circle invite: it may be the owner's first-circle link.
+    if (status === "invalid" && typeof redeemFirstOwnerToken === "function" && await redeemFirstOwnerToken(token)) {
+      j.token = "";
+      j.error = "";
+      setMessage("הקישור אושר, אפשר להשלים חשבון ולפתוח מעגל");
+      rerender();
+      return;
+    }
     if (status === "joined" || status === "already_member") {
       j.token = "";
       j.error = "";

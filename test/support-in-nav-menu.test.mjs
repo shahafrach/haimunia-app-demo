@@ -31,7 +31,7 @@ test("the hamburger offers support and bug reporting", async () => {
   assert.ok(overlay && overlay.classList.contains("open"), "the menu opened");
   const row = overlay.querySelector('[data-action="open-support"]');
   assert.ok(row, "the menu has a support row");
-  assert.match(row.textContent, /תמיכה ודיווח על תקלה/);
+  assert.match(row.textContent, /פנייה/);
 });
 
 test("tapping it CLOSES the menu rather than opening the sheet on top of it", async () => {
@@ -61,7 +61,7 @@ test("it is still in Settings too - this was an addition, not a move", async () 
   assert.ok(settings.classList.contains("open"), "settings opened");
   const rows = settings.querySelectorAll('[data-action="open-support"]');
   assert.ok(rows.length >= 1, "the original עזרה row is still there");
-  assert.match(settings.textContent, /משהו לא עובד\? ספרו לנו/,
+  assert.match(settings.textContent, /תקלה, שאלה, גישה למידע או מחיקתו/,
     "including its explanatory line, which the nav row does not repeat");
 });
 

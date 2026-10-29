@@ -38,6 +38,6 @@ This is a personal project and the service is provided as is, with no uptime pro
 
 ## Privacy and contact
 
-What is stored and how to delete it is in [PRIVACY.md](PRIVACY.md). The support address is in its [Contact](PRIVACY.md#contact) section.
+What is stored and how to delete it is in [PRIVACY.md](PRIVACY.md). How to make a request is in its [Contact](PRIVACY.md#contact) section.
 
 &copy; Shahaf Rachmany, all rights reserved.

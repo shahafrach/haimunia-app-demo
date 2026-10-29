@@ -432,6 +432,7 @@ ${uiToastHtml()}${renderOutboxBanner()}${inner}</div></section>`;
     const inner = head + profile + `<div class="chip-row" style="margin:-4px 0 8px;"><button class="chip-btn" type="button" data-community-action="migrate">סנכרון היסטוריה פרטית</button></div>`
       + `<div class="ach-section" style="margin-top:18px;">${sectionHead("var(--color-accent)", "מראה")}<div class="chart-card">${typeof renderAppearanceSection === "function" ? renderAppearanceSection("me") : ""}</div></div>`
       + targetAndPauseHtml() + shareSettingsHtml() + renderMyAchievements() + renderSharePromptPrefPanel() + renderBlockedMembersPanel() + renderNotifPrefsPanel() + termMarkPanel
+      + `<button class="chip-btn" data-action="open-support" style="display:block;margin:20px auto 0;">פנייה</button>`
       + selfExportButtonHtml("display:block;margin:20px auto 0;")
       + `<button class="link-btn" data-community-action="sign-out" style="display:block;margin:20px auto 0;">התנתקות</button>`
       + `<button class="link-btn" data-community-action="delete-account" style="display:block;margin:10px auto 8px;color:var(--color-danger);">בקשת מחיקת חשבון</button>`;

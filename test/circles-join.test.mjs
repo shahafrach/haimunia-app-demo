@@ -21,6 +21,8 @@ function newVisitorMock(joinStatus) {
     mock.db.circle_members.push(membership({ id: CIRCLE_A, name: "החבר'ה" }, { user_id: uid, role: "member" }));
     return { data: { status: "joined", club_id: CIRCLE_A }, error: null };
   });
+  // A circle invite is not a bootstrap code: the server refuses it there too.
+  mock.onRpc("redeem_invite_code", () => ({ data: "invalid", error: null }));
   mock.onRpc("mark_recovery_verified", (args, ctx) => {
     const p = mock.db.profiles.find((x) => x.id === ctx.currentUser.id);
     if (p) p.recovery_verified_at = new Date().toISOString();
@@ -162,4 +164,34 @@ test("a member in no circle can paste a link on the join step", async () => {
   again.dispatchEvent(new window.Event("submit", { cancelable: true, bubbles: true }));
   await waitFor(() => mock.callsTo("join_circle").length === 1, 4000);
   assert.deepEqual(mock.callsTo("join_circle")[0], { p_token: TOKEN });
+});
+
+// The owner's first-circle link (bootstrap_owner_invite, docs/ops/FIRST_CIRCLE.md)
+// looks like any invite link. join_circle does not know it, so the client then
+// tries redeem_invite_code, which does.
+test("a bootstrap link: join_circle says invalid, redeem_invite_code accepts it, sign-up goes on", async () => {
+  const mock = newVisitorMock("invalid");
+  mock.onRpc("redeem_invite_code", (args, ctx) => {
+    mock.db.invite_redemptions = mock.db.invite_redemptions || [];
+    mock.db.invite_redemptions.push({ user_id: ctx.currentUser.id, invite_id: "inv-boot", role: "member", redeemed_at: new Date().toISOString() });
+    return { data: "member", error: null };
+  });
+  const window = await openInviteLink(mock);
+  click(window, '[data-community-action="start-signup"]');
+  await waitFor(() => !!window.document.getElementById("communityCredentials"), 4000);
+  assert.equal(mock.callsTo("join_circle").length, 1);
+  const redeem = mock.callsTo("redeem_invite_code");
+  assert.equal(redeem.length, 1, "the token was tried once as a bootstrap code");
+  assert.equal(redeem[0].p_code, TOKEN);
+  assert.ok(!has(window, "ההזמנה לא תקפה"), "no error: the link was good");
+  assert.equal(window.location.hash, "", "and the token is still not in the address bar");
+});
+
+test("a bootstrap link that redeem_invite_code also refuses reads as an invalid invite", async () => {
+  const mock = newVisitorMock("invalid");
+  mock.onRpc("redeem_invite_code", () => ({ data: "invalid", error: null }));
+  const window = await openInviteLink(mock);
+  click(window, '[data-community-action="start-signup"]');
+  await waitFor(() => has(window, "ההזמנה לא תקפה"), 4000);
+  assert.equal(mock.callsTo("redeem_invite_code").length, 1);
 });

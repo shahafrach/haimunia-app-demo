@@ -21,11 +21,12 @@ const all = { "PRIVACY.md": privacyMd, "TERMS.md": termsMd, "privacy.html": priv
 
 const PLACEHOLDER = "SUPPORT_ADDRESS_NOT_DECIDED";
 
-test("the contact placeholder lives in privacy.html and PRIVACY.md only, once each", () => {
-  assert.equal(privacyHtml.split(PLACEHOLDER).length - 1, 1);
-  assert.equal(privacyMd.split(PLACEHOLDER).length - 1, 1);
-  assert.doesNotMatch(termsHtml, new RegExp(PLACEHOLDER));
-  assert.doesNotMatch(termsMd, new RegExp(PLACEHOLDER));
+test("no page keeps the support-address placeholder: requests go through פנייה in the app", () => {
+  for (const [name, t] of Object.entries(all)) assert.doesNotMatch(t, new RegExp(PLACEHOLDER), name);
+  assert.match(privacyMd, /Requests, including access and deletion, go through \*\*פנייה\*\* in the app/);
+  assert.match(privacyHtml, /בקשות, כולל בקשות גישה למידע ומחיקה, מגישים דרך "פנייה" באפליקציה/);
+  assert.match(privacyMd, /no email address or phone number/i);
+  assert.match(privacyHtml, /אין כתובת מייל ואין מספר טלפון/);
 });
 
 test("the terms read the contact from the privacy page", () => {

@@ -1,21 +1,16 @@
-// Support and bug reporting (2026-09-15).
+// פנייה (support) from inside the app. Owner decision 2026-10-28: no support
+// email and no phone number. A signed-in member writes a message; the app
+// sends the message and the app version, nothing else, through
+// bug_report_submit (communitySubmitBugReport in cloud.js).
 //
-// WHY THIS EXISTS. Before this feature the app had no route whatsoever for
-// "this is broken" or "I need help". The four defects found in its first
-// real-phone session reached a developer only because the person holding the
-// phone was one; a member had nowhere to put the same observation.
-//
-// WHAT THESE TESTS PIN, beyond "it renders". Three properties that are easy
-// to regress and expensive to get wrong:
-//   1. It works with Community OFF. The training log needs no account and no
-//      network, so asking for help must not require having joined a social
-//      feed.
-//   2. The diagnostics block carries device facts and NOTHING personal. This
-//      text is handed to WhatsApp or mail, so anything that leaks into it
-//      leaves the device.
-//   3. There is always at least one way to send. An unconfigured club must
-//      still get the copy fallback - a support screen with no route out is
-//      worse than no support screen.
+// WHAT THESE TESTS PIN:
+//   1. Someone who is not signed in sees why, not a form that cannot work.
+//   2. Signed in, the form sends the typed text and ONLY {app_version}: no
+//      device facts, no training data.
+//   3. There is no email or WhatsApp route anywhere, and cloud-config.js has
+//      no support address or phone.
+//   4. The dialog behaviours the first release got wrong (Escape order, the
+//      backdrop guard) still hold.
 import { test } from "node:test";
 import assert from "node:assert";
 import fs from "node:fs";
@@ -28,87 +23,54 @@ async function openSupportSheet(window) {
   return overlay;
 }
 
-test("a member with Community switched off can still open support and write a report", async () => {
+test("someone not signed in is told why there is no form", async () => {
   const window = await bootApp();
-  // bootApp() is the offline-only app: no cloud.js session, no network.
-  assert.equal(typeof window.cloudSyncActive, "undefined",
-    "this fixture must genuinely have no community layer, or the test proves nothing");
+  assert.equal(typeof window.cloudSignedIn, "undefined", "this fixture has no community layer");
   const overlay = await openSupportSheet(window);
-  assert.ok(overlay.querySelector("#supportMessage"), "the description field should render");
-  assert.match(overlay.textContent, /מעגלים: כבויה/, "and the report should say the community layer is off, not crash on it");
+  assert.ok(!overlay.querySelector("#supportMessage"), "no form that cannot work");
+  assert.match(overlay.textContent, /בלי מייל ובלי טלפון/);
   window.closeSupport();
-  assert.ok(!overlay.classList.contains("open"), "and it should close again");
+  assert.ok(!overlay.classList.contains("open"), "and it closes again");
 });
 
-test("the report carries the device facts a developer needs", async () => {
+test("signed in, the form sends the typed text and the app version only", async () => {
   const window = await bootApp();
-  await openSupportSheet(window);
-  const text = window.supportReportText();
-  assert.match(text, /גרסה: \d+\.\d+\.\d+/, "the app version is the single most useful line in any bug report");
-  assert.match(text, /מותקן במסך הבית: (כן|לא)/, "installed-as-PWA changes real behaviour and must be stated");
-  assert.match(text, /חיבור: /, "online/offline changes real behaviour too");
-  assert.match(text, /דפדפן: /, "and the engine is what separates an iOS-only defect from a general one");
-});
-
-test("the report contains nothing personal - it leaves the device, so this is the load-bearing one", async () => {
-  const window = await bootApp();
-  // Give the app real, identifiable training data first. If any of it can
-  // reach the report, this is where it shows up.
+  window.cloudSignedIn = () => true;
+  const sent = [];
+  window.communitySubmitBugReport = async (body, diagnostics) => { sent.push({ body, diagnostics }); return true; };
   await window.addMovement("Back Squat Secret", "Squat");
-  window.applyFieldValue("step", "weight", 142.5);
-  window.applyFieldValue("step", "reps", 3);
-  window.applyFieldValue("step", "sets", 1);
-  await window.saveSet();
-  window.closeCelebration();
+  const overlay = await openSupportSheet(window);
+  assert.ok(overlay.querySelector('[data-action="support-send-club"]'), "a send button");
+  assert.ok(!overlay.querySelector('[data-action="support-send-whatsapp"]'), "no WhatsApp route");
+  assert.ok(!overlay.querySelector('[data-action="support-send-email"]'), "no email route");
+  assert.ok(!overlay.querySelector('[data-action="support-copy"]'), "no copy-the-report fallback with device facts");
+  assert.match(overlay.textContent, /לא נשלחים פרטי המכשיר ולא יומן האימונים/);
 
-  await openSupportSheet(window);
-  const text = window.supportReportText();
-  assert.ok(!/Back Squat Secret/.test(text), "a movement name must never reach the report");
-  assert.ok(!/142\.5/.test(text), "nor a logged weight");
-  // The member's own typed description is the ONLY free text that travels,
-  // and it travels because they wrote it and can read it before sending.
   const field = window.document.getElementById("supportMessage");
-  field.value = "לחצתי על העלאת תמונה ולא קרה כלום";
-  const withTyped = window.supportReportText();
-  assert.match(withTyped, /לחצתי על העלאת תמונה ולא קרה כלום/, "what the member wrote must be in the report");
-  assert.ok(!/Back Squat Secret/.test(withTyped), "and typing must not pull training data in with it");
+  field.value = "   ";
+  await window.supportSendToClub();
+  assert.equal(sent.length, 0, "an empty message is not sent");
+
+  field.value = "אפשר למחוק לי את החשבון?";
+  await window.supportSendToClub();
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].body, "אפשר למחוק לי את החשבון?");
+  assert.deepEqual(Object.keys(sent[0].diagnostics), ["app_version"], "the only diagnostics key is app_version");
+  assert.match(sent[0].diagnostics.app_version, /^\d+\.\d+\.\d+$/);
+  assert.ok(!/Back Squat Secret/.test(JSON.stringify(sent[0])), "no training data travels");
+  assert.equal(field.value, "", "a sent message clears the field");
 });
 
-test("an empty description still produces a sendable report rather than a blank message", async () => {
+test("a failed send keeps the text so nothing is lost", async () => {
   const window = await bootApp();
+  window.cloudSignedIn = () => true;
+  window.communitySubmitBugReport = async () => false;
   await openSupportSheet(window);
-  const text = window.supportReportText();
-  assert.match(text, /\(לא נכתב תיאור\)/,
-    "a member who taps send without typing should still deliver the diagnostics, marked as description-less");
-});
-
-test("with no support channel configured there is still a way out - the copy fallback", async () => {
-  const window = await bootApp();
-  // This asserts the UNCONFIGURED-club case, using test/helpers/boot.mjs's
-  // own HAIMUNIA_CONFIG stub - which sets neither support channel - rather
-  // than the shipped cloud-config.js. Kept separate on purpose: the real
-  // config now routes to a club address (see the test below), and a club that
-  // has not filled one in yet must still get a working screen. Do not
-  // "fix" this by reading cloud-config.js; the two cases are both real.
-  const cfg = window.supportConfig();
-  assert.equal(cfg.whatsapp, "", "this fixture should have no WhatsApp number configured");
-  assert.equal(cfg.email, "", "nor an email address");
-  const overlay = await openSupportSheet(window);
-  assert.ok(overlay.querySelector('[data-action="support-copy"]'),
-    "the copy fallback must always be offered, or an unconfigured club has a dead-end support screen");
-  assert.ok(!overlay.querySelector('[data-action="support-send-whatsapp"]'),
-    "and a route that cannot work must not be offered at all");
-  assert.ok(!overlay.querySelector('[data-action="support-send-email"]'));
-});
-
-test("a configured WhatsApp number is offered, and the number is normalised to wa.me's shape", async () => {
-  const window = await bootApp();
-  // wa.me rejects +, spaces and dashes; a club owner pasting a human-readable
-  // number is the expected input, so the normalisation is the contract.
-  window.HAIMUNIA_CONFIG = Object.assign({}, window.HAIMUNIA_CONFIG, { supportWhatsApp: "+972 54-123-4567" });
-  assert.equal(window.supportConfig().whatsapp, "972541234567");
-  const overlay = await openSupportSheet(window);
-  assert.ok(overlay.querySelector('[data-action="support-send-whatsapp"]'), "the WhatsApp route should now be offered");
+  const field = window.document.getElementById("supportMessage");
+  field.value = "הודעה ארוכה שלא רוצים לאבד";
+  await window.supportSendToClub();
+  assert.equal(field.value, "הודעה ארוכה שלא רוצים לאבד");
+  assert.match(window.document.getElementById("supportSendNote").textContent, /לא הצלחנו לשלוח/);
 });
 
 test("support is registered ahead of settings, so Escape closes the sheet on top", async () => {
@@ -124,22 +86,11 @@ test("support is registered ahead of settings, so Escape closes the sheet on top
     "with both open, the active dialog must be support - not the settings sheet behind it");
 });
 
-test("the shipped cloud-config.js actually routes somewhere - an empty one would make the whole feature decorative", () => {
-  // The one assertion in this file that is about the REAL config rather than
-  // the test stub. Everything above proves the sheet behaves correctly; this
-  // proves it is wired to a human. A support screen whose only route is
-  // "copy this text somewhere yourself" is a feature in name only, and the
-  // failure mode is silent - nobody notices an inbox that never receives.
+test("cloud-config.js and the app carry no support email or phone", () => {
   const cfg = fs.readFileSync(new URL("../cloud-config.js", import.meta.url), "utf8");
-  const email = (cfg.match(/supportEmail:\s*"([^"]*)"/) || [])[1];
-  const whatsapp = (cfg.match(/supportWhatsApp:\s*"([^"]*)"/) || [])[1];
-  assert.ok(email !== undefined && whatsapp !== undefined, "both support keys must exist in cloud-config.js, even if empty");
-  assert.ok((email && email.length) || (whatsapp && whatsapp.length),
-    "at least one support channel must be configured, or every bug report dies in the member's clipboard");
-  if (email) assert.match(email, /^[^@\s]+@[^@\s]+\.[^@\s]+$/, "supportEmail must be a usable address");
-  // wa.me rejects +, spaces and dashes, and a wrong number fails silently by
-  // opening a chat with nobody - so the stored shape is worth pinning.
-  if (whatsapp) assert.match(whatsapp, /^[0-9]{8,15}$/, "supportWhatsApp must be digits only, international format, no + and no spaces");
+  assert.ok(!/supportEmail|supportWhatsApp/.test(cfg), "no support address or number in the config");
+  const app = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
+  assert.ok(!/supportEmail|supportWhatsApp|mailto:|wa\.me/.test(app), "no email or WhatsApp handoff in app.js");
 });
 
 test("tapping inside the sheet does NOT close it - the backdrop guard the first release shipped without", async () => {
@@ -150,6 +101,7 @@ test("tapping inside the sheet does NOT close it - the backdrop guard the first 
   // textarea found the overlay and closed the dialog before a single
   // character could be typed. The feature was unusable on a touch screen.
   const window = await bootApp();
+  window.cloudSignedIn = () => true;
   window.openSupport();
   const overlay = window.document.getElementById("supportOverlay");
   const field = window.document.getElementById("supportMessage");
@@ -163,7 +115,7 @@ test("tapping inside the sheet does NOT close it - the backdrop guard the first 
   // Typing then survives, which is the thing the member was trying to do.
   field.value = "לחצתי על העלאת תמונה ולא קרה כלום";
   assert.ok(overlay.classList.contains("open"), "and the sheet is still open after typing");
-  assert.match(window.supportReportText(), /לחצתי על העלאת תמונה/, "and the text reached the report");
+  assert.equal(window.document.getElementById("supportMessage").value, "לחצתי על העלאת תמונה ולא קרה כלום", "and the text is still in the field");
 
   // The control: the BACKDROP itself must still dismiss it, or the guard
   // would have fixed one bug by removing the way out of the dialog.
