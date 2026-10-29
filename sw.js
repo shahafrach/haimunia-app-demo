@@ -2,7 +2,7 @@
 // Version is the single source of truth for the cache name — bumping
 // APP_VERSION in app.js is what ships an update. Don't edit SW_VERSION by
 // hand: run `npm run sync-version` (see app.js) to copy it here.
-const SW_VERSION = "4.81.0";
+const SW_VERSION = "5.0.0";
 // "haimunia-demo-v..." — deliberately distinct from the production app's
 // own "haimunia-v..." cache prefix. Both service workers were once scoped
 // to one origin (a shared GitHub Pages host, before the move to Cloudflare Pages
@@ -53,6 +53,8 @@ const OPTIONAL_ASSETS = [
   "./assets/scenes/circle.webp",
   "./assets/scenes/log.webp",
   "./assets/scenes/progress.webp",
+  "./assets/scenes/welcome.webp",
+  "./assets/scenes/calendar.webp",
   "./src/community/circles-core.js",
   "./src/community/sharing-core.js",
   "./src/community/achievements.js",

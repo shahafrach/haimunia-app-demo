@@ -39,22 +39,18 @@ tone) and lays a photo over it when one is set. Each tab has its own slot:
 
 If the owner supplies his own photos they replace these files under the same names.
 
-## Still to add: welcome screen and Calendar scene (2026-10-29)
+## Welcome screen and Calendar scene (added 2026-10-29, consolidation)
 
-Two more slots were asked for in the Pilot readiness session: the welcome sheet
-and the Calendar scene (`.scene-page--history`, which today draws from the
-palette only). **Not added.** That session's network policy answered refused to
-`images.unsplash.com`, `unsplash.com`, `images.pexels.com` and `www.pexels.com`
-(checked again; nothing hotlinked, nothing faked, and none of the four tab photos
-was reused to fill the gap). Same rules when it can: free-license photo, no faces,
-no gym name or logo, WebP under 120 KB, `assets/scenes/welcome.webp` and
-`assets/scenes/calendar.webp`, license row below, `--scene-photo` on the rule
-(`.scene-page--history` and `.welcome-scene`), and a line in `OPTIONAL_ASSETS` in `sw.js`.
+The Pilot readiness session could not fetch them (network policy). The consolidation
+session added both under the same rules: free Unsplash photos, no faces, no gym name or
+logo, WebP under 120 KB, `--scene-photo` on `.scene-page--history` and on
+`#welcomeOverlay .welcome-scene` (the welcome sheet also carries `scene-page--history`, so
+its own rule overrides the Calendar photo), both in `OPTIONAL_ASSETS`.
 
-| Slot | Scene class | File (to add) | Subject to look for |
-|------|-------------|---------------|----------------------|
-| Welcome | `.welcome-scene` | `assets/scenes/welcome.webp` | early light on an empty track or a quiet road |
-| Calendar | `.scene-page--history` | `assets/scenes/calendar.webp` | a chalked board, a wall of plates, or a sunrise horizon, no text |
+| Slot | Scene class | File | Subject |
+|------|-------------|------|---------|
+| Welcome | `#welcomeOverlay .welcome-scene` | `assets/scenes/welcome.webp` | a runner in silhouette on a wet road at dusk |
+| Calendar | `.scene-page--history` | `assets/scenes/calendar.webp` | dumbbells and a band on a wooden floor, no people |
 
 ## Licenses
 
@@ -70,3 +66,5 @@ Attribution is still recorded here.
 | `assets/scenes/progress.webp` | https://images.unsplash.com/photo-1552674605-db6ffd4facb5 | not recorded | Unsplash License | 2026-10-29 |
 
 All four are free Unsplash photos (served from images.unsplash.com, not plus.unsplash.com). Checked by eye: no faces (the runners are backlit silhouettes), no gym name or logo. Home: running up stone stairs. Circle: hands on a dumbbell rack. Log: a deadlift from above. Progress: three runners at sunrise. Sizes: 114, 38, 101 and 34 KB.
+| `assets/scenes/welcome.webp` | https://images.unsplash.com/photo-1502224562085-639556652f33 | not recorded | Unsplash License | 2026-10-29 |
+| `assets/scenes/calendar.webp` | https://images.unsplash.com/photo-1584735935682-2f2b69dff9d2 | not recorded | Unsplash License | 2026-10-29 |
