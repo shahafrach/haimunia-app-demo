@@ -58,7 +58,7 @@ private circles for friends. It is not a gym app and not a product.
 
 - Leaving or removal deletes the member's posts in that circle. The private log stays on the device.
 - An owner who leaves passes ownership to the longest-standing member. The last member to leave deletes the circle.
-- Account deletion removes all posts and reactions. The circle sees "a member left".
+- Account deletion removes all posts and reactions, and takes the member out of every circle at the request, with the same cleanup as leaving (202610290003): the circle's count and a Couple's seat free up at once, not at the purge. The circle sees "a member left".
 - First run and empty circles get explicit screens.
 
 ## Auth

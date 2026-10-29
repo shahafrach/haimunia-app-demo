@@ -2074,6 +2074,8 @@ async function loadBackupConsent() {
 function setBackupConsent(choice) {
   backupConsent = choice;
   dbSetSetting(BACKUP_CONSENT_KEY, choice).catch(noteStorageError);
+  // The circles' medal prompt waits for this answer (src/community/share-prompt.js).
+  try { window.dispatchEvent(new Event("haimunia-backup-consent-answered")); } catch (e) { /* no events: the prompt is offered at the next medal */ }
 }
 // Read by cloud.js's maybeAutoStartBackup(): while this is true the member
 // has data worth backing up but has not yet been asked, so no anonymous
@@ -2082,6 +2084,13 @@ function setBackupConsent(choice) {
 // import relationship to this one - the same shape every other cross-file
 // hook in this pair uses (window.cloudSyncActive, window.isCommunitySignedIn).
 window.haimuniaBackupConsentPending = function () { return backupConsent === null; };
+// True while the Log screen owes the member the backup question: never answered,
+// there is something to back up, and a backend to back it up to. Unlike
+// shouldShowBackupConsent() this stays true while the first-entry card is still up,
+// which is exactly when a medal prompt must not open over the question.
+window.haimuniaBackupQuestionOwed = function () {
+  return backupConsent === null && totalLoggedEntries() >= 1 && cloudBackupConfigured();
+};
 
 // One Tier-A celebration exists on day one and this is it (§5.2). Keyed by
 // its own flag rather than by entries.length === 1, so deleting that first
@@ -8935,4 +8944,15 @@ async function init() {
     });
   }
 }
+// The height of everything docked to the bottom of the screen (tab bar, save bar,
+// install dock), for CSS that must float above it: the circles' share bar and status
+// toast ([data-dock] in index.html). Written whenever that stack grows or shrinks.
+(function trackBottomBars() {
+  const wrap = document.getElementById("bottomNavWrap");
+  if (!wrap) return;
+  const write = () => document.documentElement.style.setProperty("--bottom-wrap-h", wrap.offsetHeight + "px");
+  write();
+  if (typeof ResizeObserver === "function") new ResizeObserver(write).observe(wrap);
+  window.addEventListener("resize", write);
+})();
 init();

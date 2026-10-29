@@ -80,10 +80,20 @@
   function anySharePromptOpen() {
     return !!(state.posts.prPrompt || state.achievements.unlock);
   }
+  // THE BACKUP QUESTION COMES FIRST. After a member's first entry the Log screen
+  // asks whether to back up to the cloud, and a medal prompt that opens on top of
+  // that question covers its two buttons (docs/qa/user-tests-2026-10.md, finding
+  // 4). A medal is parked until the question is answered (app.js announces it with
+  // "haimunia-backup-consent-answered") and then offered as usual. A PR is not
+  // parked: it is the moment the member just made, and it asks nothing of the Log screen.
+  function backupQuestionOwed() {
+    try { return typeof window.haimuniaBackupQuestionOwed === "function" && !!window.haimuniaBackupQuestionOwed(); } catch (e) { return false; }
+  }
+  function waitsForBackupQuestion(kind) { return kind === "achievement" && backupQuestionOwed(); }
   // `open` returns true when it actually opened something.
   function offerSharePrompt(kind, open) {
     if (!sharePromptAllowed(kind)) return false;
-    if (anySharePromptOpen()) {
+    if (anySharePromptOpen() || waitsForBackupQuestion(kind)) {
       if (sharePromptQueue.length < SHARE_PROMPT_QUEUE_MAX) sharePromptQueue.push({ kind: kind, open: open });
       return false;
     }
@@ -96,12 +106,18 @@
   // closed because the member answered it is the only thing that earns the
   // next question.
   function sharePromptClosed() {
-    while (sharePromptQueue.length) {
-      const next = sharePromptQueue.shift();
-      if (!sharePromptAllowed(next.kind)) continue;
+    for (let i = 0; i < sharePromptQueue.length; ) {
+      const next = sharePromptQueue[i];
+      if (!sharePromptAllowed(next.kind)) { sharePromptQueue.splice(i, 1); continue; }
+      // Still behind the backup question: leave it parked, look at the next one.
+      if (waitsForBackupQuestion(next.kind)) { i++; continue; }
+      sharePromptQueue.splice(i, 1);
       if (next.open()) return;
     }
   }
+  window.addEventListener("haimunia-backup-consent-answered", function () {
+    if (!anySharePromptOpen()) sharePromptClosed();
+  });
 
   // ---- The switch, in Me -------------------------------------------------
   // Persists on change with no save button.

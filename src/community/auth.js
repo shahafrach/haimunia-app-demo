@@ -734,6 +734,15 @@
       ));
     if (error) return setFieldErrors(formId, { username: /registered|exists|taken/i.test(error.message || "") ? "שם הכניסה הזה כבר תפוס. בחרו שם אחר." : "השמירה נכשלה, נסו שוב" });
     state.user = data.user;
+    // updateUser() saves the new user but keeps the access token issued at the
+    // anonymous sign-in, and that token's is_anonymous claim stays true until it
+    // is refreshed. A fresh one now, so nothing that reads the token (the founder
+    // link, the פנייה, anything later) sees a member who has just signed up as
+    // still anonymous. The server no longer trusts the claim either (202610290003).
+    try {
+      const refreshed = await client.auth.refreshSession();
+      if (refreshed && refreshed.data && refreshed.data.session) state.user = refreshed.data.session.user;
+    } catch (e) { /* the upgrade itself worked; the next token refresh brings the claim up to date */ }
     setFieldErrors(formId, {});
     setMessage("החשבון נוצר, אפשר להתחבר איתו מכל מכשיר");
     // For a member who already had a profile before setting a recovery

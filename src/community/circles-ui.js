@@ -28,7 +28,7 @@
   // screens that are full pages rather than a card.
   function uiToastHtml() {
     return state.ui.message
-      ? `<div role="status" aria-live="polite" style="position:fixed;left:0;right:0;bottom:calc(var(--bottom-nav-reserve) - 108px);display:flex;justify-content:center;padding:0 16px;z-index:60;pointer-events:none;"><div style="max-width:448px;background:var(--color-surface);border:1px solid var(--color-accent);color:var(--color-accent);border-radius:14px;padding:11px 16px;font-size:13px;font-weight:700;line-height:1.45;box-shadow:var(--card-shadow);text-align:center;">${esc(state.ui.message)}</div></div>`
+      ? `<div role="status" aria-live="polite" data-dock="1" style="position:fixed;left:0;right:0;bottom:calc(var(--bottom-nav-reserve) - 108px);display:flex;justify-content:center;padding:0 16px;z-index:60;pointer-events:none;"><div style="max-width:448px;background:var(--color-surface);border:1px solid var(--color-accent);color:var(--color-accent);border-radius:14px;padding:11px 16px;font-size:13px;font-weight:700;line-height:1.45;box-shadow:var(--card-shadow);text-align:center;">${esc(state.ui.message)}</div></div>`
       : "";
   }
   // One page frame for Home, Circle and Me.
