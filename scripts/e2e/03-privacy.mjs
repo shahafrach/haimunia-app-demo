@@ -6,10 +6,7 @@
 // carries the percent and no absolute weight on the wire. Body weight never leaves
 // the phone. A set logged offline is queued and sent on reconnect. Avi deletes his
 // account and leaves the circle.
-import fs from "node:fs";
-import path from "node:path";
 import { startWorld } from "./lib/harness.mjs";
-import { REPO_ROOT } from "./lib/config.mjs";
 import { sql } from "./lib/db.mjs";
 import {
   uname, until, bootstrapToken, passWelcome, clearIncidentals, goHome, goCircle, goProgress, openMe, section,
@@ -284,21 +281,52 @@ await world.step(noa, "noa-sees-offline-post", "Noa sees the post that was queue
   s.check(r.found, "Avi's Strict Press shows in the couple's feed", r.cards.map((c) => c.text.slice(0, 40)).join(" | "));
 });
 
-// 14. Founder link --------------------------------------------------------------------------------------------------------------------
-{
-  const hits = [];
-  const walk = (dir) => {
-    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-      const f = path.join(dir, e.name);
-      if (e.isDirectory()) walk(f);
-      else if (/\.(js|sql|html)$/.test(e.name) && /founder/i.test(fs.readFileSync(f, "utf8"))) hits.push(path.relative(REPO_ROOT, f));
-    }
-  };
-  for (const d of ["src", "supabase/migrations"]) walk(path.join(REPO_ROOT, d));
-  for (const f of ["app.js", "cloud.js", "index.html"]) if (/founder/i.test(fs.readFileSync(path.join(REPO_ROOT, f), "utf8"))) hits.push(f);
-  world.skip("founder-link", "A member sends a founder link and the friend creates their own circle",
-    hits.length ? `The code mentions founder links (${hits.slice(0, 3).join(", ")}) but this script has no steps for them yet.` : "Founder link is not merged on main (no code or migration mentions it), so there is nothing to drive. Not covered.");
-}
+// 14. Founder link -----------------------------------------------------------------------------------------------------------------------
+let founderToken = null;
+await world.step(noa, "founder-send", "Noa sends a friend a founder link", async (s) => {
+  await openMe(s, noa);
+  await noa.page.locator('[data-community-action="c-founder-open"]').scrollIntoViewIfNeeded();
+  await noa.tap('[data-community-action="c-founder-open"]');
+  s.check(await noa.waitVisible('[data-community-action="c-founder-create"]', 6000), "the sheet offers to create the link");
+  s.check(/לא מצטרפים למעגלים שלך/.test(await noa.text()), "and says the friend does not join her circles");
+  const done = noa.rpc("create_founder_invite");
+  await noa.tap('[data-community-action="c-founder-create"]');
+  s.check(!!(await done), "create_founder_invite was called");
+  const link = await until(async () => ((await noa.has("#founderLink")) ? noa.page.inputValue("#founderLink") : null), { timeout: 10000 });
+  s.check(!!link, "a link is shown");
+  founderToken = (/#invite=([a-f0-9]{64})/.exec(link || "") || [])[1] || null;
+  s.check(!!founderToken, "with a 64-hex token after the #", String(link).slice(0, 60));
+  s.check(/7 ימים/.test(await noa.text()), "and says it lasts 7 days and works once");
+  s.check(count(`select count(*) from public.invite_codes where active and max_uses = 1 and expires_at > now() + interval '6 days'`) >= 1, "one 7-day, one-use code is stored");
+  await noa.tap('[data-community-action="c-sheet-close"]');
+}, { primary: ['[data-community-action="c-founder-open"]'], contrast: ['[data-community-action="c-founder-open"]', "#founderLinkPanel .footer-note"] });
+
+const dev = await world.person("dev", { ua: "android" });
+const DV = uname("dev");
+await world.step(dev, "founder-friend", "The friend signs up and creates their own circle", async (s) => {
+  const noaClubs = count(`select count(*) from public.circle_members where user_id = ${q(noaId)}`);
+  const members = (id) => count(`select count(*) from public.circle_members where club_id = ${q(id)}`);
+  const before = { couple: members(coupleId), friends: members(friendsId) };
+  await dev.goto(world.baseUrl + "#invite=" + founderToken);
+  await passWelcome(s, dev, "דב");
+  await fillCredentials(s, dev, { username: DV });
+  await fillProfile(s, dev, { displayName: "דב", emoji: "🐺" });
+  const sheet = await dev.waitVisible("#circleCreate", 20000);
+  s.check(sheet, "the create-circle sheet opens by itself after the profile");
+  if (!sheet) { await dev.waitText("עוד אין לך מעגל", 5000); await dev.tap('[data-community-action="c-create-open"]'); await dev.waitVisible("#circleCreate", 8000); }
+  await dev.type('#circleCreate input[name="name"]', "המעגל של דב");
+  await dev.tap('#circleCreate button[type="submit"]');
+  s.check(await dev.waitHidden("#circleCreate", 15000), "the circle is created");
+  await dev.waitVisible('[data-community-action="c-leave-ask"]', 15000);
+  await clearIncidentals(s, dev);
+  const devId = userId(DV);
+  const mine = sql(`select c.name, m.role from public.circle_members m join public.clubs c on c.id = m.club_id where m.user_id = ${q(devId)}`);
+  s.check(mine.length === 1 && mine[0][0] === "המעגל של דב" && mine[0][1] === "owner", "he is the owner of exactly one circle, his own", JSON.stringify(mine));
+  s.check(members(coupleId) === before.couple && members(friendsId) === before.friends, "he joined none of Noa's circles");
+  s.check(count(`select count(*) from public.circle_members where user_id = ${q(noaId)}`) === noaClubs, "and Noa gained no circle");
+  const text = await dev.text();
+  s.check(!/Back Squat|Deadlift|נועה/.test(text), "nothing of Noa's shows on his screen", text.slice(0, 160));
+}, { primary: ['[data-community-action="c-invite-open"]'] });
 
 // 15. Avi deletes his account ---------------------------------------------------------------------------------------------------------------
 await world.step(avi, "avi-deletes", "Avi deletes his account", async (s) => {
