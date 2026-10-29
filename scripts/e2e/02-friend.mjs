@@ -8,7 +8,7 @@
 // (his posts go with him), Dana invites him again and he rejoins.
 import { startWorld } from "./lib/harness.mjs";
 import {
-  uname, until, bootstrapToken, passWelcome, clearIncidentals, goHome, goCircle, openMe, section,
+  uname, until, bootstrapToken, passWelcome, landOnInvite, clearIncidentals, goHome, goCircle, openMe, section,
   fillCredentials, fillProfile, createCircle, makeInvite, joinByPaste, leaveCircle, shareSetting, logSet,
   seeInFeed, feedCards, one, q, userId, count, sleep,
 } from "./lib/flows.mjs";
@@ -79,7 +79,7 @@ await world.step(yoavWA, "yoav-whatsapp", "Yoav opens the link inside WhatsApp",
   const usersBefore = count("select count(*) from auth.users");
   await yoavWA.goto(world.baseUrl + "#invite=" + invite1);
   await passWelcome(s, yoavWA, "יואב");
-  const gate = await yoavWA.waitVisible("[data-inapp-browser]", 15000);
+  const gate = await landOnInvite(s, yoavWA, "[data-inapp-browser]");
   s.check(gate, "the open-in-browser screen appears");
   if (!gate) return;
   const text = await yoavWA.inner("[data-inapp-browser]");

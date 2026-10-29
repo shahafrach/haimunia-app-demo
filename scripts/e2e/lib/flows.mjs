@@ -100,7 +100,21 @@ export async function openInvite(s, p, token, { welcomeName = "בדיקה" } = {
   await passWelcome(s, p, welcomeName);
 }
 
+/**
+ * After an invite link and the first-run sheet, a person should be looking at the
+ * invite. If the app left them on another tab (the Log tab, in practice), that is a
+ * finding, and they tap the Circle tab to find the invite again, as a person would.
+ */
+export async function landOnInvite(s, p, selector) {
+  if (await p.waitVisible(selector, 4000)) return true;
+  const where = (await p.text()).slice(0, 90);
+  s.flag("invite-dropped", `After the invite link and the first-run name sheet the app showed another screen, not the invite: "${where}". The person has to find the Circle tab themselves.`);
+  await p.tap("#tabCommunityBtn");
+  return p.waitVisible(selector, 10000);
+}
+
 export async function fillCredentials(s, p, { username, password = PASSWORD }) {
+  await landOnInvite(s, p, '[data-community-action="start-signup"]');
   await p.tap('[data-community-action="start-signup"]');
   const ok = await p.waitVisible("#communityCredentials", 25000);
   s.check(ok, "the account form opens after the join button");
@@ -122,7 +136,9 @@ export async function fillProfile(s, p, { displayName, emoji }) {
 
 // ---- circles ------------------------------------------------------------------------------
 export async function createCircle(s, p, { type = "friends", name, emoji = "🔥" }) {
-  await p.tap('[data-community-action="c-create-open"]');
+  // After a founder or bootstrap link the app opens this sheet by itself, once.
+  if (await p.waitVisible("#circleCreate", 1500)) s.note("The create-circle sheet had already opened by itself.");
+  else await p.tap('[data-community-action="c-create-open"]');
   const open = await p.waitVisible("#circleCreate", 8000);
   s.check(open, "the create-circle sheet opens");
   if (type === "couple") await p.tap('#circleCreate label:has(input[value="couple"])');

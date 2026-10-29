@@ -9,7 +9,7 @@
 import { startWorld } from "./lib/harness.mjs";
 import { sql } from "./lib/db.mjs";
 import {
-  uname, until, bootstrapToken, passWelcome, clearIncidentals, goHome, goCircle, goProgress, openMe, section,
+  uname, until, bootstrapToken, passWelcome, landOnInvite, clearIncidentals, goHome, goCircle, goProgress, openMe, section,
   fillCredentials, fillProfile, createCircle, makeInvite, shareSetting, logSet, acceptBackup, waitSynced,
   seeInFeed, feedCards, weekCards, one, q, userId, count, sleep,
 } from "./lib/flows.mjs";
@@ -73,6 +73,7 @@ await world.step(cleo, "cleo-refused", "A third person opens the spare invite an
   const before = count(`select count(*) from public.circle_members where club_id = ${q(coupleId)}`);
   await cleo.goto(world.baseUrl + "#invite=" + invite2);
   await passWelcome(s, cleo, "קליאו");
+  await landOnInvite(s, cleo, '[data-community-action="start-signup"]');
   await cleo.tap('[data-community-action="start-signup"]');
   const refused = await cleo.waitText("המעגל הזה מלא", 25000);
   s.check(refused, "she is told the circle is full");
