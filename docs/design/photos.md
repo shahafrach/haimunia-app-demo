@@ -1,6 +1,6 @@
 # Scene photos
 
-Status: **no photos are in the repository yet.** The Design session could not fetch any.
+Status: **four photos are in the repository** (2026-10-29), one per tab. The Design session could not fetch them; they were added from a session whose network policy allowed `images.unsplash.com`.
 
 ## Why
 
@@ -47,4 +47,9 @@ Attribution is still recorded here.
 
 | File | Source URL | Author | License | Downloaded |
 |------|------------|--------|---------|------------|
-| _none yet_ | | | | |
+| `assets/scenes/home.webp` | https://images.unsplash.com/photo-1476480862126-209bfaa8edc8 | not recorded (unsplash.com page lookup was blocked) | Unsplash License | 2026-10-29 |
+| `assets/scenes/circle.webp` | https://images.unsplash.com/photo-1583454110551-21f2fa2afe61 | not recorded | Unsplash License | 2026-10-29 |
+| `assets/scenes/log.webp` | https://images.unsplash.com/photo-1517963879433-6ad2b056d712 | not recorded | Unsplash License | 2026-10-29 |
+| `assets/scenes/progress.webp` | https://images.unsplash.com/photo-1552674605-db6ffd4facb5 | not recorded | Unsplash License | 2026-10-29 |
+
+All four are free Unsplash photos (served from images.unsplash.com, not plus.unsplash.com). Checked by eye: no faces (the runners are backlit silhouettes), no gym name or logo. Home: running up stone stairs. Circle: hands on a dumbbell rack. Log: a deadlift from above. Progress: three runners at sunrise. Sizes: 114, 38, 101 and 34 KB.

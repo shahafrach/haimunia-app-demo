@@ -49,6 +49,10 @@ const REQUIRED_ASSETS = [
 // wrap `bus.emit(...)` in a try/catch), so a failed fetch of any of these
 // must not take down offline support for the training log too.
 const OPTIONAL_ASSETS = [
+  "./assets/scenes/home.webp",
+  "./assets/scenes/circle.webp",
+  "./assets/scenes/log.webp",
+  "./assets/scenes/progress.webp",
   "./src/community/circles-core.js",
   "./src/community/sharing-core.js",
   "./src/community/achievements.js",
