@@ -111,6 +111,19 @@
     "emoji is too long": "האימוג'י ארוך מדי.",
     "unknown circle type": "סוג המעגל לא מוכר.",
   });
+  // create_founder_invite (rpcs.md): the "start your own circle" link a member
+  // sends a friend. 3 a day per member; the friend's side of a refused link is
+  // join_circle / redeem_invite_code, whose "invalid" text already covers
+  // expired and used, because the server does not say which.
+  const CIRCLES_FOUNDER_ERROR_TEXT = Object.freeze({
+    rate_limited: "יצרת היום 3 קישורים לחברים, וזה המקסימום ליום. אפשר ליצור עוד מחר.",
+    "not authorized": "אפשר ליצור קישור רק מחשבון עם פרופיל.",
+  });
+  /** @param {any} error */
+  function circlesFounderErrorText(error) {
+    const msg = String((error && error.message) || error || "").trim();
+    return /** @type {any} */ (CIRCLES_FOUNDER_ERROR_TEXT)[msg] || "יצירת הקישור נכשלה. אפשר לנסות שוב.";
+  }
   /** @param {any} error @param {string} [fallback] */
   function circlesCircleErrorText(error, fallback) {
     const msg = String((error && error.message) || error || "").trim();
@@ -361,6 +374,7 @@
     inviteUrl: circlesInviteUrl,
     joinStatusText: circlesJoinStatusText,
     circleErrorText: circlesCircleErrorText,
+    founderErrorText: circlesFounderErrorText,
     JOIN_STATUS_TEXT: CIRCLES_JOIN_STATUS_TEXT,
     defaultsFor: circlesDefaultsFor,
     effectiveDefaults: circlesEffectiveDefaults,

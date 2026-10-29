@@ -76,6 +76,20 @@
     return sheetFrame("circleInviteTitle", "הזמנה למעגל " + c.name, (sheet.error ? `<div class="field-error" role="alert" style="margin-bottom:10px;">${esc(sheet.error)}</div>` : "") + (sheet.link ? made : form));
   }
 
+  function founderSheetHtml(sheet) {
+    const canShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
+    const intro = `<div style="color:var(--color-text-muted);font-size:13px;line-height:1.6;margin-bottom:10px;">${bidiText(FOUNDER_EXPLAIN_TEXT)}</div>`;
+    const err = sheet.error ? `<div class="field-error" role="alert" data-founder-error="1" style="margin-bottom:10px;">${esc(sheet.error)}</div>` : "";
+    const body = sheet.link
+      ? `<div data-founder-ready="1">
+          <label class="field"><span class="field-label">הקישור לחבר/ה</span><input class="text-input" id="founderLink" dir="ltr" readonly value="${esc(sheet.link)}" onfocus="this.select()"/></label>
+          <div class="footer-note" style="margin:6px 0 10px;">${esc("הקישור מוצג רק עכשיו, תקף 7 ימים ופועל פעם אחת.")}</div>
+          <div class="chip-row">${canShare ? `<button class="chip-btn primary" data-community-action="c-founder-share">שיתוף</button>` : ""}<button class="chip-btn${canShare ? "" : " primary"}" data-community-action="c-founder-copy">${sheet.copied ? "הועתק" : "העתקה"}</button></div>
+        </div>`
+      : `<button class="save-btn" data-community-action="c-founder-create"${state.circles.busy.founder ? " disabled" : ""}>${state.circles.busy.founder ? "יוצרים…" : "יצירת קישור"}</button>`;
+    return sheetFrame("circleFounderTitle", "קישור לחבר שרוצה מעגל משלו", intro + err + body);
+  }
+
   function shareSheetHtml(sheet) {
     const day = sheet.day;
     const list = sheet.loading || !sheet.picked
@@ -112,6 +126,7 @@
     if (sheet.kind === "join") return joinSheetHtml();
     if (sheet.kind === "settings" && c) return settingsSheetHtml(c);
     if (sheet.kind === "invite" && c) return inviteSheetHtml(c, sheet);
+    if (sheet.kind === "founder") return founderSheetHtml(sheet);
     if (sheet.kind === "share") return shareSheetHtml(sheet);
     if (sheet.kind === "medal") return medalSheetHtml(sheet);
     return "";
@@ -184,6 +199,10 @@
       case "c-join-open": state.circles.join.error = ""; state.circles.sheet = { kind: "join" }; rerender(); return true;
       case "c-settings-open": openCircleSheetFor("settings", id); return true;
       case "c-invite-open": openCircleSheetFor("invite", id); return true;
+      case "c-founder-open": openFounderSheet(); return true;
+      case "c-founder-create": createFounderLink(); return true;
+      case "c-founder-share": shareFounderLink(); return true;
+      case "c-founder-copy": copyFounderLink(); return true;
       case "c-invite-share": shareInvite(); return true;
       case "c-invite-copy": copyInvite(); return true;
       case "c-leave-ask": {
