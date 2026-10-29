@@ -1,7 +1,12 @@
 // Generates a VAPID key pair for Web Push (RFC 8292) without ever printing the
 // private half.
 //
-//   node scripts/generate-vapid-keys.mjs --env-file <path>
+//   node scripts/generate-vapid-keys.mjs --out <path>
+//
+// The flag is --out, not --env-file: Node 22 reads --env-file as its OWN
+// option even after the script name, tries to load <path> as a dotenv file
+// before the script runs, and exits 9 when it does not exist yet. That is how
+// the first rotate-vapid run failed (2026-10-28), before generating anything.
 //
 // writes VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY to <path> (mode 0600, refuses
 // to overwrite) and prints ONLY the public key on stdout. It is the first half
@@ -38,10 +43,10 @@ export function envFileBody(pair) {
 }
 
 export function main(argv, out = process.stdout) {
-  const i = argv.indexOf("--env-file");
+  const i = argv.indexOf("--out");
   const file = i >= 0 ? argv[i + 1] : "";
   if (!file) {
-    process.stderr.write("usage: generate-vapid-keys.mjs --env-file <path>\n");
+    process.stderr.write("usage: generate-vapid-keys.mjs --out <path>\n");
     return 2;
   }
   const pair = generateVapidKeyPair();

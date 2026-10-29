@@ -31,7 +31,7 @@ window.HAIMUNIA_CONFIG = Object.freeze({
   // CHANGING THIS VALUE INVALIDATES EVERY EXISTING SUBSCRIPTION: a
   // PushSubscription is bound to the key it was created with. The client
   // notices a subscription made under another key and re-subscribes.
-  notifPushVapidPublicKey: "REPLACE_WITH_VAPID_PUBLIC_KEY",
+  notifPushVapidPublicKey: "BLhw6lvS2RbwEFSLw1HuHyCqfrdpGFzxvOa-M8fT6J0liZBSHsC5cfWWArpBUVZ0UNnpeuHp6gUlyAYcqedDQ7o",
 
   // Launch-readiness audit, SEC-004: bot protection on account creation.
   //
@@ -78,7 +78,7 @@ window.HAIMUNIA_CONFIG = Object.freeze({
   // ORDER MATTERS IF THIS IS EVER RE-DONE: deploy the site key FIRST, then
   // enable enforcement in the Supabase dashboard. Backwards, the server
   // demands a token the client is not sending yet and every signup fails.
-  captchaProvider: "turnstile", // "turnstile" | "hcaptcha"
+  captchaProvider: "turnstile", // Turnstile is the only provider
   captchaSiteKey: "0x4AAAAAAE6mfjw79idh0ptH",
 
   // Support and bug reporting (2026-09-15), added after the first real-phone

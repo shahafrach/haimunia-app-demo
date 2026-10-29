@@ -54,24 +54,22 @@
   that file for the live-confirmed exploit chain that motivated it.
 -->
 <!-- Launch-readiness audit, SEC-004. script-src and frame-src carry exactly
-     two extra hosts: Cloudflare Turnstile and hCaptcha, the two providers
-     cloud-config.js's captchaProvider allows. This is a real, deliberate
+     one extra host: Cloudflare Turnstile, the only captcha provider. This is a real, deliberate
      narrowing of SEC-015's mitigation (a strict `script-src 'self'` is
      what stops an injected script loading remote code), traded for bot
      protection on free anonymous account creation, which SEC-004 rates the
      larger risk once anonymous sign-in is enabled. Both are single,
      well-known, pinned hosts - not a wildcard and not a general CDN - and
      `connect-src` is deliberately NOT widened, so neither host can be used
-     to exfiltrate a stolen token. Remove whichever provider the project
-     does not use. -->
+     to exfiltrate a stolen token. -->
 <meta http-equiv="Content-Security-Policy" content="
   default-src 'self';
-  script-src 'self' https://challenges.cloudflare.com https://js.hcaptcha.com https://newassets.hcaptcha.com;
+  script-src 'self' https://challenges.cloudflare.com;
   style-src 'self' 'unsafe-inline';
   font-src 'self';
   img-src 'self' data: blob: https://hvwakffluwvegedefoth.supabase.co;
-  connect-src 'self' https://hvwakffluwvegedefoth.supabase.co wss://hvwakffluwvegedefoth.supabase.co https://challenges.cloudflare.com https://api.hcaptcha.com;
-  frame-src https://challenges.cloudflare.com https://newassets.hcaptcha.com;
+  connect-src 'self' https://hvwakffluwvegedefoth.supabase.co wss://hvwakffluwvegedefoth.supabase.co https://challenges.cloudflare.com;
+  frame-src https://challenges.cloudflare.com;
   manifest-src 'self';
   worker-src 'self';
   object-src 'none';

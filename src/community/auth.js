@@ -431,7 +431,6 @@
   // control, so a token failure surfaces as a refusal the member can retry.
   const CAPTCHA_SCRIPT_URL = {
     turnstile: "https://challenges.cloudflare.com/turnstile/v0/api.js",
-    hcaptcha: "https://js.hcaptcha.com/1/api.js",
   };
   let captchaScriptPromise = null;
 
@@ -471,7 +470,7 @@
     if (!captchaEnabled()) return Promise.resolve(null);
     const { provider, siteKey } = captchaConfig();
     return loadCaptchaScript().then(() => new Promise((resolve, reject) => {
-      const api = provider === "hcaptcha" ? window.hcaptcha : window.turnstile;
+      const api = window.turnstile;
       if (!api || typeof api.render !== "function") return reject(new Error("captcha unavailable"));
       const host = document.createElement("div");
       host.style.display = "none";
