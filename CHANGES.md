@@ -1,3 +1,66 @@
+## BOX-LOG 5.0.0: private training circles — 2026-10-29
+
+The app is no longer the gym's community app. It is BOX-LOG, a free app of private
+training circles for friends, on its own Supabase project (`box-log`) and its own
+Cloudflare Pages site (`box-log.pages.dev`). Twenty-three branches merged since the last
+consolidation (#89): #90, #95, #112 to #134. App version **4.81.0 → 5.0.0**. Migrations
+reach production through the Supabase GitHub integration on every merge to `main`;
+`check:drift` was not run in this session (no linked project).
+
+### The pivot and the cut (#95, #112, #113, #114)
+
+- Decisions, journal and work plan for circles in `docs/circles/`; `CLAUDE.md` rewritten. The app is named BOX-LOG.
+- **Strip gym:** removed the gym, staff, coach, Arbox and display features, text comments, mentions, saved and hidden posts, pins, announcements, member of the week, recaps, search, follows, absolute leaderboards, feed ranking, reports, events, challenges, avatars and both photo buckets, Realtime code and onboarding content. Kept: reactions, private records, per-member achievements, notifications and push, account deletion, self-export, rate limits, request idempotency, client error capture.
+
+### New home (#115, #119, #133)
+
+- **Repo split:** the repository points at the `box-log` Supabase project and `box-log.pages.dev`; `push:prod` refuses unless the linked project is the one in `supabase/PROJECT_REF`.
+- **Keepalive:** the scheduled heartbeat runs again every two days against `box-log`.
+- **Vault secrets:** a `set-vault-secrets` workflow writes the Edge Function Vault secrets without anyone seeing the service-role key (`docs/ops/VAULT_SECRETS.md`). Run once on 2026-10-28; both secrets verified set.
+
+### Security guards (#116)
+
+- A pgTAP guard fails the build for any `SECURITY DEFINER` function in `public` without an empty `search_path`, with EXECUTE held by PUBLIC, executable by anon without a reviewed reason, or missing from the reviewed-functions table. A second guard requires RLS on every `public` table.
+
+### Circles (#118, #121, #125)
+
+- **Schema:** a circle is a `clubs` row with `circle_members`, limits (couple 2, friends 20, ten circles per person), hash-only 7-day invites, weekly targets and per-circle RLS. A cross-circle leak test covers every table. Profile is display name and emoji. The Realtime publication is empty.
+- **Functions:** create, join (10 attempts per hour), leave and manage circles; leaving takes the member's posts, reactions, tags and benchmark results in that circle with them; ownership passes on, and the last member leaving deletes the circle. Posts and reactions (fist bump, fire, clap) belong to one circle. A PR shows percent improvement; absolute weight only if the member chose to show it. Trained-together tags wait for confirmation. `circle_week` and `circle_feed`; the owner's benchmark of the month, with results visible only after logging your own.
+- **Client:** join through an invite link, create and manage circles, log and share to chosen circles, react, the circle's week (two columns for a couple) and the monthly benchmark.
+
+### Sharing (#124, #126)
+
+- PR card and circle week card drawn on canvas (Hebrew RTL, 1080x1350, theme tokens) and shared through Web Share with a download fallback. A Sunday offer of last week's card, once. An invite opened in the WhatsApp, Instagram or Facebook browser explains how to open it in Safari or Chrome. Add to Home Screen steps after the first circle, once. The gym-era card painter is gone.
+
+### Notifications (#127, #130, #131)
+
+- Four opt-in notifications, each with its own switch in Me and all off by default: a reaction on your post (at most one per post per hour), a trained-together tag waiting for you, someone joined your circle, the week card (Saturday night). Circle-scoped and block-aware, checked again at push time. Subscriptions are removed on sign-out and account deletion. A push opens the right circle and post.
+- VAPID keys rotated by the `rotate-vapid` workflow on 2026-10-28; the private key never left the runner, the public key ships in `cloud-config.js`.
+
+### Privacy (#128)
+
+- Privacy policy and terms rewritten for circles from the code: what is stored, what stays on the device, who sees what, processors (Supabase, Cloudflare Pages, Cloudflare Turnstile).
+- **Body weight never leaves the device:** it is excluded from the private log backup, and a migration deletes old body-weight rows and refuses new ones. hCaptcha is gone from the CSP; Turnstile is the only third-party script.
+
+### Brand and design (#120, #122, #132, this consolidation)
+
+- **BOX-LOG:** new name, original mark and icons, "© Shahaf Rachmany, all rights reserved", README rewritten, gym name and photos removed.
+- **Design system:** one token source (`tokens.css`) with `light-dark()` and `color-mix()`, guarded against color literals and checked for WCAG 2.2 AA in every palette. Six palettes, light and dark: **Classic** (default, the dark navy and coral look with a header scene), Chalk and Brass, Slate and Ember, Cedar and Fog, Sand and Horizon, Ivory and Iris. Appearance in Settings: palette, light/dark/system, transparency. Heebo, self-hosted. Four tabs with a raised Log button.
+- **Scenes:** six free Unsplash photos (Home, Circle, Log, Progress, welcome, Calendar), WebP under 120 KB, precached, licenses in `docs/design/photos.md`. The welcome and Calendar photos were added in this consolidation.
+- **Post-workout moment:** the PR first, then today against last time, then the weekly ring, then one share action; a warm gold-and-coral PR card. Logging a set of the same lift as last time takes 2 taps (was 5 and a typed search).
+- **Bottom bar:** a tap is no longer lost to a re-render; the bug was on `main` too.
+
+### Pilot readiness (#134)
+
+- The owner starts the first circle with `select public.bootstrap_owner_invite();` in the Supabase SQL editor (`docs/ops/FIRST_CIRCLE.md`): one use, one hour, hash only, callable by no role.
+- Support is פנייה in Me, stored in the database, no email or phone; `supportEmail` is gone. The support rate limit (5 per hour) is now actually enforced.
+- The backup workflow is ready for `box-log`; its schedule stays off until `SUPABASE_DB_URL` and `BACKUP_PASSPHRASE` exist (`docs/ops/BACKUPS.md`).
+- `docs/ops/PILOT_CHECKLIST.md` and a Hebrew WhatsApp invite message.
+
+### Dependencies (#117, #123, #129)
+
+- npm audit clean; GitHub Actions pins, jsdom, fake-indexeddb and axe-core updated; `@supabase/supabase-js` 2.118.0 with `vendor/supabase.js` re-vendored. An axe-core 4.14 finding (a calendar button name) and a contrast finding (the center Log tab on the scene) were fixed on the way. Playwright stays pinned at 1.62.1 on purpose.
+
 ## Each lift once on the progress screen — 2026-09-24
 
 One branch merged since the last consolidation (#87): #88. App version
