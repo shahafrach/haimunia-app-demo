@@ -7,7 +7,10 @@ do if it fails.
 
 Before you start: migration `202610290001_pilot_readiness` is on the box-log
 project, and the Turnstile setting is on in the Supabase dashboard
-(Authentication, Attack Protection, `COMMUNITY_SETUP.md`). Never paste a link
+(Authentication, Attack Protection, `COMMUNITY_SETUP.md`). Anonymous sign-ins are on and
+"Confirm email" is off: a new Supabase project starts the other way round, and sign-in
+then fails at once with "לא ניתן להתחבר כרגע". Run the `set-auth-config` workflow (Actions,
+Run workflow) once per project; its summary must read both true. Never paste a link
 in a public place: the bootstrap link is a key.
 
 | # | Step | Success looks like | If it fails |
