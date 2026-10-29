@@ -1,0 +1,116 @@
+# End-to-end user tests: three people, a real browser, a REAL backend.
+#
+# The backend is a throwaway local Supabase stack started on this runner
+# (`supabase start`, every migration applied, as in test.yml's migration-check
+# job). Nothing here reaches box-log.pages.dev or the box-log Supabase project:
+# the tests refuse to start unless every address is loopback, and the browser
+# aborts any request that is not the local page or the local stack.
+#
+#   scripts/e2e/01-owner.mjs    Dana: bootstrap link, circle, target, PR moment, week, notifications
+#   scripts/e2e/02-friend.mjs   Yoav: WhatsApp invite, sign-up, reactions, trained together, leave, rejoin
+#   scripts/e2e/03-privacy.mjs  Noa and Avi: couple limit, circle isolation, no weights or body weight on the wire, offline, deletion
+#
+# CAPTCHA IS OFF here. The local stack has no Turnstile secret and the widget
+# needs challenges.cloudflare.com; the override config the tests write has an
+# empty captchaSiteKey. Production enforces Turnstile. docs/qa/user-tests-2026-10.md says so too.
+#
+# Screenshots (dark Classic and a light palette, one pair per step), per-step
+# results and the PR card images are uploaded as the e2e-user-tests artifact.
+#
+# A failed step fails the job. A product failure the tests find is a finding for
+# the report, not a reason to weaken a test.
+name: e2e
+on:
+  pull_request:
+    paths:
+      - 'app.js'
+      - 'cloud.js'
+      - 'index.html'
+      - 'sw.js'
+      - 'tokens.css'
+      - 'src/**'
+      - 'vendor/**'
+      - 'supabase/**'
+      - 'scripts/e2e/**'
+      - '.github/workflows/e2e.yml'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+jobs:
+  user-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: scripts/e2e/package-lock.json
+      - uses: supabase/setup-cli@45a513f8c64c0bc8e0e3dfe572b5c95be85f6359 # v3.0.1
+        with:
+          # The version test.yml's migration-check job pins.
+          version: 2.116.0
+
+      # The two Auth settings sign-up depends on, as on production
+      # (docs/ops/PILOT_CHECKLIST.md): anonymous sign-ins on, email confirmation off.
+      - name: confirm the local Auth config matches production
+        run: |
+          grep -E '^enable_anonymous_sign_ins = true' supabase/config.toml
+          grep -E '^enable_confirmations = false' supabase/config.toml
+          if grep -E '^\[auth\.captcha\]' supabase/config.toml; then echo "a CAPTCHA section is in config.toml"; exit 1; fi
+
+      - run: npm ci
+        working-directory: scripts/e2e
+      - run: npx playwright install --with-deps chromium
+        working-directory: scripts/e2e
+
+      - name: start the local stack (applies every migration)
+        run: supabase start
+
+      - name: read the local stack's address and key
+        run: |
+          supabase status -o env > "$RUNNER_TEMP/stack.env"
+          val() { sed -n "s/^$1=\"\(.*\)\"\$/\1/p" "$RUNNER_TEMP/stack.env" | head -n 1; }
+          ANON="$(val ANON_KEY)"
+          [ -n "$ANON" ] || ANON="$(val PUBLISHABLE_KEY)"
+          [ -n "$ANON" ] || { echo "no anon or publishable key in supabase status"; exit 1; }
+          echo "::add-mask::$ANON"
+          {
+            echo "E2E_ANON_KEY=$ANON"
+            echo "E2E_API_URL=$(val API_URL)"
+            echo "E2E_DB_URL=$(val DB_URL)"
+          } >> "$GITHUB_ENV"
+
+      - name: the three user tests
+        working-directory: scripts/e2e
+        run: |
+          set +e
+          mkdir -p artifacts
+          rc=0
+          for t in 01-owner 02-friend 03-privacy; do
+            echo "::group::$t"
+            node "$t.mjs" 2>&1 | tee "artifacts/$t.log" || rc=1
+            echo "::endgroup::"
+          done
+          exit $rc
+
+      - name: summary
+        if: always()
+        working-directory: scripts/e2e
+        run: |
+          for t in 01-owner 02-friend 03-privacy; do
+            [ -f "artifacts/$t/summary.md" ] && cat "artifacts/$t/summary.md" >> "$GITHUB_STEP_SUMMARY"
+          done
+          true
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: e2e-user-tests
+          path: scripts/e2e/artifacts
+          retention-days: 14
+          if-no-files-found: warn
