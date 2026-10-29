@@ -91,7 +91,9 @@ jobs:
           rc=0
           for t in 01-owner 02-friend 03-privacy; do
             echo "::group::$t"
-            node "$t.mjs" 2>&1 | tee "artifacts/$t.log" || rc=1
+            node "$t.mjs" 2>&1 | tee "artifacts/$t.log"
+            # The shell is plain `bash -e`: without PIPESTATUS the pipeline reports tee's status.
+            [ "${PIPESTATUS[0]}" -eq 0 ] || rc=1
             echo "::endgroup::"
           done
           exit $rc

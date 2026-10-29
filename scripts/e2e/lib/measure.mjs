@@ -137,7 +137,8 @@ export async function layoutFacts(page, primarySelectors = []) {
       const e = [...document.querySelectorAll(sel)].find(visible);
       if (!e) return { selector: sel, found: false };
       const r = e.getBoundingClientRect();
-      return { selector: sel, found: true, top: Math.round(r.top), bottom: Math.round(r.bottom), aboveFold: r.bottom <= navTop && r.top >= 0 };
+      const fixedUi = !!e.closest("#bottomNavWrap, #bottomTabBar, #bottomBar, [data-share-bar], .modal-overlay");
+      return { selector: sel, found: true, top: Math.round(r.top), bottom: Math.round(r.bottom), aboveFold: fixedUi || (r.bottom <= navTop && r.top >= 0) };
     });
     return {
       dir: getComputedStyle(doc).direction,

@@ -46,6 +46,19 @@ export async function passWelcome(s, p, name) {
  */
 export async function clearIncidentals(s, p) {
   const seen = [];
+  if (!p.recover) {
+    // A tap that finds something on top of its target asks for this: close what a person
+    // would close (the share bar's X, a medal prompt, the install steps) and try again.
+    p.recover = async (by) => {
+      if (/share-bar/.test(by) && (await p.page.locator('[data-community-action="c-share-bar-close"]').first().isVisible().catch(() => false))) {
+        await p.page.locator('[data-community-action="c-share-bar-close"]').first().click().catch(() => {});
+        p.cnt.taps++;
+        (p.s || quiet).note("Closed the share bar, which was covering the control.");
+        return;
+      }
+      await clearIncidentals(p.s || quiet, p);
+    };
+  }
   if (p.ua === "ios" && !p.installWaited) {
     p.installWaited = true;
     await p.waitVisible("[data-install-steps]", 2500);
@@ -76,10 +89,12 @@ export async function clearIncidentals(s, p) {
 }
 
 // ---- navigation ---------------------------------------------------------------------
-export const goHome = (p) => p.tap("#tabHomeBtn");
-export const goCircle = (p) => p.tap("#tabCommunityBtn");
-export const goLog = (p) => p.tap("#tabAddBtn");
-export const goProgress = (p) => p.tap("#tabHistoryBtn");
+const quiet = { note() {}, flag() {}, check() {} };
+const nav = (id) => async (p) => { await clearIncidentals(p.s || quiet, p); await p.tap(id); };
+export const goHome = nav("#tabHomeBtn");
+export const goCircle = nav("#tabCommunityBtn");
+export const goLog = nav("#tabAddBtn");
+export const goProgress = nav("#tabHistoryBtn");
 
 export async function openMe(s, p) {
   await clearIncidentals(s, p);

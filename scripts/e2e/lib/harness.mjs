@@ -45,30 +45,48 @@ export class Person {
     this.reqs = [];          // every request to the (routed) backend: method, path, body
     this.bodies = [];        // response bodies of the calls the privacy checks read
     this.errors = [];        // console errors and page errors
+    this.failures = [];      // backend answers with status >= 400: method, path, status, body
     this.forbidden = [];     // requests that tried to leave the machine
+    this.s = null;           // the step in progress (set by World.step)
+    this.recover = null;     // set by flows: clears what covers a control
     this.downloads = [];     // files the page saved
     this.offline = false;
     this.cnt = this.freshCounts();
     page.setDefaultTimeout(DEFAULT_TIMEOUT);
   }
-  freshCounts() { return { taps: 0, typed: 0, scrolls: 0, small: [], below: [], waits: [] }; }
+  freshCounts() { return { taps: 0, typed: 0, scrolls: 0, small: [], below: [], waits: [], covered: [] }; }
 
   // ---- doing things, counted ------------------------------------------------
   loc(target) { return typeof target === "string" ? this.page.locator(target).first() : target; }
   async tap(target, opts = {}) {
     const loc = this.loc(target);
-    await loc.waitFor({ state: "visible", timeout: opts.timeout || DEFAULT_TIMEOUT });
-    const facts = await loc.evaluate((el) => {
-      const r = el.getBoundingClientRect();
-      const nav = document.getElementById("bottomNavWrap") || document.getElementById("bottomTabBar");
-      const navTop = nav && getComputedStyle(nav).display !== "none" ? nav.getBoundingClientRect().top : innerHeight;
-      return { w: r.width, h: r.height, top: r.top, bottom: r.bottom, navTop, label: ((el.getAttribute("aria-label") || el.textContent || el.id || el.tagName) + "").trim().replace(/\s+/g, " ").slice(0, 40) };
-    }).catch(() => null);
-    if (facts) {
-      if (Math.min(facts.w, facts.h) < 44) this.cnt.small.push(`${facts.label} ${Math.round(facts.w)}x${Math.round(facts.h)}`);
-      if (facts.bottom > facts.navTop || facts.top < 0) { this.cnt.scrolls++; this.cnt.below.push(facts.label); }
+    const timeout = opts.timeout || DEFAULT_TIMEOUT;
+    await loc.waitFor({ state: "visible", timeout });
+    await loc.scrollIntoViewIfNeeded().catch(() => {});
+    let facts = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      facts = await loc.evaluate((el) => {
+        const own = el.closest("label") && el.matches("input") ? el.closest("label") : el;
+        const r = own.getBoundingClientRect();
+        const nav = document.getElementById("bottomNavWrap") || document.getElementById("bottomTabBar");
+        const navTop = nav && getComputedStyle(nav).display !== "none" ? nav.getBoundingClientRect().top : innerHeight;
+        const fixedUi = !!el.closest("#bottomNavWrap, #bottomTabBar, #bottomBar, [data-share-bar], .modal-overlay");
+        const cx = Math.min(Math.max(r.left + r.width / 2, 1), innerWidth - 1), cy = Math.min(Math.max(r.top + r.height / 2, 1), innerHeight - 1);
+        const hit = document.elementFromPoint(cx, cy);
+        const covered = !!hit && !el.contains(hit) && !hit.contains(el);
+        const describe = (n) => { const o = n.closest("[data-cloud-dialog], .modal-overlay, [data-share-bar], #bottomNavWrap") || n; return (o.getAttribute("data-cloud-dialog") || o.id || o.getAttribute("data-share-bar") && "share-bar" || o.className || o.tagName) + ""; };
+        return { w: r.width, h: r.height, top: r.top, bottom: r.bottom, navTop, fixedUi, covered, by: covered ? describe(hit) : "", label: ((el.getAttribute("aria-label") || el.textContent || el.id || el.tagName) + "").trim().replace(/\s+/g, " ").slice(0, 40) };
+      }).catch(() => null);
+      if (!facts || !facts.covered) break;
+      this.cnt.covered.push(`${facts.label} covered by ${facts.by}`);
+      if (!this.recover || attempt === 2) break;
+      await this.recover(facts.by);
     }
-    await loc.click({ timeout: opts.timeout || DEFAULT_TIMEOUT });
+    if (facts) {
+      if (facts.w > 0 && facts.h > 0 && Math.min(facts.w, facts.h) < 44) this.cnt.small.push(`${facts.label} ${Math.round(facts.w)}x${Math.round(facts.h)}`);
+      if (!facts.fixedUi && (facts.bottom > facts.navTop || facts.top < 0)) { this.cnt.scrolls++; this.cnt.below.push(facts.label); }
+    }
+    await loc.click({ timeout });
     this.cnt.taps++;
   }
   async type(target, value) {
@@ -234,6 +252,11 @@ export class World {
       try {
         const u = new URL(resp.url());
         if (u.host !== FAKE_HOST) return;
+        if (resp.status() >= 400) {
+          let body = "";
+          try { body = (await resp.text()).slice(0, 240); } catch (e) { /* ignore */ }
+          p.failures.push({ t: Date.now(), method: resp.request().method(), path: u.pathname + (u.search ? "?" + u.search.slice(1, 60) : ""), status: resp.status(), body });
+        }
         if (/circle_feed|circle_week|pr_share|rest\/v1\/circle_members|workout_posts/.test(u.pathname)) {
           p.bodies.push({ t: Date.now(), path: u.pathname + u.search, status: resp.status(), req: resp.request().postData() || null, body: (await resp.text()).slice(0, 60000) });
           if (p.bodies.length > 200) p.bodies.shift();
@@ -272,9 +295,16 @@ export class World {
       flag: (kind, message) => rec.flags.push({ kind, message: String(message).slice(0, 400) }),
     };
     person.cnt = person.freshCounts();
+    person.s = s;
     const errorsBefore = person.errors.length;
+    const failuresBefore = person.failures.length;
     const t0 = Date.now();
-    try { await fn(s); } catch (e) { rec.status = "FAIL"; rec.error = String((e && e.message) || e).split("\n")[0].slice(0, 400); }
+    try { await fn(s); } catch (e) {
+      rec.status = "FAIL";
+      const lines = String((e && e.message) || e).split("\n");
+      const why = lines.find((l) => /intercepts pointer events|not visible|not enabled|waiting for locator/.test(l));
+      rec.error = (lines[0] + (why ? " | " + why.trim() : "")).slice(0, 420);
+    }
     rec.seconds = Math.round((Date.now() - t0)) / 1000;
     if (rec.checks.some((c) => !c.ok)) rec.status = "FAIL";
     rec.taps = person.cnt.taps; rec.typed = person.cnt.typed; rec.scrolls = person.cnt.scrolls;
@@ -282,6 +312,10 @@ export class World {
     rec.belowFoldTaps = person.cnt.below.slice(0, 6);
     rec.waitsMs = person.cnt.waits.slice(0, 6);
     rec.consoleErrors = person.errors.slice(errorsBefore).slice(0, 4);
+    rec.httpFailures = person.failures.slice(failuresBefore).slice(0, 5).map((f) => `${f.status} ${f.method} ${f.path} ${f.body}`.slice(0, 260));
+    for (const f of rec.httpFailures) s.flag("http", f);
+    rec.covered = person.cnt.covered.slice(0, 4);
+    for (const c of rec.covered) s.flag("covered", c);
     if (rec.consoleErrors.length) s.flag("console", rec.consoleErrors.length + " console error(s): " + rec.consoleErrors[0]);
     if (person.cnt.small.length) s.flag("small-target", "tapped under 44px: " + person.cnt.small.slice(0, 3).join("; "));
     if (person.cnt.below.length) s.flag("below-fold", "needed scrolling to tap: " + person.cnt.below.slice(0, 3).join("; "));

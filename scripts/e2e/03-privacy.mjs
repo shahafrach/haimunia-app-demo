@@ -294,7 +294,8 @@ await world.step(noa, "founder-send", "Noa sends a friend a founder link", async
   await noa.tap('[data-community-action="c-founder-create"]');
   s.check(!!(await done), "create_founder_invite was called");
   const link = await until(async () => ((await noa.has("#founderLink")) ? noa.page.inputValue("#founderLink") : null), { timeout: 10000 });
-  s.check(!!link, "a link is shown");
+  s.check(!!link, "a link is shown", noa.failures.slice(-1).map((f) => `${f.status} ${f.path} ${f.body}`).join(""));
+  if (!link) s.note("Founder sheet said: " + (await noa.page.locator("[data-founder-error]").first().innerText().catch(() => "(no error text)")));
   founderToken = (/#invite=([a-f0-9]{64})/.exec(link || "") || [])[1] || null;
   s.check(!!founderToken, "with a 64-hex token after the #", String(link).slice(0, 60));
   s.check(/7 ימים/.test(await noa.text()), "and says it lasts 7 days and works once");
@@ -358,6 +359,11 @@ await world.step(noa, "noa-sees-avi-gone", "Avi disappears from the circle", asy
   await noa.waitVisible("[data-member]", 8000);
   const members = await noa.page.$$eval("[data-member]", (els) => els.map((e) => e.innerText.replace(/\s+/g, " ").trim()));
   s.check(!members.some((m) => /אבי/.test(m)), "Avi is not in the member list", members.join(" | "));
+  await noa.tap('[data-community-action="c-section"][data-section="feed"]');
+  const header = await noa.inner("#communityHead");
+  s.check(/חבר\/ה אחד/.test(header), "and the circle's header counts one member", header.slice(0, 120));
+  s.note("Header after the deletion: " + header.slice(0, 140));
+  await section(s, noa, "members");
   await section(s, noa, "feed");
   await sleep(800);
   const cards = await feedCards(noa);
