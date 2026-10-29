@@ -260,7 +260,9 @@
       pendingTags: [], sheet: null, shareBar: null,
       // The sharing pipeline's one sheet: install steps, or last week's card.
       sharingSheet: null,
-      join: { token: "", busy: false, error: "", draft: "" },
+      join: { token: "", busy: false, error: "", draft: "", redeemRateLimited: false },
+      // True once a first-circle or founder link was redeemed: the create-circle sheet opens once.
+      founderLanding: false,
       busy: {},
       // Text typed into a sheet or a form, keyed "form.field": the screen is
       // rebuilt on every render and would otherwise erase it.

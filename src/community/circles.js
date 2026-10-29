@@ -123,6 +123,7 @@
       else if (error && isOfflineError(error)) status = "offline";
     } catch (e) { status = "offline"; }
     j.busy = false;
+    j.redeemRateLimited = false;
     // Not a circle invite: it may be the owner's first-circle link.
     if (status === "invalid" && typeof redeemFirstOwnerToken === "function" && await redeemFirstOwnerToken(token)) {
       j.token = "";
@@ -131,6 +132,7 @@
       rerender();
       return;
     }
+    if (status === "invalid" && j.redeemRateLimited) status = "rate_limited";
     if (status === "joined" || status === "already_member") {
       j.token = "";
       j.error = "";
@@ -303,6 +305,64 @@
     try {
       // The message and the link, so a paste into WhatsApp says who invited to what and for how long.
       if (navigator.clipboard && navigator.clipboard.writeText) { await navigator.clipboard.writeText(sharingInviteText(circleById(sheet.clubId)) + "\n" + sheet.link); ok = true; }
+    } catch (e) { ok = false; }
+    sheet.copied = ok;
+    sheet.error = ok ? "" : "ההעתקה לא הצליחה. אפשר ללחוץ על הקישור, לסמן אותו ולהעתיק ידנית.";
+    rerender();
+  }
+
+  // ---- The founder link ("start your own circle") -----------------------------------
+  // Any member can send a friend a link that lets them sign up and make a circle
+  // of their own (create_founder_invite, docs/ops/FOUNDER_LINK.md). It joins the
+  // friend to nothing, and nothing the friend does reaches the sender. The link
+  // exists only in the open sheet, like a circle invite.
+  function openFounderSheet() {
+    state.circles.sheet = { kind: "founder", link: "", copied: false, error: "" };
+    rerender();
+  }
+  async function createFounderLink() {
+    const sheet = state.circles.sheet;
+    if (!sheet || sheet.kind !== "founder" || !client || !state.user || state.circles.busy.founder) return;
+    circlesBusy("founder", true);
+    sheet.error = "";
+    rerender();
+    let data = null;
+    let error = null;
+    try { ({ data, error } = await client.rpc("create_founder_invite")); } catch (e) { error = e; }
+    circlesBusy("founder", false);
+    if (error || !data) {
+      sheet.error = error && isOfflineError(error) ? "אין חיבור כרגע. אפשר לנסות שוב כשהחיבור חוזר." : CIRCLES.founderErrorText(error);
+      return rerender();
+    }
+    // The server returns the whole URL, token after #. It is shown once.
+    sheet.link = String(data);
+    rerender();
+  }
+  function founderShareText() {
+    const name = state.profile && state.profile.display_name ? String(state.profile.display_name).trim() : "";
+    return (name ? name + " שולח/ת לך" : "קישור") + " להתחלת מעגל משלך ב-" + brandName() + ". הקישור תקף 7 ימים ופותח רק מעגל שלך.";
+  }
+  // Web Share needs a tap of its own, so it is a button on the sheet that shows
+  // the link; copy is the fallback for browsers without it and for a refusal.
+  async function shareFounderLink() {
+    const sheet = state.circles.sheet;
+    if (!sheet || sheet.kind !== "founder" || !sheet.link) return;
+    if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+      try {
+        await navigator.share({ title: brandName(), text: founderShareText(), url: sheet.link });
+        return;
+      } catch (e) {
+        if (e && e.name === "AbortError") return;
+      }
+    }
+    await copyFounderLink();
+  }
+  async function copyFounderLink() {
+    const sheet = state.circles.sheet;
+    if (!sheet || sheet.kind !== "founder" || !sheet.link) return;
+    let ok = false;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) { await navigator.clipboard.writeText(founderShareText() + "\n" + sheet.link); ok = true; }
     } catch (e) { ok = false; }
     sheet.copied = ok;
     sheet.error = ok ? "" : "ההעתקה לא הצליחה. אפשר ללחוץ על הקישור, לסמן אותו ולהעתיק ידנית.";

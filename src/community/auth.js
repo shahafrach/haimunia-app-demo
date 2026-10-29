@@ -257,7 +257,9 @@
 
   // The owner's bootstrap link (bootstrap_owner_invite, docs/ops/FIRST_CIRCLE.md)
   // looks like any invite link, but join_circle does not know it: it is a
-  // one-hour code for the first circle, spent by redeem_invite_code. Called
+  // one-hour code for the first circle, spent by redeem_invite_code. A friend's
+  // founder link (create_founder_invite, docs/ops/FOUNDER_LINK.md) is the same
+  // kind of code, valid seven days. Called
   // when join_circle answered "invalid". True only when the code was accepted
   // and the redemption row is loaded, so the sign-up screens can go on.
   async function redeemFirstOwnerToken(token) {
@@ -265,12 +267,16 @@
     if (!client || !state.user || !/^[a-f0-9]{40,128}$/.test(code)) return false;
     try {
       const { data, error } = await client.rpc("redeem_invite_code", { p_code: code, p_actor_key: communityActorKey() });
+      if (data === "rate_limited") state.circles.join.redeemRateLimited = true;
       if (error || !data || data === "invalid" || data === "rate_limited") return false;
     } catch (e) { return false; }
     for (let attempt = 0; attempt < 3 && !state.redemption; attempt++) {
       if (attempt) await new Promise((r) => setTimeout(r, 150 * attempt));
       await loadRedemption();
     }
+    // The owner's first-circle link and a friend's founder link end the same
+    // way: renderFirstCircle opens the create-circle sheet, once.
+    if (state.redemption) state.circles.founderLanding = true;
     return !!state.redemption;
   }
 
