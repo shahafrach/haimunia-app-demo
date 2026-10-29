@@ -155,6 +155,13 @@ ${uiToastHtml()}${renderOutboxBanner()}${inner}</div></section>`;
   // Signed in, a profile, but in no circle (a member who opened a first-owner
   // code, or one who left their last circle).
   function renderFirstCircle() {
+    // A friend who arrived with a founder link (or the owner's first-circle
+    // link) lands on the create-circle sheet, once. Closing it leaves the
+    // button below.
+    if (state.circles.founderLanding) {
+      state.circles.founderLanding = false;
+      if (!state.circles.sheet && typeof openCircleSheetFor === "function") openCircleSheetFor("create");
+    }
     return gateCard(`<div style="font-weight:800;font-size:18px;margin-bottom:6px;">עוד אין לך מעגל</div>
       <div style="color:var(--color-text-muted);font-size:14px;line-height:1.6;margin-bottom:14px;">${bidiText("אפשר ליצור מעגל ולהזמין אליו חברים, או להצטרף למעגל קיים עם קישור הזמנה.")}</div>
       <button class="save-btn" data-community-action="c-create-open">יצירת מעגל</button>
@@ -414,6 +421,14 @@ ${uiToastHtml()}${renderOutboxBanner()}${inner}</div></section>`;
         : `<div class="field-label" style="margin-bottom:4px;">הפסקה (נפגעתי, חופשה)</div><div class="chip-row"><button class="chip-btn" data-community-action="c-pause" data-days="7">שבוע</button><button class="chip-btn" data-community-action="c-pause" data-days="14">שבועיים</button><button class="chip-btn" data-community-action="c-pause" data-days="30">חודש</button></div>`}
     </div>`;
   }
+  // Any member can send a friend a link to start a circle of their own.
+  const FOUNDER_EXPLAIN_TEXT = "החבר/ה מקבלים קישור, נרשמים ופותחים מעגל משלהם. הם לא מצטרפים למעגלים שלך, ואתם לא רואים שום דבר ממה שהם עושים. הקישור תקף 7 ימים, לשימוש אחד.";
+  function founderLinkPanelHtml() {
+    return `<div class="ach-section" id="founderLinkPanel" style="margin-top:18px;">${sectionHead("var(--color-accent)", "חבר שרוצה מעגל משלו")}
+      <div class="footer-note" style="margin:0 0 10px;">${bidiText(FOUNDER_EXPLAIN_TEXT)}</div>
+      <button class="chip-btn" data-community-action="c-founder-open">קישור לחבר שרוצה מעגל משלו</button>
+    </div>`;
+  }
   function renderMeScreen() {
     const gate = renderCircleGate({ allowNoCircle: true });
     if (gate) return circleScene("me", "אני", gate);
@@ -432,6 +447,7 @@ ${uiToastHtml()}${renderOutboxBanner()}${inner}</div></section>`;
     const inner = head + profile + `<div class="chip-row" style="margin:-4px 0 8px;"><button class="chip-btn" type="button" data-community-action="migrate">סנכרון היסטוריה פרטית</button></div>`
       + `<div class="ach-section" style="margin-top:18px;">${sectionHead("var(--color-accent)", "מראה")}<div class="chart-card">${typeof renderAppearanceSection === "function" ? renderAppearanceSection("me") : ""}</div></div>`
       + targetAndPauseHtml() + shareSettingsHtml() + renderMyAchievements() + renderSharePromptPrefPanel() + renderBlockedMembersPanel() + renderNotifPrefsPanel() + termMarkPanel
+      + founderLinkPanelHtml()
       + `<button class="chip-btn" data-action="open-support" style="display:block;margin:20px auto 0;">פנייה</button>`
       + selfExportButtonHtml("display:block;margin:20px auto 0;")
       + `<button class="link-btn" data-community-action="sign-out" style="display:block;margin:20px auto 0;">התנתקות</button>`

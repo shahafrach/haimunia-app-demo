@@ -70,6 +70,7 @@ private circles for friends. It is not a gym app and not a product.
 - **An anonymous user who is in no circle sees nothing.** Every read policy resolves through circle membership; `is_community_member()` means "member of at least one circle".
 - Keep the existing recovery mechanism. No passkeys for now.
 - Rate limits: `join_circle` 10 attempts per user per hour; invite creation 20 per circle per day.
+- **Founder link** (2026-10-29): still no open sign-up, but any member can send a friend a "start your own circle" link. The friend signs up and creates their own circle; they do not join the sender's circle, and the sender sees nothing of it. `create_founder_invite()`: a signed-up member with a profile, 32-byte token after `#`, only the sha256 stored, one use, 7-day expiry, at most 3 per member per day (`rate_limits`). It is a row in `invite_codes`, spent by `redeem_invite_code` like the owner's bootstrap link: it grants the right to create circles and nothing else (no membership, no read of the sender's data), and the sender is not recorded on it. How it works and its limits: [../ops/FOUNDER_LINK.md](../ops/FOUNDER_LINK.md).
 
 ## Security
 

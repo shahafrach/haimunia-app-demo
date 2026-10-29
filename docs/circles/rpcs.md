@@ -10,13 +10,14 @@ stated; `join_circle` returns a status instead of raising, on purpose.
 
 | Call | Who | Notes |
 |---|---|---|
-| `create_circle(p_type, p_name, p_emoji)` → uuid | someone who got in by invite (member of a circle, or redeemed the bootstrap code) | type `couple` or `friends`; name 1 to 40; errors `too_many_circles` at 10 |
+| `create_circle(p_type, p_name, p_emoji)` → uuid | someone who got in by invite (member of a circle, or redeemed the bootstrap code or a founder link) | type `couple` or `friends`; name 1 to 40; errors `too_many_circles` at 10 |
 | `update_circle(p_club_id, p_settings jsonb)` | owner | keys: `name`, `emoji`, `mode`, `benchmark_enabled`, `invite_policy`, `welcome_line`, `benchmark` (one of `fran grace helen diane cindy murph isabel karen`, or null) |
 | `leave_circle(p_club_id)` | member | deletes their posts, reactions, tags and benchmark results there; owner leaves, longest-standing member becomes owner; last member leaving deletes the circle |
 | `remove_member(p_club_id, p_user_id)` | owner | same clean-up; an owner cannot be removed |
 | `create_circle_invite(p_club_id, p_max_uses default null)` → text | per `invite_policy` | the raw 64-hex token, **once**; 7 days; default 1 use (couple) or 5 (friends), max 20; errors `circle_full`, `invite_limit` (20 per circle per day) |
 | `join_circle(p_token)` → jsonb | any signed-in user | `{status, club_id?}`; status `joined`, `already_member`, `circle_full`, `too_many_circles`, `rate_limited` (10 per user per hour, every call counts), `invalid` (unknown, expired and used-up look the same). Creates a bare profile for a fresh anonymous account. |
-| `redeem_invite_code(p_code, p_actor_key)` → text | any signed-in user | bootstrap of the first circle owner only; grants no circle access |
+| `redeem_invite_code(p_code, p_actor_key)` → text | any signed-in user | spends a bootstrap code or a founder link (both are `invite_codes` rows); grants the right to create circles and no circle access |
+| `create_founder_invite()` → text | a signed-up member with a profile (not an anonymous session) | the full URL `https://box-log.pages.dev/#invite=<64 hex>`, **once**; one use, 7 days, only the sha256 stored, the sender not recorded; 3 per member per day, then `rate_limited`; errors `not authorized`, `rate_limited` (P0001) |
 | `set_share_defaults(p_club_id, p_defaults jsonb)` | member | merged; keys `share_workouts share_prs share_percent share_weekly_count show_weights`, booleans |
 | `set_weekly_target(p_target)` / `set_pause(p_until date)` | member | 1 to 21; pause up to 180 days, null resumes; a pause with no target creates target 3 |
 | `post_create(p_club_id, body, p_idempotency_key)` | member | text post; one call per circle |

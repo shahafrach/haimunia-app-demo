@@ -113,6 +113,7 @@ insert into tests.definer_reviewed (name, args, class, anon_allowed, reason) val
   ('confirm_trained_together', 'uuid', 'circle_scoped', false, 'the tagged member confirms their own pending tag'),
   ('create_circle', 'text, text, text', 'caller_own_rows', false, 'creates a circle the caller then owns'),
   ('create_circle_invite', 'uuid, integer', 'circle_scoped', false, 'mints an invite for ONE circle, per its invite_policy'),
+  ('create_founder_invite', '', 'caller_own_rows', false, 'a signed-up member mints a one-use, 7-day invite_codes row that lets a friend create their own circle; joins no circle, reads nothing, 3 per member per day (202610290002)'),
   ('has_logged_benchmark', 'uuid, text, date', 'caller_own_rows', false, 'RLS helper: has the caller logged this benchmark result; reads only the caller''s own row'),
   ('join_circle', 'text', 'circle_scoped', false, 'joins the one circle an invite token names'),
   ('leave_circle', 'uuid', 'circle_scoped', false, 'the caller leaves ONE circle they are in'),
