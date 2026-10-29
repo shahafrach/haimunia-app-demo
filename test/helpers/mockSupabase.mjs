@@ -378,6 +378,8 @@ export function createMockSupabase(seedTables = {}) {
     client: {
       auth: {
         getSession: () => Promise.resolve({ data: { session: currentUser ? { user: currentUser } : null } }),
+        // Real Supabase issues a new access token for the CURRENT user state; the mock's session is just the user.
+        refreshSession: () => Promise.resolve({ data: { session: currentUser ? { user: currentUser } : null }, error: null }),
         signInAnonymously: () => {
           currentUser = { id: `anon-${++uidCounter}`, is_anonymous: true };
           queueMicrotask(() => authCb && authCb("SIGNED_IN", { user: currentUser }));

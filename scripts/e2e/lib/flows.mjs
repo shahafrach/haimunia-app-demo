@@ -231,8 +231,18 @@ export async function pickLift(s, p, { id, name }) {
   return "picker";
 }
 
+// Type a number into a stepper field and check it stuck. A re-render between the typing and the
+// field's change event (a medal prompt opening, say) puts the old number back; a person would
+// see that and type again, so the script does, and says so.
 async function setField(p, field, value) {
-  await p.type(`input.stepper-val[data-field='${field}']`, value);
+  const sel = `input.stepper-val[data-field='${field}']`;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await p.type(sel, value);
+    await sleep(250);
+    const now = await p.page.locator(sel).first().inputValue().catch(() => "");
+    if (Number(now) === Number(value)) return;
+    (p.s || { note() {} }).note(`The ${field} field read ${now} after typing ${value} (a re-render put the old number back); typed again.`);
+  }
 }
 
 /**
@@ -249,6 +259,9 @@ export async function logSet(s, p, { id, name, weight, reps, date }) {
   await setField(p, "reps", reps);
   await p.tap("#bottomBarBtn");
   const out = await afterSave(s, p);
+  // What was actually saved: the newest entry of this lift.
+  const saved = await p.page.evaluate((id) => { const e = (typeof entries !== "undefined" ? entries : []).filter((x) => x.exerciseId === id)[0]; return e ? { weight: e.weight, reps: e.reps } : null; }, id).catch(() => null);
+  s.check(!!saved && saved.weight === Number(weight) && saved.reps === Number(reps), `the saved set is ${weight} x ${reps}`, JSON.stringify(saved));
   return { how, ...out };
 }
 

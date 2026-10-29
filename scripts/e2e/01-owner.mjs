@@ -41,12 +41,16 @@ await world.step(dana, "sign-up", "Sign up with a username and password", async 
   s.check(/\.invalid$/.test(one(`select email from auth.users where id = ${q(uid)}`) || ""), "no real email address is stored (synthetic .invalid address)");
   // The access token the browser holds must say "not anonymous" now (202610290003): the
   // upgrade keeps the token from the anonymous sign-in unless the client refreshes it.
-  const claim = await dana.page.evaluate(() => {
+  const readClaim = () => dana.page.evaluate(() => {
     const k = Object.keys(localStorage).find((x) => /^sb-.*-auth-token$/.test(x));
     if (!k) return "no session key";
     try { const t = JSON.parse(localStorage.getItem(k)).access_token; return JSON.parse(atob(t.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).is_anonymous; } catch (e) { return "unreadable: " + e.message; }
   });
-  s.note("The access token's is_anonymous claim after the upgrade: " + claim);
+  // The profile form can appear a moment before the refresh that follows the upgrade has landed.
+  const t0 = Date.now();
+  const claim = (await until(async () => ((await readClaim()) === false ? "ok" : null), { timeout: 8000, every: 300 })) ? false : await readClaim();
+  s.note(`the claim read ${claim === false ? "false " + (Date.now() - t0) + " ms after the profile form appeared" : String(claim) + " after 8 s"}`);
+  
   s.check(claim === false, "the session token says the member is permanent (refreshed after the upgrade)", String(claim));
 }, { primary: ["#communityProfile button[type='submit']"], contrast: ["#communityProfile .field-label"] });
 
