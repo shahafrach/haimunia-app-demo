@@ -209,7 +209,7 @@ await world.step(yoav, "yoav-leaves", "Yoav leaves the circle", async (s) => {
   const confirmText = s.rec.leaveConfirmText || "";
   s.check(/הפוסטים שלכם בו יימחקו/.test(confirmText), "the confirmation says his posts will be deleted", confirmText.slice(0, 200));
   s.check(/היומן הפרטי נשאר במכשיר/.test(confirmText), "and that his private log stays on the phone");
-  s.check(await yoav.waitText("עוד אין לך מעגל", 15000), "he is told he has no circle");
+  s.check(await yoav.waitText(/עוד אין לך מעגל|הדביקו את קישור ההזמנה/, 15000), "he lands on a screen for people with no circle (an invite-link form)");
   s.check(count(`select count(*) from public.circle_members where user_id = ${q(yoavId)}`) === 0, "his membership is gone");
   s.check(count(`select count(*) from public.workout_posts where author_id = ${q(yoavId)} and club_id = ${q(clubId)} and deleted_at is null`) === 0, "his posts in the circle are gone");
   s.check(count(`select count(*) from public.reactions where user_id = ${q(yoavId)}`) === 0, "and so are his reactions");

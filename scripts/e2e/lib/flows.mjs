@@ -186,7 +186,8 @@ export async function makeInvite(s, p, { maxUses } = {}) {
 
 /** A signed-in member with no circle (or any member) pastes an invite into the join sheet. */
 export async function joinByPaste(s, p, token) {
-  await p.tap('[data-community-action="c-join-open"]');
+  // With no circle the form is already on the screen; otherwise it is a sheet behind a button.
+  if (!(await p.waitVisible("#circleJoin", 1500))) await p.tap('[data-community-action="c-join-open"]');
   await p.waitVisible("#circleJoin", 8000);
   await p.type('#circleJoin input[name="link"]', p.world.baseUrl + "#invite=" + token);
   await p.tap('#circleJoin button[type="submit"]');
@@ -277,7 +278,14 @@ export async function afterSave(s, p, { timeout = 6000 } = {}) {
     }
     if (st.moment) { out.moment = true; out.prompt = st.prompt; return out; }
     if (st.prompt) { out.prompt = true; return out; }
-    if (st.saved) { out.flash = true; return out; }
+    if (st.saved) {
+      // The quiet check can show a beat before the post-workout moment opens: give the moment a moment.
+      await sleep(900);
+      out.moment = await p.page.evaluate(() => !!document.getElementById("momentOverlay")?.classList.contains("open"));
+      out.prompt = await p.has('[data-cloud-dialog="prPrompt"]');
+      out.flash = !out.moment;
+      return out;
+    }
     await sleep(150);
   }
   return out;
