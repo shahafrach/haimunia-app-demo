@@ -739,10 +739,9 @@
     // is refreshed. A fresh one now, so nothing that reads the token (the founder
     // link, the פנייה, anything later) sees a member who has just signed up as
     // still anonymous. The server no longer trusts the claim either (202610290003).
-    try {
-      const refreshed = await client.auth.refreshSession();
-      if (refreshed && refreshed.data && refreshed.data.session) state.user = refreshed.data.session.user;
-    } catch (e) { /* the upgrade itself worked; the next token refresh brings the claim up to date */ }
+    // (A failed refresh is not an error here: the upgrade itself worked, and the next token refresh brings the claim up to date.)
+    const refreshed = await client.auth.refreshSession().then((r) => r, () => null);
+    if (refreshed && refreshed.data && refreshed.data.session) state.user = refreshed.data.session.user;
     setFieldErrors(formId, {});
     setMessage("החשבון נוצר, אפשר להתחבר איתו מכל מכשיר");
     // For a member who already had a profile before setting a recovery
