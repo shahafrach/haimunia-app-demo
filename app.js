@@ -333,7 +333,7 @@ function renderNavSettingsRow() {
          nothing to catch. -->
     <button class="navrow" data-action="open-support">
       <span class="icon-chip icon-chip-steel">${ICONS.helpIcon}</span>
-      <span class="nav-label">תמיכה ודיווח על תקלה</span>
+      <span class="nav-label">פנייה</span>
       ${navChevronHtml()}
     </button>`;
 }
@@ -1877,107 +1877,45 @@ function closeNotifications() {
   notificationsOpenerEl = null;
 }
 
-// ---------- Support and bug reporting ----------
-// Added 2026-09-15, straight out of the first real-phone session this app
-// ever had. Four things were reported as "not working" that day, and the
-// only reason they reached anybody is that the person holding the phone was
-// also the person who could fix them. A member has no such channel: the app
-// has never had a single route for "this is broken" or "I need help", so
-// every one of those reports would have ended as a shrug, or as a message in
-// the club WhatsApp group that nobody with the code ever reads.
-//
-// WHY THIS LIVES IN app.js AND NOT cloud.js. Community is opt-in, and the
-// training log works with no account, no network and no Supabase at all. A
-// member who never joined Community is exactly as entitled to report a bug as
-// one who did - more so, since the offline log is the part they use daily.
-// Putting this in cloud.js would have made "can I ask for help" depend on
-// having said yes to a social feed.
-//
-// WHY IT HANDS OFF INSTEAD OF WRITING TO THE DATABASE. Reporting a bug is
-// precisely the moment the app might be the broken thing. A table write needs
-// a live client, a network, a valid session and an intact RLS path - four
-// things a bug report should never be gated on. Composing the text locally
-// and handing it to WhatsApp or mail costs none of them, works in airplane
-// mode, and leaves the member holding their own copy of what they sent.
-// See cloud-config.js's supportWhatsApp/supportEmail for the routing.
-function supportConfig() {
-  const c = (typeof window !== "undefined" && window.HAIMUNIA_CONFIG) || {};
-  const digits = String(c.supportWhatsApp || "").replace(/[^0-9]/g, "");
-  return { whatsapp: digits, email: String(c.supportEmail || "").trim() };
+// ---------- פנייה: contact the owner from inside the app ----------
+// Owner decision 2026-10-28: support without an email address or a phone
+// number. The member writes a message; it is filed in bug_reports through
+// bug_report_submit, and the owner reads it in the Supabase dashboard. The
+// same route carries requests for access to, or deletion of, a member's data
+// (privacy.html). Nothing leaves the device but the message, the app version
+// and the account the server already knows from the session. The server
+// rebuilds the diagnostics column as {"app_version"} whatever is sent, so a
+// future client cannot widen it by accident.
+function supportSignedIn() {
+  return typeof window.cloudSignedIn === "function" && window.cloudSignedIn();
 }
-// What the developer needs and the member should not have to be asked for.
-// Deliberately contains nothing personal: no name, no handle, no training
-// data, no invite code. Version + platform + the three state bits that
-// change how the app behaves are what actually narrow a bug down, and every
-// one of them is about the DEVICE, not the person. The member can read the
-// whole block before sending it - it is rendered on screen, not attached
-// invisibly, because a report that quietly ships facts about someone's phone
-// without showing them is not something this app should do.
-function supportDiagnostics() {
-  const online = typeof navigator !== "undefined" && "onLine" in navigator ? (navigator.onLine ? "מקוון" : "לא מקוון") : "לא ידוע";
-  // cloudSyncActive() is cloud.js's own published answer to "is this member
-  // signed in AND syncing" (`state.user && state.syncEnabled`). Guarded by
-  // typeof because cloud.js is a separate deferred script and an offline-only
-  // member may have it loaded but never activated - a missing function here
-  // means "no community", not an error worth showing anybody.
-  const community = (typeof window !== "undefined" && typeof window.cloudSyncActive === "function" && window.cloudSyncActive())
-    ? "פעילה" : "כבויה";
-  return [
-    `גרסה: ${APP_VERSION}`,
-    `מותקן במסך הבית: ${isStandalone() ? "כן" : "לא"}`,
-    `חיבור: ${online}`,
-    `מעגלים: ${community}`,
-    `דפדפן: ${typeof navigator !== "undefined" ? String(navigator.userAgent || "").slice(0, 160) : "לא ידוע"}`,
-  ].join("\n");
-}
-// The same facts supportDiagnostics() renders, as an object, for the database
-// column. Kept deliberately separate from the rendered string rather than
-// parsed back out of it: the screen text is for a human and may be reworded,
-// the payload is a schema and must not change when the wording does.
+// The one device fact that travels, and the one the member can read first.
 function supportDiagnosticsPayload() {
-  const online = typeof navigator !== "undefined" && "onLine" in navigator ? !!navigator.onLine : null;
-  const community = (typeof window !== "undefined" && typeof window.cloudSyncActive === "function" && window.cloudSyncActive());
-  return {
-    version: APP_VERSION,
-    standalone: isStandalone(),
-    online: online,
-    community: !!community,
-    ua: typeof navigator !== "undefined" ? String(navigator.userAgent || "").slice(0, 160) : "",
-  };
-}
-function supportReportText() {
-  const typed = (document.getElementById("supportMessage") || {}).value || "";
-  return `דיווח על תקלה — ${brandName()}\n\n${typed.trim() || "(לא נכתב תיאור)"}\n\n--- פרטים טכניים ---\n${supportDiagnostics()}`;
+  return { app_version: APP_VERSION };
 }
 function renderSupportContent() {
-  const cfg = supportConfig();
-  // No configured channel is not a dead end: the member still writes the
-  // report and copies it, which is strictly better than a screen that says
-  // "contact support" and offers no way to.
-  const routes = [];
-  // Only offered when Community is actually live for this member - an
-  // offline-only member has no club inbox to send to, and a button that
-  // cannot work must not be on screen (the same rule the disabled-control
-  // fixes earlier today were about).
-  const clubInbox = typeof window.cloudSyncActive === "function" && window.cloudSyncActive();
-  if (clubInbox) routes.push(`<button class="chip-btn primary" data-action="support-send-club">שליחה למפעיל/ת האפליקציה</button>`);
-  if (cfg.whatsapp) routes.push(`<button class="chip-btn${clubInbox ? "" : " primary"}" data-action="support-send-whatsapp">שליחה בוואטסאפ</button>`);
-  if (cfg.email) routes.push(`<button class="chip-btn" data-action="support-send-email">שליחה במייל</button>`);
-  routes.push(`<button class="chip-btn" data-action="support-copy">העתקת הדיווח</button>`);
+  // A פנייה is filed under the member's account, so it needs one. The training
+  // log works without; asking for help does not have to.
+  if (!supportSignedIn()) {
+    return `
+    <div class="settings-block">
+      <div class="settings-block-title">פנייה</div>
+      <div class="footer-note" style="margin-bottom:0;">${esc("פנייה נשלחת מתוך החשבון שלכם, בלי מייל ובלי טלפון. כדי לכתוב פנייה צריך להיכנס לחשבון במסך \"אני\".")}</div>
+    </div>`;
+  }
   return `
     <div class="settings-block">
-      <div class="settings-block-title">מה קרה?</div>
-      <div class="footer-note" style="margin-bottom:8px;">כתבו מה ניסיתם לעשות ומה קרה בפועל. ככל שיהיה מדויק יותר, כך יהיה קל יותר לתקן.</div>
-      <label class="field"><span class="field-label">תיאור התקלה</span>
-        <textarea class="text-input" id="supportMessage" rows="5" dir="auto" placeholder="למשל: לחצתי על העלאת תמונה בפרופיל ולא נפתח כלום"></textarea>
+      <div class="settings-block-title">פנייה</div>
+      <div class="footer-note" style="margin-bottom:8px;">${esc("תקלה, שאלה, או בקשה לקבל את המידע שלכם או למחוק אותו. כותבים כאן, בלי מייל ובלי טלפון.")}</div>
+      <label class="field"><span class="field-label">מה תרצו לספר?</span>
+        <textarea class="text-input" id="supportMessage" rows="5" dir="auto" maxlength="4000" placeholder="למשל: לחצתי על שיתוף ולא קרה כלום"></textarea>
       </label>
-      <div class="chip-row">${routes.join("")}</div>
+      <div class="chip-row"><button class="chip-btn primary" data-action="support-send-club">שליחה</button></div>
       <div class="footer-note" id="supportSendNote" role="status" aria-live="polite" style="margin-bottom:0;"></div>
     </div>
     <div class="settings-block">
-      <div class="settings-block-title">פרטים טכניים שיישלחו</div>
-      <div class="footer-note" style="margin-bottom:6px;">אלה פרטים על המכשיר בלבד — בלי השם שלכם, בלי יומן האימונים ובלי שום נתון אישי.</div>
-      <pre class="mono" style="white-space:pre-wrap;word-break:break-word;font-size:11.5px;color:var(--color-text-muted);margin:0;">${esc(supportDiagnostics())}</pre>
+      <div class="settings-block-title">מה נשלח</div>
+      <div class="footer-note" style="margin-bottom:0;">${esc("רק הטקסט שכתבתם, מספר הגרסה (" + APP_VERSION + ") והחשבון שממנו כתבתם, כדי שאפשר יהיה לענות ולטפל בבקשות גישה ומחיקה. לא נשלחים פרטי המכשיר ולא יומן האימונים.")}</div>
     </div>`;
 }
 let supportOpenerEl = null;
@@ -2003,62 +1941,21 @@ function supportNote(text) {
   const el = document.getElementById("supportSendNote");
   if (el) el.textContent = text;
 }
-// window.open(..., "_blank") rather than assigning location: a wa.me or
-// mailto: handoff that fails to resolve should leave the member on their
-// half-written report, not navigate the app away from it.
-function supportHandoff(url, failText) {
-  try {
-    const w = window.open(url, "_blank");
-    if (!w) supportNote(failText);
-  } catch (e) { supportNote(failText); }
-}
-// Tries the club's own inbox FIRST, then falls back to the handoff. Order
-// matters and is the opposite of what it looks like: the handoff is the
-// reliable path (it needs nothing but the device), and the inbox is the
-// USEFUL one (status, history, a second admin who can see it was handled).
-// So the useful path is attempted while it can be, and the reliable one
-// catches everything else - an offline member, Community switched off, a
-// broken session, a failed write. It never reports success it did not get:
-// communitySubmitBugReport returns true only on a confirmed server write.
-async function supportSubmitToClub() {
-  if (typeof window.communitySubmitBugReport !== "function") return false;
-  const typed = (document.getElementById("supportMessage") || {}).value || "";
-  if (!typed.trim()) return false;
-  try { return await window.communitySubmitBugReport(typed.trim(), supportDiagnosticsPayload()); }
-  catch (e) { return false; }
-}
 async function supportSendToClub() {
-  supportNote("שולח…");
-  const ok = await supportSubmitToClub();
+  const field = document.getElementById("supportMessage");
+  const typed = ((field || {}).value || "").trim();
+  if (!typed) return supportNote("כתבו כמה מילים לפני השליחה.");
+  if (typeof window.communitySubmitBugReport !== "function") return supportNote("השליחה לא זמינה כרגע.");
+  supportNote("שולחים…");
+  let ok = false;
+  try { ok = await window.communitySubmitBugReport(typed, supportDiagnosticsPayload()); } catch (e) { ok = false; }
   if (ok) {
-    const field = document.getElementById("supportMessage");
     if (field) field.value = "";
-    supportNote("הדיווח נשלח למפעיל/ת האפליקציה. תודה! אפשר לעקוב אחרי הסטטוס שלו מולו/ה.");
+    supportNote("הפנייה נשלחה. תודה!");
     return;
   }
-  supportNote("לא הצלחנו לשלוח לצוות כרגע. אפשר לשלוח את הדיווח בוואטסאפ, במייל, או להעתיק אותו.");
-}
-function supportSendWhatsApp() {
-  const cfg = supportConfig();
-  if (!cfg.whatsapp) return supportNote("לא הוגדר מספר וואטסאפ לתמיכה. אפשר להעתיק את הדיווח ולשלוח אותו ידנית.");
-  supportHandoff(`https://wa.me/${cfg.whatsapp}?text=${encodeURIComponent(supportReportText())}`,
-    "לא הצלחנו לפתוח את וואטסאפ. אפשר להעתיק את הדיווח ולשלוח אותו ידנית.");
-}
-function supportSendEmail() {
-  const cfg = supportConfig();
-  if (!cfg.email) return supportNote("לא הוגדרה כתובת מייל לתמיכה. אפשר להעתיק את הדיווח ולשלוח אותו ידנית.");
-  supportHandoff(`mailto:${encodeURIComponent(cfg.email)}?subject=${encodeURIComponent("דיווח על תקלה — " + brandName())}&body=${encodeURIComponent(supportReportText())}`,
-    "לא הצלחנו לפתוח את אפליקציית המייל. אפשר להעתיק את הדיווח ולשלוח אותו ידנית.");
-}
-function supportCopyReport() {
-  const text = supportReportText();
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(text)
-      .then(() => supportNote("הדיווח הועתק. אפשר להדביק אותו בוואטסאפ, במייל או בכל מקום אחר."))
-      .catch(() => supportNote("ההעתקה נכשלה. אפשר לסמן את הטקסט ולהעתיק ידנית."));
-    return;
-  }
-  supportNote("ההעתקה לא נתמכת בדפדפן הזה. אפשר לסמן את הטקסט ולהעתיק ידנית.");
+  // The text stays in the field: nothing is lost on a failed send.
+  supportNote("לא הצלחנו לשלוח. הטקסט נשאר כאן, אפשר לנסות שוב בעוד רגע (עד 5 פניות בשעה).");
 }
 
 // ---------- First-time onboarding ----------
@@ -6652,8 +6549,8 @@ function renderSettingsBody() {
              one row would bury it further down the same screen. -->
         <button class="exercise-row" data-action="open-support" style="margin-bottom:0;">
           <div style="text-align:right;">
-            <div style="font-weight:700; font-size:13.5px;">תמיכה ודיווח על תקלה</div>
-            <div style="color:var(--color-text-muted); font-size:12px; margin-top:2px;">משהו לא עובד? ספרו לנו</div>
+            <div style="font-weight:700; font-size:13.5px;">פנייה</div>
+            <div style="color:var(--color-text-muted); font-size:12px; margin-top:2px;">תקלה, שאלה, גישה למידע או מחיקתו</div>
           </div>
           <span style="color:var(--color-text-muted); flex-shrink:0;">${ICONS.chevronsLeft}</span>
         </button>
@@ -8675,9 +8572,6 @@ document.addEventListener("click", (e) => {
     closeSupport();
   }
   else if (action === "support-send-club") { supportSendToClub(); }
-  else if (action === "support-send-whatsapp") { supportSendWhatsApp(); }
-  else if (action === "support-send-email") { supportSendEmail(); }
-  else if (action === "support-copy") { supportCopyReport(); }
   else if (action === "close-notifications") {
     if (el.id === "notificationsOverlay" && e.target !== el) return;
     closeNotifications();

@@ -18,7 +18,6 @@
     "check:versions": "node scripts/check-migration-versions.mjs",
     "push:prod": "node scripts/push-migrations.mjs",
     "check:immutable": "node scripts/check-migration-immutability.mjs",
-    "backup:storage": "node scripts/backup-storage.mjs",
     "smoke-test-multi-role": "node scripts/smoke-test-multi-role.mjs"
   },
   "devDependencies": {

@@ -255,6 +255,25 @@
     }
   }
 
+  // The owner's bootstrap link (bootstrap_owner_invite, docs/ops/FIRST_CIRCLE.md)
+  // looks like any invite link, but join_circle does not know it: it is a
+  // one-hour code for the first circle, spent by redeem_invite_code. Called
+  // when join_circle answered "invalid". True only when the code was accepted
+  // and the redemption row is loaded, so the sign-up screens can go on.
+  async function redeemFirstOwnerToken(token) {
+    const code = String(token || "").trim().toLowerCase();
+    if (!client || !state.user || !/^[a-f0-9]{40,128}$/.test(code)) return false;
+    try {
+      const { data, error } = await client.rpc("redeem_invite_code", { p_code: code, p_actor_key: communityActorKey() });
+      if (error || !data || data === "invalid" || data === "rate_limited") return false;
+    } catch (e) { return false; }
+    for (let attempt = 0; attempt < 3 && !state.redemption; attempt++) {
+      if (attempt) await new Promise((r) => setTimeout(r, 150 * attempt));
+      await loadRedemption();
+    }
+    return !!state.redemption;
+  }
+
   // No real email is ever collected or sent - a synthetic, RFC 2606
   // "invalid" address is built locally from a username purely so
   // Supabase's password-auth provider (which requires an email-shaped

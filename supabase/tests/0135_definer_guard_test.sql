@@ -53,6 +53,7 @@ insert into tests.definer_reviewed (name, args, class, anon_allowed, reason) val
   ('ach_claim', 'text[]', 'caller_own_rows', false, ''),
   ('ach_share', 'uuid, uuid, text, uuid', 'circle_scoped', false, 'publishes a post in ONE circle the caller is a member of'),
   ('analytics_events_guard_rate_limit', '', 'caller_own_rows', false, ''),
+  ('bootstrap_owner_invite', '', 'global_safe', false, 'owner-only: granted to no role, so only the SQL editor (postgres) can call it; refuses any call that carries an auth.uid(); mints one one-hour, one-use invite_codes row (202610290001)'),
   ('bug_report_list_mine', '', 'caller_own_rows', false, ''),
   ('bug_report_submit', 'text, jsonb', 'caller_own_rows', false, ''),
   ('bug_reports_anonymize_on_user_delete', '', 'caller_own_rows', false, ''),

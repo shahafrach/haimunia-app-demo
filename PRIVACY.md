@@ -20,7 +20,7 @@ BOX-LOG is a free training-log app, a personal project by Shahaf Rachmany, used 
 - **What you shared:** workouts and personal records (PRs) you chose to share to one circle, and the reactions on them (fist bump, fire, clap).
 - **Trained together:** a tag naming a circle member. It counts for them only after they confirm.
 - **Notifications:** your preferences and, if you turn push on, your browser's push subscription at its push service.
-- **Blocks and bug reports** you submitted.
+- **Blocks and פנייה messages** you submitted (the text you wrote and the app version).
 - **Usage events:** an action name and small properties, with no workout content. Deleted after 90 days.
 - **Private backup:** your workout log, custom exercises and measurements, without body weight. Stored under your account only. No circle member sees it and it is never sent to a circle.
 
@@ -63,7 +63,7 @@ An empty backup-only account is closed after 30 days. If you have saved even one
 
 ## Contact
 
-Support address: SUPPORT_ADDRESS_NOT_DECIDED
+Requests, including access and deletion, go through **פנייה** in the app (Me, then פנייה). There is no email address or phone number for requests.
 
 You can also take questions to whoever invited you.
 

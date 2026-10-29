@@ -81,34 +81,9 @@ window.HAIMUNIA_CONFIG = Object.freeze({
   captchaProvider: "turnstile", // Turnstile is the only provider
   captchaSiteKey: "0x4AAAAAAE6mfjw79idh0ptH",
 
-  // Support and bug reporting (2026-09-15), added after the first real-phone
-  // session produced four "not working" reports that had no route back into
-  // the app - they reached the developer only because the tester happened to
-  // be the owner. A member without that channel had nowhere to put them.
-  //
-  // WHY A HANDOFF AND NOT A TABLE. Reporting a bug is exactly the moment the
-  // app may be the broken thing: a Supabase insert needs a working client, a
-  // network, a session and an intact RLS path, which is a lot of machinery to
-  // trust while the member is telling you something is wrong. WhatsApp is
-  // this club's actual channel (99% penetration, its own research in
-  // docs/community/contracts.md) and it retries, queues offline and leaves
-  // the member holding a copy of what they sent. The report is composed
-  // locally, so it works with no network and with Community switched off
-  // entirely - which is most of this app's surface.
-  //
-  // Both are optional. Leave a value empty and the app simply does not offer
-  // that route; leave BOTH empty and the reporter still gets the "copy the
-  // report" fallback, so the feature is never a dead end.
-  //
-  // supportWhatsApp: international format, digits only, no + and no spaces
-  // (this is wa.me's own required shape). Israeli mobile 05X-XXX-XXXX becomes
-  // 9725XXXXXXXX.
-  supportWhatsApp: "",
-  // TODO(owner): this is still the former gym's inbox and must be replaced with
-  // a BOX-LOG address. It is not blank only because
-  // test/support-and-bug-report.test.mjs requires one real support channel.
-  // This file is public by construction, so use an address meant to be written to.
-  supportEmail: "haimuniya@gmail.com",
+  // There is no support address and no support phone number (owner decision
+  // 2026-10-28). A member writes a פנייה in Me; it is filed in bug_reports and
+  // the owner reads it in the Supabase dashboard (docs/ops/SUPPORT.md).
 
   // ==========================================================================
   // BRANDING. The product name, for a second club.

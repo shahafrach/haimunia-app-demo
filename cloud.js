@@ -1947,7 +1947,7 @@
   // the WhatsApp/mail handoff on ANY failure rather than telling a member
   // their report was received when it was not (2026-09-15).
   window.communitySubmitBugReport = async function (body, diagnostics) {
-    if (!client || !state.user || !state.syncEnabled) return false;
+    if (!client || !state.user || state.user.is_anonymous) return false;
     try {
       const { error } = await client.rpc("bug_report_submit", {
         p_body: String(body || ""),
@@ -1957,6 +1957,9 @@
     } catch (e) { return false; }
   };
   window.cloudSyncActive = function () { return !!(state.user && state.syncEnabled); };
+  // A signed-up account (not the anonymous session mid sign-up): what the
+  // פנייה form in app.js needs, whether or not backup sync is on.
+  window.cloudSignedIn = function () { return !!(state.user && !state.user.is_anonymous); };
   window.cloudStorageStatusText = function () {
     if (!configured) return "נשמר במכשיר הזה בלבד, ללא שרת";
     if (backupOptedOut()) return "נשמר במכשיר הזה בלבד — גיבוי אוטומטי כבוי";
