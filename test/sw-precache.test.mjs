@@ -74,9 +74,25 @@ test("every src/*.js file index.html loads is precached, required or optional", 
   }
 });
 
-test("optional assets still include every font, icon, and medal image — nothing lost in the split", () => {
+test("optional assets still include every font and icon — nothing lost in the split", () => {
   const optionalBlock = sw.slice(sw.indexOf("const OPTIONAL_ASSETS"), sw.indexOf("const ASSETS ="));
-  for (const asset of ['"./manifest.json"', '"./vendor/supabase.js"', '"./assets/medal-gold.png"', '"./assets/fonts/rubik-400-hebrew.woff2"']) {
+  for (const asset of ['"./manifest.json"', '"./vendor/supabase.js"', '"./assets/fonts/heebo-hebrew-var.woff2"', '"./assets/fonts/heebo-latin-var.woff2"']) {
     assert.ok(optionalBlock.includes(asset), `${asset} must still be precached, just as optional`);
+  }
+});
+
+test("every stylesheet, font and script index.html loads is precached", () => {
+  const all = [...sw.matchAll(/"(\.\/[^"]+)"/g)].map((m) => m[1]);
+  const wanted = [
+    ...[...html.matchAll(/<link rel="stylesheet" href="(\.\/[^"]+)"/g)].map((m) => m[1]),
+    ...[...html.matchAll(/<script(?: defer)? src="(\.\/[^"]+)"/g)].map((m) => m[1]),
+    ...[...html.matchAll(/url\("(\.\/assets\/fonts\/[^"]+)"/g)].map((m) => m[1]),
+  ];
+  const tokensCss = fs.readFileSync(new URL("../tokens.css", import.meta.url), "utf8");
+  wanted.push(...[...tokensCss.matchAll(/url\("(\.\/assets\/fonts\/[^"]+)"/g)].map((m) => m[1]));
+  assert.ok(wanted.includes("./tokens.css") && wanted.some((w) => /heebo-hebrew/.test(w)) && wanted.some((w) => /heebo-latin/.test(w)));
+  for (const w of new Set(wanted)) {
+    if (/^\.\/(vendor|cloud-config)/.test(w) && !all.includes(w)) continue;
+    assert.ok(all.includes(w), `${w} is loaded by the app and missing from the sw.js precache`);
   }
 });

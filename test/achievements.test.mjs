@@ -99,12 +99,15 @@ test("a plain PR with no new badge still celebrates, without a badge grid", asyn
   window.applyFieldValue("step", "weight", 65);
   await window.saveSet();
 
-  assert.equal(window.document.getElementById("celebrationOverlay").classList.contains("open"), true, "a plain PR alone should still pop the celebration");
-  const title = window.document.getElementById("celebrationTitle").textContent;
-  assert.equal(title, "שיא אישי חדש!", "a PR-only celebration should use the PR title, not the badge one");
-  const prLine = window.document.getElementById("celebrationPrLine");
-  assert.equal(prLine.style.display, "block");
-  assert.ok(prLine.textContent.includes("Test Plain PR Deadlift"));
+  // The Design session moved the PR out of the badge popup into the post-workout
+  // moment: the PR card first, no badge grid, because nothing was unlocked.
+  const doc = window.document;
+  assert.equal(doc.getElementById("momentOverlay").classList.contains("open"), true, "a plain PR alone opens the post-workout moment");
+  assert.equal(doc.getElementById("celebrationOverlay").classList.contains("open"), false, "no badge popup: nothing was unlocked");
+  assert.match(doc.getElementById("momentTitle").textContent, /שיא חדש ב/);
+  assert.ok(doc.getElementById("momentBody").textContent.includes("Test Plain PR Deadlift"));
+  assert.ok(doc.querySelector("#momentBody .moment-pr .pr-badge"), "the PR carries a shape and a label, not color alone");
+  assert.equal(doc.querySelector("#momentBody .medal-badge"), null, "no badge grid");
 });
 
 test("celebration never offers a community share button when cloud.js hasn't loaded (no community configured)", async () => {

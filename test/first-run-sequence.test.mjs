@@ -172,11 +172,11 @@ test("fresh-eyes audit: the arrival card gets an opaque backdrop, unlike every r
   // A real, later PR (needs 3 real priors past the trivial window - see
   // saveSet()'s own MIN_ENTRIES_BEFORE_PR) must NOT get the opaque
   // backdrop - only the once-ever arrival moment does.
-  for (const kg of [45, 50]) { await logASet(window, kg); window.closeCelebration(); }
+  for (const kg of [45, 50]) { await logASet(window, kg); window.closeCelebration(); window.closeMoment(); }
   await logASet(window, 55);
-  assert.equal(window.document.getElementById("celebrationOverlay").classList.contains("open"), true, "a real PR still celebrates");
+  assert.equal(window.document.getElementById("momentOverlay").classList.contains("open"), true, "a real PR still opens the moment");
   assert.equal(window.document.getElementById("celebrationOverlay").classList.contains("arrival-card"), false,
-    "a routine celebration keeps the standard translucent scrim");
+    "the opaque scrim stays the arrival card's alone");
 });
 
 test("the arrival card happens once in a member's life, not once per empty log", async () => {

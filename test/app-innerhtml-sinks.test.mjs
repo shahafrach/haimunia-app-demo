@@ -161,8 +161,11 @@ test("the sink count is pinned, so a new sink is a deliberate decision", () => {
   //     still writes content + cloudOverlay + renderAppConfirmSheet(), so this
   //     is +1, not a move that also removed one.
   const count = sinkLines(appJs).length;
-  assert.equal(count, 39,
-    `app.js has ${count} innerHTML/outerHTML sinks, expected 39. If you added one, verify its interpolations are escaped and update this number; if you removed one, just update it.`);
+  // 39 -> 42 by the Design session, each checked: refreshAppearanceFields() (outerHTML of a
+  // string built from the fixed palette list and esc()'d names), and the post-workout moment's
+  // two writes (#momentBody, #momentActions), whose every interpolation is esc() or bidiText().
+  assert.equal(count, 42,
+    `app.js has ${count} innerHTML/outerHTML sinks, expected 42. If you added one, verify its interpolations are escaped and update this number; if you removed one, just update it.`);
 });
 
 test("esc() is a single shared definition, so there is one escaping rule and not several", () => {

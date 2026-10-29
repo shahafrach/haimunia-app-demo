@@ -80,12 +80,13 @@ test("no PR_CREATED and no behaviour change when the community is not signed in"
   for (const kg of [100, 105, 110]) {
     await logReps(window, kg);
     window.closeCelebration();
+    window.closeMoment();
   }
   await logReps(window, 120);
 
   assert.equal(seen.length, 0, "detection still runs but nothing is announced offline");
-  assert.equal(window.document.getElementById("celebrationOverlay").classList.contains("open"), true,
-    "the local PR celebration is unchanged");
+  assert.equal(window.document.getElementById("momentOverlay").classList.contains("open"), true,
+    "the local PR moment is unchanged by the community layer being absent");
 });
 
 test("end to end: a logged lift drives the PR share prompt and posts nothing on its own", async () => {

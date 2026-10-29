@@ -108,8 +108,8 @@
   function renderSharePromptPrefPanel() {
     if (!state.user || !state.profile) return "";
     const on = sharePromptsEnabled();
-    return `<div class="ach-section" id="sharePromptPrefPanel" style="margin-top:18px;">${sectionHead("var(--brass)", "הצעות שיתוף")}
-      <div style="color:var(--steel);font-size:12px;line-height:1.6;margin-bottom:8px;">אימון נשלח למעגלים לפי ההגדרות של כל מעגל. על שיא או מדליה נשאל פעם אחת איפה לשתף. שום דבר לא מתפרסם בלי לחיצה שלכם.</div>
+    return `<div class="ach-section" id="sharePromptPrefPanel" style="margin-top:18px;">${sectionHead("var(--color-accent)", "הצעות שיתוף")}
+      <div style="color:var(--color-text-muted);font-size:12px;line-height:1.6;margin-bottom:8px;">אימון נשלח למעגלים לפי ההגדרות של כל מעגל. על שיא או מדליה נשאל פעם אחת איפה לשתף. שום דבר לא מתפרסם בלי לחיצה שלכם.</div>
       <div class="log-list"><label class="log-row" style="justify-content:space-between;gap:12px;cursor:pointer;"><span style="font-size:13px;">להציע לי לשתף שיאים ומדליות</span><input type="checkbox" data-share-prompt-pref${on ? " checked" : ""} aria-label="להציע לי לשתף שיאים ומדליות"/></label></div>
     </div>`;
   }

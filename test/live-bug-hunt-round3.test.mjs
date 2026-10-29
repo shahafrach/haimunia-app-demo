@@ -110,16 +110,16 @@ test("a celebration deferred behind an open dialog is flushed by Escape, not str
   window.choosePickedMovement(movement.id);
   window.applyFieldValue("step", "weight", 55);
   await window.saveSet();
-  assert.equal(window.document.getElementById("celebrationOverlay").classList.contains("open"), false,
-    "the celebration must stay deferred while a blocking dialog is open");
+  assert.equal(window.document.getElementById("momentOverlay").classList.contains("open"), false,
+    "the PR moment must stay deferred while a blocking dialog is open");
 
   // Close Achievements via Escape - not a click. flushDeferredCelebration()
   // used to be wired only into closeOnboarding() and the generic click
   // handler's tail, so this used to leave the celebration stuck.
   window.document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape" }));
   assert.equal(window.document.getElementById("achievementsOverlay").classList.contains("open"), false, "Escape should close Achievements");
-  assert.equal(window.document.getElementById("celebrationOverlay").classList.contains("open"), true,
-    "the deferred celebration must flush the instant its blocking dialog closes via Escape, not wait for some later unrelated click");
+  assert.equal(window.document.getElementById("momentOverlay").classList.contains("open"), true,
+    "the deferred moment must open the instant its blocking dialog closes via Escape, not wait for some later unrelated click");
 });
 
 test("the flame/record marker is gated the same way categoryPRCounts() already is, and clears retroactively when a later edit changes the real running max", async () => {
@@ -272,7 +272,7 @@ test("the WOD history chart's PR dots use a strict comparison, matching the real
   await logTime(9, 0);  // 540s again - an EXACT TIE with the current best
 
   const cardHtml = window.renderWodDetailCard(wod);
-  const prDotCount = (cardHtml.match(/r="5"/g) || []).length;
+  const prDotCount = (cardHtml.match(/r="6"/g) || []).length;
   assert.equal(prDotCount, 2,
     "an inclusive (<=) comparison used to count the tied third attempt as a second PR dot, disagreeing with the attempt list right below it (which reads the real, strictly-compared entry.isPR flag)");
 });

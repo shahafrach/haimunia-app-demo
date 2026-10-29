@@ -158,7 +158,8 @@ test("empty and malformed input does not throw", () => {
 
 test("colours come from CSS tokens, with a fallback when there is no document", () => {
   const c = sc.readColors();
-  for (const k of ["bg", "surface", "border", "chalk", "steel", "energy", "brass", "green"]) assert.match(c[k], /^#[0-9a-f]{6}$/i);
+  // No document here, so each falls back to a CSS system color keyword: never a hex.
+  for (const k of ["bg", "surface", "border", "text", "muted", "accent", "accentFill", "onAccent", "pr", "progress", "success"]) assert.match(c[k], /^[A-Za-z]+$/);
 });
 
 test("wired in: one script tag and one OPTIONAL_ASSETS entry", () => {

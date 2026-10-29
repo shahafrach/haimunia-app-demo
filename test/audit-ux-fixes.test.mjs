@@ -25,9 +25,10 @@ test("bodyweight gets its own section label, matching measurements", async () =>
   assert.ok(label, "bodyweight should have its own .section-label, not read as just another tracked exercise");
 });
 
-test("the main tab bar and community sub-tab bar meet the 44px touch-target baseline", () => {
-  assert.match(indexHtml, /\.tabbtn\{[^}]*min-height:44px/);
-  assert.match(indexHtml, /\.subtabbtn\{[^}]*min-height:44px/);
+test("the main tab bar and community sub-tab bar meet the 44px touch-target baseline (--hit-min)", () => {
+  assert.match(fs.readFileSync(new URL("../tokens.css", import.meta.url), "utf8"), /--hit-min:44px/);
+  assert.match(indexHtml, /\.tabbtn\s*\{[^}]*min-height:44px/);
+  assert.match(indexHtml, /\.subtabbtn\s*\{[^}]*min-height:44px/);
 });
 
 test("onboarding mentions circles, not just the offline screens", () => {

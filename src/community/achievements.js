@@ -212,9 +212,9 @@
       <div class="modal-sheet" id="achUnlock" style="border-radius:22px;max-height:90vh;overflow:auto;">
         <div style="padding:22px 20px calc(env(safe-area-inset-bottom,0px) + 18px);text-align:center;">
           <div style="font-size:44px;line-height:1;margin-bottom:8px;" aria-hidden="true">${esc(a.icon)}</div>
-          <h2 id="achUnlockTitle" style="margin-top:0;color:var(--chalk);font-weight:800;font-size:18px;margin-bottom:4px;">מדליה חדשה נפתחה</h2>
-          <div style="color:var(--brass);font-weight:800;font-size:15px;">${esc(a.title)}</div>
-          ${a.explanation ? `<div style="color:var(--steel);font-size:12.5px;margin-top:6px;">${esc(a.explanation)}</div>` : ""}
+          <h2 id="achUnlockTitle" style="margin-top:0;color:var(--color-text);font-weight:800;font-size:18px;margin-bottom:4px;">מדליה חדשה נפתחה</h2>
+          <div style="color:var(--color-accent);font-weight:800;font-size:15px;">${esc(a.title)}</div>
+          ${a.explanation ? `<div style="color:var(--color-text-muted);font-size:12.5px;margin-top:6px;">${esc(a.explanation)}</div>` : ""}
           ${a.showNote ? `<label class="field" style="margin-top:10px;text-align:right;"><span class="field-label">הערה</span><textarea class="text-input" data-ach-note maxlength="${POST_BODY_MAX}" rows="3">${esc(a.note || "")}</textarea></label>` : ""}
           ${canShare ? `<div style="text-align:right;margin-top:10px;">${circlePickListHtml(a.picked || [], "data-ach-circle")}</div>` : ""}
           ${a.error ? `<div class="field-error" role="alert" style="margin-top:8px;">${esc(a.error)}</div>` : ""}
@@ -240,7 +240,7 @@
       // One share control: into the circles, named and with the SHARE_ICONS
       // stroke icon. There is no card for a medal, so no share out of the app.
       const share = r.shared_at
-        ? `<span style="color:var(--steel);font-size:12px;">שותף למעגל</span>`
+        ? `<span style="color:var(--color-text-muted);font-size:12px;">שותף למעגל</span>`
         : r.visibility === "only_me"
           ? ""
           : `<button class="chip-btn" data-community-action="ach-share-later" data-id="${esc(r.id)}" data-code="${esc(code)}">${SHARE_ICONS.club} שיתוף למעגל</button>`;
@@ -253,5 +253,5 @@
       // anchor always agree.
       return `<div class="log-row" data-achievement-id="${esc(r.id)}" style="flex-wrap:wrap;gap:6px;"><span style="min-width:0;">${esc(meta.icon)} ${esc(meta.title)}</span><span class="chip-row" style="margin:0;justify-content:flex-end;flex:1 1 auto;">${share}</span></div>`;
     }).join("");
-    return `<div class="ach-section" style="margin-top:18px;">${sectionHead("var(--brass)", "ההישגים שלי")}${list.length ? `<div class="log-list">${rowsHtml}</div>` : `<div class="empty">אין עדיין הישגים</div>`}</div>`;
+    return `<div class="ach-section" style="margin-top:18px;">${sectionHead("var(--color-accent)", "ההישגים שלי")}${list.length ? `<div class="log-list">${rowsHtml}</div>` : `<div class="empty">אין עדיין הישגים</div>`}</div>`;
   }

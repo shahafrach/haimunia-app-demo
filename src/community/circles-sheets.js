@@ -30,7 +30,7 @@
 
   function createSheetHtml() {
     const type = uiDraft("circleCreate.type", "friends");
-    const typeRow = (value, title, hint) => `<label class="log-row" style="gap:10px;cursor:pointer;align-items:flex-start;"><input type="radio" name="type" value="${value}" data-draft="circleCreate.type"${type === value ? " checked" : ""}/><span style="min-width:0;"><span style="font-weight:800;">${esc(title)}</span><span style="display:block;color:var(--steel);font-size:12px;line-height:1.5;">${esc(hint)}</span></span></label>`;
+    const typeRow = (value, title, hint) => `<label class="log-row" style="gap:10px;cursor:pointer;align-items:flex-start;"><input type="radio" name="type" value="${value}" data-draft="circleCreate.type"${type === value ? " checked" : ""}/><span style="min-width:0;"><span style="font-weight:800;">${esc(title)}</span><span style="display:block;color:var(--color-text-muted);font-size:12px;line-height:1.5;">${esc(hint)}</span></span></label>`;
     return sheetFrame("circleCreateTitle", "יצירת מעגל", `<form id="circleCreate">
       <div class="field-label">סוג המעגל</div>
       <div class="log-list" role="radiogroup" aria-label="סוג המעגל">
@@ -63,7 +63,7 @@
 
   function inviteSheetHtml(c, sheet) {
     const form = `<form id="circleInvite">
-      <div style="color:var(--steel);font-size:13px;line-height:1.6;margin-bottom:10px;">${bidiText("הקישור תקף שבוע, ואפשר להשתמש בו " + (c.type === "couple" ? "פעם אחת" : "עד חמש פעמים כברירת מחדל") + ". הוא מוצג רק עכשיו.")}</div>
+      <div style="color:var(--color-text-muted);font-size:13px;line-height:1.6;margin-bottom:10px;">${bidiText("הקישור תקף שבוע, ואפשר להשתמש בו " + (c.type === "couple" ? "פעם אחת" : "עד חמש פעמים כברירת מחדל") + ". הוא מוצג רק עכשיו.")}</div>
       ${field("circleInvite", "max_uses", "כמה אנשים יכולים להצטרף (אופציונלי)", `<input class="text-input" name="max_uses" inputmode="numeric" dir="ltr" maxlength="2" placeholder="${c.type === "couple" ? "1" : "5"}" value="${esc(uiDraft("circleInvite.max_uses", ""))}" data-draft="circleInvite.max_uses"/>`)}
       <button class="save-btn" type="submit"${state.circles.busy.invite ? " disabled" : ""} style="margin-top:12px;">${state.circles.busy.invite ? "יוצרים…" : "יצירת קישור הזמנה"}</button>
     </form>`;
@@ -84,7 +84,7 @@
         const d = CirclesCore.effectiveDefaults(c);
         return d.show_weights ? "עם משקלים" : "בלי משקלים מוחלטים";
       });
-    return sheetFrame("circleShareTitle", "לאילו מעגלים האימון הזה?", `<div style="color:var(--steel);font-size:13px;line-height:1.6;">${bidiText("האימון של " + shortHebDate(day) + ". מעגל שמבטלים בו נמחק ממנו הפוסט של האימון הזה, ושום דבר אחר לא משתנה.")}</div>
+    return sheetFrame("circleShareTitle", "לאילו מעגלים האימון הזה?", `<div style="color:var(--color-text-muted);font-size:13px;line-height:1.6;">${bidiText("האימון של " + shortHebDate(day) + ". מעגל שמבטלים בו נמחק ממנו הפוסט של האימון הזה, ושום דבר אחר לא משתנה.")}</div>
       ${list}
       ${sheet.error ? `<div class="field-error" role="alert" style="margin-top:8px;">${esc(sheet.error)}</div>` : ""}
       <button class="save-btn" data-community-action="c-share-apply"${sheet.saving || sheet.loading ? " disabled" : ""} style="margin-top:14px;">${sheet.saving ? "שומרים…" : "שמירה"}</button>`);
@@ -99,7 +99,7 @@
 
   function joinSheetHtml() {
     const j = state.circles.join;
-    return sheetFrame("circleJoinTitle", "הצטרפות למעגל", `<div style="color:var(--steel);font-size:13px;line-height:1.6;margin-bottom:10px;">${bidiText("הדביקו את קישור ההזמנה שקיבלתם. אפשר להיות עד 10 מעגלים.")}</div>
+    return sheetFrame("circleJoinTitle", "הצטרפות למעגל", `<div style="color:var(--color-text-muted);font-size:13px;line-height:1.6;margin-bottom:10px;">${bidiText("הדביקו את קישור ההזמנה שקיבלתם. אפשר להיות עד 10 מעגלים.")}</div>
       ${j.error ? `<div class="field-error" role="alert" data-join-error="1" style="margin-bottom:10px;">${esc(j.error)}</div>` : ""}
       <form id="circleJoin">${field("circleJoin", "link", "קישור הזמנה", `<input class="text-input" name="link" dir="ltr" inputmode="url" autocomplete="off" autocapitalize="off" placeholder="https://…#invite=…" value="${esc(j.draft || "")}" data-circle-join-draft required/>`)}<button class="save-btn" type="submit"${j.busy ? " disabled" : ""} style="margin-top:12px;">${j.busy ? "מצטרפים…" : "הצטרפות"}</button></form>`);
   }
@@ -123,11 +123,11 @@
     if (!b) return "";
     const where = b.names.length === 1 ? "ב" + b.names[0] : "ב-" + b.names.length + " מעגלים";
     const text = b.queued ? "האימון יישלח " + where + " כשהחיבור יחזור" : "האימון שותף " + where;
-    return `<div role="status" aria-live="polite" data-share-bar="1" style="position:fixed;left:0;right:0;bottom:calc(var(--bottom-nav-reserve) - 118px);display:flex;justify-content:center;padding:0 16px;z-index:60;">
-      <div style="max-width:448px;width:100%;background:var(--surface);border:1px solid var(--brass);border-radius:14px;padding:10px 14px;box-shadow:var(--shadow-card);display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+    return `<div role="status" aria-live="polite" data-share-bar="1" style="position:fixed;left:0;right:0;bottom:calc(var(--bottom-nav-reserve) - 108px);display:flex;justify-content:center;padding:0 16px;z-index:60;">
+      <div style="max-width:448px;width:100%;background:var(--color-surface);border:1px solid var(--color-accent);border-radius:14px;padding:10px 14px;box-shadow:var(--card-shadow);display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
         <span style="font-size:13px;font-weight:700;flex:1 1 auto;min-width:0;">${bidiText(text)}</span>
         <button class="chip-btn" data-community-action="c-share-bar-change" data-day="${esc(b.day)}">שינוי</button>
-        <button class="icon-btn" data-community-action="c-share-bar-close" aria-label="סגירה" style="color:var(--steel);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+        <button class="icon-btn" data-community-action="c-share-bar-close" aria-label="סגירה" style="color:var(--color-text-muted);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
       </div></div>`;
   }
 
@@ -137,7 +137,7 @@
     if (!window.isCommunitySignedIn || !window.isCommunitySignedIn() || !state.circles.list.length) return "";
     const item = typeof window.communityDayItemFor === "function" ? window.communityDayItemFor(type, id) : null;
     if (!item) return "";
-    return `<button data-community-action="c-share-open" data-day="${esc(item.day)}" aria-label="לאילו מעגלים האימון הזה" style="color:var(--steel);padding:4px;line-height:0;">${SHARE_ICONS.club}</button>`;
+    return `<button data-community-action="c-share-open" data-day="${esc(item.day)}" aria-label="לאילו מעגלים האימון הזה" style="color:var(--color-text-muted);padding:4px;line-height:0;">${SHARE_ICONS.club}</button>`;
   };
 
   function openMedalShareSheet(body) {

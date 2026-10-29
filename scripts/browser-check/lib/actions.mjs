@@ -219,12 +219,18 @@ export async function resolveAppConfirm(page, accept, { timeout = 5000 } = {}) {
 // The PR-celebration popup blocks every click behind it until dismissed.
 // Returns whether it was actually open, so callers can assert on that too.
 export async function dismissCelebrationIfOpen(page) {
+  // The post-workout moment (a PR or a met week) is the same kind of blocker.
+  const moment = await page.evaluate(() => document.getElementById("momentOverlay")?.classList.contains("open"));
+  if (moment) {
+    await page.click("#momentOverlay [data-action='close-moment']");
+    await page.waitForTimeout(150);
+  }
   const open = await page.evaluate(() => document.getElementById("celebrationOverlay")?.classList.contains("open"));
   if (open) {
     await page.click("#celebrationOverlay button[data-action='close-celebration']");
     await page.waitForTimeout(150);
   }
-  return open;
+  return open || moment;
 }
 
 // COMM-327 put the 4 main (offline training-log) tabs into a fixed bottom

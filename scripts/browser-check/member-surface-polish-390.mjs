@@ -246,7 +246,7 @@ const boxes = await page.evaluate(() => {
 });
 check("the Account tab renders real checkboxes", boxes.count >= 3, String(boxes.count));
 check("and every one of them is the same box", boxes.styles.length === 1, boxes.styles.join(" // "));
-check("drawn by the app, not by the platform", boxes.styles[0] && boxes.styles[0].startsWith("none|18px|18px|5px|"),
+check("drawn by the app, not by the platform", boxes.styles[0] && boxes.styles[0].startsWith("none|20px|20px|6px|"),
   boxes.styles[0]);
 check("a ticked box fills and an unticked one does not",
   !!boxes.checkedBg && !!boxes.uncheckedBg && boxes.checkedBg !== boxes.uncheckedBg,

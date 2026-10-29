@@ -63,7 +63,7 @@
         <span>${bidiText(names[id] || "חבר/ה")}</span>
         <button class="chip-btn"${state.members.unblocking === id ? " disabled" : ""} data-community-action="unblock" data-id="${esc(id)}">${state.members.unblocking === id ? "מבטלים…" : "ביטול חסימה"}</button>
       </div>`).join("");
-    return `<div class="ach-section" style="margin-top:18px;" data-blocked-members-section="1">${sectionHead("var(--blue)", "חברים חסומים")}<div class="log-list">${rows}</div></div>`;
+    return `<div class="ach-section" style="margin-top:18px;" data-blocked-members-section="1">${sectionHead("var(--color-info)", "חברים חסומים")}<div class="log-list">${rows}</div></div>`;
   }
 
   function isBlockedUser(userId) { return !!userId && state.members.blockedIds.indexOf(userId) >= 0; }

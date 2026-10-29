@@ -116,7 +116,8 @@ test("a ladder (different weight+reps each round) groups under one groupId and s
 
 test("the PR celebration popup is suppressed mid-ladder but fires normally otherwise", async () => {
   const window = await bootApp();
-  const isCelebrationOpen = () => window.document.getElementById("celebrationOverlay").classList.contains("open");
+  // A PR now opens the post-workout moment (the badge popup is for badges).
+  const isCelebrationOpen = () => window.document.getElementById("momentOverlay").classList.contains("open");
 
   await window.addMovement("Test Celebration Press", "Press");
   window.toggleLadderMode();
@@ -144,6 +145,7 @@ test("the PR celebration popup is suppressed mid-ladder but fires normally other
     window.applyFieldValue("step", "weight", kg);
     await window.saveSet();
     window.closeCelebration();
+    window.closeMoment();
   }
   window.applyFieldValue("step", "weight", 120);
   await window.saveSet();

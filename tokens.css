@@ -1,0 +1,294 @@
+/* Heebo only: one variable font (weights 100-900) in two self-hosted subsets, so a
+   Hebrew word fetches the Hebrew file and a digit fetches the Latin one. No
+   Google Fonts request and no third-party origin (font-src is 'self'). Both
+   files are in sw.js OPTIONAL_ASSETS. The unicode-range values are the ones the
+   Fontsource build of Heebo ships. */
+@font-face{ font-family:"Heebo"; font-style:normal; font-weight:100 900; font-display:swap; src:url("./assets/fonts/heebo-hebrew-var.woff2") format("woff2"); unicode-range:U+0307-0308,U+0590-05FF,U+200C-2010,U+20AA,U+25CC,U+FB1D-FB4F; }
+@font-face{ font-family:"Heebo"; font-style:normal; font-weight:100 900; font-display:swap; src:url("./assets/fonts/heebo-latin-var.woff2") format("woff2"); unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+
+/* tokens:start
+   THE ONLY PLACE A COLOR LITERAL MAY APPEAR (test/design-tokens-guard.test.mjs).
+   Three tiers, one direction of reference: components read semantic tokens,
+   semantic tokens read palette slots and primitives, nothing else reads
+   primitives.
+
+     Tier 1  --p-*       raw scales and constants (space, radius, type, motion, white/black)
+     Tier 1b --pal-*     the eleven color slots of the chosen palette, each written once
+                         as light-dark(light, dark); five palettes, picked by data-palette
+     Tier 2  --color-*   what rules use: surfaces, text, accent, PR, progress, status
+     Tier 3  --btn-* --card-* --ring-* --tab-* ...   a component's own handles
+
+   Theme: color-scheme decides which half of every light-dark() applies.
+   :root follows the system; data-theme="light|dark" forces it. There is no
+   second copy of any value for dark mode. Palette: [data-palette="x"] swaps the
+   eleven slots on :root, or on any element that carries the attribute (the
+   Settings previews), because Tier 2 is declared on `:root, [data-palette]`.
+
+   test/design-contrast.test.mjs evaluates this block for every palette in both
+   modes and fails below WCAG 2.2 AA (text 4.5:1, UI parts 3:1). */
+
+:root{
+  color-scheme: light dark;
+
+  /* ---- Tier 1: primitives ------------------------------------------------ */
+  --p-white:#FFFFFF; --p-black:#000000;
+  --p-space-1:4px; --p-space-2:8px; --p-space-3:12px; --p-space-4:16px; --p-space-5:20px; --p-space-6:24px; --p-space-7:32px; --p-space-8:48px;
+  --p-radius-1:8px; --p-radius-2:12px; --p-radius-3:16px; --p-radius-4:24px; --p-radius-full:999px;
+  --p-font-1:12px; --p-font-2:13px; --p-font-3:15px; --p-font-4:16px; --p-font-5:18px; --p-font-6:22px; --p-font-7:28px; --p-font-8:52px;
+  --p-duration-1:120ms; --p-duration-2:220ms; --p-duration-3:400ms; --p-duration-4:700ms;
+  --p-ease-standard:cubic-bezier(.2,0,0,1); --p-ease-enter:cubic-bezier(.05,.7,.1,1); --p-ease-exit:cubic-bezier(.3,0,.8,.15); --p-ease-spring:cubic-bezier(.34,1.56,.64,1);
+
+  /* ---- Non-color semantic tokens ---------------------------------------- */
+  --space-xs:var(--p-space-1); --space-sm:var(--p-space-2); --space-md:var(--p-space-4); --space-lg:var(--p-space-6); --space-xl:var(--p-space-7); --space-2xl:var(--p-space-8);
+  --radius-sm:var(--p-radius-1); --radius-control:var(--p-radius-2); --radius-card:var(--p-radius-3); --radius-sheet:var(--p-radius-4); --radius-pill:var(--p-radius-full);
+  --font-body:"Heebo", system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+  --text-caption:var(--p-font-1); --text-label:var(--p-font-2); --text-body:var(--p-font-4); --text-title:var(--p-font-5); --text-headline:var(--p-font-6); --text-display:var(--p-font-7); --text-hero-number:var(--p-font-8);
+  --motion-fast:var(--p-duration-1); --motion-base:var(--p-duration-2); --motion-slow:var(--p-duration-3); --motion-celebrate:var(--p-duration-4);
+  --ease-standard:var(--p-ease-standard); --ease-enter:var(--p-ease-enter); --ease-exit:var(--p-ease-exit); --ease-spring:var(--p-ease-spring);
+  --text-scale:1.2;
+  /* Room #app reserves for the fixed bottom stack, and the extra for the install dock. */
+  --bottom-nav-reserve:200px; --install-dock-reserve:190px;
+  --page-inline:clamp(16px, 4.6vw, 24px);
+  --control-height:48px;
+  --hit-min:44px;
+}
+
+/* ---- Tier 1b: palette slots. Chalk and Brass is the default and the base for the
+   other four, which override all eleven. Each pair is (light, dark). -------- */
+:root, [data-palette]{
+  --pal-bg:light-dark(#F2F5FA, #152342);
+  --pal-surface:light-dark(#FFFFFF, #1F3057);
+  --pal-text:light-dark(#1C2536, #F2ECE1);
+  --pal-muted:light-dark(#57627A, #A8B3C9);
+  --pal-accent:light-dark(#AD4023, #FF7F53);
+  --pal-accent-fill:light-dark(#E85D3D, #E85D3D);
+  --pal-on-accent:light-dark(#1A0D08, #1A0D08);
+  --pal-progress:light-dark(#1E7D76, #48B1A9);
+  --pal-pr:light-dark(#80551F, #E8B98A);
+  --pal-pr-fill:light-dark(#E8B98A, #E8B98A);
+  --pal-on-pr:light-dark(#241A0D, #241A0D);
+}
+[data-palette="classic"]{
+  --pal-bg:light-dark(#F2F5FA, #152342);
+  --pal-surface:light-dark(#FFFFFF, #1F3057);
+  --pal-text:light-dark(#1C2536, #F2ECE1);
+  --pal-muted:light-dark(#57627A, #A8B3C9);
+  --pal-accent:light-dark(#AD4023, #FF7F53);
+  --pal-accent-fill:light-dark(#E85D3D, #E85D3D);
+  --pal-on-accent:light-dark(#1A0D08, #1A0D08);
+  --pal-progress:light-dark(#1E7D76, #48B1A9);
+  --pal-pr:light-dark(#80551F, #E8B98A);
+  --pal-pr-fill:light-dark(#E8B98A, #E8B98A);
+  --pal-on-pr:light-dark(#241A0D, #241A0D);
+}
+[data-palette="chalk"]{
+  --pal-bg:light-dark(#F6F3EC, #141312);
+  --pal-surface:light-dark(#FFFFFF, #1E1C1A);
+  --pal-text:light-dark(#1C1B19, #F2EEE6);
+  --pal-muted:light-dark(#5E5A52, #A8A194);
+  --pal-accent:light-dark(#87590B, #E0B25A);
+  --pal-accent-fill:light-dark(#B87F18, #E0B25A);
+  --pal-on-accent:light-dark(#1C1B19, #141312);
+  --pal-progress:light-dark(#0F766E, #4FD1C5);
+  --pal-pr:light-dark(#AB4E08, #F59E0B);
+  --pal-pr-fill:light-dark(#AB4E08, #F59E0B);
+  --pal-on-pr:light-dark(#FFFFFF, #141312);
+}
+[data-palette="slate"]{
+  --pal-bg:light-dark(#F4F6F8, #0E1116);
+  --pal-surface:light-dark(#FFFFFF, #171B22);
+  --pal-text:light-dark(#14181F, #EEF1F5);
+  --pal-muted:light-dark(#566070, #9AA4B2);
+  --pal-accent:light-dark(#C2410C, #FB923C);
+  --pal-accent-fill:light-dark(#C2410C, #FB923C);
+  --pal-on-accent:light-dark(#FFFFFF, #0E1116);
+  --pal-progress:light-dark(#1D4ED8, #60A5FA);
+  --pal-pr:light-dark(#C2410C, #FDBA74);
+  --pal-pr-fill:light-dark(#C2410C, #FDBA74);
+  --pal-on-pr:light-dark(#FFFFFF, #0E1116);
+}
+[data-palette="cedar"]{
+  --pal-bg:light-dark(#F4F1EC, #121A16);
+  --pal-surface:light-dark(#E8E4DD, #1C2520);
+  --pal-text:light-dark(#1A2B22, #E8E4DD);
+  --pal-muted:light-dark(#52625A, #A0A89F);
+  --pal-accent:light-dark(#2E6B4A, #5A9A75);
+  --pal-accent-fill:light-dark(#2E6B4A, #5A9A75);
+  --pal-on-accent:light-dark(#FFFFFF, #121A16);
+  --pal-progress:light-dark(#2E6B4A, #5A9A75);
+  --pal-pr:light-dark(#6B5B95, #A89BC2);
+  --pal-pr-fill:light-dark(#6B5B95, #A89BC2);
+  --pal-on-pr:light-dark(#FFFFFF, #121A16);
+}
+[data-palette="sand"]{
+  --pal-bg:light-dark(#F8F3EE, #1A1614);
+  --pal-surface:light-dark(#F0E8E0, #26211E);
+  --pal-text:light-dark(#2A221C, #F5F0EB);
+  --pal-muted:light-dark(#6B5E54, #B8A99C);
+  --pal-accent:light-dark(#3A5F8A, #6B9BC3);
+  --pal-accent-fill:light-dark(#3A5F8A, #6B9BC3);
+  --pal-on-accent:light-dark(#FFFFFF, #1A1614);
+  --pal-progress:light-dark(#3A5F8A, #6B9BC3);
+  --pal-pr:light-dark(#8B4E32, #D4A07A);
+  --pal-pr-fill:light-dark(#8B4E32, #D4A07A);
+  --pal-on-pr:light-dark(#FFFFFF, #1A1614);
+}
+[data-palette="iris"]{
+  --pal-bg:light-dark(#F8F7F4, #121110);
+  --pal-surface:light-dark(#F0EEE9, #1E1C1B);
+  --pal-text:light-dark(#1C1B1A, #F5F4F2);
+  --pal-muted:light-dark(#6B6762, #A8A49E);
+  --pal-accent:light-dark(#6B4C9A, #9B7EC9);
+  --pal-accent-fill:light-dark(#6B4C9A, #9B7EC9);
+  --pal-on-accent:light-dark(#FFFFFF, #121110);
+  --pal-progress:light-dark(#6B4C9A, #9B7EC9);
+  --pal-pr:light-dark(#7A5E00, #F0C14A);
+  --pal-pr-fill:light-dark(#D4A017, #F0C14A);
+  --pal-on-pr:light-dark(#1C1B1A, #121110);
+}
+
+/* ---- Tier 2 and 3: written once, on :root and on every palette preview ---- */
+:root, [data-palette]{
+  --color-bg:var(--pal-bg);
+  --color-surface:var(--pal-surface);
+  --color-surface-raised:light-dark(color-mix(in srgb, var(--pal-surface) 55%, var(--p-white)), var(--pal-surface));
+  --color-surface-sunken:color-mix(in srgb, var(--pal-surface) 45%, var(--pal-bg));
+  --color-border:color-mix(in srgb, var(--pal-text) 14%, var(--pal-surface));
+  --color-border-strong:color-mix(in srgb, var(--pal-text) 62%, var(--pal-bg));
+  --color-text:var(--pal-text);
+  --color-text-muted:var(--pal-muted);
+  --color-accent:var(--pal-accent);
+  --color-accent-fill:var(--pal-accent-fill);
+  --color-on-accent:var(--pal-on-accent);
+  --color-accent-soft:color-mix(in srgb, var(--pal-accent-fill) 6%, var(--color-surface-sunken));
+  --color-progress:var(--pal-progress);
+  --color-progress-track:color-mix(in srgb, var(--pal-text) 12%, var(--pal-surface));
+  --color-pr:var(--pal-pr);
+  --color-pr-fill:var(--pal-pr-fill);
+  --color-on-pr:var(--pal-on-pr);
+  --color-pr-soft:color-mix(in srgb, var(--pal-pr) 6%, var(--color-surface-sunken));
+  --color-neutral-delta:var(--pal-muted);
+  --color-focus:var(--pal-accent);
+  /* Status colors do not change with the palette. Danger is for destructive
+     actions and errors only, never for a lower number (research.md section 8). */
+  --color-danger:light-dark(#B3261E, #FF8A80);
+  --color-on-danger:light-dark(#FFFFFF, #2B0B09);
+  --color-success:light-dark(#1F6B3A, #5CBB74);
+  --color-warning:light-dark(#8A5A00, #E0B23C);
+  --color-info:light-dark(#1D4ED8, #7FA8FF);
+  --color-violet:light-dark(#6D3FC0, #B79CF0);
+  --color-scrim:color-mix(in srgb, var(--p-black) 60%, transparent);
+  /* The scene: a deep tone behind every page header, dark in both themes, with white
+     type over it. It is the palette's own text (light theme) or page color (dark
+     theme) pushed toward black, so every palette gets a scene that belongs to it. */
+  --color-scene:light-dark(color-mix(in srgb, var(--pal-text) 72%, var(--p-black)), color-mix(in srgb, var(--pal-bg) 72%, var(--p-black)));
+  --color-on-scene:var(--p-white);
+  --color-celebrate:color-mix(in srgb, var(--pal-pr-fill) 34%, var(--pal-surface));
+  --color-shadow:light-dark(color-mix(in srgb, var(--p-black) 14%, transparent), color-mix(in srgb, var(--p-black) 55%, transparent));
+  --color-glass-card:color-mix(in srgb, var(--pal-surface) 72%, transparent);
+  --color-glass-bar:color-mix(in srgb, var(--pal-surface) 82%, transparent);
+  --color-glass-sheet:color-mix(in srgb, var(--pal-bg) 86%, transparent);
+  --shadow-1:0 1px 2px var(--color-shadow);
+  --shadow-2:0 10px 30px -12px var(--color-shadow);
+
+  /* Tier 3: component handles */
+  --btn-primary-bg:var(--color-accent-fill);
+  --btn-primary-fg:var(--color-on-accent);
+  --btn-danger-bg:var(--color-danger);
+  --btn-danger-fg:var(--color-on-danger);
+  --card-bg:var(--color-surface);
+  --card-border:var(--color-border);
+  --card-radius:var(--radius-card);
+  --card-shadow:var(--shadow-1);
+  --bar-bg:var(--color-surface);
+  --sheet-bg:var(--color-bg);
+  --glass-filter:none;
+  --page-art:none;
+  --input-bg:var(--color-surface-sunken);
+  --input-border:var(--color-border-strong);
+  --ring-fill:var(--color-progress);
+  --ring-track:var(--color-progress-track);
+  --ring-size:132px;
+  --pr-card-bg:var(--color-pr-soft);
+  --pr-card-edge:var(--color-pr);
+  --chart-line:var(--color-progress);
+  --chart-pr:var(--color-pr);
+  --chart-grid:var(--color-border);
+  --chart-neutral:color-mix(in srgb, var(--pal-text) 55%, var(--pal-surface));
+  --tab-active:var(--color-accent);
+  --tab-inactive:var(--color-text-muted);
+  --avatar-bg:var(--color-surface-sunken);
+  /* Scene art: no photo yet, so the header scene is drawn from the palette (accent glow,
+     fine diagonal lines, deep tone). A photo goes in --scene-photo per tab (index.html,
+     .scene-page--home ... ) and is laid over this, which stays as its fallback. */
+  --scene-photo-height:clamp(280px, 40svh, 380px);
+  --scene-photo:none;
+  --scene-glow-x:85%; --scene-glow-y:8%;
+  --scene-art:radial-gradient(120% 70% at var(--scene-glow-x) var(--scene-glow-y), color-mix(in srgb, var(--pal-accent-fill) 38%, transparent), transparent 62%), repeating-linear-gradient(135deg, color-mix(in srgb, var(--p-white) 4.5%, transparent) 0 2px, transparent 2px 22px), linear-gradient(160deg, color-mix(in srgb, var(--color-scene) 80%, var(--pal-accent-fill)), var(--color-scene));
+  --scene-scrim:linear-gradient(180deg, color-mix(in srgb, var(--color-scene) 34%, transparent) 0, color-mix(in srgb, var(--color-scene) 8%, transparent) 25%, color-mix(in srgb, var(--color-scene) 70%, transparent) 62%, var(--color-scene) 100%);
+  --header-glass:color-mix(in srgb, var(--color-scene) 72%, transparent);
+  /* Medal metals do not follow the palette: bronze, silver and gold mean the same thing in every one. */
+  --bronze-lo:#8A6A1E; --bronze-mid:#C9A227; --bronze-hi:#F0DD9C;
+  --silver-lo:#8A94A0; --silver-mid:#D8DEE4; --silver-hi:#FFFFFF;
+  --gold-lo:#B8790A; --gold-mid:#F2B90C; --gold-hi:#FFF3C4;
+  --medal-capstone-ink:#3A2410;
+  --shine:#FFFFFF;
+  --plate-25:#D8453C; --plate-20:#3E6FD9; --plate-15:#E0B23C; --plate-10:#4B9B5F; --plate-5:#7A828C; --plate-2:#1A1A1A;
+}
+
+/* Transparency: translucent cards and bars over a soft accent wash, blurred.
+   Off by default. Solid where backdrop-filter is missing; forced solid when the
+   OS asks for reduced transparency. The member's switch only ever adds. */
+@supports (backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px)){
+  :root[data-transparency="on"]{
+    --card-bg:var(--color-glass-card);
+    --bar-bg:var(--color-glass-bar);
+    --sheet-bg:var(--color-glass-sheet);
+    --glass-filter:blur(18px) saturate(140%);
+    --page-art:radial-gradient(60% 40% at 90% 0%, color-mix(in srgb, var(--pal-accent-fill) 8%, transparent), transparent 70%), radial-gradient(50% 35% at 0% 60%, color-mix(in srgb, var(--pal-progress) 8%, transparent), transparent 70%);
+  }
+}
+@media (prefers-reduced-transparency: reduce){
+  :root[data-transparency="on"]{
+    --card-bg:var(--color-surface); --bar-bg:var(--color-surface); --sheet-bg:var(--color-bg); --glass-filter:none; --page-art:none;
+  }
+}
+
+/* No light-dark() (iOS Safari below 17.5, Chrome below 123): the light theme only.
+   Every light-dark() above has its light half here, and the guard test keeps the
+   two equal. color-scheme is pinned so form controls do not go dark under a
+   light page. */
+@supports not (color:light-dark(#000, #fff)){
+  :root, :root[data-theme], [data-palette]{ color-scheme:light; }
+  :root, [data-palette]{
+    --pal-bg:#F2F5FA; --pal-surface:#FFFFFF; --pal-text:#1C2536; --pal-muted:#57627A; --pal-accent:#AD4023; --pal-accent-fill:#E85D3D; --pal-on-accent:#1A0D08; --pal-progress:#1E7D76; --pal-pr:#80551F; --pal-pr-fill:#E8B98A; --pal-on-pr:#241A0D;
+    --color-surface-raised:color-mix(in srgb, var(--pal-surface) 55%, var(--p-white));
+    --color-scene:color-mix(in srgb, var(--pal-text) 72%, var(--p-black));
+    --color-danger:#B3261E; --color-on-danger:#FFFFFF; --color-success:#1F6B3A; --color-warning:#8A5A00; --color-info:#1D4ED8; --color-violet:#6D3FC0;
+    --color-shadow:color-mix(in srgb, var(--p-black) 14%, transparent);
+  }
+  [data-palette="classic"]{ --pal-bg:#F2F5FA; --pal-surface:#FFFFFF; --pal-text:#1C2536; --pal-muted:#57627A; --pal-accent:#AD4023; --pal-accent-fill:#E85D3D; --pal-on-accent:#1A0D08; --pal-progress:#1E7D76; --pal-pr:#80551F; --pal-pr-fill:#E8B98A; --pal-on-pr:#241A0D; }
+  [data-palette="chalk"]{ --pal-bg:#F6F3EC; --pal-surface:#FFFFFF; --pal-text:#1C1B19; --pal-muted:#5E5A52; --pal-accent:#87590B; --pal-accent-fill:#B87F18; --pal-on-accent:#1C1B19; --pal-progress:#0F766E; --pal-pr:#AB4E08; --pal-pr-fill:#AB4E08; --pal-on-pr:#FFFFFF; }
+  [data-palette="slate"]{ --pal-bg:#F4F6F8; --pal-surface:#FFFFFF; --pal-text:#14181F; --pal-muted:#566070; --pal-accent:#C2410C; --pal-accent-fill:#C2410C; --pal-on-accent:#FFFFFF; --pal-progress:#1D4ED8; --pal-pr:#C2410C; --pal-pr-fill:#C2410C; --pal-on-pr:#FFFFFF; }
+  [data-palette="cedar"]{ --pal-bg:#F4F1EC; --pal-surface:#E8E4DD; --pal-text:#1A2B22; --pal-muted:#52625A; --pal-accent:#2E6B4A; --pal-accent-fill:#2E6B4A; --pal-on-accent:#FFFFFF; --pal-progress:#2E6B4A; --pal-pr:#6B5B95; --pal-pr-fill:#6B5B95; --pal-on-pr:#FFFFFF; }
+  [data-palette="sand"]{ --pal-bg:#F8F3EE; --pal-surface:#F0E8E0; --pal-text:#2A221C; --pal-muted:#6B5E54; --pal-accent:#3A5F8A; --pal-accent-fill:#3A5F8A; --pal-on-accent:#FFFFFF; --pal-progress:#3A5F8A; --pal-pr:#8B4E32; --pal-pr-fill:#8B4E32; --pal-on-pr:#FFFFFF; }
+  [data-palette="iris"]{ --pal-bg:#F8F7F4; --pal-surface:#F0EEE9; --pal-text:#1C1B1A; --pal-muted:#6B6762; --pal-accent:#6B4C9A; --pal-accent-fill:#6B4C9A; --pal-on-accent:#FFFFFF; --pal-progress:#6B4C9A; --pal-pr:#7A5E00; --pal-pr-fill:#D4A017; --pal-on-pr:#1C1B1A; }
+}
+
+/* Classic is the palette with a scene: a tall header image behind each page title, a sheet
+   rising over it, and a dark bar below. The calm palettes keep the flat page. */
+[data-palette="classic"]{
+  --tab-inactive:color-mix(in srgb, var(--color-on-scene) 78%, transparent);
+  --tab-active:color-mix(in srgb, var(--pal-accent-fill) 70%, var(--p-white));
+  --bar-bg:color-mix(in srgb, var(--color-scene) 96%, transparent);
+}
+
+/* The explicit choice flips color-scheme and nothing else. */
+:root[data-theme="light"]{ color-scheme:light; }
+:root[data-theme="dark"]{ color-scheme:dark; }
+
+/* All motion is a token, and every token is zero under reduced motion. */
+@media (prefers-reduced-motion: reduce){
+  :root{ --motion-fast:0ms; --motion-base:0ms; --motion-slow:0ms; --motion-celebrate:0ms; }
+}
+/* tokens:end */

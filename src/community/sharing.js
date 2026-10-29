@@ -55,7 +55,7 @@
   function sharingToday() { return window.CirclesCore.jerusalemDay(new Date()); }
 
   function sharingReset() {
-    if (sharingInstallWait) { clearInterval(sharingInstallWait); sharingInstallWait = null; }
+    sharingInstallPending = false;
     sharingState.pr = null;
     sharingState.week = {};
     state.circles.sharingSheet = null;
@@ -214,32 +214,37 @@
   }
   /** @param {boolean} wasFirst true when this join/create took the member from no circle to one */
   function sharingAfterCircleJoined(wasFirst) {
-    if (!wasFirst || sharingInstallWait) return;
+    if (!wasFirst || sharingInstallPending) return;
     if (!sharingInstallMode()) return;
-    sharingInstallWait = setInterval(sharingTryShowInstall, 400);
+    sharingInstallPending = true;
     sharingTryShowInstall();
   }
   // The install steps never open under another dialog (the first-run welcome
   // sheet, a PR prompt, any circle sheet). Until the screen is clear they wait,
   // and the wait is not a dismissal: only closing the steps themselves is.
-  /** @type {any} */
-  let sharingInstallWait = null;
+  // The wait is an event, not a timer: app.js and cloud.js each announce
+  // "haimunia-dialog-closed" (and "-opened") on window the moment their own dialog
+  // registry changes, and the steps are tried again then. Nothing polls.
+  let sharingInstallPending = false;
   function sharingOtherDialogOpen() {
-    return !!document.querySelector('.modal-overlay.open, [data-cloud-dialog]:not([data-cloud-dialog="sharingSheet"])');
+    return !!document.querySelector('.modal-overlay.open:not([data-cloud-dialog="sharingSheet"]), [data-cloud-dialog]:not([data-cloud-dialog="sharingSheet"])');
   }
-  // Runs until the steps are answered (closed, installed) or the member signs out.
-  // If something else opens while the steps are up (the welcome sheet can open a
-  // moment after the join), the steps step back and return when it is gone.
+  // Runs on each dialog event until the steps are answered (closed, installed)
+  // or the member signs out. If something else opens while the steps are up
+  // (the welcome sheet can open a moment after the join), the steps step back
+  // and return when it is gone.
   function sharingTryShowInstall() {
-    if (!sharingInstallWait) return;
+    if (!sharingInstallPending) return;
     const mode = sharingInstallMode(); // re-read: dismissed or installed meanwhile
-    if (!mode) { clearInterval(sharingInstallWait); sharingInstallWait = null; return; }
+    if (!mode) { sharingInstallPending = false; return; }
     const sheet = state.circles.sharingSheet;
     if (sheet && sheet.kind !== "install") return;
     const busy = sharingOtherDialogOpen();
     if (sheet && busy) { state.circles.sharingSheet = null; rerender(); return; }
     if (!sheet && !busy) { state.circles.sharingSheet = { kind: "install", mode: mode }; rerender(); }
   }
+  window.addEventListener("haimunia-dialog-closed", sharingTryShowInstall);
+  window.addEventListener("haimunia-dialog-opened", sharingTryShowInstall);
   function sharingInstallNative() {
     sharingSet(SHARING_INSTALL_DONE_KEY, "1");
     state.circles.sharingSheet = null;
@@ -256,7 +261,7 @@
   }
 
   function sharingStepIcon(/** @type {string} */ path) {
-    return `<span aria-hidden="true" style="flex:none;width:44px;height:44px;border-radius:12px;background:var(--surface2);border:1px solid var(--border);color:var(--brass);display:flex;align-items:center;justify-content:center;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false">${path}</svg></span>`;
+    return `<span aria-hidden="true" style="flex:none;width:44px;height:44px;border-radius:12px;background:var(--color-surface-sunken);border:1px solid var(--color-border);color:var(--color-accent);display:flex;align-items:center;justify-content:center;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false">${path}</svg></span>`;
   }
   function sharingStepRow(/** @type {string} */ icon, /** @type {string} */ text) {
     return `<li class="log-row" style="gap:12px;align-items:center;list-style:none;">${icon}<span style="font-size:14px;line-height:1.5;">${text}</span></li>`;
@@ -277,7 +282,7 @@
   function sharingInstallSheetHtml(/** @type {any} */ s) {
     if (s.mode === "native") {
       return sharingFrame("sharingInstallTitle", "להוסיף למסך הבית?", `<div data-install-steps="native">
-        <div style="color:var(--steel);font-size:14px;line-height:1.7;margin-bottom:14px;">${bidiText("כך המעגלים נפתחים בלחיצה אחת, כמו כל אפליקציה, והיומן שלכם נשמר במכשיר.")}</div>
+        <div style="color:var(--color-text-muted);font-size:14px;line-height:1.7;margin-bottom:14px;">${bidiText("כך המעגלים נפתחים בלחיצה אחת, כמו כל אפליקציה, והיומן שלכם נשמר במכשיר.")}</div>
         <div class="chip-row"><button class="save-btn" type="button" data-community-action="sh-install-native">התקנה</button><button class="chip-btn" type="button" data-community-action="sh-close">לא עכשיו</button></div>
       </div>`);
     }
@@ -285,7 +290,7 @@
     const plusIcon = sharingStepIcon('<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 8v8M8 12h8"/>');
     const doneIcon = sharingStepIcon('<path d="M4 11.5 12 5l8 6.5"/><path d="M6 10v9h12v-9"/><path d="m9.5 14 2 2 3.5-3.5"/>');
     return sharingFrame("sharingInstallTitle", "להוסיף למסך הבית", `<div data-install-steps="ios">
-      <div style="color:var(--steel);font-size:13px;line-height:1.7;margin-bottom:10px;">${bidiText("שלושה צעדים ב-Safari, ואחר כך פותחים את " + brandName() + " מהמסך הבית.")}</div>
+      <div style="color:var(--color-text-muted);font-size:13px;line-height:1.7;margin-bottom:10px;">${bidiText("שלושה צעדים ב-Safari, ואחר כך פותחים את " + brandName() + " מהמסך הבית.")}</div>
       <ol class="log-list" style="padding:0;margin:0;">
         ${sharingStepRow(shareIcon, bidiText("לוחצים על כפתור השיתוף בסרגל התחתון של Safari."))}
         ${sharingStepRow(plusIcon, bidiText("גוללים ובוחרים ״הוספה למסך הבית״."))}
@@ -297,7 +302,7 @@
   function sharingWeekOfferHtml(/** @type {any} */ s) {
     const c = circleById(s.clubId);
     const body = s.status === "ready"
-      ? `<div style="color:var(--steel);font-size:14px;line-height:1.7;margin-bottom:6px;">${bidiText("כרטיס השבוע שעבר (" + s.label + ") מוכן לשיתוף ב-WhatsApp.")}</div>
+      ? `<div style="color:var(--color-text-muted);font-size:14px;line-height:1.7;margin-bottom:6px;">${bidiText("כרטיס השבוע שעבר (" + s.label + ") מוכן לשיתוף ב-WhatsApp.")}</div>
          <div class="footer-note" style="margin-bottom:12px;">בתמונה מופיעים שמות החברים והאחוז של כל אחד מהיעד שלו. בלי דירוג ובלי משקלים.</div>
          <div class="chip-row"><button class="save-btn" type="button" data-community-action="sh-week-offer-share">${SHARE_ICONS.outward} שיתוף</button><button class="chip-btn" type="button" data-community-action="sh-close">לא עכשיו</button></div>`
       : `<div class="empty" aria-busy="true">מכינים את הכרטיס…</div>`;
@@ -342,10 +347,10 @@
       : h.platform === "android"
         ? ["לוחצים על ⋮ בפינה העליונה.", "בוחרים ״פתיחה ב-Chrome״ או ״פתיחה בדפדפן״.", "ההזמנה נפתחת שם, ושם מצטרפים."]
         : ["לוחצים על ״העתקת הקישור״.", "פותחים את Safari או Chrome ומדביקים בשורת הכתובת.", "ההזמנה נפתחת שם, ושם מצטרפים."];
-    const steps = how.map((t, i) => `<li class="log-row" style="gap:12px;align-items:center;list-style:none;"><span aria-hidden="true" class="mono" style="flex:none;width:30px;height:30px;border-radius:50%;background:var(--surface2);border:1px solid var(--border);color:var(--brass);display:flex;align-items:center;justify-content:center;font-weight:800;">${i + 1}</span><span style="font-size:14px;line-height:1.5;">${bidiText(t)}</span></li>`).join("");
+    const steps = how.map((t, i) => `<li class="log-row" style="gap:12px;align-items:center;list-style:none;"><span aria-hidden="true" class="mono" style="flex:none;width:30px;height:30px;border-radius:50%;background:var(--color-surface-sunken);border:1px solid var(--color-border);color:var(--color-accent);display:flex;align-items:center;justify-content:center;font-weight:800;">${i + 1}</span><span style="font-size:14px;line-height:1.5;">${bidiText(t)}</span></li>`).join("");
     return gateCard(`<div data-inapp-browser="${esc(h.id)}">
       <div style="font-weight:800;font-size:20px;margin-bottom:8px;">${bidiText("ההזמנה צריכה להיפתח בדפדפן")}</div>
-      <div style="color:var(--steel);font-size:14px;line-height:1.7;margin-bottom:14px;">${bidiText("הדפדפן שבתוך " + h.label + " לא שומר מידע ולא מאפשר הוספה למסך הבית, אז ההצטרפות והיומן שלכם לא יישארו. הקישור שלכם כבר מכיל את ההזמנה.")}</div>
+      <div style="color:var(--color-text-muted);font-size:14px;line-height:1.7;margin-bottom:14px;">${bidiText("הדפדפן שבתוך " + h.label + " לא שומר מידע ולא מאפשר הוספה למסך הבית, אז ההצטרפות והיומן שלכם לא יישארו. הקישור שלכם כבר מכיל את ההזמנה.")}</div>
       <ol class="log-list" style="padding:0;margin:0 0 14px;">${steps}</ol>
       <div class="chip-row"><button class="save-btn" type="button" data-community-action="sh-inapp-copy">העתקת הקישור</button></div>
       <div style="display:flex;justify-content:center;margin-top:16px;"><button class="gate-alt" type="button" data-community-action="sh-inapp-continue">להמשיך כאן בכל זאת</button></div>
@@ -398,4 +403,23 @@
   window.boxlogSharing = {
     maybeOfferLastWeek: sharingMaybeOfferLastWeek,
     afterCircleJoined: sharingAfterCircleJoined,
+  };
+
+  /**
+   * The PR card for the post-workout screen (app.js), built before the tap so
+   * navigator.share() runs inside the gesture. It goes through the same
+   * prCardData() as the circle PR prompt, so the same privacy rule holds: a
+   * weight is drawn only if a circle's settings say the member shows weights,
+   * and body weight never appears. With no account the name comes from the
+   * local profile the caller passes in.
+   * @param {{movement: string, new_value_numeric?: number, previous_value_numeric?: number, estimated?: boolean, memberName?: string}} rec
+   * @returns {Promise<File|null>}
+   */
+  window.communityMomentPrFile = async function (rec) {
+    const cards = sharingCards();
+    if (!cards || !window.SharingCore) return null;
+    await cards.ensureFonts();
+    const data = window.SharingCore.prCardData(rec, { profile: state.profile, circles: state.circles.list, today: sharingToday() });
+    if (!data.memberName) data.memberName = String(rec.memberName || "");
+    return cards.canvasToFile(cards.renderPrCard(data));
   };

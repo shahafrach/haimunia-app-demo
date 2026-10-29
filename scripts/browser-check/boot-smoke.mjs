@@ -57,11 +57,11 @@ const fontInfo = await page.evaluate(async () => {
   await document.fonts.ready;
   return {
     dir: document.documentElement.dir,
-    hasRubik: [...document.fonts].some((f) => f.family === "Rubik" && f.status === "loaded"),
+    hasHeebo: [...document.fonts].some((f) => f.family === "Heebo" && f.status === "loaded"),
   };
 });
 check("dir=rtl on <html>", fontInfo.dir === "rtl");
-check("Rubik font actually loaded", fontInfo.hasRubik);
+check("Heebo font actually loaded", fontInfo.hasHeebo);
 
 // The service worker's clients.claim() used to fire an unconditional
 // reload on every first-ever install — see CHANGES.md, "stop

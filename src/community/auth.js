@@ -139,7 +139,7 @@
   // themselves are in src/community/circles-ui.js.
   const JOIN_STEPS = ["הזמנה", "חשבון", "פרופיל"];
   function renderJoinProgress(idx) {
-    const dots = JOIN_STEPS.map((_, i) => `<span style="display:inline-block;height:6px;width:${i === idx ? "20px" : "6px"};border-radius:3px;background:${i <= idx ? "var(--brass)" : "var(--border)"};transition:width .2s;"></span>`).join(" ");
+    const dots = JOIN_STEPS.map((_, i) => `<span style="display:inline-block;height:6px;width:${i === idx ? "20px" : "6px"};border-radius:3px;background:${i <= idx ? "var(--color-accent)" : "var(--color-border)"};transition:width .2s;"></span>`).join(" ");
     return `<div style="margin-bottom:14px;">
       <div style="display:flex;gap:5px;align-items:center;margin-bottom:6px;">${dots}</div>
       <div class="footer-note" style="margin:0;">${esc(`שלב ${idx + 1} מתוך ${JOIN_STEPS.length} · ${JOIN_STEPS[idx]}`)}</div>

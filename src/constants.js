@@ -35,11 +35,11 @@ var cleanISODate = SAFE.cleanISODate, cleanTs = SAFE.cleanTs, uid = SAFE.uid;
 
 // ---------- Data ----------
 const CATEGORY_COLORS = {
-  Squat: "var(--teal)", Deadlift: "var(--red)", Press: "var(--yellow)",
-  Olympic: "var(--green)", Pull: "var(--purple)", Other: "var(--steel)",
-  Custom: "var(--brass)", Girls: "var(--purple)", Heroes: "var(--red)",
-  Gymnastics: "var(--purple)", Weightlifting: "var(--blue)", Dumbbell: "var(--green)",
-  Kettlebell: "var(--yellow)", "Odd Object": "var(--red)", Monostructural: "var(--steel)",
+  Squat: "var(--color-progress)", Deadlift: "var(--color-danger)", Press: "var(--color-warning)",
+  Olympic: "var(--color-success)", Pull: "var(--color-violet)", Other: "var(--color-text-muted)",
+  Custom: "var(--color-accent)", Girls: "var(--color-violet)", Heroes: "var(--color-danger)",
+  Gymnastics: "var(--color-violet)", Weightlifting: "var(--color-info)", Dumbbell: "var(--color-success)",
+  Kettlebell: "var(--color-warning)", "Odd Object": "var(--color-danger)", Monostructural: "var(--color-text-muted)",
 };
 
 const CATEGORY_LABELS = {
@@ -311,13 +311,13 @@ const WOD_LIBRARY = [
   { id: "glen", name: "Glen", category: "Heroes", scoreType: "time", desc: "30 clean & jerks, 1mi run, 100 burpees, 1mi run, 30 muscle-ups" },
 ];
 const PLATE_DEFS = [
-  { kg: 25, color: "#D8453C", w: 15, h: 78 },
-  { kg: 20, color: "#3E6FD9", w: 15, h: 70 },
-  { kg: 15, color: "#E0B23C", w: 13, h: 62 },
-  { kg: 10, color: "#4B9B5F", w: 11, h: 54 },
-  { kg: 5, color: "#7A828C", w: 9, h: 44 },
-  { kg: 2.5, color: "#1A1A1A", w: 7, h: 34 },
-  { kg: 1.25, color: "#1A1A1A", w: 6, h: 26 },
+  { kg: 25, color: "var(--plate-25)", w: 15, h: 78 },
+  { kg: 20, color: "var(--plate-20)", w: 15, h: 70 },
+  { kg: 15, color: "var(--plate-15)", w: 13, h: 62 },
+  { kg: 10, color: "var(--plate-10)", w: 11, h: 54 },
+  { kg: 5, color: "var(--plate-5)", w: 9, h: 44 },
+  { kg: 2.5, color: "var(--plate-2)", w: 7, h: 34 },
+  { kg: 1.25, color: "var(--plate-2)", w: 6, h: 26 },
 ];
 
 // ---------- Safety helpers ----------
@@ -327,7 +327,7 @@ const PLATE_DEFS = [
 // A record whose category is "__proto__" (only reachable through an imported
 // backup) must never resolve to Object.prototype.
 function catColor(cat) {
-  return Object.prototype.hasOwnProperty.call(CATEGORY_COLORS, cat) ? CATEGORY_COLORS[cat] : "var(--steel)";
+  return Object.prototype.hasOwnProperty.call(CATEGORY_COLORS, cat) ? CATEGORY_COLORS[cat] : "var(--color-text-muted)";
 }
 function catLabel(cat) {
   return Object.prototype.hasOwnProperty.call(CATEGORY_LABELS, cat) ? CATEGORY_LABELS[cat] : String(cat ?? "");

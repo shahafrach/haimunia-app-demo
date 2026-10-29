@@ -48,6 +48,8 @@ function readAppSrc() {
 // It publishes only to window, so a separate eval costs it nothing.
 const platformSrcPaths = [
   path.join(root, "src", "shared", "safe-helpers.js"),
+  path.join(root, "src", "theme.js"),
+  path.join(root, "src", "progress.js"),
   path.join(root, "src", "eventbus.js"),
   path.join(root, "src", "analytics.js"),
   // The community write queue. Same position as index.html: before

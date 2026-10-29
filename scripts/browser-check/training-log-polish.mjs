@@ -523,7 +523,7 @@ const todayPaint = await page.evaluate(() => {
   if (!el) return null;
   const cs = getComputedStyle(el);
   const probe = document.createElement("div");
-  probe.style.color = "var(--energy)";
+  probe.style.color = "var(--color-accent-fill)";
   document.body.appendChild(probe);
   const energy = getComputedStyle(probe).color;
   probe.remove();
@@ -686,7 +686,7 @@ const darkToday = await page.evaluate(() => {
   const el = document.querySelector("#calGrid .cal-cell.selected .cal-daynum");
   if (!el) return null;
   const probe = document.createElement("div");
-  probe.style.color = "var(--energy)";
+  probe.style.color = "var(--color-accent-fill)";
   document.body.appendChild(probe);
   const energy = getComputedStyle(probe).color;
   probe.remove();

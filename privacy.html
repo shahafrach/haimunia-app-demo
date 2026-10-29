@@ -22,88 +22,46 @@
 <meta name="referrer" content="no-referrer" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>מדיניות פרטיות – BOX-LOG</title>
-<meta name="theme-color" content="#152342" />
+<meta name="theme-color" content="#F6F3EC" media="(prefers-color-scheme: light)" />
+<meta name="theme-color" content="#141312" media="(prefers-color-scheme: dark)" />
 <link rel="icon" href="./icon-192.png" />
+<link rel="stylesheet" href="./tokens.css" />
 <style>
-  /* Font set trimmed to what this page actually uses: Rubik for the Hebrew
-     chrome (header, back link, "last updated" line) and Anton for the page
-     title, matching index.html's own use of .page-title. No JetBrains Mono
-     here — nothing on this page is numeric/tabular. Same self-hosted files,
-     same unicode-range split, as index.html. */
-  @font-face{ font-family:'Rubik'; font-style:normal; font-weight:400; font-display:swap; src:url('./assets/fonts/rubik-400-latin.woff2') format('woff2'); unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
-  @font-face{ font-family:'Rubik'; font-style:normal; font-weight:400; font-display:swap; src:url('./assets/fonts/rubik-400-hebrew.woff2') format('woff2'); unicode-range:U+0307-0308,U+0590-05FF,U+200C-2010,U+20AA,U+25CC,U+FB1D-FB4F; }
-  @font-face{ font-family:'Rubik'; font-style:normal; font-weight:700; font-display:swap; src:url('./assets/fonts/rubik-700-latin.woff2') format('woff2'); unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
-  @font-face{ font-family:'Rubik'; font-style:normal; font-weight:700; font-display:swap; src:url('./assets/fonts/rubik-700-hebrew.woff2') format('woff2'); unicode-range:U+0307-0308,U+0590-05FF,U+200C-2010,U+20AA,U+25CC,U+FB1D-FB4F; }
-  @font-face{ font-family:'Rubik'; font-style:normal; font-weight:800; font-display:swap; src:url('./assets/fonts/rubik-800-latin.woff2') format('woff2'); unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
-  @font-face{ font-family:'Rubik'; font-style:normal; font-weight:800; font-display:swap; src:url('./assets/fonts/rubik-800-hebrew.woff2') format('woff2'); unicode-range:U+0307-0308,U+0590-05FF,U+200C-2010,U+20AA,U+25CC,U+FB1D-FB4F; }
-  @font-face{ font-family:'Anton'; font-style:normal; font-weight:400; font-display:swap; src:url('./assets/fonts/anton-400-latin.woff2') format('woff2'); unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
-
-  /* Theme tokens — same variable names and values as index.html's :root /
-     prefers-color-scheme / [data-theme="dark"] blocks. Only the tokens this
-     page actually uses are carried over (surface, border, chalk, steel,
-     brass, bg, shadow-card, stripe); nothing invented. */
-  :root{
-    --bg:#F2F5FA; --surface:#FFFFFF; --border:#D6DFEC;
-    --chalk:#1C2536; --steel:#57627A; --brass:#956529;
-    --energy:#C94B29;
-    --stripe-a:var(--energy); --stripe-b:#22345C;
-    --stripe:repeating-linear-gradient(135deg, var(--stripe-a) 0 14px, var(--stripe-b) 14px 28px);
-    --shadow-card: 0 1px 0 rgba(255,255,255,.6) inset, 0 10px 20px -14px rgba(28,37,54,.16);
-  }
-  @media (prefers-color-scheme: dark){
-    :root:not([data-theme="light"]){
-      --bg:#152342; --surface:#1F3057; --border:#425481;
-      --chalk:#F2ECE1; --steel:#A8B3C9; --brass:#E8B98A;
-      --energy:#E85D3D;
-      --stripe-a:var(--energy); --stripe-b:#ffffff;
-      --shadow-card: 0 1px 0 rgba(255,255,255,.04) inset, 0 14px 28px -18px rgba(0,0,0,.65);
-    }
-  }
-  :root[data-theme="dark"]{
-    --bg:#152342; --surface:#1F3057; --border:#425481;
-    --chalk:#F2ECE1; --steel:#A8B3C9; --brass:#E8B98A;
-    --energy:#E85D3D;
-    --stripe-a:var(--energy); --stripe-b:#ffffff;
-    --shadow-card: 0 1px 0 rgba(255,255,255,.04) inset, 0 14px 28px -18px rgba(0,0,0,.65);
-  }
-
   * { box-sizing: border-box; }
   h1, h2, h3 { margin: 0; font: inherit; }
-  html,body{ margin:0; padding:0; background:var(--bg); color:var(--chalk); font-family:'Rubik',sans-serif; }
+  html,body{ margin:0; padding:0; background:var(--color-bg); color:var(--color-text); font-family:var(--font-body); }
   a{ color:inherit; }
-  a:focus-visible, [tabindex]:focus-visible { outline:2px solid var(--brass); outline-offset:2px; }
+  a:focus-visible, [tabindex]:focus-visible { outline:2px solid var(--color-focus); outline-offset:2px; }
 
-  .page-wrap{ max-width:640px; margin:0 auto; padding:24px 16px calc(env(safe-area-inset-bottom,0px) + 40px); }
+  .page-wrap{ max-width:640px; margin:0 auto; padding:24px var(--space-md) calc(env(safe-area-inset-bottom,0px) + 40px); }
   .header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; gap:12px; }
-  .header-logo{ height:36px; width:36px; border-radius:10px; display:block; flex-shrink:0; }
-  .back-link{ color:var(--steel); font-size:12px; font-weight:700; text-decoration:underline; white-space:nowrap; }
-  .brand-stripe{ height:6px; border-radius:4px; background-image:var(--stripe); margin-bottom:18px; }
-  .page-title{ font-family:'Anton',sans-serif; font-weight:400; letter-spacing:.3px; font-size:24px; color:var(--chalk); margin-bottom:6px; }
-  .updated-note{ color:var(--steel); font-size:11px; margin-bottom:20px; }
-  .intro{ font-size:13.5px; line-height:1.6; color:var(--chalk); margin-bottom:20px; }
+  .header-logo{ display:inline-flex; align-items:center; gap:var(--space-sm); font-weight:800; font-size:var(--text-title); letter-spacing:.04em; direction:ltr; }
+  .header-logo svg{ width:28px; height:28px; stroke:var(--color-accent); fill:none; }
+  .back-link{ color:var(--color-text-muted); font-size:var(--text-caption); font-weight:700; text-decoration:underline; white-space:nowrap; }
+  .page-title{ font-weight:800; font-size:var(--text-display); color:var(--color-text); margin-bottom:6px; }
+  .updated-note{ color:var(--color-text-muted); font-size:var(--text-caption); margin-bottom:var(--space-lg); }
+  .intro{ font-size:var(--text-label); line-height:1.6; color:var(--color-text); margin-bottom:var(--space-lg); }
 
-  /* One .chart-card per policy section — the same card component the app
-     uses elsewhere (index.html's .chart-card), not a new visual language. */
-  .chart-card{ background:var(--surface); border:1px solid var(--border); border-radius:20px; padding:16px; margin-bottom:16px; box-shadow:var(--shadow-card); }
-  .chart-card h2{ font-size:15px; font-weight:800; color:var(--chalk); margin-bottom:8px; }
-  .chart-card p{ font-size:13.5px; line-height:1.6; color:var(--chalk); margin:0 0 10px; }
+  /* One .chart-card per policy section, the same card as index.html's. */
+  .chart-card{ background:var(--card-bg); border:1px solid var(--card-border); border-radius:var(--radius-sheet); padding:var(--space-md); margin-bottom:var(--space-md); box-shadow:var(--card-shadow); }
+  .chart-card h2{ font-size:var(--text-body); font-weight:800; color:var(--color-text); margin-bottom:var(--space-sm); }
+  .chart-card p{ font-size:var(--text-label); line-height:1.6; color:var(--color-text); margin:0 0 10px; }
   .chart-card p:last-child{ margin-bottom:0; }
   .chart-card ul{ margin:0 0 10px; padding-inline-start:20px; display:flex; flex-direction:column; gap:6px; }
   .chart-card ul:last-child{ margin-bottom:0; }
-  .chart-card li{ font-size:13.5px; line-height:1.6; color:var(--chalk); }
+  .chart-card li{ font-size:var(--text-label); line-height:1.6; color:var(--color-text); }
   .chart-card strong{ font-weight:700; }
 
-  .footer-links{ text-align:center; margin-top:8px; }
-  .footer-links a{ color:var(--steel); font-size:11px; text-decoration:underline; }
+  .footer-links{ text-align:center; margin-top:var(--space-sm); }
+  .footer-links a{ color:var(--color-text-muted); font-size:var(--text-caption); text-decoration:underline; }
 </style>
 </head>
 <body>
 <div class="page-wrap">
   <header class="header">
-    <img class="header-logo" src="./icon-192.png" alt="" />
+    <span class="header-logo" aria-hidden="true"><svg viewBox="0 0 64 64"><g fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="7" width="50" height="50" rx="11"/><path d="M19 24l5.5 5.5L34 18"/><path d="M40 26h6"/><path d="M19 42h27"/></g></svg>BOX-LOG</span>
     <a class="back-link" href="./index.html">חזרה לאפליקציה</a>
   </header>
-  <div class="brand-stripe"></div>
 
   <h1 class="page-title">תנאי שימוש</h1>
   <h1 class="page-title">מדיניות פרטיות</h1>
