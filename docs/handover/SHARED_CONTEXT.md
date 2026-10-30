@@ -19,7 +19,7 @@ Live: https://box-log.pages.dev
 Repo: `shahafrach/haimunia-app-demo` — public
 Supabase: `box-log`, ref `hvwakffluwvegedefoth` (free tier)
 
-**v5.0.0** · 206 migrations · 45 pgTAP files (CI) · 41 browser scenarios ·
+**v5.0.1** · 208 migrations · 47 pgTAP files (CI) · 43 browser scenarios · 3 e2e user tests ·
 current JS test count in `docs/PROJECT_STATUS.md`
 
 ## Read these first
