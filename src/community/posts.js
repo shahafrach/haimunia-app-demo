@@ -576,14 +576,19 @@
       if (mv && mv.name) movement = mv.name;
     }
     if (!movement) movement = "שיא אישי";
+    // With weights hidden the post carries only the percent (pr_share): in
+    // metadata.improvement_pct, and as result_text "+x%". It is shown as the
+    // improvement; the kilograms row appears only when the member chose to show them.
+    const pct = m.improvement_pct != null && isFinite(Number(m.improvement_pct)) ? "+" + Number(m.improvement_pct) + "%"
+      : (/^\+\d+(\.\d+)?%$/.test(String(post.result_text || "")) ? String(post.result_text) : "");
     const rows = [
       ["תוצאה חדשה", m.new_result || m.new_value],
       ["תוצאה קודמת", m.previous_result || m.previous_value],
-      ["שיפור", m.improvement],
+      ["שיפור", m.improvement || pct],
       ["תאריך", (m.achieved_on || post.occurred_on) ? String(m.achieved_on || post.occurred_on).slice(0, 10) : ""],
     ].filter((r) => r[1] != null && r[1] !== "");
     const result = `<div class="post-result-block"><div class="post-title">${bidiText(movement)} <span class="pr-badge badge-tag">PR</span></div>
-      <div class="log-list" style="margin-top:6px;">${rows.map((r) => `<div class="log-row"><span>${esc(r[0])}</span><span class="mono" style="color:var(--color-accent);">${esc(r[1])}</span></div>`).join("")}</div></div>`;
+      <div class="log-list" style="margin-top:6px;">${rows.map((r) => `<div class="log-row"><span>${esc(r[0])}</span><span class="mono" style="color:var(--color-accent);"><bdi>${esc(r[1])}</bdi></span></div>`).join("")}</div></div>`;
     return postCardShell(post, postCardBody(post, result));
   }
 
@@ -884,7 +889,15 @@
     if (res.failed && !res.sent && !res.queued) { p.publishing = false; p.error = failText("השיתוף נכשל, אפשר לנסות שוב", res.error); return rerender(); }
     rememberPrDismissed(p.record.record_id);
     state.posts.prPrompt = null;
-    setMessage(res.queued && !res.sent ? "השיא יישלח למעגלים כשהחיבור יחזור" : res.failed ? "השיא שותף, אבל לא בכל המעגלים" : "השיא שותף למעגלים");
+    const sharedText = res.queued && !res.sent ? "השיא יישלח למעגלים כשהחיבור יחזור" : res.failed ? "השיא שותף, אבל לא בכל המעגלים" : "השיא שותף למעגלים";
+    setMessage(sharedText);
+    // The message above is drawn on the circle screens only. The prompt is mostly
+    // answered on the Log tab, so say it there too (app.js's toast, docked above the save bar).
+    if (typeof window.showToast === "function") {
+      window.showToast(sharedText);
+      // A toast paints on the next render of the screen that is up (the Log tab's, not this layer's).
+      if (typeof window.render === "function") window.render();
+    }
     for (const id of p.picked) delete state.circles.feed[id];
     rerender();
     sharePromptClosed();

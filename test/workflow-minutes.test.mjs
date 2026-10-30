@@ -182,3 +182,18 @@ test("claude-review runs when a PR is opened and on @claude, not on every push",
   assert.match(reviewYml, /contains\(github\.event\.comment\.body, '@claude'\)/,
     "a comment must still have to say @claude to start a runner");
 });
+
+// ---------------------------------------------------------------------------
+// e2e.yml boots Docker and a Supabase stack. It must not run on every PR.
+// ---------------------------------------------------------------------------
+test("e2e.yml runs only when its tests, itself or the schema change, and on demand", () => {
+  const e2eYml = fs.readFileSync(path.join(root, ".github/workflows/e2e.yml"), "utf8");
+  assert.match(e2eYml, /^ {2}workflow_dispatch: \{\}$/m, "e2e.yml must be runnable on demand");
+  assert.doesNotMatch(e2eYml, /^ {2}push:/m, "e2e.yml must not run on push");
+  const at = e2eYml.indexOf("\n  pull_request:");
+  const paths = [...e2eYml.slice(at, e2eYml.indexOf("\npermissions:")).matchAll(/^ {6}- '([^']+)'$/gm)].map((m) => m[1]);
+  assert.deepEqual(paths, ["scripts/e2e/**", "supabase/migrations/**", ".github/workflows/e2e.yml"],
+    "e2e.yml's pull_request paths changed - widening them runs Docker and Supabase on most PRs");
+  const minutes = Number((e2eYml.match(/timeout-minutes: (\d+)/) || [])[1]);
+  assert.ok(minutes > 0 && minutes <= 30, `e2e.yml's timeout is ${minutes} minutes; keep it at 30 or less`);
+});

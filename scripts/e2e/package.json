@@ -1,0 +1,15 @@
+{
+  "name": "box-log-e2e",
+  "private": true,
+  "version": "1.0.0",
+  "description": "End-to-end user tests of BOX-LOG against a LOCAL Supabase stack (never production). playwright is pinned exactly, the same version as scripts/browser-check, so both use the same Chromium build.",
+  "type": "module",
+  "scripts": {
+    "test:owner": "node 01-owner.mjs",
+    "test:friend": "node 02-friend.mjs",
+    "test:privacy": "node 03-privacy.mjs"
+  },
+  "dependencies": {
+    "playwright": "1.62.1"
+  }
+}

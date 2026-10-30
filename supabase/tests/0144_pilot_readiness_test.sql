@@ -123,10 +123,15 @@ select is((select diagnostics from public.bug_reports where body = 'x'), '{"app_
 insert into public.profiles (id, handle, display_name) values ('eeeeeeee-0000-4000-8000-0000000000e4', 'no_circle', 'No Circle');
 select tests.set_auth('eeeeeeee-0000-4000-8000-0000000000e4');
 select lives_ok($$ select public.bug_report_submit('עזבתי את כל המעגלים', '{}'::jsonb) $$, 'a member who is in no circle can write');
--- an anonymous session (mid sign-up) cannot
+-- an anonymous session (mid sign-up) cannot. "Anonymous" is what auth.users says
+-- (202610290003): the JWT's claim goes stale when sign-up upgrades the session.
+select tests.clear_auth();
+update auth.users set is_anonymous = true where id = 'eeeeeeee-0000-4000-8000-0000000000e4';
 select set_config('request.jwt.claims', '{"sub":"eeeeeeee-0000-4000-8000-0000000000e4","role":"authenticated","is_anonymous":true}', true);
+select set_config('role', 'authenticated', true);
 select throws_ok($$ select public.bug_report_submit('hi', '{}'::jsonb) $$, 'P0001', 'not authorized', 'an anonymous session cannot');
 select tests.clear_auth();
+update auth.users set is_anonymous = false where id = 'eeeeeeee-0000-4000-8000-0000000000e4';
 select tests.set_auth('eeeeeeee-0000-4000-8000-0000000000e3');
 select throws_ok($$ select public.bug_report_submit('hi', '{}'::jsonb) $$, 'P0001', 'not authorized', 'someone with no profile cannot');
 select tests.clear_auth();

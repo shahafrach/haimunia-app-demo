@@ -193,7 +193,13 @@
     // this records that a member chose to share a decoration.
     track(A.ACHIEVEMENT_SHARED, { member_achievement_id: a.memberAchievementId, code: a.code || null, source: "unlock_sheet" });
     state.achievements.unlock = null;
-    setMessage(queued ? "המדליה תישלח למעגלים כשהחיבור יחזור" : res.failed ? "המדליה שותפה, אבל לא בכל המעגלים" : "המדליה שותפה למעגלים");
+    const sharedText = queued ? "המדליה תישלח למעגלים כשהחיבור יחזור" : res.failed ? "המדליה שותפה, אבל לא בכל המעגלים" : "המדליה שותפה למעגלים";
+    setMessage(sharedText);
+    if (typeof window.showToast === "function") {
+      window.showToast(sharedText);
+      // A toast paints on the next render of the screen that is up (the Log tab's, not this layer's).
+      if (typeof window.render === "function") window.render();
+    }
     rerender();
     sharePromptClosed();
   }

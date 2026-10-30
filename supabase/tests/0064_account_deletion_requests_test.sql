@@ -108,8 +108,8 @@ select ok(
   (select deleted_at is not null from public.profiles where id = tests.uid('m3')),
   'the profile is soft-deleted immediately, so the member disappears from the club the moment they ask');
 select ok(
-  (select deleted_at is not null from public.workout_posts where id = 'c0640000-0000-4000-8000-000000000001'),
-  'and so is every post they authored');
+  not exists (select 1 from public.workout_posts where id = 'c0640000-0000-4000-8000-000000000001' and deleted_at is null),
+  'and every post they authored is gone: deleted with their circle membership (202610290003), as leave_circle does, or soft-deleted if it was in no circle');
 
 select tests.set_auth(tests.uid('m3'));
 select lives_ok(
