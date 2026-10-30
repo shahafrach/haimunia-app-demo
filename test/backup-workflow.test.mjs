@@ -1,15 +1,14 @@
-// backup-database.yml is ready for the box-log project but not scheduled: it
-// needs two repository secrets, refuses clearly without them, and the schedule
-// stays commented until the owner confirms they exist .
+// backup-database.yml backs up box-log daily (scheduled since 2026-10-30): it
+// needs two repository secrets and refuses clearly without them.
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 
 const wf = fs.readFileSync(new URL("../.github/workflows/backup-database.yml", import.meta.url), "utf8");
 
-test("the schedule is commented out", () => {
-  assert.ok(!/^\s*schedule:/m.test(wf), "no live schedule: key");
-  assert.ok(/^\s*#\s*schedule:/m.test(wf), "the commented schedule is there to uncomment");
+test("the schedule is on: daily backup, Sunday drill, matching the drill's if", () => {
+  assert.match(wf, /^\s{2}schedule:\s*\n\s+- cron: "17 2 \* \* 1-6"\s*\n\s+- cron: "17 2 \* \* 0"/m);
+  assert.match(wf, /github\.event\.schedule == '17 2 \* \* 0'/);
 });
 
 test("the workflow needs exactly two secrets", () => {

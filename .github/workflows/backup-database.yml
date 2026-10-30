@@ -95,9 +95,11 @@ on:
   # this workflow, with the drill ticked, has gone green. Six days a week a
   # backup; Sunday a backup plus the restore drill (the drill job's `if` below
   # matches the Sunday expression exactly, so change them together).
-  # schedule:
-  #   - cron: "17 2 * * 1-6"
-  #   - cron: "17 2 * * 0"
+  # On since 2026-10-30, after the first manual run of this branch passed
+  # both jobs (backup and restore drill) against box-log.
+  schedule:
+    - cron: "17 2 * * 1-6"
+    - cron: "17 2 * * 0"
   workflow_dispatch:
     inputs:
       drill:
@@ -126,9 +128,7 @@ jobs:
       # NO DATABASE PASSWORD (2026-10-30). The dump links the project with the
       # Management API access token the other ops workflows already use; the
       # CLI then connects through its temporary login role, so no connection
-      # string or database password exists anywhere in GitHub. The passphrase
-      # was generated in the GitHub secrets form and never shown to anyone:
-      # only this workflow and its restore drill ever read it.
+      # string or database password exists anywhere in GitHub.
       - name: refuse to run without both secrets
         run: |
           missing=0
