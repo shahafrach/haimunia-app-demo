@@ -9,40 +9,39 @@ The schedule is **commented out**. Until you turn it on the workflow only runs
 when you press the button. It refuses, with a message naming the secret, if one
 is missing.
 
-## Repository secrets needed (names only)
+## Repository secrets (names only)
 
 | Name | What it is |
 |---|---|
-| `SUPABASE_DB_URL` | the box-log project's **Session pooler** connection string |
+| `SUPABASE_ACCESS_TOKEN` | the Management API token the other ops workflows already use. `supabase link` with it lets the CLI connect through its temporary login role, so **no database password or connection string is stored anywhere** |
 | `BACKUP_PASSPHRASE` | a long random passphrase that encrypts the dump |
 
-Nothing else. (`SUPABASE_ACCESS_TOKEN` is used by other workflows, not this one.)
+## How the passphrase was made (2026-10-30)
 
-## Steps for the owner
+It was generated inside the GitHub "New repository secret" form by
+`crypto.getRandomValues` and saved there directly. Nobody saw it and it is not
+in any password manager. That is deliberate: the only things that ever decrypt
+a backup are this workflow's round-trip check and its restore drill, and both
+run in GitHub with the same secret. A real recovery runs the same way: a
+workflow downloads the artifact, decrypts it with the secret and loads it.
 
-1. GitHub, the repository, **Settings, Secrets and variables, Actions, New repository secret**.
-2. `SUPABASE_DB_URL`: Supabase dashboard of box-log, **Connect**, **Session pooler**,
-   copy the URI (port 5432), put your database password where it says
-   `[YOUR-PASSWORD]`. Do **not** use "Direct connection": it is IPv6-only and
-   GitHub's runners cannot reach it. The job refuses it with a clear message.
-   Forgotten the password? Dashboard, Project Settings, Database, reset it, then copy again.
-3. `BACKUP_PASSPHRASE`: generate one (for example `openssl rand -base64 32` on
-   your computer) and **also save it in your password manager, not in this
-   repository**. A backup you cannot decrypt is not a backup. The repository is
-   public and artifacts can be downloaded by any signed-in GitHub account, so
-   the encryption is the only protection.
-4. **Actions, backup-database, Run workflow**, leave "Also rehearse the restore"
-   ticked. Both jobs (`backup`, `restore-drill`) must go green. Read the log: it
-   prints the dump sizes and the rows restored.
-5. Only now turn the schedule on: in `backup-database.yml` uncomment the
-   `schedule:` block (six days a week a backup, Sunday a backup plus the drill)
-   and merge that change. If a secret is later deleted the scheduled run fails
-   loudly and says which one.
+The trade-off: if the GitHub account or the secret is lost, the existing
+artifacts cannot be decrypted. To change that, set a new passphrase you also
+keep in a password manager; backups from then on use it.
+
+## Running it
+
+1. **Actions, backup-database, Run workflow**, leave "Also rehearse the restore"
+   ticked. Both jobs (`backup`, `restore-drill`) must go green. The log prints
+   the dump sizes and the rows restored.
+2. The schedule (six days a week a backup, Sunday a backup plus the drill) is
+   on once the first manual run is green. If a secret is later deleted the
+   scheduled run fails loudly and says which one.
 
 ## Restoring
 
 The runbook is at the top of `backup-database.yml` (download the artifact,
-`gpg` decrypt with the passphrase, empty the target tables, load `data.sql`
+`gpg` decrypt with the passphrase (in a workflow, from the secret), empty the target tables, load `data.sql`
 with `session_replication_role = replica`). The Sunday drill does exactly that
 into a throwaway local Supabase, so the procedure is rehearsed, not hoped for.
 

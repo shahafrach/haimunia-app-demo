@@ -14,19 +14,19 @@ test("the schedule is commented out", () => {
 
 test("the workflow needs exactly two secrets", () => {
   const used = [...new Set([...wf.matchAll(/secrets\.([A-Z0-9_]+)/g)].map((m) => m[1]))].sort();
-  assert.deepEqual(used, ["BACKUP_PASSPHRASE", "SUPABASE_DB_URL"]);
-  assert.ok(!/SUPABASE_ACCESS_TOKEN|SUPABASE_PROJECT_REF|storage cp|backup-storage/.test(wf), "no photo-bucket half: the buckets are dropped");
+  assert.deepEqual(used, ["BACKUP_PASSPHRASE", "SUPABASE_ACCESS_TOKEN"]);
+  assert.ok(!/SUPABASE_DB_URL|SUPABASE_PROJECT_REF|storage cp|backup-storage/.test(wf.split("\n").filter((l) => !/^\s*#/.test(l)).join("\n")), "no database URL and no photo-bucket half");
 });
 
 test("a missing secret fails the job with a message naming it, before any dump", () => {
   const gate = wf.slice(wf.indexOf("- name: refuse to run without"), wf.indexOf("uses: supabase/setup-cli"));
-  assert.match(gate, /SUPABASE_DB_URL is not set/);
+  assert.match(gate, /SUPABASE_ACCESS_TOKEN is not set/);
   assert.match(gate, /BACKUP_PASSPHRASE is not set/);
   assert.match(gate, /exit 1/);
-  assert.ok(wf.indexOf("- name: refuse to run without") < wf.indexOf("supabase db dump --db-url"), "the gate runs first");
+  assert.ok(wf.indexOf("- name: refuse to run without") < wf.indexOf("supabase db dump --linked"), "the gate runs first");
 });
 
-test("the IPv6-only direct connection is refused up front", () => {
-  assert.match(wf, /Direct connection/);
-  assert.match(wf, /@db\.\*\.supabase\.co/);
+test("the project comes from supabase/PROJECT_REF and the dump needs no password", () => {
+  assert.match(wf, /supabase link --project-ref "\$\(tr -d '\[:space:\]' < supabase\/PROJECT_REF\)"/);
+  assert.ok(!/--db-url|--password|SUPABASE_DB_PASSWORD/.test(wf), "no connection string or password anywhere");
 });
