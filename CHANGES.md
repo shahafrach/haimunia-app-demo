@@ -1,3 +1,13 @@
+## Founder link, auth config and user tests — 2026-10-30
+
+Three branches merged since the 5.0.0 consolidation (#135): #136, #137, #138. App
+version **5.0.0 → 5.0.1**. Two migrations, applied by the Supabase GitHub integration
+on merge.
+
+- **Founder link (#136):** from Me, a member creates a one-use, 7-day link that lets a friend sign up and start a circle of their own. The friend joins none of the sender's circles and the sender sees nothing of theirs. Up to 3 links per member per day.
+- **Auth config (#137):** a `set-auth-config` workflow turns on anonymous sign-ins and turns off email confirmation on a new Supabase project. Run on box-log on 2026-10-29; both verified. The first real sign-up failed without them.
+- **User tests (#138):** three end-to-end user tests (the owner, a friend, privacy and limits) run in CI against a local Supabase stack, 53 of 53 steps; report in `docs/qa/user-tests-2026-10.md`. Fixed on the way: a member who has just signed up can create a founder link and file a פנייה; deleting an account removes the member from every circle at once; the PR card shows the percent when weights are hidden; the share bar, the medal prompt and the tab bar no longer cover the control being tapped; sharing from the Log tab is confirmed.
+
 ## BOX-LOG 5.0.0: private training circles — 2026-10-29
 
 The app is no longer the gym's community app. It is BOX-LOG, a free app of private
