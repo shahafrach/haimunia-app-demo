@@ -79,6 +79,16 @@ private circles for friends. It is not a gym app and not a product.
 - The `post-photos` and `avatar-photos` buckets are dropped, and the `sanitize_upload` edge function with them. `purge_abandoned_profiles` and `notif_push_send` stay. No third-party scripts.
 - Short docs: a security procedure, a database definition (Israel Privacy Protection Law, Amendment 13), and a Hebrew privacy page.
 
+## Home and recovery (2026-10-30)
+
+Two owner findings from the live app.
+
+- **Home is about me, Circle is about us.** Home always draws the member's own training from the device (IndexedDB), signed in or not, with or without a circle: a greeting, this week's workouts against the personal weekly target as the ring ("N done" early in the week, "N left" near the end), weeks met, the last session with a one-tap log of the same lift, the latest PRs with percent improvement, and the log button. Before the first workout it says what to do first. With no personal target set the ring uses the default of 3. Circles on Home are one compact card: with no account or no circle, one line and the create/join buttons; with circles, the list and the latest few posts. The full gate, feed, week and invites exist on the Circle tab only (`renderCircleGate` has no caller in the Home screen).
+- **Password recovery without email: a recovery code.** Sign-in is a username mapped to a synthetic `.invalid` address, so Supabase's email reset can never work. At sign-up (right after the username and password upgrade) the member is shown a recovery code once: 4 groups of 4 characters from the unambiguous 32-symbol alphabet `23456789ABCDEFGHJKLMNPQRSTUVWXYZ` (no `0 O 1 I`), exactly 80 bits, and only an HMAC-SHA256 of it, with a domain prefix, is stored (`recovery_codes`, no client grants; the key is the Edge Function secret `RECOVERY_CODE_HMAC_SECRET`). Me has "קוד שחזור חדש" (password re-entered first) that rotates it; members who signed up before this see a one-time prompt in Me to create one.
+- **Recovering** is the Edge Function `recover-password` (`{username, recovery_code, new_password}`), no session needed: 5 attempts per 15 minutes per username hash and per IP hash, constant-time compare, every failure the same generic answer. On success it sets the new password with the admin API, revokes every session, rotates the code and returns the new one once.
+- **A friend who lost the code**: the owner runs `select public.owner_issue_reset_code('username');` in the Supabase SQL editor. The function is `SECURITY DEFINER`, `search_path ''`, granted to no role, and returns a one-use reset code valid for one hour, stored as an HMAC. The same recover-password screen accepts it. Procedure: [../ops/PASSWORD_RESET.md](../ops/PASSWORD_RESET.md).
+- This reverses "Keep the existing recovery mechanism; no passkeys" for the one thing the existing mechanism could not do (a forgotten password). Passkeys are still not built.
+
 ## Drop and keep
 
 **Drop:** all gym, staff, coach, Arbox and gym-display features; text comments, mentions, saved and hidden posts, pins, announcements, member of the week, monthly recaps, search, follows and friends, absolute leaderboards, feed ranking and weights, reports and posting restrictions, events, the `post-photos` and `avatar-photos` buckets, `sanitize_upload`, `training_log_usage`.

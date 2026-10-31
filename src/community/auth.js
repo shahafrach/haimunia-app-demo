@@ -750,6 +750,9 @@
     // signup has no profile row yet, so this no-ops and the stamp happens
     // in saveProfile() instead.
     if (state.profile && !state.profile.recovery_verified_at) await verifyRecovery({ force: true });
+    // The recovery code, right after the upgrade: shown once, saved before the next step.
+    // (The backup-only form in Settings has no gate to show it in; Me prompts for one.)
+    if (formId === "communityCredentials") { recoveryIssueAndShow("signup"); return; }
     rerender();
   }
   // ONE NAME, ASKED ONCE (2026-09-16), at the owner's instruction: "there are

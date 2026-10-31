@@ -138,6 +138,8 @@ export async function fillCredentials(s, p, { username, password = PASSWORD }) {
   await p.type('#communityCredentials input[name="password"]', password);
   await p.type('#communityCredentials input[name="passwordConfirm"]', password);
   await p.tap('#communityCredentials button[type="submit"]');
+  // The recovery code, shown once: read it, tick "שמרתי", continue.
+  p.recoveryCode = await saveRecoveryCode(s, p);
   const profile = await p.waitVisible("#communityProfile", 25000);
   s.check(profile, "the name-and-emoji form follows the account form", profile ? "" : (await p.text()).slice(0, 200));
   return profile;
@@ -359,3 +361,48 @@ export async function weekCards(p) {
 }
 
 export { count, one, q, userId, bootstrapToken };
+
+// ---- password recovery ---------------------------------------------------------------------
+/** The recovery code screen: read the code, tick "שמרתי" (Continue is locked until then), continue. Returns the code. */
+export async function saveRecoveryCode(s, p) {
+  const shown = await p.waitVisible("[data-recovery-code]", 25000);
+  s.check(shown, "a recovery code is shown once");
+  if (!shown) return "";
+  const code = (await p.page.locator("[data-recovery-code]").first().innerText()).trim();
+  s.check(/^[2-9A-HJ-NP-Z]{4}(-[2-9A-HJ-NP-Z]{4}){3}$/.test(code), "it is four groups of four from the unambiguous alphabet");
+  s.check(await p.page.locator('[data-community-action="recovery-continue"]').first().isDisabled(), "Continue is locked until the member says they saved it");
+  s.check(await p.has('[data-community-action="recovery-copy"]'), "there is a copy button");
+  await p.tap("[data-recovery-saved]");
+  await p.tap('[data-community-action="recovery-continue"]');
+  await p.waitHidden("[data-recovery-code]", 8000);
+  return code;
+}
+
+/** Sign out from Me and land on the login screen. */
+export async function signOutToLogin(s, p) {
+  await openMe(s, p);
+  await p.tap('[data-community-action="sign-out"]');
+  await p.waitVisible('[data-community-action="show-login"]', 20000);
+  await p.tap('[data-community-action="show-login"]');
+  return p.waitVisible("#communityLogin", 8000);
+}
+
+/** "שכחתי סיסמה": username, code, new password twice; then the NEW code once. Returns it. */
+export async function recoverWithCode(s, p, { username, code, password }) {
+  await p.tap('[data-community-action="recovery-open"]');
+  const open = await p.waitVisible("#communityRecover", 8000);
+  s.check(open, "the recovery screen opens from the login screen");
+  await p.type('#communityRecover input[name="username"]', username);
+  await p.type('#communityRecover input[name="code"]', code.toLowerCase());
+  await p.type('#communityRecover input[name="password"]', password);
+  await p.type('#communityRecover input[name="passwordConfirm"]', password);
+  await p.tap('#communityRecover button[type="submit"]');
+  return saveRecoveryCode(s, p);
+}
+
+/** Sign in from the login screen. */
+export async function logInAs(s, p, { username, password }) {
+  await p.type('#communityLogin input[name="username"]', username);
+  await p.type('#communityLogin input[name="password"]', password);
+  await p.tap('#communityLogin button[type="submit"]');
+}

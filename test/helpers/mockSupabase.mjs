@@ -51,7 +51,29 @@ export function createMockSupabase(seedTables = {}) {
   // un-stubbed function returns a named error rather than a plausible
   // success, so a test that forgets to register one fails loudly instead
   // of passing on a fiction.
-  const functionHandlers = {};
+  // The two recovery functions (supabase/functions/issue-recovery-code,
+  // recover-password) are stood in by default, because every sign-up now ends in
+  // one: a code is made, shown once, and the next step waits for "שמרתי". The
+  // stand-ins keep the same shape as the real thing (a 16-character code, rotated
+  // on use, one generic failure) but none of its rules (no rate limit, no HMAC);
+  // test/recovery-edge-functions.test.mjs covers those.
+  const functionHandlers = {
+    "issue-recovery-code": () => {
+      const code = Array.from({ length: 4 }, () => Math.random().toString(36).slice(2, 6).toUpperCase().replace(/[01OI]/g, "2").padEnd(4, "2")).join("-");
+      const uid = currentUser && currentUser.id;
+      rows("__recovery").splice(0, rows("__recovery").length, ...rows("__recovery").filter((r) => r.userId !== uid), { userId: uid, code: code.replace(/-/g, "") });
+      return { data: { recovery_code: code }, error: null };
+    },
+    "recover-password": (body) => {
+      const norm = String(body.recovery_code || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+      const rec = rows("__recovery").find((r) => r.code === norm);
+      const cred = rec && rows("__credentials").find((c) => c.userId === rec.userId && c.email === `${body.username}@members.haimuniya.invalid`);
+      if (!cred) return { data: null, error: { message: "recovery_failed" } };
+      cred.password = body.new_password;
+      rec.code = Array.from({ length: 16 }, () => "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"[Math.floor(Math.random() * 32)]).join("");
+      return { data: { ok: true, recovery_code: rec.code.replace(/(.{4})/g, "$1-").slice(0, 19) }, error: null };
+    },
+  };
   const functionCalls = [];
   // COMM-110..114. Every feed_page/club_summary/telemetry call the client
   // made, in order, so a test can assert the arguments it sent rather than
@@ -1743,6 +1765,10 @@ export function createMockSupabase(seedTables = {}) {
             data: out.slice(0, 200).map((r) => ({ post_id: r.post_id, user_id: r.user_id, display_name: r.display_name, handle: r.handle, avatar_url: r.avatar_url })),
             error: null,
           });
+        }
+        if (name === "my_recovery_code_created_at") {
+          const mine = currentUser && rows("__recovery").some((r) => r.userId === currentUser.id);
+          return Promise.resolve({ data: mine ? "2026-10-30T09:00:00Z" : null, error: null });
         }
         if (name === "mark_recovery_verified") {
           const prof = rows("profiles").find((r) => currentUser && r.id === currentUser.id);

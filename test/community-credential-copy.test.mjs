@@ -19,7 +19,7 @@
 // ACCEPTS are the same thing, and only running both halves can show that.
 import { test } from "node:test";
 import assert from "node:assert";
-import { bootCommunity, waitFor, waitForCommunityGate } from "./helpers/boot.mjs";
+import { bootCommunity, waitFor, waitForCommunityGate, passRecoveryCode } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
 
 function submit(window, id) {
@@ -203,6 +203,7 @@ test("the login name and the club-facing name are not both called שם משתמ�
   window.document.querySelector('#communityCredentials input[name="password"]').value = "Abcdefghi1";
   window.document.querySelector('#communityCredentials input[name="passwordConfirm"]').value = "Abcdefghi1";
   submit(window, "communityCredentials");
+  await passRecoveryCode(window);
   await waitFor(() => !!window.document.getElementById("communityProfile"), 3000);
 
   const profileCard = window.document.getElementById("communityProfile").closest(".chart-card");
@@ -230,6 +231,7 @@ test("the club-facing name field still accepts the Hebrew its own placeholder su
   window.document.querySelector('#communityCredentials input[name="password"]').value = "Abcdefghi1";
   window.document.querySelector('#communityCredentials input[name="passwordConfirm"]').value = "Abcdefghi1";
   submit(window, "communityCredentials");
+  await passRecoveryCode(window);
   await waitFor(() => !!window.document.getElementById("communityProfile"), 3000);
 
   const clubNameInput = window.document.querySelector('#communityProfile [name="displayName"]');

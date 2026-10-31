@@ -377,3 +377,11 @@ export async function submitManagementGate(page, account, password, { timeout = 
   await page.click("#panelUnlock button[type=submit]");
   await page.waitForFunction(() => !document.getElementById("panelUnlock"), { timeout });
 }
+
+/** Every sign-up ends in a recovery code shown once; tick "שמרתי" and continue. */
+export async function passRecoveryCode(page) {
+  await page.waitForSelector("[data-recovery-code]", { timeout: 8000 });
+  await page.check("[data-recovery-saved]");
+  await page.click('[data-community-action="recovery-continue"]');
+  await page.waitForSelector("[data-recovery-code]", { state: "detached", timeout: 5000 });
+}

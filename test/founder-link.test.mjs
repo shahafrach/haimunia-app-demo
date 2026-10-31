@@ -5,6 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import { createCirclesMock, bootCommunity, waitFor, click, membership, ME, CIRCLE_A, TOKEN } from "./helpers/circles.mjs";
+import { passRecoveryCode } from "./helpers/boot.mjs";
 
 const FOUNDER_URL = "https://box-log.pages.dev/#invite=" + TOKEN;
 const text = (w) => w.document.getElementById("content").textContent + (w.document.querySelector("[data-cloud-dialog]") ? w.document.querySelector("[data-cloud-dialog]").textContent : "");
@@ -121,6 +122,7 @@ test("a friend opens the link, signs up, and lands on the create-circle sheet", 
   form.elements.password.value = "Abcdefgh12";
   form.elements.passwordConfirm.value = "Abcdefgh12";
   submit(window, form);
+  await passRecoveryCode(window);
   await waitFor(() => !!window.document.querySelector("#communityProfile"), 4000);
   const profile = window.document.getElementById("communityProfile");
   profile.elements.displayName.value = "נועה לוי";
@@ -152,6 +154,7 @@ test("closing the sheet leaves the button; it does not open again by itself", as
   form.elements.password.value = "Abcdefgh12";
   form.elements.passwordConfirm.value = "Abcdefgh12";
   submit(window, form);
+  await passRecoveryCode(window);
   await waitFor(() => !!window.document.querySelector("#communityProfile"), 4000);
   form = window.document.getElementById("communityProfile");
   form.elements.displayName.value = "נועה לוי";

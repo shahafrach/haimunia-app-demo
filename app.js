@@ -6409,16 +6409,42 @@ function renderProgressOverview() {
   return renderWeeksSection() + renderPrSection() + renderE1rmSection();
 }
 
-// What Home shows besides the week: the way back into logging and the latest PR.
+// What Home shows about the member's own training, all of it from this device:
+// the last session, the latest PRs, the weeks the target was met. Home needs no
+// account and no circle (docs/circles/decisions.md, "Home and recovery").
 window.homeSummary = function () {
   const last = entries[0];
   const m = last && movementById(last.exerciseId);
-  const pr = prItems()[0] || null;
+  const items = prItems();
+  const pr = items[0] || null;
+  const target = weeklyTargetForRing();
+  const days = typeof window.communityTrainingDays === "function" ? window.communityTrainingDays() : [];
+  const year = BoxLogProgress.weeksYear(days, target, todayISO());
+  const prText = (it) => (it.pr.weight > 0 ? `${it.pr.weight} ק״ג × ${it.pr.reps}` : `${it.pr.reps} חזרות`);
   return {
-    last: last && m ? { name: m.name, text: formatLiftedSet(last), date: last.date } : null,
-    pr: pr ? { name: pr.name, text: pr.pr.weight > 0 ? `${pr.pr.weight} ק״ג × ${pr.pr.reps}` : `${pr.pr.reps} חזרות`, pct: pr.pr.pct } : null,
+    hasData: entries.length > 0 || wodEntries.length > 0,
+    last: last && m ? { id: last.exerciseId, name: m.name, text: formatLiftedSet(last), date: last.date } : null,
+    pr: pr ? { name: pr.name, text: prText(pr), pct: pr.pr.pct } : null,
+    prs: items.slice(0, 3).map((it) => ({ id: it.id, name: it.name, text: prText(it), pct: it.pr.pct, date: it.pr.date })),
+    weeksMet: year.metCount,
+    target,
   };
 };
+// Home's "log the same lift": the Log tab on that lift, prefilled from its last session.
+// It does not save anything; the member checks the numbers and taps save.
+function startLogSameLift(id) {
+  if (!movementById(id)) return;
+  if (!ladderMode && !editingEntryId) {
+    selectedId = id;
+    movementExplicitlyChosen = true;
+    logEntryType = inferEntryTypeFor(id);
+    applyLastSessionValues(selectedId);
+  }
+  tab = "add";
+  closeNavMenu();
+  render();
+  window.scrollTo(0, 0);
+}
 function renderHistoryTab() {
   const now = new Date();
   const monthPrefix = localISODate(now).slice(0, 7);
@@ -8310,6 +8336,7 @@ document.addEventListener("click", (e) => {
   else if (action === "ladder-switch-exercise") { switchLadderExercise(el.dataset.id); }
   else if (action === "set-ladder-block-label") { setLadderBlockLabel(el.dataset.label); }
   else if (action === "prefill-last") { prefillFromLast(); }
+  else if (action === "log-same-lift") { startLogSameLift(el.dataset.id); }
   else if (action === "cancel-edit-entry") { cancelEditEntry(); }
   else if (action === "edit-entry") { startEditEntry(el.dataset.id); }
   else if (action === "view-log-wod-date-calendar") {

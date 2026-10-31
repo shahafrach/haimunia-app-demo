@@ -171,6 +171,11 @@
       // one flag, set the other - rather than on the choice screen, which
       // would have made 9c15214's way back one tap longer than it is today.
       gateView: "",
+      // Password recovery (src/community/recovery.js). view: "" | "form" (the
+      // forgot-password form on the login screen) | "show" (a recovery code on
+      // screen, once). code is held only while it is shown. has: whether the member
+      // already has a code (null until asked).
+      recovery: { view: "", busy: false, error: "", code: "", saved: false, copied: false, source: "", has: null, statusTried: false, rotateOpen: false, draftUsername: "" },
       // The term sheet (design spec section 3, tier 3): the id of the
       // glossary entry being explained, or null. Lives in ui rather than a
       // namespace of its own for the same reason confirmDialog does - it is
@@ -930,7 +935,7 @@
   // WHAT TO DO WHEN THE PASSWORD IS GONE. There is no email reset and there
   // never will be (no email, no SMTP), and the staff reset is gone with the
   // staff. The login screen says so rather than leaving a dead end.
-  const LOGIN_RECOVERY_NOTE = `<div class="footer-note" style="margin-top:14px;">${bidiText("שכחתם את הסיסמה? אי אפשר לאפס אותה כרגע. אפשר להצטרף מחדש עם הזמנה חדשה, והיומן הפרטי נשאר במכשיר.")}</div>`;
+  const LOGIN_RECOVERY_NOTE = `<div class="footer-note" style="margin-top:14px;"><button class="gate-alt" data-community-action="recovery-open">שכחתי סיסמה</button><div style="margin-top:6px;">${bidiText("יש לכם קוד שחזור? הוא מאפס את הסיסמה. אין קוד? בעל/ת האפליקציה יכול/ה לתת קוד איפוס חד־פעמי.")}</div></div>`;
 
 
 
@@ -2421,6 +2426,12 @@
       const c = currentCircle();
       if (c) ensureSectionLoaded(c.id);
     }
+    // Home shows the latest few posts of the circle the Circle tab opens on.
+    if (window.haimuniaActiveTab === "home" && state.circles.loaded && state.profile && state.profile.recovery_verified_at) {
+      const c = currentCircle();
+      const f = c && state.circles.feed[c.id];
+      if (c && !(f && (f.loaded || f.loading || f.error))) loadFeed(c.id);
+    }
     if (state.user && notifPushEnabled() && !state.notif.pushChecked) loadNotifPushStatus();
     document.querySelectorAll("[data-share-prompt-pref]").forEach((el) => {
       el.addEventListener("change", () => setSharePromptsEnabled(el.checked));
@@ -2554,6 +2565,7 @@
       rerender();
     }
     else if (action === "term-glossary-back") { state.ui.termGlossaryOpen = false; rerender(); }
+    else if (action && action.indexOf("recovery-") === 0 && recoveryAction(action, el)) { /* handled in src/community/recovery.js */ }
     else if (action === "start-signup") startSignup();
     // Design spec 7.1. The choice screen's secondary door.
     else if (action === "show-login") { state.ui.gateView = "login"; rerender(); }

@@ -9,7 +9,7 @@
 import { startWorld } from "./lib/harness.mjs";
 import {
   uname, until, bootstrapToken, passWelcome, landOnInvite, clearIncidentals, goHome, goCircle, openMe, section,
-  fillCredentials, fillProfile, createCircle, makeInvite, joinByPaste, leaveCircle, shareSetting, logSet,
+  fillCredentials, signOutToLogin, recoverWithCode, logInAs, fillProfile, createCircle, makeInvite, joinByPaste, leaveCircle, shareSetting, logSet,
   seeInFeed, feedCards, one, q, userId, count, sleep,
 } from "./lib/flows.mjs";
 
@@ -248,5 +248,30 @@ await world.step(yoav, "yoav-rejoins", "Yoav rejoins with the new link", async (
   s.check(!r.cards.some((c) => /Deadlift/.test(c.text)), "and his old post did not come back", r.cards.map((c) => c.text.slice(0, 40)).join(" | "));
   s.check(count(`select count(*) from public.workout_posts where author_id = ${q(yoavId)} and club_id = ${q(clubId)} and deleted_at is null and title is not null`) === 0, "he has no posts there");
 }, { primary: ['[data-community-action="c-leave-ask"]'] });
+
+// 15. A friend who lost the code: the owner issues a one-hour reset code in the SQL editor ------------------------------------
+await world.step(yoav, "owner-reset-code", "Yoav lost his code; the owner issues a reset code and he recovers with it", async (s) => {
+  const yid = userId(Y);
+  s.check(!!yid, "Yoav's account exists");
+  const reset = one(`select public.owner_issue_reset_code(${q(Y)})`);
+  s.check(/^[2-9A-HJ-NP-Z]{4}(-[2-9A-HJ-NP-Z]{4}){3}$/.test(reset || ""), "the owner's line returns a 4x4 code", reset || "none");
+  s.note("The owner's line: select public.owner_issue_reset_code('<username>');");
+  s.check(count(`select count(*) from public.recovery_codes where user_id = ${q(yid)} and kind = 'reset' and used_at is null and expires_at > now()`) === 1, "one unused reset code, valid for an hour");
+  s.check(await signOutToLogin(s, yoav), "Yoav signs out and reaches the login screen");
+  const next = await recoverWithCode(s, yoav, { username: Y, code: reset, password: "Anotherpass99" });
+  s.check(!!next, "the same recovery screen accepts the reset code and shows a new recovery code");
+  s.check(count(`select count(*) from public.recovery_codes where user_id = ${q(yid)} and kind = 'reset'`) === 0, "the reset code is spent and gone");
+  await logInAs(s, yoav, { username: Y, password: "Anotherpass99" });
+  s.check(await yoav.waitVisible('[data-community-action="c-open-me"]', 25000), "he signs in with the new password");
+  // The reset code works once: a second try with it is refused.
+  await signOutToLogin(s, yoav);
+  await yoav.tap('[data-community-action="recovery-open"]');
+  await yoav.type('#communityRecover input[name="username"]', Y);
+  await yoav.type('#communityRecover input[name="code"]', reset);
+  await yoav.type('#communityRecover input[name="password"]', "Thirdpass1234");
+  await yoav.type('#communityRecover input[name="passwordConfirm"]', "Thirdpass1234");
+  await yoav.tap('#communityRecover button[type="submit"]');
+  s.check(await yoav.waitText("הפרטים לא תואמים", 10000), "the reset code cannot be used twice");
+});
 
 process.exit(await world.finish());

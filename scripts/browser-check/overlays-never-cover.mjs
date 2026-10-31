@@ -14,7 +14,7 @@
 // Local-only, against the in-page mock backend (lib/mockCloud.mjs).
 import { chromium } from "playwright";
 import { resolveLocalOnlyTarget } from "./lib/target.mjs";
-import { switchTab, consoleErrorCollector, dismissWelcomeModal, dismissFirstLogArrival, selectMovement } from "./lib/actions.mjs";
+import { switchTab, consoleErrorCollector, dismissWelcomeModal, dismissFirstLogArrival, selectMovement, passRecoveryCode } from "./lib/actions.mjs";
 import { installMockCloud } from "./lib/mockCloud.mjs";
 
 let failed = false;
@@ -187,6 +187,7 @@ const browser = await chromium.launch();
   const t = await hitTest(page, '#communityCredentials button[type="submit"]');
   check("account button: the centre of the button is the button", t.ok, `covered by ${t.by}`);
   await pressAtCentre(page, '#communityCredentials button[type="submit"]');
+  await passRecoveryCode(page).catch(() => {});
   await page.waitForSelector("#communityProfile", { timeout: 10000 }).then(
     () => check("account button: pressing there creates the account", true),
     () => check("account button: pressing there creates the account", false, "the profile step never came"));

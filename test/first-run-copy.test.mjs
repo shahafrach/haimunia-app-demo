@@ -84,9 +84,14 @@ test("the login screen says what to do when the password is gone", () => {
   assert.match(cloudJs, /const LOGIN_RECOVERY_NOTE = /, "the note exists");
   const at = cloudJs.indexOf("const LOGIN_RECOVERY_NOTE = ");
   const note = cloudJs.slice(at, cloudJs.indexOf("\n", at));
-  assert.match(note, /שכחתם את הסיסמה/, "it names the situation in the member's own words");
-  assert.match(note, /אי אפשר לאפס/, "and says plainly that there is no reset, rather than promising a person who can fix it");
-  assert.match(note, /הזמנה חדשה/, "and names the way back in");
+  // 2026-10-30: there IS a reset now, a recovery code the member holds
+  // (docs/circles/decisions.md, "Home and recovery"). The note offers it by name
+  // and says what to do without a code, instead of "no reset, join again".
+  assert.match(note, /שכחתי סיסמה/, "it names the situation in the member's own words, as the way in to the reset");
+  assert.match(note, /data-community-action="recovery-open"/, "and the control opens the recovery screen");
+  assert.match(note, /קוד שחזור/, "it says what the member needs");
+  assert.match(note, /קוד איפוס/, "and what to do when the code is lost");
+  assert.doesNotMatch(note, /אי אפשר לאפס/, "and no longer says there is no reset");
   // Rendered on the login screen itself, not filed under help somewhere.
   const login = cloudJs.slice(cloudJs.indexOf('<form id="communityLogin">'));
   assert.match(login.slice(0, 1200), /\$\{LOGIN_RECOVERY_NOTE\}/,
