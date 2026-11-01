@@ -81,6 +81,20 @@ function newDom(url, opts = {}) {
   });
   const { window } = dom;
 
+  // A test whose result depends on today's date passes `now` (an ISO string)
+  // and gets a window whose clock is fixed there for the whole boot, so the
+  // app's own start-up code (the Sunday week-card offer, the calendar's
+  // current month) sees the same day the test assumes. Without it two tests
+  // passed for months and failed on Sunday 2026-11-01, the first day of a
+  // month with no fixture data and a real Sunday at boot.
+  if (opts.now) {
+    const Real = window.Date;
+    const fixed = new Real(opts.now).getTime();
+    window.Date = class extends Real {
+      constructor(...a) { if (a.length) super(...a); else super(fixed); }
+      static now() { return fixed; }
+    };
+  }
   window.indexedDB = new FDBFactory();
   window.IDBKeyRange = FDBKeyRange;
   // A test about where the app runs (an in-app browser, iOS Safari) passes
