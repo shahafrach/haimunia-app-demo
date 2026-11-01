@@ -2426,6 +2426,7 @@
       const c = currentCircle();
       if (c) ensureSectionLoaded(c.id);
     }
+    if (state.user && !state.user.is_anonymous) loadRecoveryStatus();
     // Home shows the latest few posts of the circle the Circle tab opens on.
     if (window.haimuniaActiveTab === "home" && state.circles.loaded && state.profile && state.profile.recovery_verified_at) {
       const c = currentCircle();
@@ -2701,6 +2702,7 @@
         state.profileLoadError = false; state.redemptionLoadError = false;
         state.ui.fieldErrors = {}; state.ui.confirmDialog = null;
         state.ui.gateView = ""; state.ui.termSheet = null; state.ui.termGlossaryOpen = false;
+        state.ui.recovery.has = null; state.ui.recovery.statusTried = false;
         state.posts.held = [];
         state.posts.openMenu = null;
         state.posts.captionEdit = null; state.posts.prPrompt = null;

@@ -262,7 +262,7 @@ await world.step(yoav, "owner-reset-code", "Yoav lost his code; the owner issues
   s.check(!!next, "the same recovery screen accepts the reset code and shows a new recovery code");
   s.check(count(`select count(*) from public.recovery_codes where user_id = ${q(yid)} and kind = 'reset'`) === 0, "the reset code is spent and gone");
   await logInAs(s, yoav, { username: Y, password: "Anotherpass99" });
-  s.check(await yoav.waitVisible('[data-community-action="c-open-me"]', 25000), "he signs in with the new password");
+  s.check(await yoav.waitVisible("#communityHead", 25000), "he signs in with the new password");
   // The reset code works once: a second try with it is refused.
   await signOutToLogin(s, yoav);
   await yoav.tap('[data-community-action="recovery-open"]');

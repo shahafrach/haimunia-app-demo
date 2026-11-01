@@ -133,6 +133,19 @@ jobs:
             echo "--- $fn"
             (cd "$fn" && deno cache --frozen --lock=deno.lock index.ts)
           done
+      # TEMPORARY (removed in the next commit): esm.sh is not reachable from the
+      # author's sandbox, so the lockfiles of the two new functions are produced
+      # here. Per function: does the committed lock pass, and what lock does a fresh
+      # resolve write (base64, between LOCKBEGIN and LOCKEND).
+      - name: temporary - report each lock and print a fresh one
+        if: always()
+        run: |
+          for fn in supabase/functions/*/; do
+            [ -f "$fn/index.ts" ] || continue
+            name="$(basename "$fn")"
+            if (cd "$fn" && deno cache --frozen --lock=deno.lock index.ts >/dev/null 2>&1); then echo "LOCKCHECK $name ok"; else echo "LOCKCHECK $name FAILS"; fi
+            (cd "$fn" && rm -f /tmp/fresh.lock && deno cache --reload --lock=/tmp/fresh.lock index.ts >/dev/null 2>&1; echo "LOCKBEGIN $name"; base64 -w0 /tmp/fresh.lock; echo; echo "LOCKEND $name")
+          done
 
   # Every function in supabase/functions/ must exist on the live project.
   # Added after two of three sat undeployed for weeks: the nightly cron job
@@ -155,6 +168,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Full history so origin/main can be read: a function this branch adds is
+          # excused (it deploys on merge); one that is on main must be live.
+          fetch-depth: 0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22

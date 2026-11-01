@@ -191,7 +191,8 @@
   function recoveryPanelHtml() {
     const r = recoveryUi();
     if (!state.user || state.user.is_anonymous) return "";
-    loadRecoveryStatus();
+    // The status is asked for as soon as the session is up (afterRenderCommunity), not when
+    // Me opens, so opening Me never repaints under a tap.
     if (r.has == null) return "";
     const rotate = r.rotateOpen
       ? `<form id="communityRecoveryRotate" style="margin-top:10px;">${field("communityRecoveryRotate", "password", "הסיסמה שלכם, לאישור", `<input class="text-input" name="password" type="password" dir="ltr" autocomplete="current-password" placeholder="סיסמה" required/>`)}<div class="chip-row" style="margin-top:8px;"><button class="chip-btn primary" type="submit"${r.busy ? " disabled" : ""}>${r.has ? "יצירת קוד חדש" : "יצירת קוד שחזור"}</button><button class="chip-btn" type="button" data-community-action="recovery-rotate-cancel">ביטול</button></div></form>`

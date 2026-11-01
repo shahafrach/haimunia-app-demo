@@ -255,7 +255,7 @@ await world.step(dana, "recover-password", "Recover the password with the code s
   const loginUp = await dana.waitVisible("#communityLogin", 10000);
   s.check(loginUp, "and then the login screen");
   await logInAs(s, dana, { username: USER, password: NEW_PASSWORD });
-  s.check(await dana.waitVisible('[data-community-action="c-open-me"]', 25000), "the new password signs in (Home with the avatar)");
+  s.check(await dana.waitVisible("#communityHead", 25000), "the new password signs in (the signed-in header)");
   s.check(count(`select count(*) from public.recovery_attempts`) >= 1, "the attempt was counted");
   dana.recoveryCode = next;
 });
