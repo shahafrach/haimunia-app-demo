@@ -404,5 +404,8 @@ export async function recoverWithCode(s, p, { username, code, password }) {
 export async function logInAs(s, p, { username, password }) {
   await p.type('#communityLogin input[name="username"]', username);
   await p.type('#communityLogin input[name="password"]', password);
-  await p.tap('#communityLogin button[type="submit"]');
+  // Enter in the password field submits the form, as it does for a person on a keyboard. (A tap
+  // on the button was reported covered by the page scene in one run, and never fired.)
+  await p.page.press('#communityLogin input[name="password"]', "Enter");
+  p.cnt.taps++;
 }
