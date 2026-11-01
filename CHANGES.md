@@ -1,3 +1,11 @@
+## Home is yours, and passwords can be recovered — 2026-11-01
+
+Two branches merged since 5.0.1 (#139): #141, #142. App version **5.0.1 → 5.0.2**.
+One migration, applied on merge; two new Edge Functions, deployed on merge.
+
+- **Home and recovery (#141):** Home always shows the member's own training from the device, signed in or not, with or without a circle: this week's ring, weeks met, the last session with a one-tap log of the same lift, the latest PRs. Circles are a compact card on Home; the gate, feed and invites live on the Circle tab. Password recovery without email: a recovery code shown once after sign-up (and on request in Me), "שכחתי סיסמה" on the login screen with username, code and new password, rate-limited and with every session revoked on success. For a member who lost the code, the owner runs `select public.owner_issue_reset_code('username');` (docs/ops/PASSWORD_RESET.md). The HMAC secret was created by the `rotate-recovery-secret` workflow on 2026-11-01; nobody saw it.
+- **Pin test dates (#142):** three tests read the real clock and failed on Sunday 2026-11-01; they now pin their date.
+
 ## Founder link, auth config and user tests — 2026-10-30
 
 Three branches merged since the 5.0.0 consolidation (#135): #136, #137, #138. App
