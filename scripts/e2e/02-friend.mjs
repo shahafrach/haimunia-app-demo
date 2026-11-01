@@ -270,8 +270,13 @@ await world.step(yoav, "owner-reset-code", "Yoav lost his code; the owner issues
   await yoav.type('#communityRecover input[name="code"]', reset);
   await yoav.type('#communityRecover input[name="password"]', "Thirdpass1234");
   await yoav.type('#communityRecover input[name="passwordConfirm"]', "Thirdpass1234");
+  const before = yoav.reqs.filter((r) => r.path.includes("/functions/v1/recover-password")).length;
   await yoav.tap('#communityRecover button[type="submit"]');
-  s.check(await yoav.waitText("הפרטים לא תואמים", 10000), "the reset code cannot be used twice");
+  const refused = await yoav.waitText("הפרטים לא תואמים", 12000);
+  const sent = yoav.reqs.filter((r) => r.path.includes("/functions/v1/recover-password")).length - before;
+  const fields = await yoav.page.evaluate(() => Object.fromEntries([...document.querySelectorAll("#communityRecover input")].map((i) => [i.name, i.type === "password" ? i.value.length : i.value])));
+  s.note(`second use: request sent ${sent}x; fields ${JSON.stringify(fields)}; screen: ${(await yoav.text()).slice(0, 160)}`);
+  s.check(refused, "the reset code cannot be used twice", `requests ${sent}`);
 });
 
 process.exit(await world.finish());

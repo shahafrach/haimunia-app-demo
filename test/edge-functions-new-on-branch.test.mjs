@@ -6,15 +6,15 @@ const MAIN = ["supabase/functions/notif_push_send/index.ts", "supabase/functions
 const names = ["issue-recovery-code", "notif_push_send", "purge_abandoned_profiles", "recover-password"];
 
 test("on a branch, only functions absent from main are excused", () => {
-  const got = functionsNewOnBranch(names, { branch: "feature", run: () => MAIN });
+  const got = functionsNewOnBranch(names, { branch: "feature", baseRef: "main", run: () => MAIN });
   assert.deepEqual([...got].sort(), ["issue-recovery-code", "recover-password"]);
 });
 test("a function that is on main is never excused (it must be deployed)", () => {
-  const got = functionsNewOnBranch(names, { branch: "feature", run: () => MAIN });
+  const got = functionsNewOnBranch(names, { branch: "feature", baseRef: "main", run: () => MAIN });
   assert.ok(!got.has("notif_push_send") && !got.has("purge_abandoned_profiles"));
 });
 test("on main itself nothing is excused", () => {
-  assert.equal(functionsNewOnBranch(names, { branch: "main", run: () => MAIN }).size, 0);
+  assert.equal(functionsNewOnBranch(names, { branch: "main", baseRef: "", run: () => MAIN }).size, 0);
 });
 test("if main cannot be read, or lists no functions, nothing is excused", () => {
   assert.equal(functionsNewOnBranch(names, { branch: "x", run: () => { throw new Error("no ref"); } }).size, 0);
