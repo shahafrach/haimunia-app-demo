@@ -235,7 +235,9 @@ function sundayDate(window, iso) {
 test("the first open on a Sunday offers last week's card from the saved snapshot, once", async () => {
   const snaps = JSON.stringify({ [CIRCLE_A]: { "2026-10-25": S.snapshotRows(ROWS) } });
   const mock = createCirclesMock({ circles: [hideWeights] });
-  const window = await bootCircle(mock, { localStorage: { "haimunia-demo:weekSnapshots": snaps } });
+  // Booted on a Wednesday: on a real Sunday the boot itself would make the
+  // offer before the stubs are in place and consume it.
+  const window = await bootCircle(mock, { localStorage: { "haimunia-demo:weekSnapshots": snaps }, now: "2026-10-28T09:00:00Z" });
   const calls = stubCards(window);
   sundayDate(window, "2026-11-01T05:00:00Z"); // Sunday morning, Asia/Jerusalem
   await window.boxlogSharing.maybeOfferLastWeek();
@@ -254,14 +256,14 @@ test("the first open on a Sunday offers last week's card from the saved snapshot
 test("no offer on a weekday, and none when this device saw nothing of last week", async () => {
   const snaps = JSON.stringify({ [CIRCLE_A]: { "2026-10-25": S.snapshotRows(ROWS) } });
   const mock = createCirclesMock({ circles: [hideWeights] });
-  const window = await bootCircle(mock, { localStorage: { "haimunia-demo:weekSnapshots": snaps } });
+  const window = await bootCircle(mock, { localStorage: { "haimunia-demo:weekSnapshots": snaps }, now: "2026-10-28T09:00:00Z" });
   stubCards(window);
   sundayDate(window, "2026-11-03T05:00:00Z"); // Tuesday
   await window.boxlogSharing.maybeOfferLastWeek();
   await tick(50);
   assert.equal(window.document.querySelector("[data-week-offer]"), null);
   const mock2 = createCirclesMock({ circles: [hideWeights] });
-  const w2 = await bootCircle(mock2);
+  const w2 = await bootCircle(mock2, { now: "2026-10-28T09:00:00Z" });
   stubCards(w2);
   sundayDate(w2, "2026-11-01T05:00:00Z");
   await w2.boxlogSharing.maybeOfferLastWeek();

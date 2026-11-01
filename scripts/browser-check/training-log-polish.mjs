@@ -124,8 +124,15 @@ async function openFirstHistoryDetail(page) {
   await page.waitForTimeout(400);
 }
 
+// THE CLOCK IS PINNED to the middle of a month (here and in the page, via
+// page.clock below). The calendar opens on the current month and the sets are
+// logged 3 to 45 days back, so on the first days of a month every seeded day
+// fell in the previous one and "cells with and without dots" failed - found on
+// Sunday 2026-11-01. On the 15th, 3 and 10 days back stay in this month and
+// 20 and 45 fall in earlier ones, which is exactly the mix the check wants.
+const PINNED_NOW = new Date("2026-09-15T09:00:00+03:00");
 const isoDaysAgo = (n) => {
-  const d = new Date();
+  const d = new Date(PINNED_NOW);
   d.setDate(d.getDate() - n);
   return d.toISOString().slice(0, 10);
 };
@@ -149,6 +156,7 @@ console.log(`Viewport: ${VIEWPORT.width}x${VIEWPORT.height}`);
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: VIEWPORT, locale: "he-IL" });
+await page.clock.setFixedTime(PINNED_NOW);
 const errors = await consoleErrorCollector(page);
 await page.goto(target.url, { waitUntil: "networkidle" });
 
