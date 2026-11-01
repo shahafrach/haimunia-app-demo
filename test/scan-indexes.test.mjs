@@ -79,7 +79,9 @@ function backup() {
 }
 
 async function seeded() {
-  const window = await bootApp();
+  // Pinned inside the fixture range (2026-08-01 + 90 days): the calendar opens
+  // on the current month, and on a real date past the fixtures it had no dots.
+  const window = await bootApp({ now: "2026-09-15T09:00:00Z" });
   const raw = backup();
   const file = new window.File([raw], "box-log-backup.json", { type: "application/json" });
   await window.importDataFromFile(file);
