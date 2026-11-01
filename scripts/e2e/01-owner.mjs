@@ -11,7 +11,7 @@
 import { startWorld } from "./lib/harness.mjs";
 import {
   uname, until, bootstrapToken, passWelcome, clearIncidentals, goHome, goCircle, goLog,
-  openMe, section, fillCredentials, fillProfile, createCircle, logSet, acceptBackup, waitSynced, weekCards,
+  openMe, section, fillCredentials, signOutToLogin, recoverWithCode, logInAs, PASSWORD, fillProfile, createCircle, logSet, acceptBackup, waitSynced, weekCards,
   one, q, userId, count, sleep,
 } from "./lib/flows.mjs";
 
@@ -241,5 +241,30 @@ await world.step(dana, "notifications", "Turn on all four notification switches"
   s.check(count(`select count(*) from public.notification_preferences where user_id = ${q(uid)} and channel <> 'off'`) === 4, "four preference rows are stored");
   s.note("Message shown: " + ((await dana.text()).match(/כדי לקבל התראות[^.]*\./) || ["none"])[0]);
 }, { primary: ["input[data-notif-pref-toggle]"], contrast: ["#notifPrefs [data-notif-pref-row] span", "#notifPrefs > div"] });
+
+// 13. Forgot the password: sign out, recover with the code saved at sign-up, sign in with the new one ----------------------
+const NEW_PASSWORD = "Newpassw0rd77";
+await world.step(dana, "recover-password", "Recover the password with the code saved at sign-up", async (s) => {
+  const saved = dana.recoveryCode;
+  s.check(!!saved, "a recovery code was saved at sign-up");
+  s.check(count(`select count(*) from public.recovery_codes where user_id = ${q(uid)} and kind = 'recovery'`) === 1, "the server holds one recovery row");
+  s.check(!one(`select code_hmac from public.recovery_codes where user_id = ${q(uid)}`).includes(saved.replace(/-/g, "")), "and only an HMAC, not the code");
+  s.check(await signOutToLogin(s, dana), "Dana signs out and reaches the login screen");
+  const next = await recoverWithCode(s, dana, { username: USER, code: saved, password: NEW_PASSWORD });
+  s.check(!!next && next !== saved, "recovering shows a NEW code");
+  const loginUp = await dana.waitVisible("#communityLogin", 10000);
+  s.check(loginUp, "and then the login screen");
+  await logInAs(s, dana, { username: USER, password: NEW_PASSWORD });
+  s.check(await dana.waitVisible("#communityHead", 25000), "the new password signs in (the signed-in header)");
+  s.check(count(`select count(*) from public.recovery_attempts`) >= 1, "the attempt was counted");
+  dana.recoveryCode = next;
+});
+await world.step(dana, "old-password-and-code-dead", "The old password and the old code no longer work", async (s) => {
+  const old = one(`select code_hmac from public.recovery_codes where user_id = ${q(uid)} and kind = 'recovery'`);
+  s.check(!!old && /^[0-9a-f]{64}$/.test(old), "the stored value is a hex HMAC, rotated");
+  await signOutToLogin(s, dana);
+  await logInAs(s, dana, { username: USER, password: PASSWORD });
+  s.check(await dana.waitText("שם הכניסה או הסיסמה שגויים", 15000), "the old password is refused");
+});
 
 process.exit(await world.finish());

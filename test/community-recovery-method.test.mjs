@@ -11,7 +11,7 @@
 // when the current user has a credential pair on file.
 import { test } from "node:test";
 import assert from "node:assert";
-import { bootCommunity, waitFor, waitForCommunityGate, openCommunityLogin } from "./helpers/boot.mjs";
+import { bootCommunity, waitFor, waitForCommunityGate, openCommunityLogin, passRecoveryCode } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
 
 function submit(window, id) {
@@ -34,6 +34,7 @@ test("full signup stamps recovery_verified_at and lands the member in the commun
   window.document.querySelector('#communityCredentials input[name="password"]').value = "CorrectHorse9";
   window.document.querySelector('#communityCredentials input[name="passwordConfirm"]').value = "CorrectHorse9";
   submit(window, "communityCredentials");
+  await passRecoveryCode(window);
   await waitFor(() => !!window.document.getElementById("communityProfile"), 3000);
 
   window.document.querySelector('#communityProfile input[name="displayName"]').value = "dana";
@@ -79,6 +80,7 @@ test("a first-ever profile save whose automatic recovery verification fails show
   window.document.querySelector('#communityCredentials input[name="password"]').value = "CorrectHorse9";
   window.document.querySelector('#communityCredentials input[name="passwordConfirm"]').value = "CorrectHorse9";
   submit(window, "communityCredentials");
+  await passRecoveryCode(window);
   await waitFor(() => !!window.document.getElementById("communityProfile"), 3000);
 
   window.document.querySelector('#communityProfile input[name="displayName"]').value = "dana";

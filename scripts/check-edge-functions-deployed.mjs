@@ -31,6 +31,7 @@
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { functionsNewOnBranch } from "./edge-functions-new-on-branch.mjs";
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
@@ -59,6 +60,8 @@ if (names.length === 0) {
   process.exit(0);
 }
 
+// A function this branch adds cannot be deployed until it merges; every function already on main must be.
+const newHere = functionsNewOnBranch(names);
 console.log(`Checking ${names.length} Edge Function(s) against ${cfg.url} ...\n`);
 let missing = 0;
 let inconclusive = 0;
@@ -77,7 +80,9 @@ for (const name of names) {
     inconclusive++;
     continue;
   }
-  if (res.status === 404) {
+  if (res.status === 404 && newHere.has(name)) {
+    console.log(`  +  ${name} — new on this branch (not on main), deployed by the merge`);
+  } else if (res.status === 404) {
     console.log(`  ✗  ${name} — 404 NOT DEPLOYED`);
     missing++;
   } else if (res.status === 401 || res.status === 403) {

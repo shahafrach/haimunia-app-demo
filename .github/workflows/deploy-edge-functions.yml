@@ -63,7 +63,7 @@ on:
         required: true
         default: all
         type: choice
-        options: [all, purge_abandoned_profiles, notif_push_send]
+        options: [all, purge_abandoned_profiles, notif_push_send, issue-recovery-code, recover-password]
 permissions:
   contents: read
 concurrency:

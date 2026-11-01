@@ -11,7 +11,7 @@
 // real project.
 import { chromium } from "playwright";
 import { resolveLocalOnlyTarget } from "./lib/target.mjs";
-import { consoleErrorCollector, dismissWelcomeModal } from "./lib/actions.mjs";
+import { consoleErrorCollector, dismissWelcomeModal, passRecoveryCode } from "./lib/actions.mjs";
 import { installMockCloud } from "./lib/mockCloud.mjs";
 
 let failed = false;
@@ -169,6 +169,7 @@ const browser = await chromium.launch();
   await page.fill('#communityCredentials input[name="password"]', "Abcdefgh12");
   await page.fill('#communityCredentials input[name="passwordConfirm"]', "Abcdefgh12");
   await page.click('#communityCredentials button[type="submit"]');
+  await passRecoveryCode(page);
   await page.waitForSelector("#communityProfile", { timeout: 10000 });
   await page.fill('#communityProfile input[name="displayName"]', "נועה לוי");
   await page.click('#communityProfile [data-community-action="c-emoji-pick"][data-emoji="🦁"]');

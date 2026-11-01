@@ -88,5 +88,13 @@ enabled = true
 policy = "oneshot"
 inspector_port = 8083
 
+# recover-password is called by a member who has lost their password, so there
+# is no session to check; the browser sends only the publishable key, which is
+# not a JWT. The function decides everything itself (rate limit, constant-time
+# compare, one generic failure). issue-recovery-code keeps the gateway check:
+# the caller has a real session.
+[functions.recover-password]
+verify_jwt = false
+
 [analytics]
 enabled = false

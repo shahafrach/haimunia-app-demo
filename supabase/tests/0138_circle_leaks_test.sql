@@ -70,6 +70,8 @@ insert into public.circle_invites (club_id, token_hash, created_by, expires_at) 
 insert into public.edge_function_invocations (request_id, slug) values (987654321, 'leak_probe');
 insert into public.invite_attempts (user_id, actor_key_hash) values (tests.uid('m3'), repeat('d', 64));
 insert into public.invite_codes (code_hash, role, active, max_uses) values (repeat('b', 64), 'member', true, 5);
+insert into public.recovery_codes (user_id, kind, code_hmac) values (tests.uid('m3'), 'recovery', repeat('r', 64));
+insert into public.recovery_attempts (key_hash) values (repeat('q', 64));
 insert into public.invites (club_id, code_hash, role) values ('b0000000-0000-4000-8000-00000000000b', repeat('f', 64), 'member');
 insert into public.job_health_state (id) values (true) on conflict do nothing;
 insert into public.member_achievements (user_id, achievement_id) select tests.uid('m3'), id from public.achievement_definitions where code = 'leak_probe';
@@ -97,6 +99,8 @@ select cmp_ok((select count(*) from public.clubs where id = 'b0000000-0000-4000-
 select cmp_ok((select count(*) from public.edge_function_invocations where slug = 'leak_probe'), '>', 0::bigint, 'edge_function_invocations: the victim row exists');
 select cmp_ok((select count(*) from public.invite_attempts where user_id = tests.uid('m3')), '>', 0::bigint, 'invite_attempts: the victim row exists');
 select cmp_ok((select count(*) from public.invite_codes where code_hash = repeat('b', 64)), '>', 0::bigint, 'invite_codes: the victim row exists');
+select cmp_ok((select count(*) from public.recovery_codes where user_id = tests.uid('m3')), '>', 0::bigint, 'recovery_codes: the victim row exists');
+select cmp_ok((select count(*) from public.recovery_attempts where key_hash = repeat('q', 64)), '>', 0::bigint, 'recovery_attempts: the victim row exists');
 select cmp_ok((select count(*) from public.invite_redemptions where user_id = tests.uid('m3')), '>', 0::bigint, 'invite_redemptions: the victim row exists');
 select cmp_ok((select count(*) from public.invites where club_id = 'b0000000-0000-4000-8000-00000000000b'), '>', 0::bigint, 'invites: the victim row exists');
 select cmp_ok((select count(*) from public.job_health_state where true), '>', 0::bigint, 'job_health_state: the victim row exists');
@@ -207,6 +211,20 @@ select is(tests.leak_count('invite_codes', 'code_hash = repeat(''b'', 64)'), 0::
 select is(tests.leak_dml('update public.invite_codes set active = active where code_hash = repeat(''b'', 64)'), 0, 'invite_codes: update touches zero rows of circle B');
 select is(tests.leak_dml('delete from public.invite_codes where code_hash = repeat(''b'', 64)'), 0, 'invite_codes: delete removes zero rows of circle B');
 select is(tests.leak_dml('insert into public.invite_codes (code_hash, role, active, max_uses) values (repeat(''c'', 64), ''member'', true, 5)'), 0, 'invite_codes: insert into circle B is refused');
+
+-- recovery_codes (no client grant at all: every probe is refused)
+select tests.set_auth(tests.uid('m1'));
+select is(tests.leak_count('recovery_codes', 'user_id = tests.uid(''m3'')'), 0::bigint, 'recovery_codes: select sees zero rows of circle B');
+select is(tests.leak_dml('update public.recovery_codes set kind = kind where user_id = tests.uid(''m3'')'), 0, 'recovery_codes: update touches zero rows of circle B');
+select is(tests.leak_dml('delete from public.recovery_codes where user_id = tests.uid(''m3'')'), 0, 'recovery_codes: delete removes zero rows of circle B');
+select is(tests.leak_dml('insert into public.recovery_codes (user_id, kind, code_hmac) values (tests.uid(''m1''), ''recovery'', repeat(''s'', 64))'), 0, 'recovery_codes: insert is refused');
+
+-- recovery_attempts
+select tests.set_auth(tests.uid('m1'));
+select is(tests.leak_count('recovery_attempts', 'key_hash = repeat(''q'', 64)'), 0::bigint, 'recovery_attempts: select sees zero rows of circle B');
+select is(tests.leak_dml('update public.recovery_attempts set key_hash = key_hash where key_hash = repeat(''q'', 64)'), 0, 'recovery_attempts: update touches zero rows of circle B');
+select is(tests.leak_dml('delete from public.recovery_attempts where key_hash = repeat(''q'', 64)'), 0, 'recovery_attempts: delete removes zero rows of circle B');
+select is(tests.leak_dml('insert into public.recovery_attempts (key_hash) values (repeat(''t'', 64))'), 0, 'recovery_attempts: insert is refused');
 
 -- invite_redemptions
 select tests.set_auth(tests.uid('m1'));
@@ -347,6 +365,8 @@ select cmp_ok((select count(*) from public.private_records where user_id = tests
 select cmp_ok((select count(*) from public.profiles where id = tests.uid('m3')), '>', 0::bigint, 'profiles: the victim rows survived');
 select cmp_ok((select count(*) from public.push_subscriptions where user_id = tests.uid('m3')), '>', 0::bigint, 'push_subscriptions: the victim rows survived');
 select cmp_ok((select count(*) from public.rate_limits where user_id = tests.uid('m3')), '>', 0::bigint, 'rate_limits: the victim rows survived');
+select cmp_ok((select count(*) from public.recovery_codes where user_id = tests.uid('m3')), '>', 0::bigint, 'recovery_codes: the victim rows survived');
+select cmp_ok((select count(*) from public.recovery_attempts where key_hash = repeat('q', 64)), '>', 0::bigint, 'recovery_attempts: the victim rows survived');
 select cmp_ok((select count(*) from public.reactions where post_id = 'b1000000-0000-4000-8000-000000000001'), '>', 0::bigint, 'reactions: the victim rows survived');
 select cmp_ok((select count(*) from public.request_idempotency where user_id = tests.uid('m3')), '>', 0::bigint, 'request_idempotency: the victim rows survived');
 select cmp_ok((select count(*) from public.workout_posts where club_id = 'b0000000-0000-4000-8000-00000000000b'), '>', 0::bigint, 'workout_posts: the victim rows survived');
@@ -355,7 +375,7 @@ select cmp_ok((select count(*) from public.workout_posts where club_id = 'b00000
 select is_empty(
   $$ select c.relname::text from pg_class c
       where c.relnamespace = 'public'::regnamespace and c.relkind in ('r', 'p')
-        and c.relname not in ('account_deletion_requests', 'achievement_definitions', 'analytics_events', 'blocks', 'bug_reports', 'benchmark_results', 'circle_invites', 'circle_members', 'clubs', 'edge_function_invocations', 'invite_attempts', 'invite_codes', 'invite_redemptions', 'invites', 'job_health_state', 'member_achievements', 'member_targets', 'notification_batches', 'notification_preferences', 'notifications', 'post_training_partners', 'private_records', 'profiles', 'push_subscriptions', 'rate_limits', 'reactions', 'request_idempotency', 'workout_posts') $$,
+        and c.relname not in ('account_deletion_requests', 'achievement_definitions', 'analytics_events', 'blocks', 'bug_reports', 'benchmark_results', 'circle_invites', 'circle_members', 'clubs', 'edge_function_invocations', 'invite_attempts', 'invite_codes', 'invite_redemptions', 'invites', 'job_health_state', 'member_achievements', 'member_targets', 'notification_batches', 'notification_preferences', 'notifications', 'post_training_partners', 'private_records', 'profiles', 'push_subscriptions', 'rate_limits', 'reactions', 'recovery_attempts', 'recovery_codes', 'request_idempotency', 'workout_posts') $$,
   'this file covers every table in public: a new table must be added here');
 
 select * from finish();

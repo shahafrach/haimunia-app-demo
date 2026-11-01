@@ -63,6 +63,9 @@ ${uiToastHtml()}${renderOutboxBanner()}${inner}</div></section>`;
   // profile and a circle before they have anything to show.
   function renderCircleGate(opts) {
     if (!configured) return gateNotConfigured();
+    // A recovery code on screen (after sign-up, after a recovery, after "קוד שחזור חדש")
+    // comes before everything: it is shown once and must be saved before anything else.
+    if (recoveryShowing()) return recoveryShowHtml();
     // An invite opened inside WhatsApp, Instagram or Facebook: steps to open it in the real browser.
     const inApp = sharingInAppGateHtml();
     if (inApp && !state.circles.list.length) return inApp;
@@ -80,6 +83,7 @@ ${uiToastHtml()}${renderOutboxBanner()}${inner}</div></section>`;
             <button class="gate-alt" data-community-action="show-login">התחברות</button>
           </div>${uiMessageHtml()}`);
       }
+      if (!state.signupStarted && state.ui.recovery.view === "form") return recoveryFormHtml();
       if (!state.signupStarted && state.ui.gateView !== "login") {
         return gateCard(`<div style="font-weight:800;font-size:20px;margin-bottom:8px;">המעגלים שלך</div>
           <div style="color:var(--color-text);font-size:15px;line-height:1.5;margin-bottom:12px;">${bidiText("מעגל הוא קבוצה קטנה של חברים או זוג, שרואים זה את האימונים, השיאים והשבוע של זה.")}</div>
@@ -198,59 +202,138 @@ ${uiToastHtml()}${renderOutboxBanner()}${inner}</div></section>`;
   }
 
   // ---- Home ---------------------------------------------------------------------------
-  function myTargetCardHtml() {
+  //
+  // Home is about me, Circle is about us (docs/circles/decisions.md, "Home and
+  // recovery"). Everything on Home except the last card comes from the private log on
+  // this device, so it draws the same for someone signed out, signed in with no circle,
+  // and signed in with circles. The circle gate, feed, week and invites are the Circle
+  // tab's: Home never calls renderCircleGate.
+  function homeSignedIn() {
+    return !!(state.user && !state.user.is_anonymous && state.profile && String(state.profile.display_name || "").trim());
+  }
+  function homeCard(inner, attrs) { return `<div class="chart-card" ${attrs || ""} style="margin-bottom:12px;">${inner}</div>`; }
+
+  // This week against the personal weekly target, as the ring. With no target set the
+  // ring uses the default of 3 (weeklyTargetForRing in app.js) and says so.
+  function myTargetCardHtml(sum) {
     const mine = state.circles.mine;
+    const signedIn = homeSignedIn();
     const days = typeof window.communityTrainingDays === "function" ? window.communityTrainingDays() : [];
     const done = CirclesCore.daysThisWeek(days, CirclesCore.jerusalemDay(new Date()));
-    if (isPausedNow()) {
-      return `<div class="chart-card" style="margin-bottom:12px;"><div style="font-weight:800;font-size:15px;">השבוע שלי</div><div style="color:var(--color-text-muted);font-size:13px;margin-top:4px;">${esc("את/ה בהפסקה עד " + shortHebDate(mine.pausedUntil) + ". המעגל רואה \"בהפסקה\" ולא אחוז.")}</div></div>`;
-    }
-    if (!mine.target) {
-      return `<div class="chart-card" style="margin-bottom:12px;"><div style="font-weight:800;font-size:15px;">השבוע שלי</div><div style="color:var(--color-text-muted);font-size:13px;margin-top:4px;line-height:1.6;">${bidiText("עוד לא קבעת יעד שבועי. עם יעד, המעגל רואה כמה אחוז מהיעד שלך עשית, בלי מספרים מוחלטים.")}</div><button class="chip-btn" data-community-action="c-open-me" style="margin-top:8px;">קביעת יעד</button></div>`;
+    if (signedIn && isPausedNow()) {
+      return homeCard(`<div style="font-weight:800;font-size:15px;">השבוע שלי</div><div style="color:var(--color-text-muted);font-size:13px;margin-top:4px;">${esc("את/ה בהפסקה עד " + shortHebDate(mine.pausedUntil) + ". המעגל רואה \"בהפסקה\" ולא אחוז.")}</div>`);
     }
     // The ring says what is smaller: what is done early in the week, what is left
     // late in it, and "target met" once it is. Same wording as the screen after a workout.
-    const pct = Math.round((100 * done) / mine.target);
-    const copy = window.BoxLogProgress.ringCopy(done, mine.target);
+    const target = sum.target;
+    const own = !!(mine && mine.target);
+    const pct = Math.round((100 * done) / target);
+    const copy = window.BoxLogProgress.ringCopy(done, target);
     const C = 326.73;
-    return `<div class="chart-card" data-week-ring="${esc(copy.framing)}" style="margin-bottom:12px;"><div class="week-card">
+    const weeks = sum.weeksMet === 1 ? "שבוע אחד ביעד" : sum.weeksMet + " שבועות ביעד";
+    const setTarget = signedIn
+      ? (own ? "" : `<button class="chip-btn" data-community-action="c-open-me" style="margin-top:8px;">קביעת יעד</button>`)
+      : "";
+    const note = own ? "" : `<div style="color:var(--color-text-muted);font-size:12px;margin-top:4px;">יעד ברירת מחדל: ${target} בשבוע.</div>`;
+    return homeCard(`<div class="week-card">
       <div class="week-ring" role="img" aria-label="${esc(copy.title + ", " + copy.sub + ", " + pct + "% מהיעד")}">
         <svg viewBox="0 0 120 120" aria-hidden="true"><circle class="ring-track" cx="60" cy="60" r="52" stroke-width="12"/><circle class="ring-fill" cx="60" cy="60" r="52" stroke-width="12" stroke-dasharray="${C}" stroke-dashoffset="${(C * (1 - copy.fraction)).toFixed(2)}"/></svg>
         <div class="week-ring-label"><span class="big num">${esc(copy.big)}</span><span class="small">${esc(copy.small)}</span></div>
       </div>
       <div style="min-width:0;"><div style="font-weight:800;font-size:15px;">השבוע שלי</div>
         <div style="font-weight:800;margin-top:4px;">${esc(copy.title)}</div>
-        <div style="color:var(--color-text-muted);font-size:12.5px;margin-top:2px;">${esc(done + " מתוך " + mine.target + " אימונים השבוע")}</div>
-        <div class="mono" style="color:var(--color-accent);font-weight:800;margin-top:6px;"><bdi>${pct}%</bdi> <span style="font-weight:600;color:var(--color-text-muted);">מהיעד</span></div></div>
-    </div></div>`;
+        <div style="color:var(--color-text-muted);font-size:12.5px;margin-top:2px;">${esc(done + " מתוך " + target + " אימונים השבוע")}</div>
+        <div class="mono" style="color:var(--color-accent);font-weight:800;margin-top:6px;"><bdi>${pct}%</bdi> <span style="font-weight:600;color:var(--color-text-muted);">מהיעד</span></div>
+        <div data-weeks-met="${sum.weeksMet}" style="color:var(--color-text-muted);font-size:12.5px;margin-top:4px;">${esc(weeks)}</div>${note}${setTarget}</div>
+    </div>`, `data-week-ring="${esc(copy.framing)}"`);
   }
-  // The way back into logging, and the member's latest PR. Both come from app.js.
-  function homeLogCtaHtml() {
-    const sum = typeof window.homeSummary === "function" ? window.homeSummary() : null;
-    if (!sum) return "";
+
+  // The last session, with one tap to log the same lift again (the Log tab, prefilled).
+  function homeLastSessionHtml(sum) {
+    if (!sum.last) return "";
+    return homeCard(`<div class="flex" style="justify-content:space-between;align-items:center;gap:10px;">
+      <div style="min-width:0;"><div style="color:var(--color-text-muted);font-size:12px;">האימון האחרון${sum.last.date ? " · " + esc(shortHebDate(sum.last.date)) : ""}</div>
+        <div style="font-weight:800;margin-top:2px;">${bidiText(sum.last.name)}</div>
+        <div style="color:var(--color-text-muted);font-size:13px;">${bidiText(sum.last.text)}</div></div>
+      <button class="chip-btn primary" data-action="log-same-lift" data-id="${esc(sum.last.id)}" style="flex-shrink:0;">לרשום שוב</button></div>`, 'data-last-session="1"');
+  }
+
+  // The latest PRs with the percent improvement, from the log on this device.
+  function homePrsHtml(sum) {
+    if (!sum.prs.length) return "";
+    const star = `<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="m12 2 3 7 7 .6-5.3 4.7 1.6 7.2L12 17.8 5.7 21.5l1.6-7.2L2 9.6 9 9z"/></svg>`;
+    return `<div class="ach-section" data-home-prs="1" style="margin-top:6px;">${sectionHead("var(--color-accent)", "השיאים האחרונים")}<div class="log-list">${sum.prs.map((p) => `<div class="log-row home-pr-row" data-last-pr="1" style="justify-content:space-between;gap:10px;">
+        <span style="display:flex;align-items:center;gap:10px;min-width:0;"><span class="pr-badge" aria-hidden="true">${star}<span>שיא</span></span><span style="min-width:0;"><span style="font-weight:800;display:block;">${bidiText(p.name)}</span><span style="color:var(--color-text-muted);font-size:12.5px;">${esc(p.text)}</span></span></span>
+        <span class="mono" style="color:var(--color-accent);font-weight:800;"><bdi class="num">+${esc(String(p.pct))}%</bdi></span></div>`).join("")}</div></div>`;
+  }
+
+  // The way back into logging.
+  function homeLogCtaHtml(sum) {
     const sub = sum.last ? `הפעם האחרונה: ${sum.last.name}, ${sum.last.text}` : "בוחרים תרגיל ורושמים סט";
-    const cta = `<button class="home-log-cta" data-action="switch-tab" data-tab="add"><span><span class="home-log-cta-title">${sum.last ? "רישום סט" : "רישום האימון הראשון"}</span><span class="home-log-cta-sub" style="display:block;">${bidiText(sub)}</span></span>
+    return `<button class="home-log-cta" data-action="switch-tab" data-tab="add"><span><span class="home-log-cta-title">${sum.last ? "רישום סט" : "רישום האימון הראשון"}</span><span class="home-log-cta-sub" style="display:block;">${bidiText(sub)}</span></span>
       <span class="tab-log-disc" aria-hidden="true" style="display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:999px;background:var(--btn-primary-bg);color:var(--btn-primary-fg);flex-shrink:0;">${typeof ICONS !== "undefined" ? ICONS.logIcon : "+"}</span></button>`;
-    const pr = sum.pr ? `<div class="home-last-pr" data-last-pr="1"><span class="pr-badge" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="m12 2 3 7 7 .6-5.3 4.7 1.6 7.2L12 17.8 5.7 21.5l1.6-7.2L2 9.6 9 9z"/></svg><span>שיא</span></span>
-      <span style="min-width:0;"><span style="font-weight:800;display:block;">${bidiText(sum.pr.name)}</span><span style="color:var(--color-text-muted);font-size:12.5px;">${esc(sum.pr.text)} · <bdi class="num">+${esc(String(sum.pr.pct))}%</bdi></span></span></div>` : "";
-    return cta + pr;
   }
-  function renderHomeScreen() {
-    const gate = renderCircleGate();
-    if (gate) return circleScene("home", "בית", gate);
-    const p = state.profile || {};
-    const header = `<div class="chart-card" id="communityHead" style="margin-bottom:12px;"><div class="flex" style="justify-content:space-between;align-items:center;gap:10px;">
-      <div style="display:flex;align-items:center;gap:10px;min-width:0;">
-        <button class="avatar-badge" data-community-action="c-open-me" aria-label="הפרופיל וההגדרות שלי" style="width:44px;height:44px;font-size:22px;background:var(--color-surface);border:1px solid var(--color-border);">${esc(p.emoji || "🙂")}</button>
-        <div style="min-width:0;"><div style="color:var(--color-text-muted);font-size:12px;">שלום</div><div style="font-weight:800;font-size:16px;">${bidiText(p.display_name || "")}</div></div>
-      </div>${renderNotificationBell()}</div></div>`;
-    const circlesList = state.circles.list.map((c) => `<button class="log-row" data-community-action="c-open-circle" data-id="${esc(c.id)}" style="width:100%;text-align:inherit;">
+
+  // First run: nothing logged yet.
+  function homeFirstRunHtml() {
+    return homeCard(`<div style="font-weight:800;font-size:18px;margin-bottom:6px;">מתחילים כאן</div>
+      <div style="color:var(--color-text);font-size:14px;line-height:1.7;">${bidiText("בוחרים תרגיל, רושמים סט אחד, ושומרים. השבוע, השיאים והשבועות ביעד יופיעו כאן. הכול נשאר במכשיר שלך, בלי חשבון.")}</div>`, 'data-home-first-run="1"');
+  }
+
+  // The recent posts on Home: the circle the Circle tab opens on, three at most.
+  function homeRecentPostsHtml() {
+    const c = currentCircle();
+    const f = c && state.circles.feed[c.id];
+    if (!f || !f.loaded) return "";
+    const posts = CirclesCore.feedOrder(f.rows).slice(0, 3).map((r) => CirclesCore.feedPost(r));
+    if (!posts.length) return `<div style="color:var(--color-text-muted);font-size:12.5px;margin-top:8px;" data-home-empty-posts="1">עוד אין פוסטים במעגלים.</div>`;
+    return `<div class="log-list" data-home-posts="1" style="margin-top:8px;">${posts.map((p) => {
+      const what = String(p.title || p.result_text || p.body || "").trim();
+      return `<div class="log-row" style="gap:8px;justify-content:flex-start;min-width:0;"><span aria-hidden="true">${esc(p.author.emoji || "🙂")}</span><span style="min-width:0;"><span style="font-weight:700;">${bidiText(p.author.display_name || "חבר/ה")}</span>${what ? ` <span style="color:var(--color-text-muted);font-size:13px;">${bidiText(what.length > 80 ? what.slice(0, 80) + "…" : what)}</span>` : ""}</span></div>`;
+    }).join("")}</div>`;
+  }
+
+  // Circles on Home: one compact card. The full gate, feed, week and invites are on the
+  // Circle tab.
+  function homeCirclesCardHtml() {
+    if (!configured) return "";
+    const list = state.circles.list;
+    const head = sectionHead("var(--color-accent)", "המעגלים שלי");
+    if (homeSignedIn() && list.length) {
+      const rows = list.map((c) => `<button class="log-row" data-community-action="c-open-circle" data-id="${esc(c.id)}" style="width:100%;text-align:inherit;">
         <span style="display:flex;gap:10px;align-items:center;min-width:0;"><span aria-hidden="true" style="font-size:22px;">${esc(c.emoji)}</span><span style="min-width:0;"><span style="font-weight:700;">${bidiText(c.name)}</span><span style="display:block;color:var(--color-text-muted);font-size:12px;">${esc(c.type === "couple" ? "זוג" : "חברים")}${c.role === "owner" && c.type !== "couple" ? " · בעלות" : ""}</span></span></span>
         <span style="color:var(--color-text-muted);transform:scaleX(-1);display:inline-flex;" aria-hidden="true">${ICONS_CHEVRON()}</span></button>`).join("");
-    const inner = header + pendingTagsHtml() + myTargetCardHtml() + homeLogCtaHtml()
-      + `<div class="ach-section" style="margin-top:6px;">${sectionHead("var(--color-accent)", "המעגלים שלי")}<div class="log-list">${circlesList}</div>
+      return `<div class="ach-section" data-home-circles="list" style="margin-top:6px;">${head}<div class="log-list">${rows}</div>${homeRecentPostsHtml()}
         <div class="chip-row" style="margin-top:10px;"><button class="chip-btn" data-community-action="c-create-open">יצירת מעגל</button><button class="chip-btn" data-community-action="c-join-open">הצטרפות עם קישור</button></div></div>`;
-    return circleScene("home", "בית", inner);
+    }
+    // No account, or no circle yet: one line and the two doors. Signed out, both go to
+    // the Circle tab, which has the sign-up and login screens; signed in, they open the
+    // create and join sheets right here.
+    const here = homeSignedIn();
+    const create = here ? `data-community-action="c-create-open"` : `data-action="switch-tab" data-tab="community"`;
+    const join = here ? `data-community-action="c-join-open"` : `data-action="switch-tab" data-tab="community"`;
+    const line = here ? "עוד אין לך מעגל. אפשר ליצור אחד או להצטרף עם קישור." : "מעגל הוא קבוצה קטנה של חברים שרואים זה את האימונים של זה.";
+    return `<div class="ach-section" data-home-circles="none" style="margin-top:6px;">${head}<div style="color:var(--color-text-muted);font-size:13.5px;line-height:1.6;">${bidiText(line)}</div>
+      <div class="chip-row" style="margin-top:10px;"><button class="chip-btn" ${create}>יצירת מעגל</button><button class="chip-btn" ${join}>הצטרפות עם קישור</button></div></div>`;
+  }
+
+  function renderHomeScreen() {
+    const sum = typeof window.homeSummary === "function" ? window.homeSummary() : null;
+    const signedIn = homeSignedIn();
+    const p = state.profile || {};
+    const who = signedIn ? bidiText(p.display_name || "") : "";
+    const avatar = signedIn
+      ? `<button class="avatar-badge" data-community-action="c-open-me" aria-label="הפרופיל וההגדרות שלי" style="width:44px;height:44px;font-size:22px;background:var(--color-surface);border:1px solid var(--color-border);">${esc(p.emoji || "🙂")}</button>`
+      : `<span class="avatar-badge" aria-hidden="true" style="width:44px;height:44px;font-size:22px;background:var(--color-surface);border:1px solid var(--color-border);">🙂</span>`;
+    const header = `<div class="chart-card"${signedIn ? ' id="communityHead"' : ' data-home-head="1"'} style="margin-bottom:12px;"><div class="flex" style="justify-content:space-between;align-items:center;gap:10px;">
+      <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+        ${avatar}
+        <div style="min-width:0;"><div style="color:var(--color-text-muted);font-size:12px;">שלום</div><div style="font-weight:800;font-size:16px;">${who || "וברוכים הבאים"}</div></div>
+      </div>${signedIn ? renderNotificationBell() : ""}</div></div>`;
+    const own = !sum ? `<div class="empty">טוען…</div>`
+      : !sum.hasData ? homeFirstRunHtml() + myTargetCardHtml(sum) + homeLogCtaHtml(sum)
+      : myTargetCardHtml(sum) + homeLastSessionHtml(sum) + homeLogCtaHtml(sum) + homePrsHtml(sum);
+    return circleScene("home", "בית", header + (signedIn ? pendingTagsHtml() : "") + own + homeCirclesCardHtml());
   }
   function ICONS_CHEVRON() { return typeof ICONS !== "undefined" && ICONS.chevron ? ICONS.chevron : "›"; }
 
@@ -447,6 +530,7 @@ ${uiToastHtml()}${renderOutboxBanner()}${inner}</div></section>`;
     const inner = head + profile + `<div class="chip-row" style="margin:-4px 0 8px;"><button class="chip-btn" type="button" data-community-action="migrate">סנכרון היסטוריה פרטית</button></div>`
       + `<div class="ach-section" style="margin-top:18px;">${sectionHead("var(--color-accent)", "מראה")}<div class="chart-card">${typeof renderAppearanceSection === "function" ? renderAppearanceSection("me") : ""}</div></div>`
       + targetAndPauseHtml() + shareSettingsHtml() + renderMyAchievements() + renderSharePromptPrefPanel() + renderBlockedMembersPanel() + renderNotifPrefsPanel() + termMarkPanel
+      + recoveryPanelHtml()
       + founderLinkPanelHtml()
       + `<button class="chip-btn" data-action="open-support" style="display:block;margin:20px auto 0;">פנייה</button>`
       + selfExportButtonHtml("display:block;margin:20px auto 0;")

@@ -11,7 +11,7 @@
 // gates, real async auth handlers.
 import { test } from "node:test";
 import assert from "node:assert";
-import { bootCommunity, waitFor, waitForCommunityGate, openCommunityLogin, seedAdminStepUp, unlockAdminPanel } from "./helpers/boot.mjs";
+import { bootCommunity, waitFor, waitForCommunityGate, openCommunityLogin, seedAdminStepUp, unlockAdminPanel, passRecoveryCode } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
 
 test("a queued local edit reaches the mock server before a stale remote copy would be pulled back - the exact scenario the sync-ordering bug corrupted", async () => {
@@ -64,6 +64,7 @@ test("full signup lifecycle executes for real: bootstrap -> redeem code -> set c
   window.document.querySelector('#communityCredentials input[name="password"]').value = "CorrectHorse9";
   window.document.querySelector('#communityCredentials input[name="passwordConfirm"]').value = "CorrectHorse9";
   window.document.getElementById("communityCredentials").dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
+  await passRecoveryCode(window);
   await waitFor(() => !!window.document.getElementById("communityProfile"), 3000);
 
   window.document.querySelector('#communityProfile input[name="displayName"]').value = "dana";

@@ -7,6 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import { createCirclesMock, bootCommunity, waitFor, tick, click, membership, club, ME, CIRCLE_A, CIRCLE_B, TOKEN } from "./helpers/circles.mjs";
+import { passRecoveryCode } from "./helpers/boot.mjs";
 
 const text = (w) => w.document.getElementById("content").textContent;
 const has = (w, s) => text(w).includes(s);
@@ -72,6 +73,7 @@ test("a visitor with a link joins as an anonymous session, then upgrades to a us
   form.elements.password.value = "Abcdefgh12";
   form.elements.passwordConfirm.value = "Abcdefgh12";
   form.dispatchEvent(new window.Event("submit", { cancelable: true, bubbles: true }));
+  await passRecoveryCode(window);
   // Then a name and an emoji, and nothing else.
   await waitFor(() => !!window.document.querySelector("#communityProfile"), 4000);
   const profile = window.document.getElementById("communityProfile");

@@ -272,6 +272,21 @@ export async function waitForCommunityGate(window) {
     '#content [data-community-action="start-signup"], #content #communityLogin'), 4000);
   return window.document.getElementById("content");
 }
+/**
+ * Every sign-up ends in a recovery code shown once, and the next step waits for the
+ * "שמרתי" checkbox. Returns the code. Call it after the credentials form is submitted.
+ */
+export async function passRecoveryCode(window) {
+  await waitFor(() => !!window.document.querySelector("[data-recovery-code]"), 4000);
+  const code = window.document.querySelector("[data-recovery-code]").textContent.trim();
+  const box = window.document.querySelector("[data-recovery-saved]");
+  box.checked = true;
+  box.dispatchEvent(new window.Event("change", { bubbles: true }));
+  await waitFor(() => !window.document.querySelector('[data-community-action="recovery-continue"]').disabled, 2000);
+  window.document.querySelector('[data-community-action="recovery-continue"]').click();
+  await waitFor(() => !window.document.querySelector("[data-recovery-code]"), 2000);
+  return code;
+}
 export async function openCommunityLogin(window) {
   await waitForCommunityGate(window);
   const btn = window.document.querySelector('#content [data-community-action="show-login"]');

@@ -69,6 +69,28 @@ jobs:
       - name: start the local stack (applies every migration)
         run: supabase start
 
+      # issue-recovery-code and recover-password run in the local Edge Runtime with a
+      # key made on the runner for this job only (never printed, never a repo secret).
+      - name: serve the recovery Edge Functions
+        run: |
+          set +x
+          umask 077
+          ENV_FILE="$RUNNER_TEMP/fn.env"
+          printf 'RECOVERY_CODE_HMAC_SECRET=%s\n' "$(openssl rand -hex 32)" > "$ENV_FILE"
+          # The local Edge runtime (Deno 2.1.4) is served a different esm.sh build of
+          # auth-js than the Deno that wrote the lockfiles, so it fails their integrity
+          # check. The lockfiles are verified by edge-function-lockfiles and by the deploy
+          # workflow; here, in this throwaway checkout, the runtime resolves fresh.
+          rm -f supabase/functions/*/deno.lock
+          nohup supabase functions serve --env-file "$ENV_FILE" > "$RUNNER_TEMP/functions.log" 2>&1 &
+          for i in $(seq 1 60); do
+            code="$(curl -s -o /dev/null -w '%{http_code}' -X OPTIONS "http://127.0.0.1:54321/functions/v1/recover-password" || true)"
+            [ "$code" = "204" ] && break
+            sleep 2
+          done
+          echo "recover-password answered OPTIONS with $code"
+          [ "$code" = "204" ] || { tail -n 30 "$RUNNER_TEMP/functions.log"; exit 1; }
+
       - name: read the local stack's address and key
         run: |
           supabase status -o env > "$RUNNER_TEMP/stack.env"
