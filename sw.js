@@ -70,6 +70,7 @@ const OPTIONAL_ASSETS = [
   "./src/share-cards.js",
   "./src/community/auth.js",
   "./src/community/recovery.js",
+  "./src/community/mfa.js",
   "./cloud.js",
   "./src/eventbus.js",
   "./src/analytics.js",
