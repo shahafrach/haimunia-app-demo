@@ -8,7 +8,7 @@
     "https://esm.sh/whatwg-url@^5.0.0?target=denonext": "https://esm.sh/whatwg-url@5.0.0?target=denonext"
   },
   "remote": {
-    "https://esm.sh/@supabase/auth-js@2.71.1/denonext/auth-js.mjs": "d55f67342e652b8bdce35b0ff13ad5cc294b7e96dbd68f859b464b07c6864967",
+    "https://esm.sh/@supabase/auth-js@2.71.1/denonext/auth-js.mjs": "a92d005e4a8a03063aa2c46d7d69161fa776ce1bacccc43daa70e28fe367068e",
     "https://esm.sh/@supabase/functions-js@2.4.6/denonext/functions-js.mjs": "d6cc049a0430f428ff0b71a0d3c48d45a243ddd48c68febcdb5cb8a02476a1dc",
     "https://esm.sh/@supabase/node-fetch@2.6.15/denonext/node-fetch.mjs": "0bae9052231f4f6dbccc7234d05ea96923dbf967be12f402764580b6bf9f713d",
     "https://esm.sh/@supabase/node-fetch@2.6.15?target=denonext": "4d28c4ad97328403184353f68434f2b6973971507919e9150297413664919cf3",
