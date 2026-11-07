@@ -1,3 +1,11 @@
+## Weekly target per circle — 2026-11-07
+
+One branch merged since 5.0.2 (#144): #145. App version **5.0.2 → 5.0.3**. One
+migration, applied by the Supabase GitHub integration on merge.
+
+- **Weekly target is per circle (#145):** a target is set for each circle in Me, and each circle sees a percent of the target set for it. New table `circle_targets` (mine only, removed with the membership); the pause stays one for all circles. Existing targets were copied to every circle the member is in, so no percent changed on the day. Home's ring uses the current circle's target. Closes audit question O16.
+- **Cleanup (#145):** the self-export download uses the shared `downloadBackup()` instead of its own copy; the unused `README1.md` is gone.
+
 ## Home is yours, and passwords can be recovered — 2026-11-01
 
 Two branches merged since 5.0.1 (#139): #141, #142. App version **5.0.1 → 5.0.2**.
