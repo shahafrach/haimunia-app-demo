@@ -31,7 +31,7 @@ const club = { id: A, name: "החבר'ה", type: "friends", emoji: "🔥", mode:
 const seed = () => ({
   profiles: [{ id: ME, handle: "member_me", display_name: "אני", emoji: "💪", recovery_verified_at: VERIFIED }],
   circle_members: [{ club_id: A, user_id: ME, role: "owner", joined_at: "2026-10-01T00:00:00Z", share_defaults: {}, clubs: club }],
-  member_targets: [{ user_id: ME, weekly_target: 3, paused_until: null }], post_training_partners: [], workout_posts: [], benchmark_results: [], blocks: [], reactions: [],
+  member_targets: [{ user_id: ME, paused_until: null }], circle_targets: [{ club_id: A, user_id: ME, weekly_target: 3 }], post_training_partners: [], workout_posts: [], benchmark_results: [], blocks: [], reactions: [],
   notifications: [], notification_preferences: [], analytics_events: [],
 });
 function rpcs() {

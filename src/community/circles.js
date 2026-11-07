@@ -478,21 +478,28 @@
   // ---- The member's own target and pause (Me) ---------------------------------
   async function loadMyTarget() {
     if (!client || !state.user) return;
-    const { data, error } = await client.from("member_targets").select("weekly_target,paused_until").eq("user_id", state.user.id).maybeSingle();
-    if (error) return;
-    state.circles.mine.target = data ? Number(data.weekly_target) : null;
-    state.circles.mine.pausedUntil = data && data.paused_until ? String(data.paused_until) : null;
+    // The target is per circle; the pause is one per person.
+    const [t, p] = await Promise.all([
+      client.from("circle_targets").select("club_id,weekly_target").eq("user_id", state.user.id),
+      client.from("member_targets").select("paused_until").eq("user_id", state.user.id).maybeSingle(),
+    ]);
+    if (t.error || p.error) return;
+    const targets = {};
+    (t.data || []).forEach((r) => { targets[String(r.club_id)] = Number(r.weekly_target); });
+    state.circles.mine.targets = targets;
+    state.circles.mine.pausedUntil = p.data && p.data.paused_until ? String(p.data.paused_until) : null;
     state.circles.mine.loaded = true;
     rerender();
   }
-  async function saveWeeklyTarget(value) {
+  async function saveWeeklyTarget(clubId, value) {
     const n = Math.floor(Number(value));
-    if (!client || !state.user || !isFinite(n) || n < 1 || n > 21) return;
-    const before = state.circles.mine.target;
-    state.circles.mine.target = n;
+    if (!client || !state.user || !circleById(clubId) || !isFinite(n) || n < 1 || n > 21) return;
+    const targets = state.circles.mine.targets;
+    const before = targets[clubId];
+    targets[clubId] = n;
     rerender();
-    const { error } = await client.rpc("set_weekly_target", { p_target: n });
-    if (error) { state.circles.mine.target = before; rerender(); return setMessage(CIRCLES.circleErrorText(error, "שמירת היעד נכשלה")); }
+    const { error } = await client.rpc("set_weekly_target", { p_club_id: clubId, p_target: n });
+    if (error) { if (before == null) delete targets[clubId]; else targets[clubId] = before; rerender(); return setMessage(CIRCLES.circleErrorText(error, "שמירת היעד נכשלה")); }
     setMessage("היעד השבועי נשמר");
     clearWeekCache();
   }
@@ -889,7 +896,7 @@
     const c = state.circles;
     c.loaded = false; c.loading = false; c.loadError = false; c.list = []; c.currentId = "";
     c.section = "feed"; c.members = {}; c.feed = {}; c.week = {}; c.benchmark = {};
-    c.mine = { target: null, pausedUntil: null, loaded: false };
+    c.mine = { targets: {}, pausedUntil: null, loaded: false };
     c.pendingTags = []; c.sheet = null; c.shareBar = null; c.busy = {};
     c.join.busy = false; c.join.error = "";
   }

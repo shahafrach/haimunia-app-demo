@@ -94,8 +94,8 @@ select is(public.notif_pref_allows(tests.uid('m1'), 'week_card'), true, 'a row t
 -- Israel is UTC+2 that week, so Saturday 21:30 local is 19:30Z.
 insert into public.notification_preferences (user_id, type, channel) values
   (tests.uid('m3'), 'week_card', 'push');
-insert into public.member_targets (user_id, weekly_target, paused_until) values
-  (tests.uid('m1'), 3, '2026-12-01');
+insert into public.member_targets (user_id, paused_until) values
+  (tests.uid('m1'), '2026-12-01');
 insert into public.workout_posts (id, author_id, club_id, post_type, title, status, published_at, occurred_on) values
   ('d0000000-0000-4000-8000-000000000002', tests.uid('m3'), 'a0000000-0000-4000-8000-00000000000a', 'POST_WORKOUT', 'M3 workout', 'active', '2026-10-27T08:00:00Z', '2026-10-27');
 -- m1 turned the card on too, but is paused.

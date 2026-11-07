@@ -48,9 +48,12 @@ select is((select extract(dow from ws)::int from wk), 0, 'fixture: the week star
 -- week (one of them on the Saturday just before the boundary). A text post and a
 -- soft-deleted workout do not count. m2 target 2, paused. m3 no target, hides
 -- their count. norec has nothing.
-insert into public.member_targets (user_id, weekly_target, paused_until) values
-  (tests.uid('m1'), 3, null),
-  (tests.uid('m2'), 2, (select today + 5 from wk));
+insert into public.member_targets (user_id, paused_until) values
+  (tests.uid('m1'), null),
+  (tests.uid('m2'), (select today + 5 from wk));
+insert into public.circle_targets (club_id, user_id, weekly_target) values
+  ('a0000000-0000-4000-8000-00000000000a', tests.uid('m1'), 3),
+  ('a0000000-0000-4000-8000-00000000000a', tests.uid('m2'), 2);
 update public.circle_members set share_defaults = '{"share_weekly_count": false}'
  where club_id = 'a0000000-0000-4000-8000-00000000000a' and user_id = tests.uid('m3');
 

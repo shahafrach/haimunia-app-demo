@@ -88,7 +88,7 @@ test("the weekly target and the pause live in Me and go to set_weekly_target and
   select.value = "4";
   select.dispatchEvent(new window.Event("change", { bubbles: true }));
   await waitFor(() => mock.callsTo("set_weekly_target").length === 1, 4000);
-  assert.deepEqual(mock.callsTo("set_weekly_target")[0], { p_target: 4 });
+  assert.deepEqual(mock.callsTo("set_weekly_target")[0], { p_club_id: select.dataset.circle, p_target: 4 });
   click(window, '[data-community-action="c-pause"][data-days="14"]');
   await waitFor(() => mock.callsTo("set_pause").length === 1, 4000);
   const until = mock.callsTo("set_pause")[0].p_until;

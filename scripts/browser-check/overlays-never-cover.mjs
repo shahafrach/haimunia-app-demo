@@ -38,7 +38,7 @@ function seed(over) {
   return Object.assign({
     profiles: [{ id: ME, handle: "member_me", display_name: "אני", emoji: "💪", recovery_verified_at: VERIFIED }],
     circle_members: [{ club_id: c.id, user_id: ME, role: "owner", joined_at: "2026-10-01T00:00:00Z", share_defaults: {}, clubs: c }],
-    member_targets: [], post_training_partners: [], workout_posts: [], benchmark_results: [], blocks: [], reactions: [],
+    member_targets: [], circle_targets: [], post_training_partners: [], workout_posts: [], benchmark_results: [], blocks: [], reactions: [],
     notifications: [], notification_preferences: [], analytics_events: [],
   }, over || {});
 }

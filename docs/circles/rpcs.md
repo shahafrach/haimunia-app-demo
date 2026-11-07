@@ -19,7 +19,7 @@ stated; `join_circle` returns a status instead of raising, on purpose.
 | `redeem_invite_code(p_code, p_actor_key)` → text | any signed-in user | spends a bootstrap code or a founder link (both are `invite_codes` rows); grants the right to create circles and no circle access |
 | `create_founder_invite()` → text | a signed-up member with a profile (not an anonymous session) | the full URL `https://box-log.pages.dev/#invite=<64 hex>`, **once**; one use, 7 days, only the sha256 stored, the sender not recorded; 3 per member per day, then `rate_limited`; errors `not authorized`, `rate_limited` (P0001) |
 | `set_share_defaults(p_club_id, p_defaults jsonb)` | member | merged; keys `share_workouts share_prs share_percent share_weekly_count show_weights`, booleans |
-| `set_weekly_target(p_target)` / `set_pause(p_until date)` | member | 1 to 21; pause up to 180 days, null resumes; a pause with no target creates target 3 |
+| `set_weekly_target(p_club_id, p_target)` / `set_pause(p_until date)` | circle member / member | target per circle, 1 to 21; one pause per person, up to 180 days, null resumes; a pause creates no target |
 | `post_create(p_club_id, body, p_idempotency_key)` | member | text post; one call per circle |
 | `pr_share(p_club_id, record_id, note, p_weight, p_idempotency_key)` | member | send `p_weight` **only** if the member chose to show weights; otherwise the post carries the lift and `+x.x%` |
 | `ach_share(p_club_id, member_achievement_id, caption, p_idempotency_key)` | member | |

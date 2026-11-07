@@ -261,7 +261,7 @@
     circles: {
       loaded: false, loading: false, loadError: false, list: [], currentId: "", section: "feed",
       members: {}, feed: {}, week: {}, benchmark: {},
-      mine: { target: null, pausedUntil: null, loaded: false },
+      mine: { targets: {}, pausedUntil: null, loaded: false },
       pendingTags: [], sheet: null, shareBar: null,
       // The sharing pipeline's one sheet: install steps, or last week's card.
       sharingSheet: null,

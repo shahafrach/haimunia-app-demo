@@ -37,6 +37,7 @@ export function createCirclesMock(opts = {}) {
     { id: FRIEND, handle: "dana_k", display_name: "דנה", emoji: "🦁", recovery_verified_at: "2026-10-01T00:00:00Z" },
   ];
   mock.db.member_targets = opts.targets || [];
+  mock.db.circle_targets = opts.circleTargets || [];
   mock.db.post_training_partners = opts.tags || [];
   mock.db.workout_posts = opts.posts || [];
   mock.db.benchmark_results = opts.benchmarkResults || [];
