@@ -265,9 +265,9 @@ select is(tests.leak_dml('insert into public.member_targets (user_id) values (te
 
 -- circle_targets
 select is(tests.leak_count('circle_targets', 'club_id = ''b0000000-0000-4000-8000-00000000000b'''), 0::bigint, 'circle_targets: select sees zero rows of circle B');
-select is(tests.leak_dml('update public.circle_targets set weekly_target = 1 where club_id = 'b0000000-0000-4000-8000-00000000000b''), 0, 'circle_targets: update touches zero rows of circle B');
-select is(tests.leak_dml('delete from public.circle_targets where club_id = 'b0000000-0000-4000-8000-00000000000b''), 0, 'circle_targets: delete removes zero rows of circle B');
-select is(tests.leak_dml('insert into public.circle_targets (club_id, user_id, weekly_target) values ('b0000000-0000-4000-8000-00000000000b', tests.uid(''m1''), 2)'), 0, 'circle_targets: insert into circle B is refused');
+select is(tests.leak_dml('update public.circle_targets set weekly_target = 1 where club_id = ''b0000000-0000-4000-8000-00000000000b'''), 0, 'circle_targets: update touches zero rows of circle B');
+select is(tests.leak_dml('delete from public.circle_targets where club_id = ''b0000000-0000-4000-8000-00000000000b'''), 0, 'circle_targets: delete removes zero rows of circle B');
+select is(tests.leak_dml('insert into public.circle_targets (club_id, user_id, weekly_target) values (''b0000000-0000-4000-8000-00000000000b'', tests.uid(''m1''), 2)'), 0, 'circle_targets: insert into circle B is refused');
 
 -- notification_batches
 select tests.set_auth(tests.uid('m1'));
