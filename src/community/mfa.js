@@ -56,7 +56,13 @@
     const m = mfaUi();
     if (m.statusTried || !client || !state.user || state.user.is_anonymous || m.challenge) return;
     m.statusTried = true;
-    try { m.has = (await mfaVerifiedFactorId()) !== null; } catch (e) { m.statusTried = false; return; }
+    // The local assurance level, not listFactors(): that one asks the server who the user is, and for a
+    // session the server already ended (after a password recovery) it signs the app out under the member.
+    try {
+      const { data, error } = await client.auth.mfa.getAuthenticatorAssuranceLevel();
+      if (error || !data) { m.statusTried = false; return; }
+      m.has = data.nextLevel === "aal2";
+    } catch (e) { m.statusTried = false; return; }
     rerender();
   }
 
