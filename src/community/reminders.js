@@ -13,7 +13,8 @@
 // from the shared scope, from inside function bodies only.
 
   const REMINDER_DAY_SHORT = ["א׳", "ב׳", "ג׳", "ד׳", "ה׳", "ו׳", "ש׳"];
-  const REMINDER_DAY_LONG = ["יום ראשון", "יום שני", "יום שלישי", "יום רביעי", "יום חמישי", "יום שישי", "שבת"];
+  // The spoken name contains the visible letter (WCAG 2.5.3, label in name): "יום א׳", the usual Hebrew for Sunday.
+  const REMINDER_DAY_NAME = ["יום א׳", "יום ב׳", "יום ג׳", "יום ד׳", "יום ה׳", "יום ו׳", "יום ש׳ (שבת)"];
   const REMINDER_MINUTES = [0, 15, 30, 45];
   /** One entry per scheduled reminder: its notification type and its columns in reminder_prefs. */
   const REMINDER_KINDS = {
@@ -82,7 +83,7 @@
     const busy = reminderState().saving ? " disabled" : "";
     const dayLabel = k.multi ? "ימים" : "יום";
     const chips = REMINDER_DAY_SHORT.map((s, d) =>
-      `<button type="button" class="chip-btn" data-community-action="reminder-day" data-kind="${kind}" data-day="${d}" aria-pressed="${days.includes(d)}" aria-label="${esc(REMINDER_DAY_LONG[d])}" style="min-width:44px;min-height:44px;"${busy}>${s}</button>`).join("");
+      `<button type="button" class="chip-btn" data-community-action="reminder-day" data-kind="${kind}" data-day="${d}" aria-pressed="${days.includes(d)}" aria-label="${esc(REMINDER_DAY_NAME[d])}" style="min-width:44px;min-height:44px;"${busy}>${s}</button>`).join("");
     const hours = Array.from({ length: 24 }, (_, h) => `<option value="${h}"${h === hour ? " selected" : ""}>${String(h).padStart(2, "0")}</option>`).join("");
     const mins = REMINDER_MINUTES.map((m) => `<option value="${m}"${m === minute ? " selected" : ""}>${String(m).padStart(2, "0")}</option>`).join("");
     const none = k.multi && !days.length ? `<div role="status" style="color:var(--color-text-muted);font-size:12px;margin-top:6px;">בחרו לפחות יום אחד, אחרת לא תגיע תזכורת.</div>` : "";

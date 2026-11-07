@@ -79,3 +79,25 @@ reach backups only through the already-encrypted dump. Home's scheme keeps the k
 not protect against the one party that can read the table, while adding a real risk: a lost key or a bug makes a member's
 whole backup unreadable on restore. Revisit if a health-type field is ever added (the rule forbids it today) or if the
 backup is ever exposed to someone besides the owner.
+
+## 5. Accessibility
+
+**Home's standards** (`audit/UX-AUDIT.md`, `docs/SYSTEM.md`): axe clean at WCAG 2.2 AA; real pixel contrast on every style and mode;
+44 px controls (switch rows are the tap target); `aria-invalid` + `aria-describedby` on every field, errors linked; named
+tiles; dialog pattern (Esc, focus return); `data-reduce-motion` and `prefers-reduced-motion` collapse motion to zero.
+
+**BOX-LOG already met most of it** (axe scan on 5 screens, token contrast tests for 6 palettes, a global reduced-motion
+rule, logical RTL properties). Gap: none of it was measured on the account screens or in a real browser per palette, and the
+touch-target rule was not measured at all. New check `scripts/browser-check/a11y-screens-palettes.mjs` (run by `run-all`) measures,
+at 320 px: sign-up explainer, login, forgot password, two-step code gate and its recovery form, Me (security panel, enrolment,
+confirm forms, both schedules) and Progress with the weekly summary, for 44 px targets, axe serious/critical, colour contrast in
+all 6 palettes (classic default + chalk, slate, cedar, sand, iris) in light and dark, tab order, sideways scroll, and endless
+animation under reduced motion.
+
+**Fixed (all found by that check):**
+- every `label.log-row` (switch or checkbox row) is now at least 44 px (share settings, share prompt);
+- `.link-btn` 36 → 44 px (e.g. "+ הוספת מדד חדש"); the Progress search input 26 → 44 px;
+- day chips in the new schedules: spoken name now contains the visible letter (WCAG 2.5.3), 44 px chips;
+- header logo in classic/light is a known **axe false positive** (white text over a dark photo; checked on a screenshot), excluded in the check only.
+
+Result: 60 of 60 checks pass. Not measured: iOS Safari/VoiceOver and Android TalkBack by hand (no device here), 200 % text zoom.
