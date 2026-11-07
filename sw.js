@@ -71,6 +71,7 @@ const OPTIONAL_ASSETS = [
   "./src/community/auth.js",
   "./src/community/recovery.js",
   "./src/community/mfa.js",
+  "./src/community/reminders.js",
   "./cloud.js",
   "./src/eventbus.js",
   "./src/analytics.js",
@@ -233,7 +234,9 @@ self.addEventListener("notificationclick", (e) => {
       // comment below) — app.js reads ?notif= at boot and hands it to the
       // community layer once its session is ready.
       if (self.clients.openWindow) {
-        return self.clients.openWindow("./index.html?tab=community&notif=" + encodeURIComponent(deepLink));
+        // A personal reminder or the weekly summary opens a core tab; everything else opens a circle.
+        const own = /^\/tab\/(add|history)$/.exec(deepLink);
+        return self.clients.openWindow(own ? "./index.html?tab=" + own[1] : "./index.html?tab=community&notif=" + encodeURIComponent(deepLink));
       }
     })()
   );

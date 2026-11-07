@@ -473,7 +473,7 @@ test("the default is ON: a member who set nothing is offered push, behind a swit
   const push = stubPushApis(window);
   await openAccount(window);
 
-  assert.equal(notifPrefValue(window, "reaction"), "off");
+  assert.equal(notifPrefValue(window, "week_card"), "off");
   assert.equal(window.document.querySelector("[data-notif-push-reason]"), null, "nothing stands in the way of push on a capable, installed browser");
   assert.equal(push.calls.requestPermission, 0, "and nobody has been asked anything");
 });

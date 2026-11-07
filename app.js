@@ -296,6 +296,8 @@ function renderNavRows(withIds, onlyOther) {
 // Exposed so cloud.js can correct the top-level tab before it re-renders (a
 // push-notification or deep-link tap can fire while another tab is up).
 window.switchToCommunityTopTab = function () { tab = "community"; };
+// A tapped reminder or weekly-summary push opens a core tab (notifications.js, sw.js).
+window.haimuniaOpenTab = function (name) { if (VALID_TABS.includes(name)) { tab = name; render(); window.scrollTo(0, 0); } };
 function renderNavSettingsRow() {
   // Fresh-eyes audit: on the desktop sidebar (renderDesktopSidebar below)
   // this section header renders in the same persistent column as
