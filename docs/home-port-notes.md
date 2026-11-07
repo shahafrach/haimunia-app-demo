@@ -52,3 +52,30 @@ automated reader in Home.
 **Added:** `read_at` and `tag` (migration `202611080003`), and the reader: the manual **feedback-inbox** workflow
 (`scripts/feedback-inbox.mjs`) that prints unread reports (no reporter id, no device facts) and optionally marks exactly
 those read. How to ask a session to use it: [feedback-inbox.md](feedback-inbox.md).
+
+## 4. Encryption at rest
+
+**Home:** voucher codes only. AES-256-GCM in the browser (`src/lib/voucherCrypto.ts`), stored as
+`enc:v1:<key ref>:<iv>:<ciphertext>`; the key (one per user or household) lives in Supabase Vault and is fetched once per
+session through an RPC, held in memory only; the device cache keeps the plain code; old plain rows still read; migration
+pattern is "new values are written encrypted, old ones are re-encrypted on next sync".
+
+**BOX-LOG audit of what is stored server-side** (every table in `supabase/migrations`):
+
+| Data | Where | Verdict |
+|---|---|---|
+| Body weight | device only; `private_records` CHECK forbids the type (202610280001) | stays on device, untouched |
+| Passwords | Supabase Auth (bcrypt) | not ours to encrypt |
+| Recovery codes, reset codes | HMAC-SHA256 only (`recovery_codes`) | already one-way, better than encryption |
+| Email / phone / health columns | none exist, by rule | nothing to encrypt |
+| Push endpoint + keys | `push_subscriptions` | server needs them in the clear to send; encrypting with a server-held key adds nothing |
+| Training log backup (`private_records`: sets, WODs, custom moves, measurements, notes) | owner-only RLS, no circle ever sees it | see below |
+| Bug report text | `bug_reports`, no client grant | member-written, staff-read by design |
+| DB dumps | `backup-database.yml` | already encrypted with `BACKUP_PASSPHRASE` |
+
+**Decision: skip.** The only candidates are user-defined body measurements (waist, chest) and free-text session notes in the
+private backup. They are disclosed in `PRIVACY.md`, readable only by their owner under RLS, disk-encrypted by Supabase, and
+reach backups only through the already-encrypted dump. Home's scheme keeps the key in the same Supabase project, so it would
+not protect against the one party that can read the table, while adding a real risk: a lost key or a bug makes a member's
+whole backup unreadable on restore. Revisit if a health-type field is ever added (the rule forbids it today) or if the
+backup is ever exposed to someone besides the owner.
