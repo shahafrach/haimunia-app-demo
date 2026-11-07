@@ -53,7 +53,6 @@ on:
       - 'CLAUDE.md'
       - 'CLAUDE_CODE_PROMPT.md'
       - 'COMMUNITY_SETUP.md'
-      - 'README1.md'
       - '2026-*.md'
   pull_request:
     # The same list as the push trigger above, repeated because GitHub Actions
@@ -72,7 +71,6 @@ on:
       - 'CLAUDE.md'
       - 'CLAUDE_CODE_PROMPT.md'
       - 'COMMUNITY_SETUP.md'
-      - 'README1.md'
       - '2026-*.md'
 permissions:
   contents: read

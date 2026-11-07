@@ -302,19 +302,22 @@ select tests.clear_auth();
 select is((select count(*)::int from public.circle_members where club_id = 'b0000000-0000-4000-8000-00000000000b' and share_defaults ->> 'show_weights' = 'true'), 0, 'and B''s rows are unchanged');
 
 select tests.set_auth(tests.uid('m1'));
-select lives_ok($$ select public.set_weekly_target(4) $$, 'a weekly target is set');
-select throws_ok($$ select public.set_weekly_target(0) $$, 'P0001', 'target must be between 1 and 21', 'zero is refused');
-select throws_ok($$ select public.set_weekly_target(22) $$, 'P0001', 'target must be between 1 and 21', 'and 22');
+select lives_ok($$ select public.set_weekly_target('a0000000-0000-4000-8000-00000000000a', 4) $$, 'a weekly target is set');
+select throws_ok($$ select public.set_weekly_target('a0000000-0000-4000-8000-00000000000a', 0) $$, 'P0001', 'target must be between 1 and 21', 'zero is refused');
+select throws_ok($$ select public.set_weekly_target('a0000000-0000-4000-8000-00000000000a', 22) $$, 'P0001', 'target must be between 1 and 21', 'and 22');
 select lives_ok($$ select public.set_pause(current_date + 7) $$, 'a pause is set');
 select throws_ok($$ select public.set_pause(current_date - 3) $$, 'P0001', 'pause must end within the next 180 days', 'a pause in the past is refused');
 select tests.clear_auth();
-select is((select weekly_target::int from public.member_targets where user_id = tests.uid('m1')), 4, 'the target is stored');
+select is((select weekly_target::int from public.circle_targets where club_id = 'a0000000-0000-4000-8000-00000000000a' and user_id = tests.uid('m1')), 4, 'the target is stored');
 select is((select paused_until is not null from public.member_targets where user_id = tests.uid('m1')), true, 'and the pause');
-select is((select count(*)::int from public.member_targets where user_id <> tests.uid('m1')), 0, 'neither call wrote anyone else''s row');
+select is((select count(*)::int from public.member_targets where user_id <> tests.uid('m1')) + (select count(*)::int from public.circle_targets where user_id <> tests.uid('m1')), 0, 'neither call wrote anyone else''s row');
+select tests.set_auth(tests.uid('m1'));
+select throws_ok($$ select public.set_weekly_target('b0000000-0000-4000-8000-00000000000b', 3) $$, 'P0001', 'not authorized', 'CROSS-CIRCLE: a member of A cannot set a target in B');
+select tests.clear_auth();
 select tests.set_auth(tests.uid('m1'));
 select lives_ok($$ select public.set_pause(null) $$, 'a pause is cleared with null');
 select tests.set_auth('eeeeeeee-0000-4000-8000-0000000000e5');
-select throws_ok($$ select public.set_weekly_target(3) $$, 'P0001', 'not authorized', 'a user in no circle has no target to set');
+select throws_ok($$ select public.set_weekly_target('a0000000-0000-4000-8000-00000000000a', 3) $$, 'P0001', 'not authorized', 'a user in no circle has no target to set');
 
 -- =====================================================================
 -- 6. leave_circle and remove_member

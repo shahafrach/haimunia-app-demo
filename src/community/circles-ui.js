@@ -226,7 +226,7 @@ ${uiToastHtml()}${renderOutboxBanner()}${inner}</div></section>`;
     // The ring says what is smaller: what is done early in the week, what is left
     // late in it, and "target met" once it is. Same wording as the screen after a workout.
     const target = sum.target;
-    const own = !!(mine && mine.target);
+    const own = window.communityWeeklyTarget() > 0;
     const pct = Math.round((100 * done) / target);
     const copy = window.BoxLogProgress.ringCopy(done, target);
     const C = 326.73;
@@ -493,12 +493,16 @@ ${uiToastHtml()}${renderOutboxBanner()}${inner}</div></section>`;
   function targetAndPauseHtml() {
     if (!state.circles.list.length) return "";
     const mine = state.circles.mine;
-    const opts = [];
-    for (let n = 1; n <= 21; n++) opts.push(`<option value="${n}"${mine.target === n ? " selected" : ""}>${n}</option>`);
+    const targetField = (c) => {
+      const cur = mine.targets[c.id] || 0;
+      const opts = [];
+      for (let n = 1; n <= 21; n++) opts.push(`<option value="${n}"${cur === n ? " selected" : ""}>${n}</option>`);
+      return `<label class="field"><span class="field-label"><span aria-hidden="true">${esc(c.emoji)}</span> ${bidiText(c.name)}: כמה אימונים בשבוע</span><select class="text-input" data-weekly-target="1" data-circle="${esc(c.id)}" aria-label="${esc("יעד שבועי ב" + c.name)}"><option value=""${cur ? "" : " selected"}>עוד לא נקבע</option>${opts.join("")}</select></label>`;
+    };
     const paused = isPausedNow();
     return `<div class="ach-section" id="circleTargetPanel" style="margin-top:18px;">${sectionHead("var(--color-accent)", "יעד שבועי והפסקה")}
-      <label class="field"><span class="field-label">כמה אימונים בשבוע</span><select class="text-input" data-weekly-target="1" aria-label="יעד שבועי"><option value=""${mine.target ? "" : " selected"}>עוד לא נקבע</option>${opts.join("")}</select></label>
-      <div class="footer-note" style="margin:6px 0 10px;">כל אימון נספר. המעגל רואה כמה אחוז מהיעד שלכם עשיתם. שבוע שלא עמדתם בו לא מאפס כלום.</div>
+      ${state.circles.list.map(targetField).join("")}
+      <div class="footer-note" style="margin:6px 0 10px;">כל אימון נספר. כל מעגל רואה כמה אחוז מהיעד שלו עשיתם. שבוע שלא עמדתם בו לא מאפס כלום. ההפסקה אחת לכל המעגלים.</div>
       ${paused
         ? `<div style="font-size:13px;margin-bottom:8px;">${esc("את/ה בהפסקה עד " + shortHebDate(mine.pausedUntil) + ". המעגל רואה \"בהפסקה\".")}</div><button class="chip-btn primary" data-community-action="c-pause" data-days="0">חזרה מהפסקה</button>`
         : `<div class="field-label" style="margin-bottom:4px;">הפסקה (נפגעתי, חופשה)</div><div class="chip-row"><button class="chip-btn" data-community-action="c-pause" data-days="7">שבוע</button><button class="chip-btn" data-community-action="c-pause" data-days="14">שבועיים</button><button class="chip-btn" data-community-action="c-pause" data-days="30">חודש</button></div>`}
@@ -544,6 +548,8 @@ ${uiToastHtml()}${renderOutboxBanner()}${inner}</div></section>`;
   window.renderMeApp = function () { resetTermMarkBudget(); return renderMeScreen(); };
   /** The member's weekly target in a circle, or 0 when none is set. The ring on Home and after a workout reads it. */
   window.communityWeeklyTarget = function () {
-    const t = state && state.circles && state.circles.mine ? state.circles.mine.target : 0;
+    const c = state && state.circles;
+    const cur = c && c.mine && c.mine.targets ? currentCircle() : null;
+    const t = cur ? c.mine.targets[cur.id] : 0;
     return typeof t === "number" && t > 0 ? t : 0;
   };

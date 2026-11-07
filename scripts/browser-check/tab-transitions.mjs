@@ -25,7 +25,7 @@ function check(label, ok, detail = "") {
 }
 const ME = "11111111-1111-4111-8111-111111111111", A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", V = new Date().toISOString();
 const club = { id: A, name: "החבר'ה", type: "friends", emoji: "🔥", mode: "together", benchmark_enabled: false, invite_policy: "owner", welcome_line: "", benchmark: null, benchmark_month: null, created_by: ME };
-const seed = { profiles: [{ id: ME, handle: "m", display_name: "אני", emoji: "💪", recovery_verified_at: V }], circle_members: [{ club_id: A, user_id: ME, role: "owner", joined_at: "2026-10-01T00:00:00Z", share_defaults: {}, clubs: club }], member_targets: [], post_training_partners: [], workout_posts: [], benchmark_results: [], blocks: [], reactions: [], notifications: [], notification_preferences: [], analytics_events: [] };
+const seed = { profiles: [{ id: ME, handle: "m", display_name: "אני", emoji: "💪", recovery_verified_at: V }], circle_members: [{ club_id: A, user_id: ME, role: "owner", joined_at: "2026-10-01T00:00:00Z", share_defaults: {}, clubs: club }], member_targets: [], circle_targets: [], post_training_partners: [], workout_posts: [], benchmark_results: [], blocks: [], reactions: [], notifications: [], notification_preferences: [], analytics_events: [] };
 const TABS = [["tabHomeBtn", "בית"], ["tabCommunityBtn", "מעגל"], ["tabAddBtn", "סיכום אימון"], ["tabHistoryBtn", "התקדמות"]];
 
 const target = await resolveLocalOnlyTarget();

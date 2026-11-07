@@ -261,7 +261,7 @@
     circles: {
       loaded: false, loading: false, loadError: false, list: [], currentId: "", section: "feed",
       members: {}, feed: {}, week: {}, benchmark: {},
-      mine: { target: null, pausedUntil: null, loaded: false },
+      mine: { targets: {}, pausedUntil: null, loaded: false },
       pendingTags: [], sheet: null, shareBar: null,
       // The sharing pipeline's one sheet: install steps, or last week's card.
       sharingSheet: null,
@@ -1536,19 +1536,6 @@
       data: ordered,
     };
   }
-  function downloadJsonFile(payload, filename) {
-    if (typeof Blob === "undefined" || typeof URL === "undefined" || typeof URL.createObjectURL !== "function") return false;
-    const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }));
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    a.rel = "noopener";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 30000);
-    return true;
-  }
   async function exportMyServerData() {
     if (state.ui.selfExportBusy) return false;
     state.ui.selfExportBusy = true;
@@ -1556,7 +1543,7 @@
     let ok = false;
     try {
       const payload = await buildSelfExport();
-      ok = !!payload && downloadJsonFile(payload, `box-log-my-data-${new Date().toISOString().slice(0, 10)}.json`);
+      ok = !!payload && typeof window.downloadBackup === "function" && window.downloadBackup(payload, `box-log-my-data-${new Date().toISOString().slice(0, 10)}.json`);
     } catch (e) { ok = false; }
     state.ui.selfExportBusy = false;
     if (typeof window.showToast === "function") window.showToast(ok ? "ההורדה התחילה: כל מה שנשמר עליכם בשרת, בקובץ אחד." : "הורדת הנתונים נכשלה. נסו שוב כשיש חיבור.");

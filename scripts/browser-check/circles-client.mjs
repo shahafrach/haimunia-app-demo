@@ -46,7 +46,7 @@ function seed(over) {
       { id: DANA, handle: "dana_k", display_name: "דנה", emoji: "🦁", recovery_verified_at: VERIFIED },
     ],
     circle_members: [membership()],
-    member_targets: [], post_training_partners: [], workout_posts: [], benchmark_results: [], blocks: [], reactions: [],
+    member_targets: [], circle_targets: [], post_training_partners: [], workout_posts: [], benchmark_results: [], blocks: [], reactions: [],
     notifications: [], notification_preferences: [], analytics_events: [],
   }, over || {});
 }

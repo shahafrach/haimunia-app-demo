@@ -410,6 +410,6 @@ Opened by the Circles RPCs session (2026-10-25), for the Circles client session 
 | # | Question |
 |---|---|
 | O14 | Turnstile is enforced by Supabase Auth only once the secret is set in the new project's dashboard (`COMMUNITY_SETUP.md`, the dashboard step), and `captchaSiteKey` in `cloud-config.js` is still `""`. Both belong to the repo-split session; until then sign-up is not CAPTCHA-protected. |
-| O16 | `member_targets` is one row per person, so a weekly target is the same in every circle although `decisions.md` lists it under per-circle member settings. Make it per circle? |
+| O16 | `member_targets` is one row per person, so a weekly target is the same in every circle although `decisions.md` lists it under per-circle member settings. **Resolved 2026-11-07: per circle.** `circle_targets(club_id, user_id)`; the pause stays one per person. |
 
 Everything else from the original questions is settled.

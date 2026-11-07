@@ -85,7 +85,7 @@ await world.step(dana, "weekly-target", "Set a weekly target of 3", async (s) =>
   await dana.choose("[data-weekly-target]", "3");
   s.check(!!(await saved), "set_weekly_target was called");
   s.check(await dana.waitText("היעד השבועי נשמר", 6000), "the screen confirms the target was saved");
-  s.check(Number(one(`select weekly_target from public.member_targets where user_id = ${q(uid)}`)) === 3, "the database holds target 3");
+  s.check(Number(one(`select weekly_target from public.circle_targets where user_id = ${q(uid)}`)) === 3, "the database holds target 3");
   await goHome(dana);
   s.check(await dana.waitText("0 מתוך 3 אימונים", 6000), "Home shows the ring at 0 of 3");
 }, { primary: ["[data-weekly-target]"], contrast: ["#circleTargetPanel .field-label", "#circleTargetPanel .footer-note"] });

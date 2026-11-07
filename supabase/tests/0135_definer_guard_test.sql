@@ -125,7 +125,7 @@ insert into tests.definer_reviewed (name, args, class, anon_allowed, reason) val
   ('remove_member', 'uuid, uuid', 'circle_scoped', false, 'owner removes a member of the owner''s own circle'),
   ('set_pause', 'date', 'caller_own_rows', false, ''),
   ('set_share_defaults', 'uuid, jsonb', 'circle_scoped', false, 'the caller''s own sharing defaults in ONE circle they are in'),
-  ('set_weekly_target', 'integer', 'caller_own_rows', false, ''),
+  ('set_weekly_target', 'uuid, integer', 'circle_scoped', false, 'the caller''s own weekly target in ONE circle they are in'),
   ('update_circle', 'uuid, jsonb', 'circle_scoped', false, 'owner changes settings of the owner''s own circle');
 
 -- The set under test: one row per definer function, keyed like the table.

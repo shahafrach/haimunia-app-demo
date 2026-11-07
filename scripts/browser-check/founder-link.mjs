@@ -39,7 +39,7 @@ function seed(over) {
   return Object.assign({
     profiles: [{ id: ME, handle: "member_me", display_name: "אני", emoji: "💪", recovery_verified_at: VERIFIED }],
     circle_members: [membership()],
-    member_targets: [], post_training_partners: [], workout_posts: [], benchmark_results: [], blocks: [], reactions: [],
+    member_targets: [], circle_targets: [], post_training_partners: [], workout_posts: [], benchmark_results: [], blocks: [], reactions: [],
     notifications: [], notification_preferences: [], analytics_events: [], invite_redemptions: [],
   }, over || {});
 }

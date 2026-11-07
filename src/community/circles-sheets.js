@@ -272,7 +272,7 @@
       if (t.type === "radio") rerender();
     }
     if ("shareSetting" in t.dataset) setShareSetting(t.dataset.circle, t.dataset.shareSetting, t.checked);
-    else if ("weeklyTarget" in t.dataset) { if (t.value) saveWeeklyTarget(t.value); }
+    else if ("weeklyTarget" in t.dataset) { if (t.value) saveWeeklyTarget(t.dataset.circle, t.value); }
     else if ("shareProfile" in t.dataset) { /* reserved */ }
     else if ("prCircle" in t.dataset) togglePrCircle(t.dataset.prCircle);
     else if ("achCircle" in t.dataset) {

@@ -26,7 +26,7 @@ const club = { id: A, name: "החבר'ה", type: "friends", emoji: "🔥", mode:
 const seed = (circles) => ({
   profiles: [{ id: ME, handle: "member_me", display_name: "אני", emoji: "💪", recovery_verified_at: VERIFIED }],
   circle_members: circles ? [{ club_id: A, user_id: ME, role: "owner", joined_at: "2026-10-01T00:00:00Z", share_defaults: {}, clubs: club }] : [],
-  member_targets: [{ user_id: ME, weekly_target: 3, paused_until: null }], post_training_partners: [], workout_posts: [], benchmark_results: [], blocks: [], reactions: [],
+  member_targets: [{ user_id: ME, paused_until: null }], circle_targets: [{ club_id: A, user_id: ME, weekly_target: 3 }], post_training_partners: [], workout_posts: [], benchmark_results: [], blocks: [], reactions: [],
   notifications: [], notification_preferences: [], analytics_events: [], invite_redemptions: [],
 });
 const FEED = [1, 2, 3, 4].map((n) => ({ post_id: "p" + n, author_id: "f", author_name: "דנה", author_emoji: "🦁", post_type: "POST_TEXT", title: "פוסט " + n, result_text: "", body: "", metadata: {}, occurred_on: "2026-10-2" + n, published_at: "2026-10-2" + n + "T10:00:00Z", reaction_counts: {}, my_reactions: [] }));

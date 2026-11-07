@@ -75,7 +75,8 @@ insert into public.recovery_attempts (key_hash) values (repeat('q', 64));
 insert into public.invites (club_id, code_hash, role) values ('b0000000-0000-4000-8000-00000000000b', repeat('f', 64), 'member');
 insert into public.job_health_state (id) values (true) on conflict do nothing;
 insert into public.member_achievements (user_id, achievement_id) select tests.uid('m3'), id from public.achievement_definitions where code = 'leak_probe';
-insert into public.member_targets (user_id, weekly_target) values (tests.uid('m3'), 4);
+insert into public.member_targets (user_id, paused_until) values (tests.uid('m3'), null);
+insert into public.circle_targets (club_id, user_id, weekly_target) values ('b0000000-0000-4000-8000-00000000000b', tests.uid('m3'), 4);
 insert into public.notification_batches (user_id, category, pending_count, pending, window_started_at, next_flush_at) values (tests.uid('m3'), 'community', 0, '[]'::jsonb, now(), now());
 insert into public.notification_preferences (user_id, type, channel) values (tests.uid('m3'), 'reaction', 'off');
 insert into public.notifications (user_id, type, category, title, body) values (tests.uid('m3'), 'leak_probe', 'community', 't', 'b');
@@ -106,6 +107,7 @@ select cmp_ok((select count(*) from public.invites where club_id = 'b0000000-000
 select cmp_ok((select count(*) from public.job_health_state where true), '>', 0::bigint, 'job_health_state: the victim row exists');
 select cmp_ok((select count(*) from public.member_achievements where user_id = tests.uid('m3')), '>', 0::bigint, 'member_achievements: the victim row exists');
 select cmp_ok((select count(*) from public.member_targets where user_id = tests.uid('m3')), '>', 0::bigint, 'member_targets: the victim row exists');
+select cmp_ok((select count(*) from public.circle_targets where user_id = tests.uid('m3')), '>', 0::bigint, 'circle_targets: the victim row exists');
 select cmp_ok((select count(*) from public.notification_batches where user_id = tests.uid('m3')), '>', 0::bigint, 'notification_batches: the victim row exists');
 select cmp_ok((select count(*) from public.notification_preferences where user_id = tests.uid('m3')), '>', 0::bigint, 'notification_preferences: the victim row exists');
 select cmp_ok((select count(*) from public.notifications where user_id = tests.uid('m3')), '>', 0::bigint, 'notifications: the victim row exists');
@@ -257,9 +259,15 @@ select is(tests.leak_dml('insert into public.member_achievements (user_id, achie
 -- member_targets
 select tests.set_auth(tests.uid('m1'));
 select is(tests.leak_count('member_targets', 'user_id = tests.uid(''m3'')'), 0::bigint, 'member_targets: select sees zero rows of circle B');
-select is(tests.leak_dml('update public.member_targets set weekly_target = 1 where user_id = tests.uid(''m3'')'), 0, 'member_targets: update touches zero rows of circle B');
+select is(tests.leak_dml('update public.member_targets set paused_until = null where user_id = tests.uid(''m3'')'), 0, 'member_targets: update touches zero rows of circle B');
 select is(tests.leak_dml('delete from public.member_targets where user_id = tests.uid(''m3'')'), 0, 'member_targets: delete removes zero rows of circle B');
-select is(tests.leak_dml('insert into public.member_targets (user_id, weekly_target) values (tests.uid(''m3''), 2)'), 0, 'member_targets: insert into circle B is refused');
+select is(tests.leak_dml('insert into public.member_targets (user_id) values (tests.uid(''m3''))'), 0, 'member_targets: insert into circle B is refused');
+
+-- circle_targets
+select is(tests.leak_count('circle_targets', 'club_id = ''b0000000-0000-4000-8000-00000000000b'''), 0::bigint, 'circle_targets: select sees zero rows of circle B');
+select is(tests.leak_dml('update public.circle_targets set weekly_target = 1 where club_id = ''b0000000-0000-4000-8000-00000000000b'''), 0, 'circle_targets: update touches zero rows of circle B');
+select is(tests.leak_dml('delete from public.circle_targets where club_id = ''b0000000-0000-4000-8000-00000000000b'''), 0, 'circle_targets: delete removes zero rows of circle B');
+select is(tests.leak_dml('insert into public.circle_targets (club_id, user_id, weekly_target) values (''b0000000-0000-4000-8000-00000000000b'', tests.uid(''m1''), 2)'), 0, 'circle_targets: insert into circle B is refused');
 
 -- notification_batches
 select tests.set_auth(tests.uid('m1'));
@@ -357,6 +365,7 @@ select cmp_ok((select count(*) from public.invites where club_id = 'b0000000-000
 select cmp_ok((select count(*) from public.job_health_state where true), '>', 0::bigint, 'job_health_state: the victim rows survived');
 select cmp_ok((select count(*) from public.member_achievements where user_id = tests.uid('m3')), '>', 0::bigint, 'member_achievements: the victim rows survived');
 select cmp_ok((select count(*) from public.member_targets where user_id = tests.uid('m3')), '>', 0::bigint, 'member_targets: the victim rows survived');
+select cmp_ok((select count(*) from public.circle_targets where user_id = tests.uid('m3')), '>', 0::bigint, 'circle_targets: the victim rows survived');
 select cmp_ok((select count(*) from public.notification_batches where user_id = tests.uid('m3')), '>', 0::bigint, 'notification_batches: the victim rows survived');
 select cmp_ok((select count(*) from public.notification_preferences where user_id = tests.uid('m3')), '>', 0::bigint, 'notification_preferences: the victim rows survived');
 select cmp_ok((select count(*) from public.notifications where user_id = tests.uid('m3')), '>', 0::bigint, 'notifications: the victim rows survived');
@@ -375,7 +384,7 @@ select cmp_ok((select count(*) from public.workout_posts where club_id = 'b00000
 select is_empty(
   $$ select c.relname::text from pg_class c
       where c.relnamespace = 'public'::regnamespace and c.relkind in ('r', 'p')
-        and c.relname not in ('account_deletion_requests', 'achievement_definitions', 'analytics_events', 'blocks', 'bug_reports', 'benchmark_results', 'circle_invites', 'circle_members', 'clubs', 'edge_function_invocations', 'invite_attempts', 'invite_codes', 'invite_redemptions', 'invites', 'job_health_state', 'member_achievements', 'member_targets', 'notification_batches', 'notification_preferences', 'notifications', 'post_training_partners', 'private_records', 'profiles', 'push_subscriptions', 'rate_limits', 'reactions', 'recovery_attempts', 'recovery_codes', 'request_idempotency', 'workout_posts') $$,
+        and c.relname not in ('account_deletion_requests', 'achievement_definitions', 'analytics_events', 'blocks', 'bug_reports', 'benchmark_results', 'circle_invites', 'circle_members', 'circle_targets', 'clubs', 'edge_function_invocations', 'invite_attempts', 'invite_codes', 'invite_redemptions', 'invites', 'job_health_state', 'member_achievements', 'member_targets', 'notification_batches', 'notification_preferences', 'notifications', 'post_training_partners', 'private_records', 'profiles', 'push_subscriptions', 'rate_limits', 'reactions', 'recovery_attempts', 'recovery_codes', 'request_idempotency', 'workout_posts') $$,
   'this file covers every table in public: a new table must be added here');
 
 select * from finish();

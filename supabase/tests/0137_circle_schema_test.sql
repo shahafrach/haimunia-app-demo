@@ -49,7 +49,7 @@ select is_empty(
   'every club_id column is NOT NULL with no default');
 select set_eq(
   $$ select table_name::text from information_schema.columns
-      where table_schema = 'public' and column_name = 'club_id' and table_name not in ('circle_members', 'circle_invites', 'benchmark_results') $$,
+      where table_schema = 'public' and column_name = 'club_id' and table_name not in ('circle_members', 'circle_invites', 'circle_targets', 'benchmark_results') $$,
   $$ values ('invites'), ('post_training_partners'), ('workout_posts') $$,
   'club_id remains only on rows that belong to one circle (plus the new circle tables)');
 select is_empty(
@@ -173,13 +173,20 @@ select throws_ok($$ insert into public.circle_invites (club_id, token_hash, expi
 -- ---------------------------------------------------------------------
 -- 6. member_targets are private to their owner
 -- ---------------------------------------------------------------------
-select lives_ok($$ insert into public.member_targets (user_id, weekly_target) values (tests.pu('p1'), 3) $$, 'I set my target');
-select throws_ok($$ insert into public.member_targets (user_id, weekly_target) values (tests.pu('p2'), 3) $$,
+select lives_ok($$ insert into public.member_targets (user_id, paused_until) values (tests.pu('p1'), null) $$, 'I keep my pause row');
+select throws_ok($$ insert into public.member_targets (user_id) values (tests.pu('p2')) $$,
   '42501', null, 'but not someone else''s');
-select throws_ok($$ update public.member_targets set weekly_target = 0 where user_id = tests.pu('p1') $$,
+-- circle_targets: one target per circle, mine only
+select lives_ok($$ insert into public.circle_targets (club_id, user_id, weekly_target)
+  select club_id, user_id, 3 from public.circle_members where user_id = tests.pu('p1') limit 1 $$, 'I set my target in a circle I am in');
+select throws_ok($$ insert into public.circle_targets (club_id, user_id, weekly_target)
+  select club_id, user_id, 3 from public.circle_members where user_id = tests.pu('p2') limit 1 $$,
+  '42501', null, 'but not someone else''s');
+select throws_ok($$ update public.circle_targets set weekly_target = 0 where user_id = tests.pu('p1') $$,
   '23514', null, 'a target is between 1 and 21');
 select tests.set_auth(tests.pu('p2'));
-select is_empty($$ select 1 from public.member_targets $$, 'a circle-mate does not read my target');
+select is_empty($$ select 1 from public.member_targets $$, 'a circle-mate does not read my pause row');
+select is_empty($$ select 1 from public.circle_targets where user_id = tests.pu('p1') $$, 'or my target');
 
 -- ---------------------------------------------------------------------
 -- 7. A removed member loses access immediately
