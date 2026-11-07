@@ -50,6 +50,7 @@ create table tests.definer_reviewed (
 );
 
 insert into tests.definer_reviewed (name, args, class, anon_allowed, reason) values
+  ('aal_satisfied', '', 'caller_own_rows', false, 'RLS helper: does the caller''s session meet its second step; reads only the caller''s own verified factors (202611070002)'),
   ('ach_claim', 'text[]', 'caller_own_rows', false, ''),
   ('ach_share', 'uuid, uuid, text, uuid', 'circle_scoped', false, 'publishes a post in ONE circle the caller is a member of'),
   ('analytics_events_guard_rate_limit', '', 'caller_own_rows', false, ''),

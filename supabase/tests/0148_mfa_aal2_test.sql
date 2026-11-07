@@ -55,7 +55,7 @@ select ok(not has_function_privilege('anon', 'public.aal_satisfied()', 'execute'
 select ok(has_function_privilege('authenticated', 'public.aal_satisfied()', 'execute'), 'authenticated can (the policies call it)');
 select ok(has_function_privilege('service_role', 'public.aal_satisfied()', 'execute'), 'service_role can');
 select is((select prosecdef from pg_proc where oid = 'public.aal_satisfied()'::regprocedure), true, 'it is a definer function');
-select ok((select proconfig::text like '%search_path=""%' from pg_proc where oid = 'public.aal_satisfied()'::regprocedure), 'with an empty search_path');
+select ok((select 'search_path=""' = any (proconfig) from pg_proc where oid = 'public.aal_satisfied()'::regprocedure), 'with an empty search_path');
 
 -- 3. Every table with a client policy has the restrictive one
 select is_empty(
