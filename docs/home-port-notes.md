@@ -41,3 +41,14 @@ on the phone when the screen opens.
   workouts vs target, new PRs, 1RM estimate increases, weeks on target in a row. Only good news: a lower estimate or an empty
   week yields no failure line. "Streak" is weeks, not days (`decisions.md`: no daily streaks).
 - One tap opens it: the push deep link is `/tab/history`, also from a cold start.
+
+## 3. Feedback inbox
+
+**Home:** table `feedback` (kind bug/idea/question, status new/doing/done, app version); users insert and read only their
+own rows; no update/delete grant to clients; the owner reads everything with the service role / dashboard. There is no
+automated reader in Home.
+
+**BOX-LOG already had** the form, the table (`bug_reports`, no client grant, rate limit 5/hour, status, staff RPCs).
+**Added:** `read_at` and `tag` (migration `202611080003`), and the reader: the manual **feedback-inbox** workflow
+(`scripts/feedback-inbox.mjs`) that prints unread reports (no reporter id, no device facts) and optionally marks exactly
+those read. How to ask a session to use it: [feedback-inbox.md](feedback-inbox.md).
