@@ -3,7 +3,7 @@
   "//1": "Without it, Deno finds the root package.json, treats this function as",
   "//2": "part of that workspace, and writes the NODE TEST SUITE's dependencies",
   "//3": "(@supabase/supabase-js, jsdom, fake-indexeddb) into deno.lock. Those have",
-  "//4": "nothing to do with an Edge Function, which imports from esm.sh - but the",
+  "//4": "nothing to do with an Edge Function, which imports supabase-js from npm: - but the",
   "//5": "frozen check then fails every time package.json moves, for a reason with",
   "//6": "no connection to this function. That is what broke CI: the deps were",
   "//7": "bumped in d6c1319 and these four lockfiles were never regenerated,",

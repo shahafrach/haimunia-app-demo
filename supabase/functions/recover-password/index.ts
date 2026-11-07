@@ -8,7 +8,7 @@
 //
 // Secrets: RECOVERY_CODE_HMAC_SECRET (rotate-recovery-secret workflow).
 // SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are injected by the runtime.
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.4";
+import { createClient } from "npm:@supabase/supabase-js@2.57.4";
 import { handleRecover, CORS_HEADERS } from "../_shared/recovery.mjs";
 
 Deno.serve(async (req: Request) => {
