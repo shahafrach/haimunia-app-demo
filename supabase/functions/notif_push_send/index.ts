@@ -23,7 +23,7 @@
 // the runner so that no person and no session ever sees the private half.
 // The subject (RFC 8292 contact) is a URL, not an email address: VAPID_SUBJECT
 // in _shared/webPush.mjs.
-import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.57.4";
+import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.57.4";
 import { encryptPushPayload, buildVapidAuth, VAPID_SUBJECT } from "../_shared/webPush.mjs";
 
 // Same constant-shape comparison recap_weekly uses (SEC-017): a plain !==

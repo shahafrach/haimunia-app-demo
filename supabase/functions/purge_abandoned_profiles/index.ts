@@ -57,7 +57,7 @@
 // photos tonight. A row is cleared only after storage.remove() returns no
 // error for its batch; anything the API refused is retried the next night.
 // See drainStorageErasure() below.
-import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.57.4";
+import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.57.4";
 
 // "Versioned": a change to the abandonment predicate in
 // public.purge_abandoned_profiles()'s WHERE clause (202609010004) must
