@@ -18,6 +18,8 @@
   /** One entry per scheduled reminder: its notification type and its columns in reminder_prefs. */
   const REMINDER_KINDS = {
     workout_reminder: { days: "workout_days", hour: "workout_hour", minute: "workout_minute", multi: true, defaults: { days: [], hour: 18, minute: 0 } },
+    // One day a week (Friday 10:00 until the member chooses).
+    weekly_digest: { days: "digest_day", hour: "digest_hour", minute: "digest_minute", multi: false, defaults: { days: 5, hour: 10, minute: 0 } },
   };
 
   function reminderState() {
@@ -57,8 +59,9 @@
 
   function reminderToggleDay(kind, day) {
     const k = REMINDER_KINDS[kind];
-    const cur = /** @type {number[]} */ (reminderValue(kind, "days") || []);
-    const next = k.multi ? (cur.includes(day) ? cur.filter((d) => d !== day) : cur.concat(day).sort()) : [day];
+    const rawCur = reminderValue(kind, "days");
+    const cur = /** @type {number[]} */ (Array.isArray(rawCur) ? rawCur : [rawCur]);
+    const next = k.multi ? (cur.includes(day) ? cur.filter((d) => d !== day) : cur.concat(day).sort()) : day;
     saveReminder(kind, "days", next);
   }
 
@@ -73,7 +76,8 @@
   function reminderScheduleHtml(kind) {
     const k = REMINDER_KINDS[kind];
     if (!k || !reminderState().loaded) return "";
-    const days = /** @type {number[]} */ (reminderValue(kind, "days") || []);
+    const raw = reminderValue(kind, "days");
+    const days = /** @type {number[]} */ (Array.isArray(raw) ? raw : [raw]);
     const hour = reminderValue(kind, "hour"); const minute = reminderValue(kind, "minute");
     const busy = reminderState().saving ? " disabled" : "";
     const dayLabel = k.multi ? "ימים" : "יום";

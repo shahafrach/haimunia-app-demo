@@ -25,3 +25,19 @@ Delivery of the two personal types reuses `notif_push_pending`/`notif_push_send`
 them only). Tapping one opens the Add tab (`/tab/add`), also on a cold start (`sw.js`).
 
 Secrets: none new. VAPID already exists through the `rotate-vapid` workflow.
+
+## 2. Weekly progress digest
+
+**Home:** the daily digest is one `pg_cron` job (hourly, minute 5) that counts due items per user on the server and
+sends one push through `send-reminders`; per-user `digest_enabled` and an hour; the same push path as reminders.
+
+**BOX-LOG differs on purpose:** the training log is private and stays on the device (`decisions.md`), so the server cannot
+count workouts, PRs or 1RM. The push is therefore content-free ("הסיכום השבועי שלך מוכן") and the numbers are built
+on the phone when the screen opens.
+
+- Schedule: `reminder_prefs.digest_day/hour/minute` (default Friday 10:00), picked in Me under the `weekly_digest` switch (off by
+  default; switching off stops it). Same `reminder_push_due` job as the workout reminder (migration `202611080002`).
+- Progress screen: already existed (התקדמות). Added **"השבוע שלך"** at its top (`BoxLogProgress.weekDigest`/`digestLines`):
+  workouts vs target, new PRs, 1RM estimate increases, weeks on target in a row. Only good news: a lower estimate or an empty
+  week yields no failure line. "Streak" is weeks, not days (`decisions.md`: no daily streaks).
+- One tap opens it: the push deep link is `/tab/history`, also from a cold start.

@@ -244,7 +244,60 @@
     return { rx, scaled };
   }
 
+  // ---- The weekly summary ---------------------------------------------------------------
+  /**
+   * What the week (Sunday to today) looked like, from the member's own log. Only good news is reported:
+   * a lower estimate or an empty week yields no line, never a deficit word (decisions.md).
+   * @param {{id: string, name: string, entries: SetEntry[]}[]} lifts
+   * @param {string[]} days every training day (lifts and workouts)
+   * @param {number} target workouts per week, 0 or less for none
+   * @param {string} today ISO
+   * @param {{minPrior?: number}} [opts]
+   */
+  function weekDigest(lifts, days, target, today, opts) {
+    const ws = weekStartOf(today);
+    const we = addDays(ws, 6);
+    /** @param {string} d */
+    const inWeek = (d) => d >= ws && d <= we;
+    /** @type {{id: string, name: string, weight: number, reps: number, pct: number}[]} */
+    const prs = [];
+    /** @type {{id: string, name: string, from: number, to: number, pct: number}[]} */
+    const e1rm = [];
+    for (const lift of lifts) {
+      for (const p of repMaxPrs(lift.entries, opts)) if (inWeek(p.date)) prs.push({ id: lift.id, name: lift.name, weight: p.weight, reps: p.reps, pct: p.pct });
+      const series = e1rmSeries(lift.entries);
+      const before = Math.max(0, ...series.filter((s) => s.date < ws).map((s) => s.e1rm));
+      const now = Math.max(0, ...series.filter((s) => inWeek(s.date)).map((s) => s.e1rm));
+      if (before > 0 && now > before) e1rm.push({ id: lift.id, name: lift.name, from: before, to: now, pct: /** @type {number} */ (percentImprovement(before, now)) });
+    }
+    prs.sort((a, b) => b.pct - a.pct);
+    e1rm.sort((a, b) => b.pct - a.pct);
+    const year = weeksYear(days, target, today);
+    // Consecutive weeks on target, ending now. The unfinished current week never breaks the run.
+    let run = 0;
+    for (let i = year.weeks.length - 1; i >= 0; i--) {
+      const w = year.weeks[i];
+      if (w.met) run++; else if (!w.current) break;
+    }
+    const workouts = daysInWeek(days, ws);
+    return { weekStart: ws, workouts, target: target > 0 ? target : 0, prs, e1rm, weeksMet: year.metCount, run, hasAnything: workouts > 0 || prs.length > 0 };
+  }
+
+  /** The short, positive lines for a digest. @param {ReturnType<typeof weekDigest>} d @returns {string[]} */
+  function digestLines(d) {
+    /** @type {string[]} */
+    const out = [];
+    if (d.workouts === 0) out.push("שבוע חדש מתחיל. אימון קטן אחד מספיק כדי להתחיל.");
+    else out.push(d.target > 0 && d.workouts >= d.target ? `${d.workouts} אימונים השבוע, והיעד של ${d.target} הושג` : d.target > 0 ? `${d.workouts} מתוך ${d.target} אימונים השבוע` : d.workouts === 1 ? "אימון אחד השבוע" : `${d.workouts} אימונים השבוע`);
+    if (d.prs.length === 1) out.push("שיא אישי חדש: " + d.prs[0].name);
+    else if (d.prs.length > 1) out.push(`${d.prs.length} שיאים אישיים חדשים, בהם ${d.prs[0].name}`);
+    for (const e of d.e1rm.slice(0, 2)) out.push(`1RM משוער ב${e.name}: ${e.to} ק״ג (עלייה של ${e.pct}%)`);
+    if (d.run >= 2) out.push(`${d.run} שבועות ברצף ביעד`);
+    return out;
+  }
+
   const api = {
+    weekDigest, digestLines,
     E1RM_MAX_REPS, epley, e1rmEligible, e1rmSeries, percentImprovement, repMaxPrs,
     weekStartOf, addDays, daysInWeek, weeksYear, ringCopy, topSet, compareToLast, workoutMoment, splitBenchmarkAttempts,
   };
