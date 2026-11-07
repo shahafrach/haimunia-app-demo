@@ -7,7 +7,7 @@ a number here disagrees with the repository, the repository is right and this
 file is stale. Say so in your PR.
 
 **Last reconciled: 2026-10-29, against `main` after Pilot readiness (#134), in the
-5.0.0 consolidation; version bumped to 5.0.1 on 2026-10-30 after #136 to #138, and to 5.0.2 on 2026-11-01 after #141 and #142.** Everything before 2026-10-25 (the gym app, project
+5.0.0 consolidation; version bumped to 5.0.1 on 2026-10-30 after #136 to #138, to 5.0.2 on 2026-11-01 after #141 and #142, and to 5.0.3 on 2026-11-07 after #145.** Everything before 2026-10-25 (the gym app, project
 `jajmlyrjlkhclgphbfbb`, 70 tables) is history; git keeps the old version of this file.
 
 ---
@@ -16,11 +16,11 @@ file is stale. Say so in your PR.
 
 | | |
 |---|---|
-| App version | **5.0.2** (`APP_VERSION` in app.js, mirrored to `SW_VERSION` in sw.js) |
-| Migrations | **209** files in `supabase/migrations/`, latest `202610300001_password_recovery_codes`. Applied to production by the Supabase GitHub integration on each merge to `main`; `check:drift` not run at this consolidation (no linked project here) |
-| pgTAP suites | **47** files in `supabase/tests/`, run by CI in `migration-check` on every PR (green on #138) |
-| JS tests | **1448 tests, 1448 pass, 0 fail** (`npm test`, 2026-10-29, this consolidation) |
-| Browser scenarios | **41** files in `scripts/browser-check/`; 40 of 41 passed at this consolidation (2026-10-29); `community-render-cost` read 22.4 ms against its 16 ms trip-wire on a loaded machine, not re-run |
+| App version | **5.0.3** (`APP_VERSION` in app.js, mirrored to `SW_VERSION` in sw.js) |
+| Migrations | **210** files in `supabase/migrations/`, latest `202611070001_per_circle_targets`. Applied to production by the Supabase GitHub integration on each merge to `main`; `check:drift` not run at this consolidation (no linked project here) |
+| pgTAP suites | **48** files in `supabase/tests/`, run by CI in `migration-check` on every PR (green on #145) |
+| JS tests | **1512 tests, 1512 pass, 0 fail** (`npm test`, 2026-11-07, on #145 before merge) |
+| Browser scenarios | **44** scenarios in `scripts/browser-check/`; 44 of 44 passed (2026-11-07), run one by one on a different Chromium build than the pinned one, so pixel numbers are approximate; green in CI on #145 |
 | Community layer | `cloud.js` **2,775** lines plus **13** files in `src/community/`; `app.js` **8,938** lines |
 | Schema | Not re-measured here. After Circles schema: 24 tables before the circle tables were added, every one with RLS (guarded by `0136`); every SECURITY DEFINER function reviewed in `tests.definer_reviewed` (guarded by `0135`) |
 
@@ -67,15 +67,12 @@ file is stale. Say so in your PR.
   `docs/ops/PILOT_CHECKLIST.md` with two phones.
 - **Friend conversations** (the validation gate in `docs/circles/audit.md`) have not
   happened.
-- **Dependabot:** Playwright 1.64 stays out on purpose (the pinned Chromium build is
-  what the layout numbers were measured on); claude-code-action is behind by one patch.
+- **Scheduled jobs failing on production.** `scheduled-job-alert` has failed on every run since at least 2026-11-06 (#169 to #172): "2 scheduled job(s) are failing". Which two is unknown from the repository; the owner runs `select * from public.scheduled_job_health() where not healthy;`. `ALERT_WEBHOOK_URL` is not set, so the alert only prints in the run log (`docs/ops/MONITORING.md`).
+- **Dependabot:** Playwright 1.64 (#107) stays out on purpose (the pinned Chromium build is
+  what the layout numbers were measured on); the claude-code-action bump (#143) was asked to rebase.
 
 ## Stale in the repository, flagged not fixed
 
-- **`downloadJsonFile()` in cloud.js duplicates `downloadBackup()` in app.js** (Blob,
-  anchor, revoke). Merge them in a change allowed to touch both.
-- **`README1.md` at the root** is an old design-direction handoff that `index.html`
-  used to cite. Check whether anything still cites it before moving or deleting it.
 - **The synthetic sign-in domain is still `members.haimuniya.invalid`.** SQL and
   migrations reference it, so it stays until a migration changes both sides together.
 - **The backup workflow's comment says the repository is public.** True again since
