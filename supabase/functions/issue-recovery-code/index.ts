@@ -30,6 +30,15 @@ Deno.serve(async (req: Request) => {
       const { data, error } = await supabase.auth.getUser(token);
       return error || !data.user ? null : { id: data.user.id, is_anonymous: !!data.user.is_anonymous };
     },
+    // True when the member has a verified authenticator factor but this token is not aal2.
+    secondFactorMissing: async (userId: string, token: string) => {
+      let aal = "aal1";
+      try { aal = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).aal ?? "aal1"; } catch { /* treated as aal1 */ }
+      if (aal === "aal2") return false;
+      const { data, error } = await supabase.auth.admin.mfa.listFactors({ userId });
+      if (error) return true;
+      return (data?.factors ?? []).some((f: { status: string }) => f.status === "verified");
+    },
     store: {
       putRecoveryCode: async (userId: string, hmac: string) => {
         const { error } = await supabase.from("recovery_codes").upsert(

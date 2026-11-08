@@ -57,12 +57,25 @@ ${uiToastHtml()}${renderOutboxBanner()}${inner}</div></section>`;
     return `<div class="chart-card"><div style="font-weight:800;font-size:18px;margin-bottom:8px;">המעגלים מוכנים לחיבור</div><div style="color:var(--color-text-muted);font-size:13px;line-height:1.7;">יש ליצור פרויקט Supabase ולמלא את cloud-config.js (ראו COMMUNITY_SETUP.md). עד אז היומן הפרטי עובד במלואו, והמעגלים יופיעו כאן.</div></div>`;
   }
   function gateCard(inner) { return `<div class="chart-card">${inner}</div>`; }
+  // What signing up involves, said before it starts (shown on both pre-signup screens).
+  function signupExplainerHtml() {
+    return `<div data-signup-explainer="1" style="border:1px solid var(--color-border-strong);border-radius:var(--radius-control);padding:12px 14px;margin-bottom:16px;font-size:13.5px;line-height:1.7;">
+      <div style="font-weight:800;margin-bottom:4px;">איך ההרשמה עובדת</div>
+      <ul style="margin:0;padding-inline-start:18px;">
+        <li>${bidiText("בוחרים שם כניסה וסיסמה. בלי אימייל ובלי מספר טלפון.")}</li>
+        <li>${bidiText("מקבלים קוד שחזור אחד, ושומרים אותו. הוא הדרך היחידה לאפס סיסמה שנשכחה.")}</li>
+        <li>${bidiText("אפשר להוסיף אימות דו-שלבי באפליקציית אימות, ב״אני״. זה אופציונלי.")}</li>
+        <li>${bidiText("נשארים מחוברים במכשיר עד שמתנתקים.")}</li>
+      </ul></div>`;
+  }
 
   // Whatever stands between the member and their circles, or "" when nothing
   // does. One function for Home, Circle and Me: they all need an account, a
   // profile and a circle before they have anything to show.
   function renderCircleGate(opts) {
     if (!configured) return gateNotConfigured();
+    // Two-step login: a password-only session owes the code, and nothing else shows until it is given.
+    if (mfaChallengeShowing()) return mfaChallengeHtml();
     // A recovery code on screen (after sign-up, after a recovery, after "קוד שחזור חדש")
     // comes before everything: it is shown once and must be saved before anything else.
     if (recoveryShowing()) return recoveryShowHtml();
@@ -77,6 +90,7 @@ ${uiToastHtml()}${renderOutboxBanner()}${inner}</div></section>`;
       if (j.token && !state.signupStarted && state.ui.gateView !== "login") {
         return gateCard(`<div style="font-weight:800;font-size:20px;margin-bottom:8px;">הוזמנת להצטרף למעגל</div>
           <div style="color:var(--color-text-muted);font-size:14px;line-height:1.6;margin-bottom:18px;">${bidiText("מעגל הוא קבוצה קטנה וסגורה של חברים שרואים זה את האימונים והשיאים של זה. היומן הפרטי שלך נשאר במכשיר.")}</div>
+          ${signupExplainerHtml()}
           <button class="save-btn" data-community-action="start-signup">הצטרפות למעגל</button>
           <div style="display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;margin-top:18px;">
             <span style="color:var(--color-text-muted);font-size:14px;">${bidiText("כבר יש לך חשבון?")}</span>
@@ -88,6 +102,7 @@ ${uiToastHtml()}${renderOutboxBanner()}${inner}</div></section>`;
         return gateCard(`<div style="font-weight:800;font-size:20px;margin-bottom:8px;">המעגלים שלך</div>
           <div style="color:var(--color-text);font-size:15px;line-height:1.5;margin-bottom:12px;">${bidiText("מעגל הוא קבוצה קטנה של חברים או זוג, שרואים זה את האימונים, השיאים והשבוע של זה.")}</div>
           <div style="color:var(--color-text-muted);font-size:14px;line-height:1.6;margin-bottom:18px;">${bidiText("הכניסה בקישור הזמנה שמקבלים מחבר/ה במעגל. הקישור לא נוגע ליומן האימונים הפרטי שלכם.")}</div>
+          ${signupExplainerHtml()}
           <button class="save-btn" data-community-action="start-signup">יש לי קישור הזמנה</button>
           <div style="display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;margin-top:18px;">
             <span style="color:var(--color-text-muted);font-size:14px;">${bidiText("כבר יש לך חשבון?")}</span>
@@ -535,6 +550,7 @@ ${uiToastHtml()}${renderOutboxBanner()}${inner}</div></section>`;
       + `<div class="ach-section" style="margin-top:18px;">${sectionHead("var(--color-accent)", "מראה")}<div class="chart-card">${typeof renderAppearanceSection === "function" ? renderAppearanceSection("me") : ""}</div></div>`
       + targetAndPauseHtml() + shareSettingsHtml() + renderMyAchievements() + renderSharePromptPrefPanel() + renderBlockedMembersPanel() + renderNotifPrefsPanel() + termMarkPanel
       + recoveryPanelHtml()
+      + mfaPanelHtml()
       + founderLinkPanelHtml()
       + `<button class="chip-btn" data-action="open-support" style="display:block;margin:20px auto 0;">פנייה</button>`
       + selfExportButtonHtml("display:block;margin:20px auto 0;")

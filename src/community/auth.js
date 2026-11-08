@@ -31,6 +31,9 @@
     if (!client) return;
     const { data } = await client.auth.getSession();
     state.user = data.session ? data.session.user : null;
+    // A password-only session of a member with two-step login loads nothing until the code is proven
+    // (the database refuses it anyway); the auth handler in cloud.js loads the account after the code.
+    if (state.user && (await mfaCheck())) { rerender(); return; }
     if (state.user) {
       enableSyncIfAllowed();
       // Bind the device's training log to this identity (round 10). Called on

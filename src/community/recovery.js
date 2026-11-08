@@ -170,7 +170,7 @@
   // The code, once. Shown after sign-up, after a recovery, and after a new code is asked for in Me.
   function recoveryShowHtml() {
     const r = recoveryUi();
-    const title = r.source === "recover" ? "הסיסמה אופסה. זה קוד השחזור החדש שלך" : "קוד השחזור שלך";
+    const title = r.source === "recover" ? "הסיסמה אופסה. זה קוד השחזור החדש שלך" : r.source === "mfa" ? "האימות הדו-שלבי כובה. זה קוד השחזור החדש שלך" : "קוד השחזור שלך";
     if (r.busy) return gateCard(`<div style="font-weight:800;font-size:18px;margin-bottom:6px;">יוצרים קוד שחזור…</div><div style="color:var(--color-text-muted);font-size:13px;">שנייה אחת.</div>`);
     if (!r.code) {
       return gateCard(`<div style="font-weight:800;font-size:18px;margin-bottom:6px;">${esc(title)}</div>

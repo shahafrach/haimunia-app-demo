@@ -88,6 +88,8 @@ export async function handleIssue(req, deps) {
   const m = /^Bearer\s+(\S+)$/i.exec(req.authorization || "");
   const user = m ? await deps.getUser(m[1]) : null;
   if (!user || !user.id || user.is_anonymous) return json(401, { error: "unauthorized" });
+  // Two-step login: a password-only (aal1) session may not replace the code that resets the password.
+  if (deps.secondFactorMissing && (await deps.secondFactorMissing(user.id, m[1]))) return json(403, { error: "second_factor_required" });
   const code = generateCode(deps.randomBytes);
   await deps.store.putRecoveryCode(user.id, await recoveryHmac(deps.secret, code));
   return json(200, { recovery_code: code });

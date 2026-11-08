@@ -175,6 +175,8 @@
       // forgot-password form on the login screen) | "show" (a recovery code on
       // screen, once). code is held only while it is shown. has: whether the member
       // already has a code (null until asked).
+      // Two-step login (src/community/mfa.js). challenge: the session passed the password and owes the code.
+      mfa: { challenge: false, recover: false, busy: false, error: "", enroll: null, has: null, statusTried: false, disableOpen: false, signOutAllOpen: false },
       recovery: { view: "", busy: false, error: "", code: "", saved: false, copied: false, source: "", has: null, statusTried: false, rotateOpen: false, draftUsername: "" },
       // The term sheet (design spec section 3, tier 3): the id of the
       // glossary entry being explained, or null. Lives in ui rather than a
@@ -2413,7 +2415,7 @@
       const c = currentCircle();
       if (c) ensureSectionLoaded(c.id);
     }
-    if (state.user && !state.user.is_anonymous) loadRecoveryStatus();
+    if (state.user && !state.user.is_anonymous) { loadRecoveryStatus(); loadMfaStatus(); }
     // Home shows the latest few posts of the circle the Circle tab opens on.
     if (window.haimuniaActiveTab === "home" && state.circles.loaded && state.profile && state.profile.recovery_verified_at) {
       const c = currentCircle();
@@ -2554,6 +2556,7 @@
     }
     else if (action === "term-glossary-back") { state.ui.termGlossaryOpen = false; rerender(); }
     else if (action && action.indexOf("recovery-") === 0 && recoveryAction(action, el)) { /* handled in src/community/recovery.js */ }
+    else if (action && action.indexOf("mfa-") === 0 && mfaAction(action)) { /* handled in src/community/mfa.js */ }
     else if (action === "start-signup") startSignup();
     // Design spec 7.1. The choice screen's secondary door.
     else if (action === "show-login") { state.ui.gateView = "login"; rerender(); }
@@ -2667,22 +2670,32 @@
   window.addEventListener("online", flushOutbox);
   window.addEventListener("online", () => { flushCommunityOutbox(); });
   window.addEventListener("haimunia-sync-needed", () => { maybeAutoStartBackup(); flushOutbox(); });
-  if (client) {
-    client.auth.onAuthStateChange((_event, session) => {
-      state.user = session ? session.user : null;
-      if (state.user) {
-        enableSyncIfAllowed();
-        if (typeof window.haimuniaBindLogOwner === "function") {
-          window.haimuniaBindLogOwner(state.user.id);
-        }
-        ensureAnalyticsConfigured();
-        loadRedemption()
+  // What happens once a session is allowed in (aal2, or no second step): bind the log, load the account.
+  function loadSignedInAccount() {
+    if (!state.user) return;
+    if (typeof window.haimuniaBindLogOwner === "function") {
+      window.haimuniaBindLogOwner(state.user.id);
+    }
+    ensureAnalyticsConfigured();
+    loadRedemption()
           .then(() => Promise.all([loadProfile(), flushOutbox(), flushCommunityOutbox()]))
           .then(circlesAfterSession)
           .then(pullPrivateRecords)
           .then(() => { if (typeof window.syncCommunityMilestones === "function") window.syncCommunityMilestones(); })
           .then(() => { state.communityDataLoaded = false; return ensureCommunityDataLoaded(); })
           .then(rerender);
+  }
+
+  if (client) {
+    client.auth.onAuthStateChange((_event, session) => {
+      state.user = session ? session.user : null;
+      if (state.user) {
+        // Two-step login: nothing loads for a password-only session. MFA_CHALLENGE_VERIFIED comes back here.
+        mfaCheck().then((pending) => {
+          if (pending) { rerender(); return; }
+          enableSyncIfAllowed();
+          loadSignedInAccount();
+        });
       } else {
         state.communityDataLoaded = false; state.communityDataLoading = false;
         state.profile = null; state.redemption = null; state.signupStarted = false;
@@ -2690,6 +2703,7 @@
         state.ui.fieldErrors = {}; state.ui.confirmDialog = null;
         state.ui.gateView = ""; state.ui.termSheet = null; state.ui.termGlossaryOpen = false;
         state.ui.recovery.has = null; state.ui.recovery.statusTried = false;
+        mfaResetUi();
         state.posts.held = [];
         state.posts.openMenu = null;
         state.posts.captionEdit = null; state.posts.prPrompt = null;

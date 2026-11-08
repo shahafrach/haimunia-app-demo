@@ -46,13 +46,13 @@ jobs:
           code=$(curl -sS -o /dev/null -w '%{http_code}' -X PATCH "$API" \
             -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
             -H "Content-Type: application/json" \
-            -d '{"external_anonymous_users_enabled":true,"mailer_autoconfirm":true}')
+            -d '{"external_anonymous_users_enabled":true,"mailer_autoconfirm":true,"mfa_totp_enroll_enabled":true,"mfa_totp_verify_enabled":true}')
           if [ "$code" -lt 200 ] || [ "$code" -ge 300 ]; then
             echo "PATCH $API answered HTTP $code. Nothing is known to have changed."
             exit 1
           fi
           state=$(curl -sS "$API" -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
-            | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const c=JSON.parse(s);process.stdout.write(JSON.stringify({anonymous_sign_ins:c.external_anonymous_users_enabled===true,confirm_email_off:c.mailer_autoconfirm===true}))})')
+            | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const c=JSON.parse(s);process.stdout.write(JSON.stringify({anonymous_sign_ins:c.external_anonymous_users_enabled===true,confirm_email_off:c.mailer_autoconfirm===true,totp_enroll:c.mfa_totp_enroll_enabled===true,totp_verify:c.mfa_totp_verify_enabled===true}))})')
           {
             echo "## Auth config"
             echo
@@ -63,4 +63,4 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
           echo "$state"
-          [ "$state" = '{"anonymous_sign_ins":true,"confirm_email_off":true}' ]
+          [ "$state" = '{"anonymous_sign_ins":true,"confirm_email_off":true,"totp_enroll":true,"totp_verify":true}' ]

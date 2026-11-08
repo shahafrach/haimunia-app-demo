@@ -23,11 +23,11 @@ test("the project comes from supabase/PROJECT_REF, never a literal ref", () => {
 test("it PATCHes exactly the two settings and nothing else", () => {
   const body = code.match(/-d '(\{[^']+\})'/);
   assert.ok(body, "a JSON body is sent");
-  assert.deepEqual(JSON.parse(body[1]), { external_anonymous_users_enabled: true, mailer_autoconfirm: true });
+  assert.deepEqual(JSON.parse(body[1]), { external_anonymous_users_enabled: true, mailer_autoconfirm: true, mfa_totp_enroll_enabled: true, mfa_totp_verify_enabled: true });
 });
 
 test("it reads both back and fails unless both are true", () => {
-  assert.match(code, /\[ "\$state" = '\{"anonymous_sign_ins":true,"confirm_email_off":true\}' \]/);
+  assert.match(code, /\[ "\$state" = '\{"anonymous_sign_ins":true,"confirm_email_off":true,"totp_enroll":true,"totp_verify":true\}' \]/);
 });
 
 test("the token is never echoed", () => {
