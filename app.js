@@ -296,6 +296,8 @@ function renderNavRows(withIds, onlyOther) {
 // Exposed so cloud.js can correct the top-level tab before it re-renders (a
 // push-notification or deep-link tap can fire while another tab is up).
 window.switchToCommunityTopTab = function () { tab = "community"; };
+// A tapped reminder or weekly-summary push opens a core tab (notifications.js, sw.js).
+window.haimuniaOpenTab = function (name) { if (VALID_TABS.includes(name)) { tab = name; render(); window.scrollTo(0, 0); } };
 function renderNavSettingsRow() {
   // Fresh-eyes audit: on the desktop sidebar (renderDesktopSidebar below)
   // this section header renders in the same persistent column as
@@ -6013,7 +6015,7 @@ function renderMeasureArea() {
            <button data-action="cancel-add-measure-type" style="color:var(--color-text-muted); font-size:13px; padding:0 10px;">ביטול</button>
          </div>
        </div>`
-    : `<button class="link-btn" data-action="open-add-measure-type" style="margin-top:${types.length ? "8px" : "0"};">+ הוספת מדד חדש</button>`;
+    : `<button class="link-btn link-btn--tap" data-action="open-add-measure-type" style="margin-top:${types.length ? "8px" : "0"};">+ הוספת מדד חדש</button>`;
 
   const rows = types.map((t) => {
     const expanded = measureExpandedId === t.id;
@@ -6406,7 +6408,22 @@ function renderE1rmSection() {
 }
 function renderProgressOverview() {
   if (!entries.length && !wodEntries.length) return "";
-  return renderWeeksSection() + renderPrSection() + renderE1rmSection();
+  return renderWeeklySummary() + renderWeeksSection() + renderPrSection() + renderE1rmSection();
+}
+
+// "השבוע שלך": the screen the weekly push opens. All of it is computed here from the log on this device
+// (body weight and the training log never leave it); the push itself carries no numbers.
+function weeklySummaryData() {
+  const lifts = recentLiftIds(200).map((id) => { const m = movementById(id); return { id, name: m ? m.name : id, entries: entriesFor(id) }; });
+  const days = typeof window.communityTrainingDays === "function" ? window.communityTrainingDays() : [];
+  return BoxLogProgress.weekDigest(lifts, days, weeklyTargetForRing(), todayISO(), { minPrior: MIN_ENTRIES_BEFORE_PR });
+}
+function renderWeeklySummary() {
+  const lines = BoxLogProgress.digestLines(weeklySummaryData());
+  return `<section class="progress-section" id="weeklySummary" aria-labelledby="progWeekly">
+    <div class="progress-head"><h2 class="progress-title" id="progWeekly">השבוע שלך</h2><span class="progress-note">מיום ראשון עד היום</span></div>
+    <div class="chart-card"><ul style="margin:0;padding-inline-start:20px;line-height:1.9;font-weight:600;">${lines.map((l) => `<li>${bidiText(l)}</li>`).join("")}</ul></div>
+  </section>`;
 }
 
 // What Home shows about the member's own training, all of it from this device:

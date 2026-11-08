@@ -253,8 +253,10 @@ test("notifRoute is opt-in: no stored preference is off, and a type the client n
   const window = await bootCommunity(mock, { syncEnabled: false, localStorage: { "haimunia-demo:notifPushFlag": "0" } });
   await openCommunity(window);
 
-  for (const type of ["reaction", "trained_together", "circle_joined", "week_card"]) {
-    assert.deepEqual(window.notifRoute(type, {}), { channel: "off", suppressed: true }, `${type} is off by default`);
+  for (const type of ["reaction", "trained_together", "circle_joined", "week_card", "pr_circle", "workout_reminder", "weekly_digest"]) {
+    // A reaction to your own post is the one type that is on until turned off.
+    if (type === "reaction") assert.deepEqual(window.notifRoute(type, {}), { channel: "in_app", suppressed: false }, "reaction is on by default");
+    else assert.deepEqual(window.notifRoute(type, {}), { channel: "off", suppressed: true }, `${type} is off by default`);
     assert.deepEqual(window.notifRoute(type, { [type]: "off" }), { channel: "off", suppressed: true });
     assert.deepEqual(window.notifRoute(type, { [type]: "in_app" }), { channel: "in_app", suppressed: false });
   }
@@ -300,16 +302,17 @@ test("each of the four types carries its own icon, category and copy", async () 
 // ===== the switches in Me ==============================================
 
 const FOUR = ["reaction", "trained_together", "circle_joined", "week_card"];
+const SEVEN = ["reaction", "trained_together", "circle_joined", "week_card", "pr_circle", "workout_reminder", "weekly_digest"];
 
-test("Me has one switch per type, and ALL FOUR ARE OFF for a member who has set nothing", async () => {
+test("Me has one switch per type; only a reaction is ON for a member who has set nothing", async () => {
   const mock = seeded([]);
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openAccount(window);
 
   const types = [...window.document.querySelectorAll("[data-notif-pref-toggle]")].map((b) => b.dataset.type);
-  assert.deepEqual(types, FOUR, "exactly these, in this order (comments, mentions, coach, class, event, challenge, recap, streak and achievement preferences are gone)");
-  for (const t of FOUR) {
-    assert.equal(notifPrefValue(window, t), "off", `${t} is off by default`);
+  assert.deepEqual(types, SEVEN, "exactly these, in this order (comments, mentions, coach, class, event, challenge, recap, streak and achievement preferences are gone)");
+  for (const t of SEVEN) {
+    assert.equal(notifPrefValue(window, t), t === "reaction" ? "on" : "off", `${t} default`);
     assert.equal(notifPrefControl(window, t).getAttribute("role"), "switch");
     assert.ok(notifPrefControl(window, t).getAttribute("aria-label"), `${t} has its own accessible name`);
   }
@@ -332,7 +335,8 @@ test("turning a switch on is a direct own-row upsert into notification_preferenc
   window.render();
   await waitFor(() => !!notifPrefControl(window, "trained_together"), 4000);
   assert.equal(notifPrefValue(window, "trained_together"), "on", "reflected on re-render");
-  assert.equal(notifPrefValue(window, "reaction"), "off", "and the other three did not move");
+  assert.equal(notifPrefValue(window, "reaction"), "on", "reaction stays on by default");
+  assert.equal(notifPrefValue(window, "circle_joined"), "off", "and the others did not move");
 
   pickNotifPref(window, "trained_together", false);
   await waitFor(() => mock.db.notification_preferences.some((r) => r.type === "trained_together" && r.channel === "off"), 4000);
@@ -364,9 +368,9 @@ test("a failed preference save reverts the switch and shows the Hebrew error", a
   const window = await bootCommunity(mock, { syncEnabled: false });
   await openAccount(window);
 
-  pickNotifPref(window, "reaction", true);
+  pickNotifPref(window, "circle_joined", true);
   await waitFor(() => /לא ניתן לשמור העדפה זו/.test(window.document.getElementById("content").textContent), 4000);
-  assert.equal(notifPrefValue(window, "reaction"), "off", "the switch reverted to off");
+  assert.equal(notifPrefValue(window, "circle_joined"), "off", "the switch reverted to off");
 });
 
 test("with the device flag off nothing touches push_subscriptions and no push mention is shown", async () => {

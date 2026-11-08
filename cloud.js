@@ -290,6 +290,8 @@
     notif: {
       center: null, unread: 0, unreadLoaded: false,
       prefs: {}, prefsLoaded: false, prefSaving: {},
+      // The schedule beside the reminder switches (src/community/reminders.js).
+      reminder: { loaded: false, row: null, saving: false },
       pushSub: null, pushChecked: false,
       // The account-settings push self-test. status walks
       // idle -> sending -> waiting -> received | not_received | failed, and
@@ -1558,7 +1560,7 @@
   // deletion request lives on, and for the same reason.
   function selfExportButtonHtml(style) {
     if (!state.user) return "";
-    return `<button class="link-btn" data-community-action="self-export" style="${style || "display:block;margin-top:10px;"}"${state.ui.selfExportBusy ? " disabled aria-busy=\"true\"" : ""}>${state.ui.selfExportBusy ? "מכינים את הקובץ…" : "הורדת הנתונים שלי מהשרת (JSON)"}</button>`;
+    return `<button class="link-btn link-btn--tap" data-community-action="self-export" style="${style || "display:block;margin-top:10px;"}"${state.ui.selfExportBusy ? " disabled aria-busy=\"true\"" : ""}>${state.ui.selfExportBusy ? "מכינים את הקובץ…" : "הורדת הנתונים שלי מהשרת (JSON)"}</button>`;
   }
 
 
@@ -2415,7 +2417,7 @@
       const c = currentCircle();
       if (c) ensureSectionLoaded(c.id);
     }
-    if (state.user && !state.user.is_anonymous) { loadRecoveryStatus(); loadMfaStatus(); }
+    if (state.user && !state.user.is_anonymous) { loadRecoveryStatus(); loadMfaStatus(); window.haimuniaReminders.load(); }
     // Home shows the latest few posts of the circle the Circle tab opens on.
     if (window.haimuniaActiveTab === "home" && state.circles.loaded && state.profile && state.profile.recovery_verified_at) {
       const c = currentCircle();
@@ -2557,6 +2559,7 @@
     else if (action === "term-glossary-back") { state.ui.termGlossaryOpen = false; rerender(); }
     else if (action && action.indexOf("recovery-") === 0 && recoveryAction(action, el)) { /* handled in src/community/recovery.js */ }
     else if (action && action.indexOf("mfa-") === 0 && mfaAction(action)) { /* handled in src/community/mfa.js */ }
+    else if (action && action.indexOf("reminder-") === 0 && reminderAction(action, el)) { /* handled in src/community/reminders.js */ }
     else if (action === "start-signup") startSignup();
     // Design spec 7.1. The choice screen's secondary door.
     else if (action === "show-login") { state.ui.gateView = "login"; rerender(); }
@@ -2716,7 +2719,7 @@
         state.members.blockedIds = []; state.members.blocksLoaded = false;
         state.achievements.mine = []; state.achievements.unlock = null;
         state.notif.center = null; state.notif.unread = 0; state.notif.prefs = {}; state.notif.prefsLoaded = false;
-        state.notif.prefSaving = {}; state.notif.pushSub = null; state.notif.pushChecked = false;
+        state.notif.prefSaving = {}; state.notif.reminder = { loaded: false, row: null, saving: false }; state.notif.pushSub = null; state.notif.pushChecked = false;
         // However the session ended (sign-out, expiry, another tab), this
         // device keeps no push subscription for a member who is gone from it.
         if (_event === "SIGNED_OUT") forgetDevicePushLocally();

@@ -220,15 +220,15 @@ await world.step(dana, "week-view", "Open the week view", async (s) => {
 }, { primary: ["[data-week-member]", '[data-week-card="ready"]'], contrast: ["[data-week-member]", ".week-list + .footer-note, .footer-note"] });
 
 // 12. Notification switches ---------------------------------------------------------------------------------------
-await world.step(dana, "notifications", "Turn on all four notification switches", async (s) => {
+await world.step(dana, "notifications", "Turn on all seven notification switches", async (s) => {
   await openMe(s, dana);
   const toggles = dana.page.locator("input[data-notif-pref-toggle]");
   await toggles.first().waitFor({ state: "attached", timeout: 10000 });
-  s.check((await toggles.count()) === 4, "there are four switches", String(await toggles.count()));
+  s.check((await toggles.count()) === 7, "there are seven switches", String(await toggles.count()));
   await toggles.first().scrollIntoViewIfNeeded();
   const labels = await dana.page.$$eval("[data-notif-pref-row]", (rows) => rows.map((r) => r.innerText.replace(/\s+/g, " ").trim()));
   s.note("Switches: " + labels.join(" | "));
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 7; i++) {
     const t = toggles.nth(i);
     if (await t.isChecked()) continue;
     const saved = dana.page.waitForResponse((r) => r.url().includes("notification_preferences") && r.request().method() !== "GET", { timeout: 10000 }).catch(() => null);
@@ -237,8 +237,8 @@ await world.step(dana, "notifications", "Turn on all four notification switches"
     await until(async () => !(await t.isDisabled()), { timeout: 6000 });
   }
   const on = await dana.page.$$eval("input[data-notif-pref-toggle]", (els) => els.map((e) => e.checked));
-  s.check(on.length === 4 && on.every(Boolean), "all four switches show on", JSON.stringify(on));
-  s.check(count(`select count(*) from public.notification_preferences where user_id = ${q(uid)} and channel <> 'off'`) === 4, "four preference rows are stored");
+  s.check(on.length === 7 && on.every(Boolean), "all seven switches show on", JSON.stringify(on));
+  s.check(count(`select count(*) from public.notification_preferences where user_id = ${q(uid)} and channel <> 'off'`) === 6, "six preference rows are stored (a reaction to your own post is on without a row)");
   s.note("Message shown: " + ((await dana.text()).match(/כדי לקבל התראות[^.]*\./) || ["none"])[0]);
 }, { primary: ["input[data-notif-pref-toggle]"], contrast: ["#notifPrefs [data-notif-pref-row] span", "#notifPrefs > div"] });
 

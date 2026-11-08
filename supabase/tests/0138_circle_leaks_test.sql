@@ -84,6 +84,7 @@ insert into public.post_training_partners (post_id, tagged_user_id, tagged_by) v
 insert into public.private_records (user_id, record_type, record_id, payload) values (tests.uid('m3'), 'session_note', 'leak-probe', '{}'::jsonb);
 insert into public.push_subscriptions (user_id, endpoint, keys) values (tests.uid('m3'), 'https://example.test/leak', '{"p256dh":"k","auth":"a"}'::jsonb);
 insert into public.rate_limits (user_id, action) values (tests.uid('m3'), 'leak_probe');
+insert into public.reminder_prefs (user_id) values (tests.uid('m3'));
 insert into public.reactions (post_id, user_id, kind) values ('b1000000-0000-4000-8000-000000000001', tests.uid('owner'), 'fist_bump');
 insert into public.request_idempotency (user_id, action, idempotency_key) values (tests.uid('m3'), 'leak_probe', gen_random_uuid());
 
@@ -116,6 +117,7 @@ select cmp_ok((select count(*) from public.private_records where user_id = tests
 select cmp_ok((select count(*) from public.profiles where id = tests.uid('m3')), '>', 0::bigint, 'profiles: the victim row exists');
 select cmp_ok((select count(*) from public.push_subscriptions where user_id = tests.uid('m3')), '>', 0::bigint, 'push_subscriptions: the victim row exists');
 select cmp_ok((select count(*) from public.rate_limits where user_id = tests.uid('m3')), '>', 0::bigint, 'rate_limits: the victim row exists');
+select cmp_ok((select count(*) from public.reminder_prefs where user_id = tests.uid('m3')), '>', 0::bigint, 'reminder_prefs: the victim row exists');
 select cmp_ok((select count(*) from public.reactions where post_id = 'b1000000-0000-4000-8000-000000000001'), '>', 0::bigint, 'reactions: the victim row exists');
 select cmp_ok((select count(*) from public.request_idempotency where user_id = tests.uid('m3')), '>', 0::bigint, 'request_idempotency: the victim row exists');
 select cmp_ok((select count(*) from public.workout_posts where club_id = 'b0000000-0000-4000-8000-00000000000b'), '>', 0::bigint, 'workout_posts: the victim row exists');
@@ -325,6 +327,12 @@ select is(tests.leak_dml('update public.rate_limits set attempt_count = attempt_
 select is(tests.leak_dml('delete from public.rate_limits where user_id = tests.uid(''m3'')'), 0, 'rate_limits: delete removes zero rows of circle B');
 select is(tests.leak_dml('insert into public.rate_limits (user_id, action) values (tests.uid(''m3''), ''leak_probe_2'')'), 0, 'rate_limits: insert into circle B is refused');
 
+-- reminder_prefs
+select is(tests.leak_count('reminder_prefs', 'user_id = tests.uid(''m3'')'), 0::bigint, 'reminder_prefs: select sees zero rows of another member');
+select is(tests.leak_dml('update public.reminder_prefs set workout_hour = workout_hour where user_id = tests.uid(''m3'')'), 0, 'reminder_prefs: update touches zero rows of another member');
+select is(tests.leak_dml('delete from public.reminder_prefs where user_id = tests.uid(''m3'')'), 0, 'reminder_prefs: delete removes zero rows of another member');
+select is(tests.leak_dml('insert into public.reminder_prefs (user_id) values (tests.uid(''m3''))'), 0, 'reminder_prefs: insert as another member is refused');
+
 -- reactions
 select tests.set_auth(tests.uid('m1'));
 select is(tests.leak_count('reactions', 'post_id = ''b1000000-0000-4000-8000-000000000001'''), 0::bigint, 'reactions: select sees zero rows of circle B');
@@ -374,6 +382,7 @@ select cmp_ok((select count(*) from public.private_records where user_id = tests
 select cmp_ok((select count(*) from public.profiles where id = tests.uid('m3')), '>', 0::bigint, 'profiles: the victim rows survived');
 select cmp_ok((select count(*) from public.push_subscriptions where user_id = tests.uid('m3')), '>', 0::bigint, 'push_subscriptions: the victim rows survived');
 select cmp_ok((select count(*) from public.rate_limits where user_id = tests.uid('m3')), '>', 0::bigint, 'rate_limits: the victim rows survived');
+select cmp_ok((select count(*) from public.reminder_prefs where user_id = tests.uid('m3')), '>', 0::bigint, 'reminder_prefs: the victim row survived');
 select cmp_ok((select count(*) from public.recovery_codes where user_id = tests.uid('m3')), '>', 0::bigint, 'recovery_codes: the victim rows survived');
 select cmp_ok((select count(*) from public.recovery_attempts where key_hash = repeat('q', 64)), '>', 0::bigint, 'recovery_attempts: the victim rows survived');
 select cmp_ok((select count(*) from public.reactions where post_id = 'b1000000-0000-4000-8000-000000000001'), '>', 0::bigint, 'reactions: the victim rows survived');
@@ -384,7 +393,7 @@ select cmp_ok((select count(*) from public.workout_posts where club_id = 'b00000
 select is_empty(
   $$ select c.relname::text from pg_class c
       where c.relnamespace = 'public'::regnamespace and c.relkind in ('r', 'p')
-        and c.relname not in ('account_deletion_requests', 'achievement_definitions', 'analytics_events', 'blocks', 'bug_reports', 'benchmark_results', 'circle_invites', 'circle_members', 'circle_targets', 'clubs', 'edge_function_invocations', 'invite_attempts', 'invite_codes', 'invite_redemptions', 'invites', 'job_health_state', 'member_achievements', 'member_targets', 'notification_batches', 'notification_preferences', 'notifications', 'post_training_partners', 'private_records', 'profiles', 'push_subscriptions', 'rate_limits', 'reactions', 'recovery_attempts', 'recovery_codes', 'request_idempotency', 'workout_posts') $$,
+        and c.relname not in ('account_deletion_requests', 'achievement_definitions', 'analytics_events', 'blocks', 'bug_reports', 'benchmark_results', 'circle_invites', 'circle_members', 'circle_targets', 'clubs', 'edge_function_invocations', 'invite_attempts', 'invite_codes', 'invite_redemptions', 'invites', 'job_health_state', 'member_achievements', 'member_targets', 'notification_batches', 'notification_preferences', 'notifications', 'post_training_partners', 'private_records', 'profiles', 'push_subscriptions', 'rate_limits', 'reactions', 'recovery_attempts', 'recovery_codes', 'reminder_prefs', 'request_idempotency', 'workout_posts') $$,
   'this file covers every table in public: a new table must be added here');
 
 select * from finish();

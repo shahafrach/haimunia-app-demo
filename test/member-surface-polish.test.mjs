@@ -240,14 +240,14 @@ test("each notification type is one row with one switch", async () => {
   await openAccount(window);
 
   const switches = [...window.document.querySelectorAll("[data-notif-pref-toggle]")];
-  assert.equal(switches.length, 4, "the four types, no more");
+  assert.equal(switches.length, 7, "the seven types, no more");
   assert.equal(window.document.querySelectorAll("[data-notif-pref-select]").length, 0, "no select is left");
   assert.equal(window.document.querySelectorAll('[data-community-action="notif-pref"]').length, 0,
     "and none of them renders the old three-button row");
   for (const box of switches) {
     assert.equal(box.type, "checkbox");
     assert.equal(box.getAttribute("role"), "switch");
-    assert.equal(box.checked, false, "off until the member turns it on");
+    assert.equal(box.checked, box.dataset.type === "reaction", "off until the member turns it on (a reaction to your own post is the one default)");
     assert.equal(box.closest(".log-row").querySelectorAll("input").length, 1, "one control per row");
   }
 });

@@ -52,6 +52,8 @@ create table tests.definer_reviewed (
 insert into tests.definer_reviewed (name, args, class, anon_allowed, reason) values
   ('aal_satisfied', '', 'caller_own_rows', false, 'RLS helper: does the caller''s session meet its second step; reads only the caller''s own verified factors (202611070002)'),
   ('ach_claim', 'text[]', 'caller_own_rows', false, ''),
+  ('notif_on_pr_post', '', 'circle_scoped', false, 'trigger: tells the OTHER members of the post''s own circle that a member posted a personal record; notif_create re-checks membership and blocks'),
+  ('reminder_push_due', 'timestamp with time zone', 'global_safe', false, 'cron job: writes content-free personal reminder rows for members whose chosen day and time it is; service_role only'),
   ('ach_share', 'uuid, uuid, text, uuid', 'circle_scoped', false, 'publishes a post in ONE circle the caller is a member of'),
   ('analytics_events_guard_rate_limit', '', 'caller_own_rows', false, ''),
   ('bootstrap_owner_invite', '', 'global_safe', false, 'owner-only: granted to no role, so only the SQL editor (postgres) can call it; refuses any call that carries an auth.uid(); mints one one-hour, one-use invite_codes row (202610290001)'),

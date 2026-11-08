@@ -68,7 +68,14 @@
     trained_together: { category: "community", pref: "trained_together", icon: "🤝", title: "תיוג לאימון משותף מחכה לאישור שלך" },
     circle_joined:    { category: "community", pref: "circle_joined",    icon: "👋", title: "חבר/ה חדש/ה במעגל" },
     week_card:        { category: "community", pref: "week_card",        icon: "📅", title: "כרטיס השבוע מוכן" },
+    pr_circle:        { category: "community", pref: "pr_circle",        icon: "🏅", title: "שיא אישי חדש במעגל" },
+    workout_reminder: { category: "community", pref: "workout_reminder", icon: "⏰", title: "זמן לאימון" },
+    weekly_digest:    { category: "community", pref: "weekly_digest",    icon: "📈", title: "הסיכום השבועי שלך מוכן" },
   };
+  // Opt-in, except a reaction to your own post: no stored row means on for that one type
+  // (the server twin is notif_pref_allows, migration 202611080001).
+  const NOTIF_DEFAULT_ON = new Set(["reaction"]);
+  function notifStored(prefs, key) { const s = prefs && prefs[key]; return s == null && NOTIF_DEFAULT_ON.has(key) ? "in_app" : s; }
   function notifTypeDef(type) { return NOTIF_TYPES[type] || null; }
 
   // The toggles in Me, in this order. Every one is OFF until the member turns
@@ -78,6 +85,9 @@
     { key: "trained_together", label: "תיוג לאימון משותף שמחכה לאישור שלי" },
     { key: "circle_joined",    label: "מישהו הצטרף למעגל שלי" },
     { key: "week_card",        label: "כרטיס השבוע מוכן (מוצאי שבת)" },
+    { key: "pr_circle",        label: "שיא אישי חדש של חבר/ה במעגל" },
+    { key: "workout_reminder", label: "תזכורת לאימון בימים ובשעה שבחרתי" },
+    { key: "weekly_digest",    label: "סיכום התקדמות שבועי" },
   ];
   const NOTIF_PREF_KEYS = new Set(NOTIF_PREF_TYPES.map((t) => t.key));
   const NOTIF_CHANNELS = ["push", "in_app", "off"];
@@ -88,7 +98,7 @@
   function notifRoute(type, prefs) {
     const def = NOTIF_TYPES[type];
     if (!def) return { channel: "off", suppressed: true };
-    let channel = (prefs && prefs[def.pref]) || "off";
+    let channel = notifStored(prefs, def.pref) || "off";
     if (NOTIF_CHANNELS.indexOf(channel) < 0) channel = "off";
     if (channel === "push" && !notifPushEnabled()) channel = "in_app";
     return { channel: channel, suppressed: channel === "off" };
@@ -749,6 +759,8 @@
     }
     const st = row && row.source_type;
     const sid = row && row.source_id;
+    const own = /^\/tab\/(add|history)$/.exec(link);
+    if (own) return { personalTab: own[1], tab: "own", circle: null, post: null, week: false };
     return {
       tab: "circle",
       circle: q.c || (row && row.circle_id) || null,
@@ -757,6 +769,8 @@
     };
   }
   async function navigateToNotifTarget(target) {
+    // A personal reminder or the weekly summary opens one of the core tabs, not a circle.
+    if (target.personalTab) { if (typeof window.haimuniaOpenTab === "function") window.haimuniaOpenTab(target.personalTab); return; }
     if (typeof window.switchToCommunityTopTab === "function") window.switchToCommunityTopTab();
     if (!target.circle) { rerender(); return; }
     // A cold start gets here before the circles have loaded.
@@ -822,9 +836,10 @@
     // never the reverse). A real click on the existing tab button is the
     // same DOM-level bridge every other cross-file test in this repo
     // already relies on.
+    const target = resolveNotifTarget({ deep_link: deepLink });
     const topBtn = document.getElementById("tabCommunityBtn");
-    if (topBtn && !topBtn.classList.contains("active")) topBtn.click();
-    navigateToNotifTarget(resolveNotifTarget({ deep_link: deepLink }));
+    if (!target.personalTab && topBtn && !topBtn.classList.contains("active")) topBtn.click();
+    navigateToNotifTarget(target);
   }
   window.communityHandlePushDeepLink = communityHandlePushDeepLink;
 
@@ -923,7 +938,7 @@
     const pushOn = notifPushEnabled();
     const pushReason = pushOn ? notifPushUnsupportedReason() : null;
     const rowFor = (t) => {
-      const stored = state.notif.prefs[t.key];
+      const stored = notifStored(state.notif.prefs, t.key);
       const on = stored === "push" || stored === "in_app";
       const saving = !!state.notif.prefSaving[t.key];
       const pushBadge = (pushOn && stored === "push" && state.notif.pushSub)
@@ -931,7 +946,7 @@
       return `<label class="log-row" data-notif-pref-row="${t.key}" style="justify-content:space-between;gap:12px;align-items:center;cursor:pointer;min-height:44px;">
         <span style="font-size:13px;min-width:0;">${esc(t.label)}${pushBadge}</span>
         <input type="checkbox" role="switch" data-notif-pref-toggle data-type="${t.key}" aria-label="${esc(t.label)}"${on ? " checked" : ""}${saving ? " disabled" : ""}/>
-      </label>`;
+      </label>${on && window.haimuniaReminders ? window.haimuniaReminders.scheduleHtml(t.key) : ""}`;
     };
     const rows = state.notif.prefsLoaded
       ? NOTIF_PREF_TYPES.map(rowFor).join("")
@@ -943,7 +958,7 @@
       : "";
     const reasonHtml = pushReason
       ? `<div data-notif-push-reason style="color:var(--color-text-muted);font-size:12px;line-height:1.6;margin-bottom:8px;">${esc(pushReason)} ההתראות יופיעו בפעמון.</div>` : "";
-    const introHtml = "כל ההתראות כבויות עד שתדליקו אותן. מקבלים התראה רק על מעגל שעדיין חברים בו, ואף פעם לא ממי שחסמתם. עידוד על אותו פוסט מגיע לכל היותר פעם בשעה.";
+    const introHtml = "כל ההתראות כבויות עד שתדליקו אותן, חוץ מעידוד על פוסט שלכם. מקבלים התראה רק על מעגל שעדיין חברים בו, ואף פעם לא ממי שחסמתם. עידוד על אותו פוסט מגיע לכל היותר פעם בשעה.";
     return `<div class="ach-section" id="notifPrefs" style="margin-top:18px;">${sectionHead("var(--color-accent)", "התראות")}
       <div style="color:var(--color-text-muted);font-size:12px;line-height:1.6;margin-bottom:8px;">${introHtml}</div>
       ${reasonHtml}

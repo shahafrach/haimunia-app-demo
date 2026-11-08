@@ -69,8 +69,8 @@ const measure = () => page.evaluate(() => {
 
 let m = await measure();
 check("the page is right-to-left", m.dir === "rtl");
-check("exactly four switches, in order", m.rows.map((r) => r.type).join(",") === "reaction,trained_together,circle_joined,week_card", m.rows.map((r) => r.type).join(","));
-check("ALL FOUR START OFF", m.rows.every((r) => !r.checked));
+check("exactly seven switches, in order", m.rows.map((r) => r.type).join(",") === "reaction,trained_together,circle_joined,week_card,pr_circle,workout_reminder,weekly_digest", m.rows.map((r) => r.type).join(","));
+check("only a reaction to your own post starts ON, the other six start off", m.rows.every((r) => r.checked === (r.type === "reaction")));
 check("each is a switch with its own accessible name", m.rows.every((r) => r.role === "switch" && r.name && r.name.length > 3));
 check("RTL: the label is on the right and the switch on the left", m.rows.every((r) => r.boxCenter < r.labelCenter), m.rows.map((r) => `${Math.round(r.boxCenter)}<${Math.round(r.labelCenter)}`).join(" "));
 check("each row is a touch target (height >= 44px)", m.rows.every((r) => r.rowH >= 44), m.rows.map((r) => r.rowH).join(","));
@@ -103,7 +103,7 @@ await page.waitForFunction(() => window.__mock.db.notification_preferences.some(
 await page.waitForFunction(() => document.querySelector('[data-notif-pref-toggle][data-type="week_card"]').checked, { timeout: 5000 });
 m = await measure();
 check("turning week_card on writes its row and it stays on", m.rows.find((r) => r.type === "week_card").checked);
-check("and the other three did not move", m.rows.filter((r) => r.type !== "week_card").every((r) => !r.checked));
+check("and the others did not move", m.rows.filter((r) => r.type !== "week_card").every((r) => r.checked === (r.type === "reaction")));
 check("nothing was subscribed: no push_subscriptions row", (await page.evaluate(() => window.__mock.db.push_subscriptions.length)) === 0);
 check("no horizontal overflow after the change", m.scrollWidth <= m.clientWidth + 1);
 check("no console errors", errors.length === 0, errors.join(" | "));

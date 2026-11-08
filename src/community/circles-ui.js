@@ -501,7 +501,7 @@ ${uiToastHtml()}${renderOutboxBanner()}${inner}</div></section>`;
       ${state.circles.list.map((c) => {
         const d = CirclesCore.effectiveDefaults(c);
         return `<div class="chart-card" style="margin-bottom:10px;"><div style="font-weight:800;margin-bottom:6px;"><span aria-hidden="true">${esc(c.emoji)}</span> ${bidiText(c.name)}</div>
-          <div class="log-list">${labels.map((l) => `<label class="log-row" style="justify-content:space-between;gap:12px;cursor:pointer;"><span style="font-size:13px;">${esc(l[1])}</span><input type="checkbox" data-share-setting="${l[0]}" data-circle="${esc(c.id)}"${d[l[0]] ? " checked" : ""} aria-label="${esc(l[1] + " ב" + c.name)}"/></label>`).join("")}</div></div>`;
+          <div class="log-list">${labels.map((l) => `<label class="log-row" style="justify-content:space-between;gap:12px;cursor:pointer;min-height:44px;align-items:center;"><span style="font-size:13px;">${esc(l[1])}</span><input type="checkbox" data-share-setting="${l[0]}" data-circle="${esc(c.id)}"${d[l[0]] ? " checked" : ""} aria-label="${esc(l[1] + " ב" + c.name)}"/></label>`).join("")}</div></div>`;
       }).join("")}
     </div>`;
   }
@@ -554,8 +554,8 @@ ${uiToastHtml()}${renderOutboxBanner()}${inner}</div></section>`;
       + founderLinkPanelHtml()
       + `<button class="chip-btn" data-action="open-support" style="display:block;margin:20px auto 0;">פנייה</button>`
       + selfExportButtonHtml("display:block;margin:20px auto 0;")
-      + `<button class="link-btn" data-community-action="sign-out" style="display:block;margin:20px auto 0;">התנתקות</button>`
-      + `<button class="link-btn" data-community-action="delete-account" style="display:block;margin:10px auto 8px;color:var(--color-danger);">בקשת מחיקת חשבון</button>`;
+      + `<button class="link-btn link-btn--tap" data-community-action="sign-out" style="display:block;margin:20px auto 0;">התנתקות</button>`
+      + `<button class="link-btn link-btn--tap" data-community-action="delete-account" style="display:block;margin:10px auto 8px;color:var(--color-danger);">בקשת מחיקת חשבון</button>`;
     return circleScene("me", "אני", inner);
   }
 

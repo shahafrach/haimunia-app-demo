@@ -382,7 +382,9 @@
   .modal-title{ color:var(--color-text); font-weight:800; font-size:var(--text-body); }
   .search-box{ display:flex; align-items:center; margin:0 var(--space-md) 12px; background:var(--input-bg); border:1px solid var(--input-border); border-radius:var(--radius-control); padding:var(--space-sm) 12px; gap:var(--space-sm); color:var(--color-text-muted); }
   .search-box:focus-within{ outline:2px solid var(--color-focus); outline-offset:2px; }
-  .search-box input{ background:transparent; border:none; color:var(--color-text); flex:1; outline:none; }
+  /* A row that is a label around a switch or checkbox is the touch target: 44px at least. */
+  label.log-row{ min-height:44px; align-items:center; }
+  .search-box input{ background:transparent; border:none; color:var(--color-text); flex:1; outline:none; min-height:44px; }
   .modal-list{ overflow-y:auto; overflow-x:hidden; -webkit-overflow-scrolling:touch; padding:0 var(--space-md) var(--space-lg); flex:1; min-height:0; }
   #navMenuList{ display:flex; flex-direction:column; }
   #achievementsOverlay{ align-items:stretch; padding:0; }
@@ -1246,6 +1248,7 @@
 <script defer src="./src/community/auth.js"></script>
 <script defer src="./src/community/recovery.js"></script>
 <script defer src="./src/community/mfa.js"></script>
+<script defer src="./src/community/reminders.js"></script>
 <script defer src="./cloud.js"></script>
 <script defer src="./src/constants.js"></script>
 <script defer src="./src/format.js"></script>
