@@ -43,8 +43,8 @@ test("functions importing only supabase-js share one lockfile, byte for byte", (
   // `deno cache` run, not deleted.
   const simple = functions.filter((name) => {
     const src = readFileSync(new URL(`${name}/index.ts`, dir), "utf8");
-    const remote = [...src.matchAll(/^import .* from "(https?:[^"]+)"/gm)].map((m) => m[1]);
-    return remote.length === 1 && remote[0] === "https://esm.sh/@supabase/supabase-js@2.57.4";
+    const remote = [...src.matchAll(/^import .* from "(npm:[^"]+|https?:[^"]+)"/gm)].map((m) => m[1]);
+    return remote.length === 1 && remote[0] === "npm:@supabase/supabase-js@2.57.4";
   });
   assert.ok(simple.length >= 2, `expected several single-dependency functions, found ${simple.length}`);
   const locks = new Set(simple.map((name) => readFileSync(new URL(`${name}/deno.lock`, dir), "utf8")));

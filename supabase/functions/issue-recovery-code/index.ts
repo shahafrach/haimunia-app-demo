@@ -9,7 +9,7 @@
 //
 // An anonymous session is refused: a recovery code belongs to a username and
 // password, and the member has to have set both first.
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.4";
+import { createClient } from "npm:@supabase/supabase-js@2.57.4";
 import { handleIssue, CORS_HEADERS } from "../_shared/recovery.mjs";
 
 Deno.serve(async (req: Request) => {
