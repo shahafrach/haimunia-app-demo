@@ -140,3 +140,13 @@ test("a member in no circle can still reach Me: sign-out and account deletion do
   await waitFor(() => !!window.document.querySelector('[data-community-action="sign-out"]'), 4000);
   assert.ok(window.document.querySelector('[data-community-action="delete-account"]'));
 });
+
+test("Me shows the sign-in name, taken from the synthetic address before the @", async () => {
+  const mock = createCirclesMock();
+  mock.setUser({ id: ME, is_anonymous: false, email: "dana_k@members.haimuniya.invalid" });
+  const window = await bootMe(mock);
+  const el = window.document.querySelector("#communityHead [data-login-name]");
+  assert.ok(el, "the sign-in name line is in the Me header");
+  assert.equal(el.querySelector("bdi").textContent, "dana_k");
+  assert.ok(!el.textContent.includes("members.haimuniya"), "the synthetic domain is not shown");
+});

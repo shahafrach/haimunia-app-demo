@@ -544,7 +544,11 @@ ${uiToastHtml()}${renderOutboxBanner()}${inner}</div></section>`;
       </label>
       <button class="chip-btn" data-community-action="term-glossary-open" style="margin-top:10px;">כל המונחים</button>
     </div>`;
-    const head = `<div class="chart-card" id="communityHead" style="margin-bottom:12px;"><div class="flex" style="justify-content:space-between;align-items:center;gap:10px;"><div style="font-weight:800;font-size:16px;"><span aria-hidden="true">${esc(p.emoji || "🙂")}</span> ${bidiText(p.display_name || "")}</div>${renderNotificationBell()}</div></div>`;
+    // The sign-in name is the part of the synthetic address before the "@".
+    // Shown so a member who forgot it can read it off a signed-in device.
+    const loginName = state.user && !state.user.is_anonymous && state.user.email ? String(state.user.email).split("@")[0] : "";
+    const loginNameHtml = loginName ? `<div data-login-name="1" style="color:var(--color-text-muted);font-size:13px;margin-top:6px;">שם המשתמש להתחברות: <bdi dir="ltr" style="font-weight:700;user-select:all;">${esc(loginName)}</bdi></div>` : "";
+    const head = `<div class="chart-card" id="communityHead" style="margin-bottom:12px;"><div class="flex" style="justify-content:space-between;align-items:center;gap:10px;"><div style="font-weight:800;font-size:16px;"><span aria-hidden="true">${esc(p.emoji || "🙂")}</span> ${bidiText(p.display_name || "")}</div>${renderNotificationBell()}</div>${loginNameHtml}</div>`;
     const profile = profileFormHtml("communityProfile", p, true);
     const inner = head + profile + `<div class="chip-row" style="margin:-4px 0 8px;"><button class="chip-btn" type="button" data-community-action="migrate">סנכרון היסטוריה פרטית</button></div>`
       + `<div class="ach-section" style="margin-top:18px;">${sectionHead("var(--color-accent)", "מראה")}<div class="chart-card">${typeof renderAppearanceSection === "function" ? renderAppearanceSection("me") : ""}</div></div>`
