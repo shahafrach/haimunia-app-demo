@@ -1,7 +1,7 @@
 // mfa-recovery: remove a member's authenticator factors with their recovery code.
 // The gateway JWT check stays ON (the caller is signed in with a password), the
 // logic is in ../_shared/mfa-recovery.mjs. Secrets: RECOVERY_CODE_HMAC_SECRET.
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.4";
+import { createClient } from "npm:@supabase/supabase-js@2.57.4";
 import { CORS_HEADERS } from "../_shared/recovery.mjs";
 import { handleMfaRecovery } from "../_shared/mfa-recovery.mjs";
 
