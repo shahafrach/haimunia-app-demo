@@ -5,8 +5,8 @@
 #   * the confirm input is the word "apply" (the typed confirmation push:prod asks for);
 #   * SUPABASE_ACCESS_TOKEN is set (the same secret the other ops workflows use; `supabase link` with it needs no DB password);
 #   * check:versions and check:immutable pass (no shared version prefix, no applied migration edited);
-#   * check:drift shows nothing applied to production that is missing from the repo (someone ran SQL by hand:
-#     work out what it did first).
+#   * production holds no migration that is missing from the repo (someone ran SQL by hand: work out what it did
+#     first). Pending migrations are expected and are what gets applied (same rule as push:prod).
 # Then it prints what is pending, runs `supabase db push --linked --yes` and prints the migration list again.
 # Take a backup first (Actions, backup-database): there is no undo for a migration.
 name: apply-migrations
@@ -60,7 +60,18 @@ jobs:
           set -euo pipefail
           npm run check:versions
           npm run check:immutable
-          npm run check:drift
+          # Same rule as scripts/push-migrations.mjs: migrations committed but not yet applied are what this run is
+          # FOR. It refuses only when production could not be read (exit 2) or holds migrations the repo does not
+          # (somebody ran SQL by hand: work out what it did first).
+          set +e
+          out="$(node scripts/check-migration-drift.mjs 2>&1)"
+          code=$?
+          set -e
+          echo "$out"
+          if [ "$code" -eq 2 ] || echo "$out" | grep -q "applied to production but NOT in the repo"; then
+            echo "::error::Refusing: production could not be read, or it has migrations the repository does not. Nothing was changed."
+            exit 1
+          fi
 
       - name: pending migrations
         run: |
