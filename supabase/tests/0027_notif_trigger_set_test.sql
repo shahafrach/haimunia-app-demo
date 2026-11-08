@@ -37,6 +37,11 @@ insert into public.workout_posts (id, author_id, club_id, post_type, title, stat
   ('c0270000-0000-4000-8000-000000000004', tests.uid('m1'), 'a0000000-0000-4000-8000-00000000000a', 'POST_WORKOUT', 'P4 (reactor is blocked)', 'active', now()),
   ('c0270000-0000-4000-8000-000000000005', tests.uid('owner'), 'b0000000-0000-4000-8000-00000000000b', 'POST_WORKOUT', 'P5 (circle B)', 'active', now());
 
+-- A reaction to your own post is ON until switched off (202611080001), so these three members have
+-- switched it off first; the opt-in rule is what the next section exercises.
+insert into public.notification_preferences (user_id, type, channel) values
+  (tests.uid('m1'), 'reaction', 'off'), (tests.uid('m2'), 'reaction', 'off'), (tests.uid('m3'), 'reaction', 'off');
+
 -- 1. Nobody can call a trigger function ---------------------------------------------------------
 select tests.set_auth(tests.uid('m1'));
 select throws_ok($$ select public.notif_on_reaction() $$, '42501', null, 'notif_on_reaction is not callable by a member');
@@ -45,14 +50,13 @@ select throws_ok($$ select public.notif_on_circle_join() $$, '42501', null, 'nei
 select tests.clear_auth();
 
 -- 2. Reactions --------------------------------------------------------------------------------------
--- Off by default: m1 has not opted in.
+-- Switched off: m1 has not turned reactions on.
 insert into public.reactions (post_id, user_id, kind) values ('c0270000-0000-4000-8000-000000000001', tests.uid('m2'), 'fist_bump');
 select is_empty($$ select 1 from public.notifications where type = 'reaction' $$,
-  'a reaction on my post tells me nothing until I turn reactions on');
+  'a reaction on my post tells me nothing while I have reactions off');
 delete from public.reactions;
 
-insert into public.notification_preferences (user_id, type, channel) values
-  (tests.uid('m1'), 'reaction', 'push');
+update public.notification_preferences set channel = 'push' where user_id = tests.uid('m1') and type = 'reaction';
 
 insert into public.reactions (post_id, user_id, kind) values ('c0270000-0000-4000-8000-000000000001', tests.uid('m2'), 'fist_bump');
 select results_eq(

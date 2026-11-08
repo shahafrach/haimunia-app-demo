@@ -173,13 +173,13 @@ const prefs = await page.evaluate(() => {
     count: boxes.length,
     selects: document.querySelectorAll("[data-notif-pref-select]").length,
     rowsWithButtons: document.querySelectorAll('[data-community-action="notif-pref"]').length,
-    allOff: boxes.every((b) => !b.checked),
+    allOffExceptReaction: boxes.every((b) => b.checked === (b.dataset.type === "reaction")),
     rowHeights: boxes.map((b) => Math.round(b.closest(".log-row").getBoundingClientRect().height)),
   };
 });
-check("every notification type has exactly one switch (four)", prefs.count === 4, String(prefs.count));
+check("every notification type has exactly one switch (seven)", prefs.count === 7, String(prefs.count));
 check("no type renders the old button row or select any more", prefs.rowsWithButtons === 0 && prefs.selects === 0, JSON.stringify(prefs));
-check("every switch starts off", prefs.allOff);
+check("every switch starts off except a reaction to your own post", prefs.allOffExceptReaction);
 // "Compact" measured, not asserted: a row with a label and one switch fits
 // on one or two lines, so it is well under the ~140px the stacked block took.
 check("each row is compact", prefs.rowHeights.every((h) => h > 0 && h <= 90),
@@ -187,12 +187,12 @@ check("each row is compact", prefs.rowHeights.every((h) => h > 0 && h <= 90),
 
 // Turning one on writes a preference row.
 await page.evaluate(() => {
-  const s = document.querySelector('[data-notif-pref-toggle][data-type="reaction"]');
+  const s = document.querySelector('[data-notif-pref-toggle][data-type="trained_together"]');
   s.checked = true;
   s.dispatchEvent(new Event("change", { bubbles: true }));
 });
 await page.waitForFunction(
-  () => window.__mock.db.notification_preferences.some((r) => r.type === "reaction" && r.channel !== "off"),
+  () => window.__mock.db.notification_preferences.some((r) => r.type === "trained_together" && r.channel !== "off"),
   { timeout: 5000 });
 check("turning a switch on writes the notification_preferences row", true);
 await noHorizontalOverflow("notification preferences");

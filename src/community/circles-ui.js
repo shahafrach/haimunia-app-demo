@@ -554,8 +554,8 @@ ${uiToastHtml()}${renderOutboxBanner()}${inner}</div></section>`;
       + founderLinkPanelHtml()
       + `<button class="chip-btn" data-action="open-support" style="display:block;margin:20px auto 0;">פנייה</button>`
       + selfExportButtonHtml("display:block;margin:20px auto 0;")
-      + `<button class="link-btn" data-community-action="sign-out" style="display:block;margin:20px auto 0;">התנתקות</button>`
-      + `<button class="link-btn" data-community-action="delete-account" style="display:block;margin:10px auto 8px;color:var(--color-danger);">בקשת מחיקת חשבון</button>`;
+      + `<button class="link-btn link-btn--tap" data-community-action="sign-out" style="display:block;margin:20px auto 0;">התנתקות</button>`
+      + `<button class="link-btn link-btn--tap" data-community-action="delete-account" style="display:block;margin:10px auto 8px;color:var(--color-danger);">בקשת מחיקת חשבון</button>`;
     return circleScene("me", "אני", inner);
   }
 

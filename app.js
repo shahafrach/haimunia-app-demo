@@ -6015,7 +6015,7 @@ function renderMeasureArea() {
            <button data-action="cancel-add-measure-type" style="color:var(--color-text-muted); font-size:13px; padding:0 10px;">ביטול</button>
          </div>
        </div>`
-    : `<button class="link-btn" data-action="open-add-measure-type" style="margin-top:${types.length ? "8px" : "0"};">+ הוספת מדד חדש</button>`;
+    : `<button class="link-btn link-btn--tap" data-action="open-add-measure-type" style="margin-top:${types.length ? "8px" : "0"};">+ הוספת מדד חדש</button>`;
 
   const rows = types.map((t) => {
     const expanded = measureExpandedId === t.id;

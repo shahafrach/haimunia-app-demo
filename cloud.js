@@ -1560,7 +1560,7 @@
   // deletion request lives on, and for the same reason.
   function selfExportButtonHtml(style) {
     if (!state.user) return "";
-    return `<button class="link-btn" data-community-action="self-export" style="${style || "display:block;margin-top:10px;"}"${state.ui.selfExportBusy ? " disabled aria-busy=\"true\"" : ""}>${state.ui.selfExportBusy ? "מכינים את הקובץ…" : "הורדת הנתונים שלי מהשרת (JSON)"}</button>`;
+    return `<button class="link-btn link-btn--tap" data-community-action="self-export" style="${style || "display:block;margin-top:10px;"}"${state.ui.selfExportBusy ? " disabled aria-busy=\"true\"" : ""}>${state.ui.selfExportBusy ? "מכינים את הקובץ…" : "הורדת הנתונים שלי מהשרת (JSON)"}</button>`;
   }
 
 
