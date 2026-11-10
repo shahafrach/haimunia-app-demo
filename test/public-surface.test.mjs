@@ -157,3 +157,16 @@ test("_redirects is gone, and stays gone", () => {
   assert.equal(existsSync(fileURLToPath(new URL("_redirects", root))), false,
     "_redirects cannot block existing files on Pages - use functions/_middleware.js");
 });
+
+test("every public page is Hebrew RTL and has exactly one h1 where it has headings (audit M10, L1)", () => {
+  for (const f of ["index.html", "privacy.html", "terms.html", "404.html"]) {
+    const html = readFileSync(new URL(f, root), "utf8");
+    assert.match(html, /<html lang="he" dir="rtl">/, `${f} must declare lang="he" dir="rtl"`);
+  }
+  for (const f of ["privacy.html", "terms.html"]) {
+    const html = readFileSync(new URL(f, root), "utf8");
+    const h1 = [...html.matchAll(/<h1\b[^>]*>([^<]*)<\/h1>/g)].map((m) => m[1]);
+    assert.equal(h1.length, 1, `${f} has one h1, found: ${h1.join(" | ")}`);
+  }
+  assert.match(readFileSync(new URL("privacy.html", root), "utf8"), /<h1 class="page-title">מדיניות פרטיות<\/h1>/, "the privacy page's h1 is the privacy title");
+});

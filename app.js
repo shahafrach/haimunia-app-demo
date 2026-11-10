@@ -1549,8 +1549,8 @@ function momentSet(w, r) { return w > 0 ? `<bdi class="num">${esc(String(w))} ק
 function renderMomentBody(m) {
   const burst = m.level === 2 ? `<span class="moment-burst" aria-hidden="true">${"<i></i>".repeat(12)}</span>` : "";
   const topPr = m.prs[0] || null;
-  const title = m.wodPr ? `שיא חדש ב${m.wodPr.name}!`
-    : topPr ? `שיא חדש ב${topPr.name}!`
+  const title = m.wodPr ? `שיא חדש ב-\u2068${m.wodPr.name}\u2069!`
+    : topPr ? `שיא חדש ב-\u2068${topPr.name}\u2069!`
     : m.week.weekJustMet ? "השבוע הושלם" : `אימון מספר ${m.sessionNumber}`;
   const sub = m.wodPr ? (m.wodPr.benchmark ? "בנצ'מרק" : "") : (topPr || m.week.weekJustMet) ? `אימון מספר ${m.sessionNumber} · ${fmtDate(m.date)}` : fmtDate(m.date);
   const prCards = m.wodPr
@@ -2403,7 +2403,7 @@ async function saveSet(sanityConfirmed) {
     const reference = heaviestLoggedWeightFor(selectedId, editId);
     const mov = movementById(selectedId);
     if (!sanityConfirmed && weightNeedsSanityCheck(weight, reference, firstSetWeightCeiling(mov && mov.category))) {
-      const movSuffix = mov ? "-" + mov.name : "תרגיל הזה";
+      const movSuffix = mov ? "-\u2068" + mov.name + "\u2069" : "תרגיל הזה";
       askAppConfirm({
         title: `${weight} ק״ג — לוודא?`,
         // Two references, one question. With history the honest comparison is
@@ -6381,7 +6381,7 @@ function e1rmChartSvg(series, prDates, name) {
     return `<circle class="pt${p.real ? " real" : ""}" cx="${cx}" cy="${cy}" r="${p.real ? 4 : 3.5}"/>`;
   }).join("");
   const first = series[0], last = series[series.length - 1];
-  const label = `הערכת 1RM ב${name}: ${series.length} נקודות בין ${fmtDate(first.date)} (${first.e1rm} ק״ג) ל-${fmtDate(last.date)} (${last.e1rm} ק״ג)${prDates.size ? `, כולל ${prDates.size === 1 ? "שיא אחד" : prDates.size + " שיאים"}` : ""}. מימין לשמאל: מהישן לחדש.`;
+  const label = `הערכת 1RM ב-\u2068${name}\u2069: ${series.length} נקודות בין ${fmtDate(first.date)} (${first.e1rm} ק״ג) ל-${fmtDate(last.date)} (${last.e1rm} ק״ג)${prDates.size ? `, כולל ${prDates.size === 1 ? "שיא אחד" : prDates.size + " שיאים"}` : ""}. מימין לשמאל: מהישן לחדש.`;
   return `<svg class="chart-svg" viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(label)}">${grid}
     <polyline class="line" points="${path}"/>${pts}
     <text x="${w - padR}" y="${h - 8}" text-anchor="end">${esc(fmtDate(first.date))}</text><text x="${padL}" y="${h - 8}" text-anchor="start">${esc(fmtDate(last.date))}</text></svg>`;

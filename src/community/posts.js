@@ -585,7 +585,8 @@
       ["תוצאה חדשה", m.new_result || m.new_value],
       ["תוצאה קודמת", m.previous_result || m.previous_value],
       ["שיפור", m.improvement || pct],
-      ["תאריך", (m.achieved_on || post.occurred_on) ? String(m.achieved_on || post.occurred_on).slice(0, 10) : ""],
+      // The shared post date formatter, not the raw ISO day (audit L3).
+      ["תאריך", (m.achieved_on || post.occurred_on) ? shortHebDate(String(m.achieved_on || post.occurred_on).slice(0, 10)) : ""],
     ].filter((r) => r[1] != null && r[1] !== "");
     const result = `<div class="post-result-block"><div class="post-title">${bidiText(movement)} <span class="pr-badge badge-tag">PR</span></div>
       <div class="log-list" style="margin-top:6px;">${rows.map((r) => `<div class="log-row"><span>${esc(r[0])}</span><span class="mono" style="color:var(--color-accent);"><bdi>${esc(r[1])}</bdi></span></div>`).join("")}</div></div>`;

@@ -122,6 +122,18 @@ for (const [width, name] of [[320, "320px"]]) {
   await installMockCloud(out, SEED, { user: null });
   await out.goto(target.url, { waitUntil: "networkidle" });
   await out.waitForSelector("#app", { state: "visible", timeout: 30000 });
+  // The welcome sheet, first thing a new member sees (audit M1, M2): measured before it is dismissed.
+  await out.waitForSelector("#welcomeOverlay.open", { timeout: 15000 });
+  await auditScreen(out, `welcome ${name}`, { tabs: false });
+  await out.setViewportSize({ width: 1280, height: 800 });
+  const wl = await out.evaluate(() => {
+    const r = document.querySelector("#welcomeOverlay .welcome-scene").getBoundingClientRect();
+    const t = document.getElementById("welcomeTitle").getBoundingClientRect();
+    return { center: r.left + r.width / 2, vw: document.documentElement.clientWidth, titleTop: t.top - r.top };
+  });
+  check("welcome 1280px: the sheet is centred", Math.abs(wl.center - wl.vw / 2) <= 2, `sheet centre ${Math.round(wl.center)} vs ${wl.vw / 2}`);
+  check("welcome 1280px: the title does not touch the top edge", wl.titleTop >= 16, `${Math.round(wl.titleTop)}px`);
+  await out.setViewportSize({ width, height: 800 });
   await dismissWelcomeModal(out);
   await switchTab(out, "tabCommunityBtn");
   await out.waitForSelector('[data-community-action="start-signup"]', { timeout: 20000 });
