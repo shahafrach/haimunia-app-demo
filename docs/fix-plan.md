@@ -137,6 +137,15 @@ Legend: **Mig** needs a migration. **Sec** touches RLS, auth or edge functions.
 - **Fix:** login uses `usernameRuleError` for the message (a-z, 0-9, _, 3-24
   characters); `passwordRuleError` adds "עד 72 תווים", which `recovery.js:86`
   picks up because it calls the same function. M4 below decides the label.
+- **Lost-code path (added 2026-11-10):** the forgot-password screen
+  (`recovery.js:165`) never says what to do without a code, and the sign-up
+  screen (`recovery.js:182`) says the code is "the only way" back, which is not
+  true: the owner can issue a one-hour reset code (`owner_issue_reset_code`,
+  [ops/PASSWORD_RESET.md](ops/PASSWORD_RESET.md)). Add one line under the
+  forgot form, "אין קוד? כתבו למי שמפעיל את BOX-LOG, והוא ישלח לכם קוד איפוס
+  חד-פעמי.", and correct the sign-up line to say that. No phone number or name
+  in the file.
+- **Files (add):** `src/community/recovery.js`.
 - **Decision (yours): email in login.** decisions.md says no email and the
   recovery code replaced email reset; there is no planned email reset in it.
   **Recommendation:** remove the email branch and label ("שם כניסה" only),
@@ -217,8 +226,7 @@ Legend: **Mig** needs a migration. **Sec** touches RLS, auth or edge functions.
   weeks, not days (flag if you want them gone too). The DB-side
   `notif_streak_at_risk` and `community_streaks` (audit.md) need a migration and
   are not in this plan.
-- **Decision (yours):** weeks-on-target or remove. **Recommendation:** weeks on
-  target; the number exists and it is the metric decisions.md names.
+- **Decided 2026-11-10:** weeks on target.
 - Mig no · Sec no · Risk low.
 - **Verify:** grep the tests for `ברצף` and update them; `home-390.mjs`.
 
@@ -233,8 +241,7 @@ Legend: **Mig** needs a migration. **Sec** touches RLS, auth or edge functions.
   Signed out it shows local settings plus sign-in; signed in, the profile name is
   the one name everywhere and the local name is only the signed-out fallback.
   The support sheet gets a "כניסה לחשבון" button that opens it.
-- **Decision (yours):** merge Settings into Me, as above, or keep both and only
-  fix the support copy and names. **Recommendation:** merge.
+- **Decided 2026-11-10:** merge Settings into Me, as above.
 - Mig no · Sec no · Risk **high** (many tests and browser checks open Settings).
 - **Verify:** `member-surface-polish-390.mjs`, `notification-toggles-390.mjs`,
   `app-dialog-keyboard.mjs`, `first-run-sequence.mjs`; grep the tests for
@@ -315,8 +322,8 @@ at once would conflict. Update each branch from `main` before merging.
 | 3 | One settings screen and touch targets | `fix/p3-ux-consistency-touch` | F11, F12, F13, F14 (F15 only if you choose two columns) | L | none |
 | 4 | Strip and perf | `fix/p4-strip-perf` | F16, F17, F18 | S | none |
 
-**Before phase 1:** decide F5 (email in login). **Before phase 3:** decide F11,
-F12 and F15.
+**Before phase 1:** decide F5 (email in login). **Before phase 3:** decide F15
+(F11 and F12 are decided).
 
 **Phone checks after each merge:**
 1. Airplane mode: the Circle tab shows the offline state; type "1,250.5" and "٢٠"
