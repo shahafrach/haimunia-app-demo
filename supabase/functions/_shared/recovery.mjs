@@ -114,16 +114,19 @@ export async function handleRecover(req, deps) {
   const ip = String(req.ip || "unknown");
 
   // Throttle on what the caller claims and where they come from, before looking at anything.
+  // The IP key counts every request. The username key counts only well-formed
+  // ones (audit L8, 2026-11): junk such as an empty or malformed code can
+  // never match, so it no longer spends the real member's five attempts.
+  const shapeOk = usernameOk(username) && looksLikeCode(code) && passwordOk(password);
   const userKey = await hmacHex(deps.secret, ATTEMPT_DOMAIN + "user:" + username);
   const ipKey = await hmacHex(deps.secret, ATTEMPT_DOMAIN + "ip:" + ip);
   const since = now - ATTEMPT_WINDOW_MS;
   const [byUser, byIp] = await Promise.all([deps.store.countAttempts(userKey, since), deps.store.countAttempts(ipKey, since)]);
   if (byUser >= ATTEMPT_LIMIT || byIp >= ATTEMPT_LIMIT) return fail();
-  await deps.store.addAttempts([userKey, ipKey]);
+  await deps.store.addAttempts(shapeOk ? [userKey, ipKey] : [ipKey]);
   await deps.store.purgeAttempts(now - 24 * 60 * 60 * 1000);
 
   // Both checks always run, so the time taken does not say which one a code matched.
-  const shapeOk = usernameOk(username) && looksLikeCode(code) && passwordOk(password);
   const userId = shapeOk ? await deps.store.lookupUser(username) : null;
   const stored = userId ? await deps.store.getRecoveryHmac(userId) : null;
   const given = await recoveryHmac(deps.secret, code);
@@ -134,6 +137,110 @@ export async function handleRecover(req, deps) {
   if (!(await deps.store.setPassword(userId, password))) return fail();
   await deps.store.revokeSessions(userId);
   // Rotate: the code that was just used is dead whichever kind it was.
+  const next = generateCode(deps.randomBytes);
+  await deps.store.putRecoveryCode(userId, await recoveryHmac(deps.secret, next));
+  await deps.store.clearReset(userId);
+  return json(200, { ok: true, recovery_code: next });
+}
+
+// ---- Lost recovery code: the self-service reset (fix plan F19, 2026-11-10) ----------
+//
+// Decided by the owner: a member with no code can reset with the username alone,
+// after a 12-hour wait that any signed-in session of the account can cancel; the
+// account's devices get a push when it is asked for. No approval by anyone. The
+// accepted risk: anyone who knows a username can take that account over after 12
+// hours unless the owner cancels. The rules below are what limits it.
+//
+//   * request: { action: "request", username } -> { ok, request_token, ready_at }.
+//     The same answer for a known and an unknown username (an unknown one gets a
+//     token that is stored nowhere). Only an HMAC of the token is kept. A new
+//     request replaces an open one and restarts the wait. 3 per username per day,
+//     the IP limit per 15 minutes, nothing after a cancel for 24 hours.
+//   * complete: { action: "complete", username, request_token, new_password } ->
+//     { ok, recovery_code } once the wait is over and nobody cancelled; the same
+//     tail as recover-password: new password, every session ended, new code once.
+export const RESET_DOMAIN = "box-log:reset-request:v1:";
+export const RESET_WAIT_MS = 12 * 60 * 60 * 1000;
+export const RESET_VALID_MS = 24 * 60 * 60 * 1000;
+export const RESET_REQUESTS_PER_DAY = 3;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const TOKEN_RE = /^[0-9a-f]{64}$/;
+
+export function resetTokenHmac(secret, token) {
+  return hmacHex(secret, RESET_DOMAIN + "token:" + String(token || ""));
+}
+function randomHex(randomBytes, n) {
+  return hex((randomBytes || ((k) => crypto.getRandomValues(new Uint8Array(k))))(n));
+}
+
+/**
+ * request-reset. `req` is { body, ip }.
+ * deps: { secret, store, now?, randomBytes? }
+ * store (in addition to the recover-password store): getResetRequest(id) ->
+ *   { token_hmac, ready_at, expires_at, cancelled_at, blocked_until } | null (times in ms);
+ *   putResetRequest(id, { token_hmac, ready_at, expires_at }); deleteResetRequest(id);
+ *   notifyResetRequested(id, readyAtMs)
+ */
+export async function handleResetRequest(req, deps) {
+  if (!deps.secret) return json(500, { error: "not_configured" });
+  const now = (deps.now || Date.now)();
+  const body = req.body && typeof req.body === "object" ? req.body : {};
+  const action = body.action === "complete" ? "complete" : body.action === "request" ? "request" : "";
+  if (!action) return fail();
+  const username = typeof body.username === "string" ? body.username.trim().toLowerCase() : "";
+  const ip = String(req.ip || "unknown");
+  return action === "request" ? resetRequest(deps, now, username, ip) : resetComplete(deps, now, body, username, ip);
+}
+
+async function resetRequest(deps, now, username, ip) {
+  if (!usernameOk(username)) return fail();
+  const userKey = await hmacHex(deps.secret, RESET_DOMAIN + "user:" + username);
+  const ipKey = await hmacHex(deps.secret, RESET_DOMAIN + "ip:" + ip);
+  const [byUser, byIp] = await Promise.all([
+    deps.store.countAttempts(userKey, now - DAY_MS),
+    deps.store.countAttempts(ipKey, now - ATTEMPT_WINDOW_MS),
+  ]);
+  if (byUser >= RESET_REQUESTS_PER_DAY || byIp >= ATTEMPT_LIMIT) return fail();
+  await deps.store.addAttempts([userKey, ipKey]);
+  await deps.store.purgeAttempts(now - 2 * DAY_MS);
+
+  const token = randomHex(deps.randomBytes, 32);
+  const readyAt = now + RESET_WAIT_MS;
+  const answer = json(200, { ok: true, request_token: token, ready_at: new Date(readyAt).toISOString() });
+  const userId = await deps.store.lookupUser(username);
+  if (!userId) return answer;
+  const open = await deps.store.getResetRequest(userId);
+  // After a cancel the account takes no request for 24 hours; the caller cannot tell.
+  if (open && open.blocked_until && open.blocked_until > now) return answer;
+  await deps.store.putResetRequest(userId, {
+    token_hmac: await resetTokenHmac(deps.secret, token),
+    ready_at: readyAt,
+    expires_at: readyAt + RESET_VALID_MS,
+  });
+  await deps.store.notifyResetRequested(userId, readyAt);
+  return answer;
+}
+
+async function resetComplete(deps, now, body, username, ip) {
+  const token = typeof body.request_token === "string" ? body.request_token.trim().toLowerCase() : "";
+  const password = typeof body.new_password === "string" ? body.new_password : "";
+  const shapeOk = usernameOk(username) && TOKEN_RE.test(token) && passwordOk(password);
+  const userKey = await hmacHex(deps.secret, RESET_DOMAIN + "complete-user:" + username);
+  const ipKey = await hmacHex(deps.secret, RESET_DOMAIN + "complete-ip:" + ip);
+  const since = now - ATTEMPT_WINDOW_MS;
+  const [byUser, byIp] = await Promise.all([deps.store.countAttempts(userKey, since), deps.store.countAttempts(ipKey, since)]);
+  if (byUser >= ATTEMPT_LIMIT || byIp >= ATTEMPT_LIMIT) return fail();
+  await deps.store.addAttempts(shapeOk ? [userKey, ipKey] : [ipKey]);
+
+  const userId = shapeOk ? await deps.store.lookupUser(username) : null;
+  const open = userId ? await deps.store.getResetRequest(userId) : null;
+  const given = await resetTokenHmac(deps.secret, token);
+  const match = timingSafeEqualStrings((open && open.token_hmac) || "0".repeat(64), given) && !!open;
+  if (!shapeOk || !userId || !match || open.cancelled_at || now < open.ready_at || now > open.expires_at) return fail();
+
+  if (!(await deps.store.setPassword(userId, password))) return fail();
+  await deps.store.deleteResetRequest(userId);
+  await deps.store.revokeSessions(userId);
   const next = generateCode(deps.randomBytes);
   await deps.store.putRecoveryCode(userId, await recoveryHmac(deps.secret, next));
   await deps.store.clearReset(userId);

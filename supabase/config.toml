@@ -101,5 +101,9 @@ verify_enabled = true
 [functions.recover-password]
 verify_jwt = false
 
+# The lost-code reset (fix plan F19): no session, like recover-password.
+[functions.request-reset]
+verify_jwt = false
+
 [analytics]
 enabled = false

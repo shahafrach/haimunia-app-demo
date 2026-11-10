@@ -50,6 +50,9 @@ create table tests.definer_reviewed (
 );
 
 insert into tests.definer_reviewed (name, args, class, anon_allowed, reason) values
+  ('my_pending_reset', '', 'caller_own_rows', false, 'lost-code reset: the caller''s own open request, ready_at and created_at only (202611100001)'),
+  ('cancel_my_reset', '', 'caller_own_rows', false, 'lost-code reset: cancels the caller''s own open request and blocks new ones for 24 hours; permanent accounts only (202611100001)'),
+  ('reset_notify_requested', 'uuid, timestamp with time zone', 'global_safe', false, 'lost-code reset: one personal reset_requested notification for the account; service_role only (202611100001)'),
   ('aal_satisfied', '', 'caller_own_rows', false, 'RLS helper: does the caller''s session meet its second step; reads only the caller''s own verified factors (202611070002)'),
   ('ach_claim', 'text[]', 'caller_own_rows', false, ''),
   ('notif_on_pr_post', '', 'circle_scoped', false, 'trigger: tells the OTHER members of the post''s own circle that a member posted a personal record; notif_create re-checks membership and blocks'),

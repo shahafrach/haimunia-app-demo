@@ -66,8 +66,23 @@ const BLOCKED_PATHS = new Set(["/package.json", "/package-lock.json"]);
 // published in the first place.
 const BLOCKED_SUFFIXES = [".md", ".sql", ".mjs"];
 
+// The pathname as the asset server will resolve it (audit L10, 2026-11). The
+// WHATWG URL keeps "%64ocs" encoded, but the static server decodes it to
+// "docs", so matching the raw string let /%64ocs/... past the list. Decode
+// until stable (a double-encoded %2564 too), fold backslashes and repeated
+// slashes. A malformed escape is null, and the caller blocks it.
+function normalizePath(pathname) {
+  let p = String(pathname);
+  for (let i = 0; i < 3 && /%[0-9a-f]{2}/i.test(p); i++) {
+    try { p = decodeURIComponent(p); } catch (err) { return null; }
+  }
+  if (/%/.test(p) && /%(?![0-9a-f]{2})/i.test(p)) return null;
+  return p.replace(/\\/g, "/").replace(/\/{2,}/g, "/").toLowerCase();
+}
+
 function isBlocked(pathname) {
-  const p = pathname.toLowerCase();
+  const p = normalizePath(pathname);
+  if (p === null) return true;
   if (BLOCKED_PREFIXES.some((prefix) => p.startsWith(prefix))) return true;
   if (BLOCKED_PATHS.has(p)) return true;
   // Only at the top level: /src/*.mjs is app code and must keep serving.

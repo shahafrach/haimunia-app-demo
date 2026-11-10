@@ -32,6 +32,7 @@
   function recoveryClear() {
     const r = recoveryUi();
     r.view = ""; r.busy = false; r.error = ""; r.code = ""; r.saved = false; r.copied = false; r.source = "";
+    r.drafts = {};
     r.rotateOpen = false;
   }
   /** True while a code is waiting to be saved, or being made: the gate shows nothing else. */
@@ -65,6 +66,7 @@
     const r = recoveryUi();
     if (r.statusTried || !client || !state.user || state.user.is_anonymous) return;
     r.statusTried = true;
+    loadPendingReset();
     const { data, error } = await client.rpc("my_recovery_code_created_at");
     if (error) { r.statusTried = false; return; }
     r.has = !!data;
@@ -99,7 +101,7 @@
     if (!data || !data.ok || typeof data.recovery_code !== "string") { r.error = RECOVERY_GENERIC_ERROR; return rerender(); }
     // Every session of that account was ended by the server; this device is signed out too.
     r.view = "show"; r.source = "recover"; r.code = data.recovery_code; r.saved = false; r.copied = false; r.error = "";
-    r.has = true;
+    r.has = true; r.drafts = {};
     rerender();
   }
 
@@ -145,8 +147,12 @@
   function recoveryAction(action, el) {
     const r = recoveryUi();
     switch (action) {
-      case "recovery-open": r.view = "form"; r.error = ""; state.ui.fieldErrors = {}; rerender(); return true;
-      case "recovery-close": recoveryClear(); state.ui.gateView = "login"; rerender(); return true;
+      case "recovery-open": r.view = "form"; r.error = ""; state.ui.fieldErrors = {}; if (resetStored()) resetUi().view = "wait"; rerender(); return true;
+      case "recovery-lost-open": resetUi().view = resetStored() ? "wait" : "ask"; resetUi().error = ""; state.ui.fieldErrors = {}; rerender(); return true;
+      case "recovery-lost-back": resetUi().view = ""; resetUi().error = ""; rerender(); return true;
+      case "recovery-lost-forget": resetForget(); resetUi().view = "ask"; rerender(); return true;
+      case "recovery-reset-cancel": cancelPendingReset(); return true;
+      case "recovery-close": recoveryClear(); resetUi().view = ""; state.ui.gateView = "login"; rerender(); return true;
       case "recovery-copy": copyRecoveryCode(); return true;
       case "recovery-continue": recoveryContinue(); return true;
       case "recovery-retry": recoveryIssueAndShow(r.source || "existing"); return true;
@@ -157,14 +163,159 @@
     }
   }
 
+  // ---- Lost recovery code: the self-service reset (fix plan F19) ------------------------
+  // A member with no code asks with the username alone; the reset can be finished on THIS
+  // device 12 hours later, unless a signed-in session of the account cancels it (the
+  // banner below). The request token is kept on this device only, in localStorage, so a
+  // reload during the wait does not lose it; it is useless without the wait having passed.
+  const RESET_STORAGE_KEY = "haimunia-demo:resetRequest";
+  const RESET_GENERIC_ERROR = "לא הצלחנו לאפס. אולי הבקשה בוטלה מהחשבון, פגה, או שהיו יותר מדי ניסיונות. אפשר לבקש שוב.";
+  function resetUi() {
+    const r = recoveryUi();
+    if (!r.lost) r.lost = { view: "", busy: false, error: "", pending: null, pendingTried: false };
+    return r.lost;
+  }
+  /** @returns {{username: string, token: string, readyAt: number} | null} */
+  function resetStored() {
+    try {
+      const v = JSON.parse(localStorage.getItem(RESET_STORAGE_KEY) || "null");
+      if (!v || typeof v.username !== "string" || !/^[0-9a-f]{64}$/.test(String(v.token)) || !Number.isFinite(v.readyAt)) return null;
+      // Expired 24 hours after the wait ends (the server's rule): forget it.
+      if (Date.now() > v.readyAt + 24 * 60 * 60 * 1000) { resetForget(); return null; }
+      return v;
+    } catch (e) { return null; }
+  }
+  function resetForget() { try { localStorage.removeItem(RESET_STORAGE_KEY); } catch (e) { /* nothing to forget */ } }
+  function resetTimeText(ms) {
+    try { return new Date(ms).toLocaleString("he-IL", { weekday: "long", hour: "2-digit", minute: "2-digit", day: "numeric", month: "numeric" }); }
+    catch (e) { return new Date(ms).toISOString(); }
+  }
+
+  async function resetRequest(form) {
+    const l = resetUi();
+    if (l.busy || !client) return;
+    const username = String(form.elements.username.value || "").trim().toLowerCase();
+    const userErr = usernameRuleError(username);
+    if (userErr) return setFieldErrors("communityResetRequest", { username: userErr });
+    setFieldErrors("communityResetRequest", {});
+    l.busy = true; l.error = ""; rerender();
+    let data = null;
+    try {
+      const res = await client.functions.invoke("request-reset", { body: { action: "request", username } });
+      data = res.error ? null : res.data;
+    } catch (e) { data = null; }
+    l.busy = false;
+    const readyAt = data && data.ready_at ? Date.parse(String(data.ready_at)) : NaN;
+    if (!data || !data.ok || !/^[0-9a-f]{64}$/.test(String(data.request_token)) || !Number.isFinite(readyAt)) {
+      l.error = "לא הצלחנו לשלוח את הבקשה. אולי היו יותר מדי בקשות היום. אפשר לנסות שוב מחר.";
+      return rerender();
+    }
+    try { localStorage.setItem(RESET_STORAGE_KEY, JSON.stringify({ username, token: data.request_token, readyAt })); } catch (e) { /* the wait screen says so */ }
+    l.view = "wait";
+    rerender();
+  }
+
+  async function resetComplete(form) {
+    const l = resetUi();
+    const stored = resetStored();
+    if (l.busy || !client || !stored) return;
+    const password = String(form.elements.password.value || "");
+    const confirm = String(form.elements.passwordConfirm.value || "");
+    const errors = {};
+    const passErr = passwordRuleError(password);
+    if (passErr) errors.password = passErr;
+    if (!errors.password && password !== confirm) errors.passwordConfirm = "הסיסמאות לא תואמות";
+    if (Object.keys(errors).length) return setFieldErrors("communityResetComplete", errors);
+    setFieldErrors("communityResetComplete", {});
+    l.busy = true; l.error = ""; rerender();
+    let data = null;
+    try {
+      const res = await client.functions.invoke("request-reset", { body: { action: "complete", username: stored.username, request_token: stored.token, new_password: password } });
+      data = res.error ? null : res.data;
+    } catch (e) { data = null; }
+    l.busy = false;
+    if (!data || !data.ok || typeof data.recovery_code !== "string") { l.error = RESET_GENERIC_ERROR; return rerender(); }
+    resetForget();
+    l.view = "";
+    const r = recoveryUi();
+    // Every session of that account was ended by the server; the new code is shown once.
+    r.view = "show"; r.source = "recover"; r.code = data.recovery_code; r.saved = false; r.copied = false; r.error = "";
+    r.has = true; r.draftUsername = stored.username; r.drafts = {};
+    rerender();
+  }
+
+  /** A signed-in session of the account: is a reset waiting? Asked once per session. */
+  async function loadPendingReset() {
+    const l = resetUi();
+    if (l.pendingTried || !client || !state.user || state.user.is_anonymous) return;
+    l.pendingTried = true;
+    const { data, error } = await client.rpc("my_pending_reset");
+    if (error) { l.pendingTried = false; return; }
+    const row = Array.isArray(data) ? data[0] : data;
+    l.pending = row && row.ready_at ? { readyAt: Date.parse(String(row.ready_at)) } : null;
+    if (l.pending) rerender();
+  }
+  async function cancelPendingReset() {
+    const l = resetUi();
+    if (l.busy || !client) return;
+    l.busy = true; rerender();
+    const { error } = await client.rpc("cancel_my_reset");
+    l.busy = false;
+    if (error) { l.error = "הביטול לא הצליח. בדקו את החיבור ונסו שוב."; return rerender(); }
+    l.pending = null; l.error = ""; l.cancelled = true;
+    rerender();
+  }
+
+  /** Home, Circle and Me (circleScene): the "not me?" banner while a reset waits on this account. */
+  function resetBannerHtml() {
+    const l = resetUi();
+    if (!state.user || state.user.is_anonymous) return "";
+    if (l.cancelled) return `<div class="chart-card" role="status" data-reset-banner="cancelled" style="margin-bottom:14px;"><div style="font-weight:800;">הבקשה בוטלה</div><div style="color:var(--color-text-muted);font-size:13px;line-height:1.6;">${bidiText("הסיסמה לא תשתנה. בקשה חדשה לא תתקבל ב-24 השעות הקרובות.")}</div></div>`;
+    if (!l.pending) return "";
+    return `<div class="chart-card" role="alert" data-reset-banner="pending" style="margin-bottom:14px;border-color:var(--color-danger);">
+      <div style="font-weight:800;font-size:16px;margin-bottom:4px;">התבקש איפוס לסיסמה שלך</div>
+      <div style="font-size:13.5px;line-height:1.7;margin-bottom:10px;">${bidiText("מישהו ביקש לאפס את הסיסמה בלי קוד שחזור. אם זה לא אתם, בטלו עכשיו. בלי ביטול, אפשר יהיה לקבוע סיסמה חדשה החל מ" + resetTimeText(l.pending.readyAt) + ".")}</div>
+      ${l.error ? `<div class="field-error" role="alert" style="margin-bottom:8px;">${esc(l.error)}</div>` : ""}
+      <button class="save-btn" data-community-action="recovery-reset-cancel"${l.busy ? " disabled" : ""}>זה לא אני, לבטל</button>
+    </div>`;
+  }
+
   // ---- Screens ----------------------------------------------------------------------------
   function recoveryFormHtml() {
     const r = recoveryUi();
+    if (resetUi().view) return resetLostHtml();
     return gateCard(`<button class="gate-back" data-community-action="recovery-close">‹ חזרה</button>
       <div style="font-weight:800;font-size:20px;margin:6px 0 8px;">איפוס סיסמה</div>
       <div style="color:var(--color-text-muted);font-size:14px;line-height:1.6;margin-bottom:14px;">${bidiText("מקלידים את שם הכניסה, את קוד השחזור ששמרתם ואת הסיסמה החדשה. אחרי האיפוס מקבלים קוד שחזור חדש, והקוד הישן מפסיק לעבוד.")}</div>
       ${r.error ? `<div class="field-error" role="alert" data-recovery-error="1" style="margin-bottom:10px;">${esc(r.error)}</div>` : ""}
-      <form id="communityRecover">${field("communityRecover", "username", LOGIN_NAME_LABEL, `<input class="text-input" name="username" dir="ltr" autocapitalize="off" autocomplete="username" placeholder="${esc(LOGIN_NAME_LABEL)}" value="${esc(r.draftUsername || "")}" required/>`)}${field("communityRecover", "code", "קוד שחזור", `<input class="text-input mono" name="code" dir="ltr" autocapitalize="characters" autocomplete="off" spellcheck="false" maxlength="24" placeholder="XXXX-XXXX-XXXX-XXXX" required/>`)}${field("communityRecover", "password", "סיסמה חדשה", `<input class="text-input" name="password" type="password" dir="ltr" autocomplete="new-password" placeholder="${esc(PASSWORD_RULE_TEXT)}" required/>`)}${field("communityRecover", "passwordConfirm", "אימות הסיסמה החדשה", `<input class="text-input" name="passwordConfirm" type="password" dir="ltr" autocomplete="new-password" placeholder="הקלידו שוב" required/>`)}<button class="save-btn" type="submit"${r.busy ? " disabled" : ""} style="margin-top:12px;">${r.busy ? "מאפסים…" : "איפוס הסיסמה"}</button></form>`);
+      <form id="communityRecover">${field("communityRecover", "username", LOGIN_NAME_LABEL, `<input class="text-input" name="username" dir="ltr" autocapitalize="off" autocomplete="username" placeholder="${esc(LOGIN_NAME_LABEL)}" value="${esc(r.draftUsername || "")}" required/>`)}${field("communityRecover", "code", "קוד שחזור", `<input class="text-input mono" name="code" dir="ltr" autocapitalize="characters" autocomplete="off" spellcheck="false" maxlength="24" placeholder="XXXX-XXXX-XXXX-XXXX" required/>`)}${field("communityRecover", "password", "סיסמה חדשה", `<input class="text-input" name="password" type="password" dir="ltr" autocomplete="new-password" placeholder="${esc(PASSWORD_RULE_TEXT)}" required/>`)}${field("communityRecover", "passwordConfirm", "אימות הסיסמה החדשה", `<input class="text-input" name="passwordConfirm" type="password" dir="ltr" autocomplete="new-password" placeholder="הקלידו שוב" required/>`)}<button class="save-btn" type="submit"${r.busy ? " disabled" : ""} style="margin-top:12px;">${r.busy ? "מאפסים…" : "איפוס הסיסמה"}</button></form>
+      <div style="display:flex;justify-content:center;margin-top:14px;"><button class="gate-alt" data-community-action="recovery-lost-open">אין לי קוד שחזור</button></div>`);
+  }
+
+  // No code: ask with the username, then wait 12 hours on this device.
+  function resetLostHtml() {
+    const l = resetUi();
+    const back = `<button class="gate-back" data-community-action="recovery-lost-back">‹ חזרה</button>`;
+    const err = l.error ? `<div class="field-error" role="alert" data-reset-error="1" style="margin-bottom:10px;">${esc(l.error)}</div>` : "";
+    const stored = resetStored();
+    if (l.view === "wait" && stored) {
+      const ready = Date.now() >= stored.readyAt;
+      const body = ready
+        ? `<div style="font-size:14px;line-height:1.7;margin-bottom:14px;">${bidiText("עברו 12 שעות. בוחרים סיסמה חדשה. אחר כך מקבלים קוד שחזור חדש, פעם אחת.")}</div>
+          <form id="communityResetComplete">${field("communityResetComplete", "password", "סיסמה חדשה", `<input class="text-input" name="password" type="password" dir="ltr" autocomplete="new-password" required/>`)}${field("communityResetComplete", "passwordConfirm", "שוב את הסיסמה החדשה", `<input class="text-input" name="passwordConfirm" type="password" dir="ltr" autocomplete="new-password" required/>`)}
+          <button class="save-btn" type="submit"${l.busy ? " disabled" : ""}>${l.busy ? "מאפסים…" : "קביעת סיסמה חדשה"}</button></form>`
+        : `<div data-reset-wait="1" style="font-size:14px;line-height:1.7;margin-bottom:14px;">${bidiText("הבקשה התקבלה. אפשר לקבוע סיסמה חדשה במכשיר הזה החל מ" + resetTimeText(stored.readyAt) + ". אם מישהו מחובר לחשבון, הוא יקבל הודעה ויוכל לבטל.")}</div>`;
+      return gateCard(`${back}
+        <div style="font-weight:800;font-size:20px;margin:6px 0 8px;">איפוס בלי קוד</div>
+        ${err}${body}
+        <div style="display:flex;justify-content:center;margin-top:12px;"><button class="gate-alt" data-community-action="recovery-lost-forget">בקשה חדשה</button></div>`);
+    }
+    return gateCard(`${back}
+      <div style="font-weight:800;font-size:20px;margin:6px 0 8px;">אין לי קוד שחזור</div>
+      <div style="color:var(--color-text-muted);font-size:14px;line-height:1.7;margin-bottom:14px;">${bidiText("מקלידים את שם הכניסה. אחרי 12 שעות אפשר לקבוע סיסמה חדשה במכשיר הזה. בזמן הזה כל מכשיר שמחובר לחשבון מקבל הודעה ויכול לבטל.")}</div>
+      ${err}
+      <form id="communityResetRequest">${field("communityResetRequest", "username", LOGIN_NAME_LABEL, `<input class="text-input" name="username" dir="ltr" autocapitalize="off" autocomplete="username" placeholder="${esc(LOGIN_NAME_LABEL)}" value="${esc(recoveryUi().draftUsername || "")}" required/>`)}
+      <button class="save-btn" type="submit"${l.busy ? " disabled" : ""}>${l.busy ? "שולחים…" : "בקשת איפוס"}</button></form>`);
   }
 
   // The code, once. Shown after sign-up, after a recovery, and after a new code is asked for in Me.
@@ -179,7 +330,7 @@
         <div style="display:flex;justify-content:center;margin-top:12px;"><button class="gate-alt" data-community-action="recovery-skip">להמשיך בלי קוד (אפשר ליצור ב"אני")</button></div>`);
     }
     return gateCard(`<div style="font-weight:800;font-size:20px;margin-bottom:8px;">${esc(title)}</div>
-      <div style="color:var(--color-text-muted);font-size:14px;line-height:1.7;margin-bottom:14px;">${bidiText("אין אימייל לאפס איתו סיסמה, אז הקוד הזה הוא הדרך היחידה לחזור לחשבון אם תשכחו אותה. הוא מוצג פעם אחת בלבד. שמרו אותו במקום שאתם סומכים עליו: מנהל סיסמאות, או הודעה לעצמכם.")}</div>
+      <div style="color:var(--color-text-muted);font-size:14px;line-height:1.7;margin-bottom:14px;">${bidiText("אין אימייל לאפס איתו סיסמה, אז הקוד הזה הוא הדרך המהירה לחזור לחשבון אם תשכחו אותה. בלי קוד אפשר לאפס רק אחרי המתנה של 12 שעות. הוא מוצג פעם אחת בלבד. שמרו אותו במקום שאתם סומכים עליו: מנהל סיסמאות, או הודעה לעצמכם.")}</div>
       <div data-recovery-code="1" dir="ltr" class="mono" style="font-size:24px;font-weight:800;letter-spacing:.06em;text-align:center;padding:16px 8px;border:1px solid var(--color-border-strong);border-radius:14px;background:var(--color-surface-sunken);user-select:all;word-break:break-all;">${esc(r.code)}</div>
       <div style="display:flex;justify-content:center;margin:12px 0;"><button class="chip-btn" data-community-action="recovery-copy">${r.copied ? "הועתק" : "העתקת הקוד"}</button></div>
       ${r.error ? `<div class="field-error" role="alert" style="margin-bottom:10px;">${esc(r.error)}</div>` : ""}
@@ -204,10 +355,40 @@
       </div></div>`;
   }
 
+  // What the member has typed in the recovery forms survives a re-render.
+  // A background update (a session event, a status load) redraws the gate, and
+  // a redraw mid-typing used to empty the code and password fields, so the
+  // submit went nowhere (E2E 02-friend, step 18). Kept in memory only, wiped
+  // with the screen (recoveryClear) and after a successful reset.
+  const RECOVERY_DRAFT_FORMS = ["communityRecover", "communityResetRequest", "communityResetComplete"];
+  document.addEventListener("input", (event) => {
+    const el = /** @type {HTMLInputElement} */ (event.target);
+    const form = el && el.form;
+    if (!form || RECOVERY_DRAFT_FORMS.indexOf(form.id) < 0 || !el.name) return;
+    const r = recoveryUi();
+    if (!r.drafts) r.drafts = {};
+    (r.drafts[form.id] = r.drafts[form.id] || {})[el.name] = el.value;
+  });
+  /** After a render: put the typed values back into a recovery form that was redrawn. */
+  function restoreRecoveryDrafts() {
+    const drafts = recoveryUi().drafts || {};
+    for (const id of Object.keys(drafts)) {
+      const form = /** @type {HTMLFormElement | null} */ (document.getElementById(id));
+      if (!form) continue;
+      for (const name of Object.keys(drafts[id])) {
+        const el = /** @type {HTMLInputElement | undefined} */ (form.elements.namedItem(name));
+        if (el && el !== document.activeElement && el.value !== drafts[id][name]) el.value = drafts[id][name];
+      }
+    }
+  }
+  window.restoreRecoveryDrafts = restoreRecoveryDrafts;
+
   document.addEventListener("submit", (event) => {
     const form = /** @type {HTMLFormElement} */ (event.target);
     if (!form || !form.id) return;
     if (form.id === "communityRecover") { event.preventDefault(); recoverPassword(form); }
+    else if (form.id === "communityResetRequest") { event.preventDefault(); resetRequest(form); }
+    else if (form.id === "communityResetComplete") { event.preventDefault(); resetComplete(form); }
     else if (form.id === "communityRecoveryRotate") { event.preventDefault(); rotateRecoveryCode(form); }
   });
   document.addEventListener("change", (event) => {

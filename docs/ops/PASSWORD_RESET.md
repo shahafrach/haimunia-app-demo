@@ -14,7 +14,18 @@ password twice. The server checks the code, sets the password, signs the account
 everywhere, and shows a NEW code, once. The old one is dead. Five attempts per 15 minutes per
 username and per address; every failure reads the same.
 
-## When the code is lost: one line for the owner
+## When the code is lost: the member does it alone (12 hours)
+
+On the "שכחתי סיסמה" screen the member taps "אין לי קוד שחזור" and types the username
+(`request-reset` Edge Function, decided 2026-11-10). After 12 hours the same device sets a new
+password and is shown a new recovery code once. Meanwhile every signed-in device of that account
+gets a push and a banner, "זה לא אני, לבטל"; a cancel kills the request and blocks new ones for
+24 hours. Three requests per username per day. Nothing for the owner to do.
+
+Needs on the project: migration `202611100001` and the `request-reset` function deployed (both
+happen on merge to `main`); it uses the same `RECOVERY_CODE_HMAC_SECRET` as recover-password.
+
+## When the code is lost: the faster way, one line for the owner
 
 In the Supabase SQL editor (it runs as `postgres`; the function is granted to no other role):
 

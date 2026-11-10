@@ -25,6 +25,33 @@ function fmtDate(iso) {
   if (d.getFullYear() !== new Date().getFullYear()) opts.year = "numeric";
   return d.toLocaleDateString("he-IL", opts);
 }
+// One number parser for every typed numeric field (audit M8, 2026-11).
+// parseFloat("1.250.5") is 1.25 and parseFloat("٢٠") is NaN, and both used to
+// end as the field minimum with no warning. Returns a finite number or NaN;
+// the caller decides what an invalid or out-of-range value does.
+//   Arabic-Indic (٠-٩) and Persian (۰-۹) digits count as digits, and the Arabic
+//   decimal separator (٫) as a point.
+//   Both "," and "." present: commas are thousands separators ("1,250.5").
+//   Only commas: groups of exactly three digits are thousands ("1,250",
+//   "1,250,000"); a single other comma is a decimal point ("62,5").
+function parseLocaleNumber(raw) {
+  let t = String(raw == null ? "" : raw).trim()
+    .replace(/[\u0660-\u0669]/g, (c) => String(c.charCodeAt(0) - 0x0660))
+    .replace(/[\u06F0-\u06F9]/g, (c) => String(c.charCodeAt(0) - 0x06F0))
+    .replace(/\u066B/g, ".").replace(/[\u066C\u00A0\u202F\s']/g, "")
+    .replace(/^\u2212/, "-");
+  if (t.includes(",") && t.includes(".")) {
+    if (!/^-?\d{1,3}(,\d{3})+(\.\d+)?$/.test(t)) return NaN;
+    t = t.replace(/,/g, "");
+  } else if (t.includes(",")) {
+    if (/^-?\d{1,3}(,\d{3})+$/.test(t)) t = t.replace(/,/g, "");
+    else if (/^-?\d*,\d+$/.test(t)) t = t.replace(",", ".");
+    else return NaN;
+  }
+  if (!/^-?(\d+(\.\d*)?|\.\d+)$/.test(t)) return NaN;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : NaN;
+}
 function localISODate(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }

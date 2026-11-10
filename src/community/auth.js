@@ -329,11 +329,10 @@
   // ("הקוד לא נוגע לרישום האימונים עצמו — הוא רק פותח את לשונית הקהילה"), and
   // each screen names the other name so neither reads as a duplicate.
   const LOGIN_NAME_LABEL = "שם לכניסה";
-  // The login field accepts an email too (see login()), and a field that
-  // silently accepts something its own label denies is a field people do not
-  // try. Only the LOGIN label says so - account CREATION still mints a
-  // username-only account, so the signup form keeps LOGIN_NAME_LABEL.
-  const LOGIN_IDENTIFIER_LABEL = "שם לכניסה או אימייל";
+  // Login takes a username only (2026-11-10, audit M4). The email path existed
+  // for a gym-era admin account with a real address; decisions.md has no email
+  // at all, and a member who lost the recovery code uses the lost-code reset.
+  const LOGIN_IDENTIFIER_LABEL = LOGIN_NAME_LABEL;
   const CLUB_NAME_LABEL = "השם שרואים במעגל";
   const CREDENTIALS_INTRO_TEXT = "שם וסיסמה לכניסה — כדי שתוכלו להיכנס לחשבון שוב מכל מכשיר. שם הכניסה הוא רק בשבילכם ואף אחד במעגל לא רואה אותו; את השם שחברי המעגל כן יראו בוחרים בשלב הבא, והוא יכול להיות אחר לגמרי.";
   const CLUB_NAME_HINT_TEXT = "זה השם שחברי המעגל יראו לידכם. אפשר שם מלא עם רווחים, בעברית או באנגלית. זה לא שם הכניסה לחשבון.";
@@ -360,6 +359,10 @@
     const password = String(value || "");
     if (!password) return "יש להזין סיסמה";
     if (password.length < 10) return `הסיסמה קצרה מדי. צריך ${PASSWORD_RULE_TEXT}.`;
+    // The server's cap (passwordOk in supabase/functions/_shared/recovery.mjs,
+    // and bcrypt's 72 bytes): without it a long password passed here and then
+    // failed recovery with only the generic answer (audit L9).
+    if (password.length > 72) return "הסיסמה ארוכה מדי. אפשר עד 72 תווים.";
     if (!/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/[0-9]/.test(password)) return "הסיסמה צריכה לכלול אות גדולה, אות קטנה וספרה באנגלית.";
     return "";
   }
@@ -663,31 +666,16 @@
     const identifier = String(form.elements.username.value || "").trim().toLowerCase();
     const password = String(form.elements.password.value || "");
     const errors = {};
-    // A REAL email address is accepted here as well as a username (2026-09-15).
-    //
-    // Every ordinary member's account is username-only: usernameToEmail()
-    // maps it onto <name>@members.haimuniya.invalid, a deliberately
-    // non-routable domain, which is what lets this club run with no email
-    // collection at all. That is unchanged and stays the default.
-    //
-    // The exception is an account that genuinely needs to be RECOVERABLE
-    // without another admin - the club's own owner/admin account most of all,
-    // because "an admin resets it for you" has no answer when the locked-out
-    // person IS the only admin. Such an account is created with a real
-    // address as its auth email, which makes Supabase's own password-reset
-    // mail work; this branch is what lets it sign in, since its email is not
-    // derivable from any username. Detection is deliberately just "contains
-    // @" rather than a validating regex: the server is the authority on
-    // whether an address exists, and a stricter client-side test could only
-    // ever lock someone out of their own account over a technicality.
-    const looksLikeEmail = identifier.includes("@");
-    if (!identifier) errors.username = "יש להזין שם כניסה או אימייל";
-    else if (!looksLikeEmail && !USERNAME_RE.test(identifier)) errors.username = "שם הכניסה לא תקין";
+    // Username only, and the same rule text as sign-up (audit M4, M5): a
+    // Hebrew name used to get just "שם הכניסה לא תקין", with no hint of the
+    // allowed characters. usernameRuleError() is the sign-up rule.
+    const usernameError = usernameRuleError(identifier);
+    if (usernameError) errors.username = usernameError;
     if (!password) errors.password = "יש להזין סיסמה";
     if (Object.keys(errors).length) return setFieldErrors("communityLogin", errors);
     const { error } = await withCaptcha((captchaToken) =>
       client.auth.signInWithPassword(Object.assign(
-        { email: looksLikeEmail ? identifier : usernameToEmail(identifier), password },
+        { email: usernameToEmail(identifier), password },
         captchaToken ? { options: { captchaToken } } : {},
       )));
     if (error) {

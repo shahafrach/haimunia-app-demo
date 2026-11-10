@@ -289,6 +289,8 @@
   .flex:not(.col) > .field + .field{ margin-top:0; }
   .flex:not(.col) > .field{ flex:1; min-width:0; }
   .field-error{ display:block; color:var(--color-danger); font-size:var(--text-caption); margin-top:5px; }
+  .stepper-error[hidden]{ display:none; }
+  .stepper-val[aria-invalid="true"]{ outline:2px solid var(--color-danger); outline-offset:-2px; }
   .reset-date-btn{ background:var(--color-surface); border:1px solid var(--color-border-strong); border-radius:var(--radius-card); padding:12px var(--space-md); color:var(--color-text-muted); font-weight:700; font-size:var(--text-label); white-space:nowrap; }
   input[type="checkbox"], .movecheck-box{ appearance:none; -webkit-appearance:none; -moz-appearance:none; width:20px; height:20px; flex-shrink:0; margin:0; padding:0; border:2px solid var(--color-border-strong); border-radius:6px; background:var(--input-bg); cursor:pointer; position:relative; }
   input[type="checkbox"]:checked, .movecheck-row.checked .movecheck-box{ background:var(--color-accent-fill); border-color:var(--color-accent-fill); }

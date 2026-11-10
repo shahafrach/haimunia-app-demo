@@ -172,6 +172,22 @@ test("recover: 5 attempts per 15 minutes per username, then even the right code 
   const later = await recover(w, { username: "dana", recovery_code: code, new_password: GOOD_PW }, "198.51.100.201");
   assert.equal(later.status, 200, "after 15 minutes the right code works");
 });
+test("recover: malformed requests from many addresses do not lock the member out (audit L8)", async () => {
+  const w = makeWorld();
+  const code = await issueFor(w, "u-dana");
+  const junk = [
+    { username: "dana", recovery_code: "", new_password: GOOD_PW },
+    { username: "dana", recovery_code: "nope", new_password: GOOD_PW },
+    { username: "dana", recovery_code: generateCode(), new_password: "short" },
+    { username: "dana", recovery_code: "0000-OOOO-1111-IIII", new_password: GOOD_PW },
+  ];
+  for (let i = 0; i < ATTEMPT_LIMIT * 3; i++) {
+    const out = await recover(w, junk[i % junk.length], "198.51.100." + i);
+    assert.deepEqual([out.status, out.body], [400, GENERIC_FAILURE], "junk still gets the generic answer");
+  }
+  const real = await recover(w, { username: "dana", recovery_code: code, new_password: GOOD_PW }, "203.0.113.50");
+  assert.equal(real.status, 200, "the member's own code still works after 15 junk requests");
+});
 test("recover: 5 attempts per 15 minutes per IP, across usernames", async () => {
   const w = makeWorld();
   const code = await issueFor(w, "u-dana");

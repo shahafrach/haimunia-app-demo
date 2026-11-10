@@ -40,26 +40,24 @@ test("login() signs in with the synthetic email + typed password, and does not c
   // usernameToEmail() (no real address is invented or collected for an
   // ordinary member), and the call is still signInWithPassword.
   assert.match(src, /client\.auth\.signInWithPassword\(Object\.assign\(/);
-  assert.match(src, /looksLikeEmail \? identifier : usernameToEmail\(identifier\)/);
+  assert.match(src, /\{ email: usernameToEmail\(identifier\), password \}/);
   // And nothing in login() reaches for a different session type.
   const loginBody = src.slice(src.indexOf("async function login(form)"), src.indexOf("async function setCredentials(form)"));
   assert.ok(!/signInAnonymously|signInWithOtp|signInWithOAuth/.test(loginBody),
     "login() must stay a password grant - no other session type may appear in it");
 });
 
-test("a real email is accepted at login, so the one account that must be recoverable without another admin can be", () => {
-  // The club's own admin account is created with a real address precisely so
-  // Supabase's own password-reset mail works for it - "ask an admin to reset
-  // it" has no answer when the locked-out person IS the only admin. That
-  // account's email is not derivable from any username, so login has to
-  // accept it verbatim.
-  assert.match(src, /const looksLikeEmail = identifier\.includes\("@"\);/);
-  // Deliberately NOT a validating regex: the server is the authority on
-  // whether an address exists, and a stricter client test could only ever
-  // lock someone out of their own account over a technicality.
+test("login takes a username only, with the sign-up rule's message (2026-11-10, audit M4, M5)", () => {
+  // The real-email path served a gym-era admin account. decisions.md has no
+  // email at all; a lost recovery code has its own reset.
   const loginBody = src.slice(src.indexOf("async function login(form)"), src.indexOf("async function setCredentials(form)"));
-  assert.ok(!/\[a-z\]\+@|EMAIL_RE|isValidEmail/.test(loginBody),
-    "login() must not second-guess the server on what a valid address looks like");
+  assert.ok(!/includes\("@"\)|looksLikeEmail/.test(loginBody), "login() must not accept an email any more");
+  assert.match(loginBody, /usernameRuleError\(identifier\)/, "and must explain the allowed characters the way sign-up does");
+  assert.ok(!/אימייל/.test(src.slice(src.indexOf("const LOGIN_IDENTIFIER_LABEL"), src.indexOf("const CLUB_NAME_LABEL"))), "the label no longer says email");
+});
+
+test("the client password rule caps at 72, like the server (audit L9)", () => {
+  assert.match(src, /password\.length > 72/);
 });
 
 test("account CREATION stays username-only - accepting an email to log in did not start collecting them", () => {
