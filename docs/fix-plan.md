@@ -30,7 +30,7 @@ Every item was checked again in the current code and against
 
 ## 1. Verification result
 
-23 audit items, all confirmed except one part. Merged into **18 items** (F1-F18).
+23 audit items, all confirmed. Merged into **18 items** (F1-F18).
 
 | Audit | Result | Item |
 |---|---|---|
@@ -39,13 +39,13 @@ Every item was checked again in the current code and against
 | M3 | confirmed, plus a twin: the header flame `updateStreakLabel` (app.js:5577) | F11 |
 | M4, M5, L9 | confirmed (one form, one rule file) | F5 |
 | M6, M7 | confirmed (Me has no nav entry; both come from two settings screens) | F12 |
-| M8 | confirmed for "1,250.5", "-5", Arabic-Indic digits. "abc" keeps the previous value (the input handler returns before writing state), so it does not snap; it is still accepted silently with no flag | F2 |
+| M8 | confirmed; the audit measured all four inputs ("1,250.5", "abc", "-5", Arabic-Indic) becoming 20 in the browser. The code shows the "1,250.5" and "-5" path; for "abc" the measurement stands over the reading | F2 |
 | M9 | confirmed | F7 |
 | M10, L1 | confirmed (static pages) | F8 |
 | L2 | confirmed, plus 3 twins in app.js | F9 |
 | L3 | confirmed | F10 |
 | L4 | confirmed in code structure (flex rows, no columns); geometry not measured | F14 |
-| L5, L6 (skip link) | confirmed | F13 |
+| L5, L6 | confirmed. L6 is about what the icons mean on screen: every header button has an `aria-label` (sparkle = `עדכוני גרסה`), but there is no visible label | F13 |
 | L7 | confirmed (product choice) | F15 |
 | L8 | confirmed | F3 |
 | L10 | confirmed in code (WHATWG `URL` keeps `%64` encoded); whether Cloudflare then serves the decoded file is not measured | F4 |
@@ -53,10 +53,7 @@ Every item was checked again in the current code and against
 | L12 | confirmed | F16 |
 | L13 | confirmed, plus a twin: the static `theme-color` metas (index.html:92-93) | F18 |
 
-**Dropped (1):**
-- L6 "unlabelled header icon buttons": false positive. Every header button has an
-  `aria-label` (the sparkle is `עדכוני גרסה`, index.html:764). The skip-link half
-  of L6 is kept in F13.
+**Dropped:** none.
 
 **Already fixed:** none.
 
@@ -244,13 +241,15 @@ Legend: **Mig** needs a migration. **Sec** touches RLS, auth or edge functions.
   `open-settings`.
 - **Manual:** phone, signed out and signed in: menu, Me, support.
 
-### F13 · Low · feels · Touch targets under 44px; no skip link (L5, L6)
+### F13 · Low · feels · Touch targets under 44px; header icons unexplained; no skip link (L5, L6)
 - **Root cause:** `.link-btn` is `min-height:36px` (`index.html:313`),
   `.icon-chip` is 30x30 (`index.html:412`), the reactors trigger is 42 wide.
 - **Files:** `index.html`, `src/community/reactions.js`.
 - **Fix:** `.link-btn` min-height 44; `.icon-chip` keeps its 30px look with a 44px
   hit area (padding or an inset pseudo-element); reactors trigger min 44;
-  a "דילוג לתוכן" skip link to `main`.
+  a "דילוג לתוכן" skip link to `main`; move release notes (the sparkle,
+  `index.html:764`) into the nav menu as a text row, so the header keeps only
+  icons whose meaning is obvious (menu, medals).
 - **Twins:** every `icon-chip` (header menu, medals, release notes, profile
   edit `app.js:6551`); every `link-btn`.
 - Mig no · Sec no · Risk med (header layout at 320px).
