@@ -1,6 +1,6 @@
 // F19 (fix plan, 2026-11-10): the lost-code reset on the device. "אין לי קוד
 // שחזור" on the forgot screen asks with the username alone; the request token
-// stays on this device; after 12 hours the same screen sets a new password and
+// stays on this device; after an hour the same screen sets a new password and
 // shows a new recovery code once. A signed-in session of the account sees a
 // banner and can cancel.
 import { test } from "node:test";
@@ -23,9 +23,9 @@ async function openLost(window) {
   click(window, '[data-community-action="recovery-lost-open"]');
 }
 
-test("no code: the username alone starts a request, and the device waits 12 hours", async () => {
+test("no code: the username alone starts a request, and the device waits an hour", async () => {
   const mock = createMockSupabase();
-  const readyAt = new Date(Date.now() + 12 * 3600e3).toISOString();
+  const readyAt = new Date(Date.now() + 3600e3).toISOString();
   mock.onFunction("request-reset", (body) => body.action === "request"
     ? { data: { ok: true, request_token: TOKEN, ready_at: readyAt }, error: null }
     : { data: null, error: { message: "unexpected" } });

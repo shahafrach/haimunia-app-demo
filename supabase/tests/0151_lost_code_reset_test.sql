@@ -71,6 +71,8 @@ select is((select count(*)::int from public.notif_push_pending(100) where notifi
   'it is pushed with no preference row, to the account''s own device');
 select is((select count(*)::int from public.notif_push_pending(100) where notification_type = 'reset_requested' and endpoint <> 'https://push.example/reset-m1'), 0,
   'and to no other member''s device');
+select ok((select body like '%בעוד שעה.' from public.notifications where user_id = tests.uid('m1') and type = 'reset_requested' order by created_at desc limit 1),
+  'the push names the one-hour wait (202611100002)');
 select is((select count(*)::int from public.notif_push_pending(100) where notification_type = 'workout_reminder'), 0,
   'other personal types still need their preference row');
 

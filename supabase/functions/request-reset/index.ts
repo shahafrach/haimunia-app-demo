@@ -4,7 +4,7 @@
 // No session is needed (the caller has lost both the password and the recovery
 // code), so the gateway's JWT check is off (supabase/config.toml) and every rule
 // is in ../_shared/recovery.mjs: the same answer for a known and an unknown
-// username, a 12-hour wait the account can cancel from any signed-in session
+// username, a one-hour wait the account can cancel from any signed-in session
 // (cancel_my_reset), a push to the account's devices, 3 requests per username
 // per day, the recover-password IP limit, one generic answer for every failure.
 //

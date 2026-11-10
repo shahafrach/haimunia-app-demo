@@ -165,7 +165,7 @@
 
   // ---- Lost recovery code: the self-service reset (fix plan F19) ------------------------
   // A member with no code asks with the username alone; the reset can be finished on THIS
-  // device 12 hours later, unless a signed-in session of the account cancels it (the
+  // device an hour later, unless a signed-in session of the account cancels it (the
   // banner below). The request token is kept on this device only, in localStorage, so a
   // reload during the wait does not lose it; it is useless without the wait having passed.
   const RESET_STORAGE_KEY = "haimunia-demo:resetRequest";
@@ -292,7 +292,7 @@
       <div style="display:flex;justify-content:center;margin-top:14px;"><button class="gate-alt" data-community-action="recovery-lost-open">אין לי קוד שחזור</button></div>`);
   }
 
-  // No code: ask with the username, then wait 12 hours on this device.
+  // No code: ask with the username, then wait an hour on this device.
   function resetLostHtml() {
     const l = resetUi();
     const back = `<button class="gate-back" data-community-action="recovery-lost-back">‹ חזרה</button>`;
@@ -301,7 +301,7 @@
     if (l.view === "wait" && stored) {
       const ready = Date.now() >= stored.readyAt;
       const body = ready
-        ? `<div style="font-size:14px;line-height:1.7;margin-bottom:14px;">${bidiText("עברו 12 שעות. בוחרים סיסמה חדשה. אחר כך מקבלים קוד שחזור חדש, פעם אחת.")}</div>
+        ? `<div style="font-size:14px;line-height:1.7;margin-bottom:14px;">${bidiText("עברה שעה. בוחרים סיסמה חדשה. אחר כך מקבלים קוד שחזור חדש, פעם אחת.")}</div>
           <form id="communityResetComplete">${field("communityResetComplete", "password", "סיסמה חדשה", `<input class="text-input" name="password" type="password" dir="ltr" autocomplete="new-password" required/>`)}${field("communityResetComplete", "passwordConfirm", "שוב את הסיסמה החדשה", `<input class="text-input" name="passwordConfirm" type="password" dir="ltr" autocomplete="new-password" required/>`)}
           <button class="save-btn" type="submit"${l.busy ? " disabled" : ""}>${l.busy ? "מאפסים…" : "קביעת סיסמה חדשה"}</button></form>`
         : `<div data-reset-wait="1" style="font-size:14px;line-height:1.7;margin-bottom:14px;">${bidiText("הבקשה התקבלה. אפשר לקבוע סיסמה חדשה במכשיר הזה החל מ" + resetTimeText(stored.readyAt) + ". אם מישהו מחובר לחשבון, הוא יקבל הודעה ויוכל לבטל.")}</div>`;
@@ -312,7 +312,7 @@
     }
     return gateCard(`${back}
       <div style="font-weight:800;font-size:20px;margin:6px 0 8px;">אין לי קוד שחזור</div>
-      <div style="color:var(--color-text-muted);font-size:14px;line-height:1.7;margin-bottom:14px;">${bidiText("מקלידים את שם הכניסה. אחרי 12 שעות אפשר לקבוע סיסמה חדשה במכשיר הזה. בזמן הזה כל מכשיר שמחובר לחשבון מקבל הודעה ויכול לבטל.")}</div>
+      <div style="color:var(--color-text-muted);font-size:14px;line-height:1.7;margin-bottom:14px;">${bidiText("מקלידים את שם הכניסה. אחרי שעה אפשר לקבוע סיסמה חדשה במכשיר הזה. בזמן הזה כל מכשיר שמחובר לחשבון מקבל הודעה ויכול לבטל.")}</div>
       ${err}
       <form id="communityResetRequest">${field("communityResetRequest", "username", LOGIN_NAME_LABEL, `<input class="text-input" name="username" dir="ltr" autocapitalize="off" autocomplete="username" placeholder="${esc(LOGIN_NAME_LABEL)}" value="${esc(recoveryUi().draftUsername || "")}" required/>`)}
       <button class="save-btn" type="submit"${l.busy ? " disabled" : ""}>${l.busy ? "שולחים…" : "בקשת איפוס"}</button></form>`);
@@ -330,7 +330,7 @@
         <div style="display:flex;justify-content:center;margin-top:12px;"><button class="gate-alt" data-community-action="recovery-skip">להמשיך בלי קוד (אפשר ליצור ב"אני")</button></div>`);
     }
     return gateCard(`<div style="font-weight:800;font-size:20px;margin-bottom:8px;">${esc(title)}</div>
-      <div style="color:var(--color-text-muted);font-size:14px;line-height:1.7;margin-bottom:14px;">${bidiText("אין אימייל לאפס איתו סיסמה, אז הקוד הזה הוא הדרך המהירה לחזור לחשבון אם תשכחו אותה. בלי קוד אפשר לאפס רק אחרי המתנה של 12 שעות. הוא מוצג פעם אחת בלבד. שמרו אותו במקום שאתם סומכים עליו: מנהל סיסמאות, או הודעה לעצמכם.")}</div>
+      <div style="color:var(--color-text-muted);font-size:14px;line-height:1.7;margin-bottom:14px;">${bidiText("אין אימייל לאפס איתו סיסמה, אז הקוד הזה הוא הדרך המהירה לחזור לחשבון אם תשכחו אותה. בלי קוד אפשר לאפס רק אחרי המתנה של שעה. הוא מוצג פעם אחת בלבד. שמרו אותו במקום שאתם סומכים עליו: מנהל סיסמאות, או הודעה לעצמכם.")}</div>
       <div data-recovery-code="1" dir="ltr" class="mono" style="font-size:24px;font-weight:800;letter-spacing:.06em;text-align:center;padding:16px 8px;border:1px solid var(--color-border-strong);border-radius:14px;background:var(--color-surface-sunken);user-select:all;word-break:break-all;">${esc(r.code)}</div>
       <div style="display:flex;justify-content:center;margin:12px 0;"><button class="chip-btn" data-community-action="recovery-copy">${r.copied ? "הועתק" : "העתקת הקוד"}</button></div>
       ${r.error ? `<div class="field-error" role="alert" style="margin-bottom:10px;">${esc(r.error)}</div>` : ""}

@@ -146,10 +146,10 @@ export async function handleRecover(req, deps) {
 // ---- Lost recovery code: the self-service reset (fix plan F19, 2026-11-10) ----------
 //
 // Decided by the owner: a member with no code can reset with the username alone,
-// after a 12-hour wait that any signed-in session of the account can cancel; the
+// after a one-hour wait (12 hours until 2026-11-10, shortened by the owner) that any signed-in session of the account can cancel; the
 // account's devices get a push when it is asked for. No approval by anyone. The
-// accepted risk: anyone who knows a username can take that account over after 12
-// hours unless the owner cancels. The rules below are what limits it.
+// accepted risk: anyone who knows a username can take that account over after an
+// hour unless the owner cancels. The rules below are what limits it.
 //
 //   * request: { action: "request", username } -> { ok, request_token, ready_at }.
 //     The same answer for a known and an unknown username (an unknown one gets a
@@ -160,7 +160,7 @@ export async function handleRecover(req, deps) {
 //     { ok, recovery_code } once the wait is over and nobody cancelled; the same
 //     tail as recover-password: new password, every session ended, new code once.
 export const RESET_DOMAIN = "box-log:reset-request:v1:";
-export const RESET_WAIT_MS = 12 * 60 * 60 * 1000;
+export const RESET_WAIT_MS = 60 * 60 * 1000;
 export const RESET_VALID_MS = 24 * 60 * 60 * 1000;
 export const RESET_REQUESTS_PER_DAY = 3;
 const DAY_MS = 24 * 60 * 60 * 1000;

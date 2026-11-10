@@ -72,7 +72,7 @@ ${uiToastHtml()}${renderOutboxBanner()}${resetBannerHtml()}${inner}</div></secti
       <div style="font-weight:800;margin-bottom:4px;">איך ההרשמה עובדת</div>
       <ul style="margin:0;padding-inline-start:18px;">
         <li>${bidiText("בוחרים שם כניסה וסיסמה. בלי אימייל ובלי מספר טלפון.")}</li>
-        <li>${bidiText("מקבלים קוד שחזור אחד, ושומרים אותו. איתו מאפסים סיסמה שנשכחה מיד; בלי קוד, רק אחרי 12 שעות.")}</li>
+        <li>${bidiText("מקבלים קוד שחזור אחד, ושומרים אותו. איתו מאפסים סיסמה שנשכחה מיד; בלי קוד, רק אחרי שעה.")}</li>
         <li>${bidiText("אפשר להוסיף אימות דו-שלבי באפליקציית אימות, ב״אני״. זה אופציונלי.")}</li>
         <li>${bidiText("נשארים מחוברים במכשיר עד שמתנתקים.")}</li>
       </ul></div>`;
