@@ -100,7 +100,10 @@ check("no what's-new popup for a fresh install (nothing to catch up on)", !whats
 // --- Notifications bell ---
 const badgeHiddenFresh = await page.evaluate(() => document.getElementById("notificationsBadge").style.display !== "flex");
 check("bell badge shows nothing for a fresh install", badgeHiddenFresh);
-await page.click("[data-action='open-notifications']");
+// Since audit L6 (2026-11) the header button is hidden while it has nothing to show;
+// its handler is still what the checks below are about, so it is invoked directly.
+check("with nothing to show, the header bell is hidden", !(await page.locator("#notificationsBellBtn").isVisible()));
+await page.evaluate(() => document.getElementById("notificationsBellBtn").click());
 await page.waitForTimeout(200);
 // THE BELL NO LONGER OPENS AN EMPTY CHANGELOG, and this pair of checks used
 // to require that it did.
@@ -157,7 +160,7 @@ check("control: with something genuinely unseen, the list renders real version e
 await page.click("#notificationsOverlay button[data-action='close-notifications']");
 await page.waitForTimeout(150);
 
-// --- Streak + recent-history: log a set today, check both ---
+// --- No streak + recent-history: log a set today, check both ---
 await selectMovement(page, "Strict");
 await page.fill("[data-field='weight'].stepper-val", "60");
 await page.dispatchEvent("[data-field='weight'].stepper-val", "change");
@@ -167,9 +170,9 @@ await page.click("[data-action='save-set']");
 await page.waitForTimeout(300);
 await dismissCelebrationIfOpen(page);
 
-const streakVisible = await page.evaluate(() => document.getElementById("streakLabel").style.display === "flex");
-const streakText = await page.evaluate(() => document.getElementById("streakLabel").textContent.trim());
-check("streak indicator shows 1 after logging today's only set", streakVisible && streakText === "1", `visible=${streakVisible} text="${streakText}"`);
+// No daily streak (decisions.md; audit M3, 2026-11): the header has no day counter at all.
+const streakGone = await page.evaluate(() => !document.getElementById("streakLabel"));
+check("no daily-streak counter in the header after logging a set", streakGone);
 await page.screenshot({ path: `${outDir}/roadmap-03-streak.png` });
 
 // Log a second set for the same exercise -> recent-history strip should appear.

@@ -41,9 +41,9 @@ const PROVEN_SAFE = new Map([
   ["ICONS.chevronsLeft", "hardcoded SVG literal in const ICONS"],
   ["ICONS.dumbbell", "hardcoded SVG literal in const ICONS"],
   ["ICONS.flame", "hardcoded SVG literal in const ICONS"],
-  // computeCurrentStreak(): `let streak = 0` incremented in a while loop
-  // and returned. Provably an integer, never a string.
-  ["streak", "integer counter from computeCurrentStreak()"],
+  // weeksOnTargetThisYear(): BoxLogProgress.weeksYear(...).metCount, a count
+  // of weeks. Provably an integer, never a string.
+  ["met", "integer week count from weeksOnTargetThisYear()"],
   // renderNotificationsList(): a ternary of two hardcoded Hebrew string
   // literals, gated on RELEASE_NOTES.length (a const array's own length,
   // not a value that can carry user input).
@@ -119,7 +119,7 @@ test("the sink count is pinned, so a new sink is a deliberate decision", () => {
   //     this file is built around.
   //   * The one value that column composes itself is pendingModerationCount(),
   //     a .filter().length - provably an integer, the same class of value as
-  //     computeCurrentStreak() in the PROVEN_SAFE list above. Every other
+  //     weeksOnTargetThisYear() in the PROVEN_SAFE list above. Every other
   //     interpolation in it goes through esc() or bidiText().
   //
   // 40 -> 41 on 2026-09-22: renderBenchmarkArea() writes the benchmark section
@@ -164,7 +164,8 @@ test("the sink count is pinned, so a new sink is a deliberate decision", () => {
   // 39 -> 42 by the Design session, each checked: refreshAppearanceFields() (outerHTML of a
   // string built from the fixed palette list and esc()'d names), and the post-workout moment's
   // two writes (#momentBody, #momentActions), whose every interpolation is esc() or bidiText().
-  assert.equal(count, 42,
+  // 42 -> 41 on 2026-11-10: updateStreakLabel() went with the daily streak (audit M3).
+  assert.equal(count, 41,
     `app.js has ${count} innerHTML/outerHTML sinks, expected 42. If you added one, verify its interpolations are escaped and update this number; if you removed one, just update it.`);
 });
 

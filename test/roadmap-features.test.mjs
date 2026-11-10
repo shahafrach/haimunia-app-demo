@@ -53,49 +53,10 @@ test("editing the profile later never opens the explainer either", async () => {
   assert.equal(window.document.getElementById("onboardingOverlay").classList.contains("open"), false, "editing the profile must not show onboarding");
 });
 
-test("computeCurrentStreak counts consecutive logged days backward; today unlogged doesn't break it", async () => {
+test("weeksOnTargetThisYear counts weeks the target was met, and a day without training takes nothing away", async () => {
   const window = await bootApp();
-  const iso = (daysAgo) => window.localISODate(new Date(Date.now() - daysAgo * 86400000));
-
-  assert.equal(window.computeCurrentStreak(), 0, "nothing logged yet");
-
-  await window.addMovement("Test Streak Squat", "Squat");
-  const movement = window.allMovements().find((m) => m.name === "Test Streak Squat");
-
-  // Seed entries directly via the DB (bypasses needing to drive the date
-  // picker through the UI) for today, yesterday, and 2 days ago.
-  for (const daysAgo of [0, 1, 2]) {
-    await window.dbPut({
-      id: `seed-streak-${daysAgo}`, exerciseId: movement.id, date: iso(daysAgo),
-      weight: 50, reps: 5, sets: 1, ts: Date.now() - daysAgo * 86400000, isPR: false, est1RM: 50, groupId: null,
-    });
-  }
-  await window.reloadFromDb();
-  assert.equal(window.computeCurrentStreak(), 3, "today + yesterday + 2 days ago logged");
-
-  // Now seed 4 days ago too but leave 3 days ago empty — the gap should
-  // cap the streak at the 3 unbroken days, not count through the gap.
-  await window.dbPut({
-    id: "seed-streak-4", exerciseId: movement.id, date: iso(4),
-    weight: 50, reps: 5, sets: 1, ts: Date.now() - 4 * 86400000, isPR: false, est1RM: 50, groupId: null,
-  });
-  await window.reloadFromDb();
-  assert.equal(window.computeCurrentStreak(), 3, "a gap at day 3 should stop the count, not skip over it");
-});
-
-test("computeCurrentStreak: today not logged yet doesn't break a streak that's otherwise unbroken", async () => {
-  const window = await bootApp();
-  const iso = (daysAgo) => window.localISODate(new Date(Date.now() - daysAgo * 86400000));
-  await window.addMovement("Test Streak Deadlift", "Deadlift");
-  const movement = window.allMovements().find((m) => m.name === "Test Streak Deadlift");
-  for (const daysAgo of [1, 2, 3]) { // yesterday back through 3 days ago; today untouched
-    await window.dbPut({
-      id: `seed-yest-${daysAgo}`, exerciseId: movement.id, date: iso(daysAgo),
-      weight: 40, reps: 5, sets: 1, ts: Date.now() - daysAgo * 86400000, isPR: false, est1RM: 40, groupId: null,
-    });
-  }
-  await window.reloadFromDb();
-  assert.equal(window.computeCurrentStreak(), 3, "today just not being logged yet shouldn't reset or exclude yesterday's streak");
+  assert.equal(window.weeksOnTargetThisYear(), 0, "nothing logged yet");
+  assert.equal(typeof window.computeCurrentStreak, "undefined", "there is no daily streak to break (decisions.md)");
 });
 
 test("recentEntriesFor respects the 14-day window and caps at 5, most recent first", async () => {

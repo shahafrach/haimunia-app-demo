@@ -292,7 +292,8 @@
     if (d.prs.length === 1) out.push("שיא אישי חדש: " + d.prs[0].name);
     else if (d.prs.length > 1) out.push(`${d.prs.length} שיאים אישיים חדשים, בהם ${d.prs[0].name}`);
     for (const e of d.e1rm.slice(0, 2)) out.push(`1RM משוער ב-\u2068${e.name}\u2069: ${e.to} ק״ג (עלייה של ${e.pct}%)`);
-    if (d.run >= 2) out.push(`${d.run} שבועות ברצף ביעד`);
+    // Weeks met this year, not a run that a missed week resets (decisions.md; audit M3).
+    if (d.weeksMet >= 2) out.push(`${d.weeksMet} שבועות ביעד השנה`);
     return out;
   }
 

@@ -124,23 +124,20 @@ test("the nav menu shows an app version footer instead of ending in empty space"
   assert.match(list.textContent, /BOX-LOG/, "the footer names the app, not a bare version number");
 });
 
-test("a one-day streak reads '1 יום ברצף', not the grammatically wrong '1 ימים ברצף'", async () => {
+test("the nav card shows weeks on target, never a daily streak (decisions.md; audit M3)", async () => {
   const window = await bootApp();
-  await window.addMovement("Streak Grammar Check", "Squat");
+  await window.addMovement("Weeks Check Squat", "Squat");
   window.applyFieldValue("step", "weight", 40);
   window.applyFieldValue("step", "reps", 5);
   window.applyFieldValue("step", "sets", 1);
   await window.saveSet();
   window.closeCelebration();
-
-  assert.equal(window.computeCurrentStreak(), 1, "one set logged today is a one-day streak");
-
+  assert.equal(typeof window.computeCurrentStreak, "undefined", "the daily streak is gone");
   window.document.getElementById("navMenuBtn").click();
-  const who = window.document.querySelector("#navMenuList .who-sub");
-  assert.equal(who.textContent, "1 יום ברצף");
-
-  const streakLabel = window.document.getElementById("streakLabel");
-  assert.equal(streakLabel.getAttribute("aria-label"), "1 יום ברצף");
+  const who = window.document.querySelector("#navMenuList .who-sub").textContent;
+  assert.ok(!/ברצף|ימים|יום/.test(who), `no day count on the card: ${who}`);
+  assert.match(who, /שבוע|שבועות/);
+  assert.equal(window.document.getElementById("streakLabel"), null, "and no flame counter in the header");
 });
 
 test("a near-empty progress chart (1-2 points) explains itself instead of just looking sparse", async () => {

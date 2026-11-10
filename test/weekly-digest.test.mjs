@@ -41,7 +41,7 @@ test("the run counts consecutive weeks on target and the unfinished week never b
   const days = ["2026-10-26", "2026-10-28", "2026-11-02", "2026-11-04"]; // two full weeks at target 2, this week not yet
   const d = P.weekDigest([], days, 2, TODAY);
   assert.equal(d.run, 2);
-  assert.match(P.digestLines(d).join(" "), /2 שבועות ברצף ביעד/);
+  assert.ok(!/ברצף/.test(P.digestLines(d).join(" ")), "the summary names weeks met, not a run a missed week would reset (audit M3)");
   const gap = P.weekDigest([], ["2026-10-12", "2026-10-13", "2026-11-04", "2026-11-05"], 2, TODAY);
   assert.equal(gap.run, 1, "a missed week ends the run (nothing else is taken away)");
 });

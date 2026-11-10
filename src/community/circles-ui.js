@@ -556,7 +556,8 @@ ${uiToastHtml()}${renderOutboxBanner()}${resetBannerHtml()}${inner}</div></secti
     const head = `<div class="chart-card" id="communityHead" style="margin-bottom:12px;"><div class="flex" style="justify-content:space-between;align-items:center;gap:10px;"><div style="font-weight:800;font-size:16px;"><span aria-hidden="true">${esc(p.emoji || "🙂")}</span> ${bidiText(p.display_name || "")}</div>${renderNotificationBell()}</div></div>`;
     const profile = profileFormHtml("communityProfile", p, true);
     const inner = head + profile + `<div class="chip-row" style="margin:-4px 0 8px;"><button class="chip-btn" type="button" data-community-action="migrate">סנכרון היסטוריה פרטית</button></div>`
-      + `<div class="ach-section" style="margin-top:18px;">${sectionHead("var(--color-accent)", "מראה")}<div class="chart-card">${typeof renderAppearanceSection === "function" ? renderAppearanceSection("me") : ""}</div></div>`
+      // Appearance lives once, in Settings (audit M7); Me links there.
+      + `<div class="ach-section" style="margin-top:18px;">${sectionHead("var(--color-accent)", "מראה")}<button class="exercise-row" data-action="open-settings" style="margin:0;"><span style="font-weight:700;font-size:13.5px;">ערכת צבעים, מצב כהה וגודל טקסט</span><span style="color:var(--color-text-muted);flex-shrink:0;" aria-hidden="true">‹</span></button></div>`
       + targetAndPauseHtml() + shareSettingsHtml() + renderMyAchievements() + renderSharePromptPrefPanel() + renderBlockedMembersPanel() + renderNotifPrefsPanel() + termMarkPanel
       + recoveryPanelHtml()
       + mfaPanelHtml()
@@ -571,6 +572,10 @@ ${uiToastHtml()}${renderOutboxBanner()}${resetBannerHtml()}${inner}</div></secti
   window.renderCommunityApp = function () { resetTermMarkBudget(); return renderCircleScreen(); };
   window.renderHomeApp = function () { resetTermMarkBudget(); return renderHomeScreen(); };
   window.renderMeApp = function () { resetTermMarkBudget(); return renderMeScreen(); };
+  /** The display name the circles see, for the nav card and Settings; "" without a profile (audit M7). */
+  window.communityProfileName = function () {
+    return state.user && !state.user.is_anonymous && state.profile && state.profile.display_name ? String(state.profile.display_name) : "";
+  };
   /** The member's weekly target in a circle, or 0 when none is set. The ring on Home and after a workout reads it. */
   window.communityWeeklyTarget = function () {
     const c = state && state.circles;

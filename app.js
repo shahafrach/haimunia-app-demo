@@ -175,6 +175,10 @@ function getNavItems() {
     { id: "history", tab: "history", rowId: "tabHistoryBtn", label: "התקדמות", tint: "blue", icon: ICONS.chartIcon, main: true },
     { id: "calendar", tab: "calendar", rowId: "tabCalendarBtn", label: "לוח שנה", tint: "yellow", icon: ICONS.calendarIcon, main: false },
     { id: "wod", tab: "wod", rowId: "tabWodBtn", label: "אימונים", tint: "purple", icon: ICONS.stopwatchIcon, main: false },
+    // Audit M6, M7 (2026-11): Me opened only from the circle avatar, so a
+    // signed-out member (and the support sheet pointing there) had no way in.
+    // A menu row for everyone; signed out it is the sign-in screen.
+    { id: "me", tab: "me", rowId: "tabMeBtn", label: "אני והחשבון", tint: "teal", icon: ICONS.communityIcon, main: false },
   ];
   return items;
 }
@@ -206,9 +210,16 @@ function renderBottomTabBar() {
 // a normally-hidden container" treatment renderSettingsBody() already relies on
 // - so the tabAddBtn/tabHistoryBtn/etc. ids these rows carry stay resolvable
 // at all times, exactly like the old static tabbar's buttons always were.
+// One name (audit M7): signed in with a profile, the name the circles see;
+// otherwise the private log's own name.
+function shownMemberName() {
+  const p = typeof window.communityProfileName === "function" ? window.communityProfileName() : "";
+  return p || userName;
+}
 function renderNavWho() {
-  const initial = userName ? userName.trim().charAt(0) : "";
-  const streak = computeCurrentStreak();
+  const shownName = shownMemberName();
+  const initial = shownName ? shownName.trim().charAt(0) : "";
+  const met = weeksOnTargetThisYear();
   // data-action="open-achievements" added here (2026-09-08, immersive
   // redesign): the ONLY two existing triggers for this
   // (#userGreeting/the "לכל המדליות..." link) both live inside the main
@@ -242,23 +253,10 @@ function renderNavWho() {
     <button class="who" data-action="open-achievements" aria-label="פתיחת מדליות והישגים" style="width:100%; text-align:inherit;">
       <div class="who-avatar">${esc(initial)}</div>
       <div style="flex:1; min-width:0;">
-        <div class="who-name">${userName ? bidiText(userName) : "אורח/ת"}</div>
-        <!-- Design spec Appendix A.9: the zero-streak branch here used to
-             read "בואו נתחיל להתאמן" - the THIRD instance of "בואו נתחיל" in
-             the app, after the welcome sheet's primary button and the
-             onboarding explainer's (both index.html, both genuine calls to
-             action). This one is not a button. It is the sub-line of the
-             .who card, i.e. a STATUS line about the member, sitting directly
-             under their name - so a member with no current streak had their
-             state reported to them as an imperative, and the same words meant
-             three different things in three places.
-             The replacement is a fact, in the same shape as the streak > 0
-             branch it alternates with: that branch says what the streak IS,
-             so this one says where it starts. It is also true for both people
-             who land here - someone who has never trained and someone whose
-             streak lapsed - which "בואו נתחיל להתאמן" was not, and it leaves
-             "בואו נתחיל" to the two buttons that actually ask for a tap. -->
-        <div class="who-sub">${streak > 0 ? `${streak} ${streak === 1 ? "יום" : "ימים"} ברצף` : "הרצף מתחיל באימון הבא"}</div>
+        <div class="who-name">${shownName ? bidiText(shownName) : "אורח/ת"}</div>
+        <!-- Weeks the weekly target was met this year, never a daily streak
+             (decisions.md; audit M3). A week that was missed is not mentioned. -->
+        <div class="who-sub">${met > 0 ? (met === 1 ? "שבוע אחד ביעד השנה" : `${met} שבועות ביעד השנה`) : "השבועות ביעד ייספרו כאן"}</div>
       </div>
       <div class="flex items-center gap-6" style="flex-shrink:0; color:var(--color-text-muted); font-size:12px; font-weight:700;" aria-hidden="true">
         <span>מדליות</span>
@@ -309,6 +307,12 @@ function renderNavSettingsRow() {
   // every OTHER screen it appears on.
   return `
     <div class="divider-label">כללי</div>
+    <button class="navrow" data-action="open-release-notes">
+      <span class="icon-chip icon-chip-steel" aria-hidden="true">✨</span>
+      <span class="nav-label">מה חדש באפליקציה</span>
+      ${unseenReleaseNotes().length ? `<span class="tab-badge" aria-label="${unseenReleaseNotes().length} חדשים">${unseenReleaseNotes().length}</span>` : ""}
+      ${navChevronHtml()}
+    </button>
     <button class="navrow" data-action="open-settings">
       <span class="icon-chip icon-chip-steel">${ICONS.settingsIcon}</span>
       <span class="nav-label">הגדרות</span>
@@ -842,8 +846,7 @@ function totalSessions() { return new Set(loggedDates()).size; }
 // Live bug hunt (2026-09-11): raw ms-division drifts by the DST offset around
 // a spring-forward/fall-back transition, which can flip a day count
 // off-by-one right at local midnight once the drift accumulates.
-// computeCurrentStreak() already gets this right elsewhere in this file via
-// setDate() local-calendar-day counting; this matches that.
+// It counts local calendar days with setDate(), not milliseconds.
 //
 // Extracted from daysSinceBoxStart() when the benchmark retest reminder
 // needed the same arithmetic. A second copy of a DST-correct day count is the
@@ -1792,6 +1795,10 @@ function updateNotificationsBadge() {
   badge.textContent = count > 9 ? "9+" : String(count);
   badge.style.display = count > 0 ? "flex" : "none";
   if (btn) btn.setAttribute("aria-label", social > 0 ? `התראות, ${social} חדשות` : "עדכוני גרסה");
+  // Audit L6 (2026-11): an icon with nothing behind it read as a mystery. It
+  // shows only with a count on it; "מה חדש" is a text row in the menu and in
+  // Settings at all times.
+  if (btn) btn.hidden = count === 0;
 }
 // Prefers the real community notification center when there's something
 // unread there; falls back to the offline release-notes overlay otherwise
@@ -1902,7 +1909,8 @@ function renderSupportContent() {
     return `
     <div class="settings-block">
       <div class="settings-block-title">פנייה</div>
-      <div class="footer-note" style="margin-bottom:0;">${esc("פנייה נשלחת מתוך החשבון שלכם, בלי מייל ובלי טלפון. כדי לכתוב פנייה צריך להיכנס לחשבון במסך \"אני\".")}</div>
+      <div class="footer-note" style="margin-bottom:0;">${esc("פנייה נשלחת מתוך החשבון שלכם, בלי מייל ובלי טלפון. כדי לכתוב פנייה צריך להיכנס לחשבון.")}</div>
+      <button class="chip-btn" data-action="open-me" style="margin-top:10px;">כניסה לחשבון</button>
     </div>`;
   }
   return `
@@ -5559,30 +5567,12 @@ function buildDayIndex() {
   }
   return { ent, wod };
 }
-// Consecutive days, counting backward from today, with at least one logged
-// entry. Today not being logged yet doesn't break the streak — it's just
-// not counted until it is; the first fully-empty day (including today, if
-// yesterday also has nothing) resets it to 0.
-function computeCurrentStreak() {
-  let streak = 0;
-  // One index for the whole walk, instead of two array scans per day.
-  const index = buildDayIndex();
-  const d = new Date(todayISO() + "T00:00:00");
-  if (!hasAnyEntryOn(localISODate(d), index)) d.setDate(d.getDate() - 1);
-  while (hasAnyEntryOn(localISODate(d), index)) {
-    streak++;
-    d.setDate(d.getDate() - 1);
-  }
-  return streak;
-}
-function updateStreakLabel() {
-  const el = document.getElementById("streakLabel");
-  if (!el) return;
-  const streak = computeCurrentStreak();
-  if (streak <= 0) { el.style.display = "none"; return; }
-  el.innerHTML = `${ICONS.flame}<span>${streak}</span>`;
-  el.style.display = "flex";
-  el.setAttribute("aria-label", `${streak} ${streak === 1 ? "יום" : "ימים"} ברצף`);
+// No daily streak (docs/circles/decisions.md, "Targets and metrics": count weeks
+// the target was met, no daily streaks; audit M3, 2026-11). The nav card shows
+// weeks on target this year instead, from the same count Home uses.
+function weeksOnTargetThisYear() {
+  const days = typeof window.communityTrainingDays === "function" ? window.communityTrainingDays() : [];
+  return BoxLogProgress.weeksYear(days, weeklyTargetForRing(), todayISO()).metCount;
 }
 // COMM-341. Training days / total sets / PR days for the month currently
 // shown - a real feature (a monthly summary), not just decoration, so it
@@ -5721,7 +5711,7 @@ function renderDayEntriesListHtml(dayEntries, dayWods) {
         if (group.length === 1) {
           const e = group[0];
           return `
-        <div class="log-row">
+        <div class="log-row cal-entry-row">
           <div class="flex items-center gap-8">
             ${isFlameworthyEntry(e, celebratableIds) ? ICONS.flame : ""}
             <span style="font-weight:700; font-size:14px;">${bidiText(movementById(e.exerciseId) ? movementById(e.exerciseId).name : "?")}</span>
@@ -6533,7 +6523,9 @@ function renderSettingsBody() {
     ? `<div class="settings-warn" role="status">⚠️<span>${esc(days === null ? "עדיין לא ביצעתם גיבוי — לא הורדתם קובץ גיבוי" : `קובץ הגיבוי האחרון שהורדתם הוא מלפני ${days} ימים`)} — ייצוא גיבוי למטה</span></div>`
     : "";
   const backupSettingsPanel = typeof window.renderBackupSettingsPanel === "function" ? window.renderBackupSettingsPanel() : "";
-  const initial = userName ? userName.trim().charAt(0) : "";
+  const profileName = typeof window.communityProfileName === "function" ? window.communityProfileName() : "";
+  const shownName = shownMemberName();
+  const initial = shownName ? shownName.trim().charAt(0) : "";
   // COMM-323: card-based redesign - .settings-pane of .settings-block
   // cards instead of the old flat .divider-label + bare .card list. The
   // profile card reuses .who (the exact same avatar+name component the nav
@@ -6546,11 +6538,19 @@ function renderSettingsBody() {
       <div class="who" style="margin:0;">
         <div class="who-avatar">${esc(initial)}</div>
         <div style="flex:1; min-width:0;">
-          <div class="who-name">${userName ? bidiText(userName) : "אורח/ת"}</div>
-          <div class="who-sub">פרופיל אישי</div>
+          <div class="who-name">${shownName ? bidiText(shownName) : "אורח/ת"}</div>
+          <div class="who-sub">${profileName ? "השם שרואים במעגלים" : "פרופיל אישי"}</div>
         </div>
         <button class="icon-chip icon-chip-steel" data-action="edit-user-name" aria-label="עריכת פרופיל">${ICONS.edit}</button>
       </div>
+      <!-- Audit M6, M7: the account part of the settings is Me; one row leads there from here, signed in or not. -->
+      <button class="exercise-row" data-action="open-me" style="margin:10px 0 0;">
+        <div style="text-align:right;">
+          <div style="font-weight:700; font-size:13.5px;">${profileName ? "החשבון והמעגלים שלי" : "כניסה או הרשמה"}</div>
+          <div style="color:var(--color-text-muted); font-size:12px; margin-top:2px;">${profileName ? "פרופיל, יעד שבועי, שיתוף, התראות ואבטחה" : "למעגלים עם חברים, גיבוי בענן והתראות. היומן עובד גם בלי"}</div>
+        </div>
+        <span style="color:var(--color-text-muted); flex-shrink:0;">${ICONS.chevronsLeft}</span>
+      </button>
 
       <div class="settings-block">
         <div class="settings-block-title">מראה</div>
@@ -7000,7 +7000,6 @@ function render() {
   // be re-checked as the member's situation changes rather than once at the
   // moment the browser offered it. No-op unless all four conditions hold.
   maybeShowInstallBanner();
-  updateStreakLabel();
   // Cloud.js's rerender() is literally window.render (see its own
   // definition) - so a community notification arriving, or being read,
   // already reaches here on the very next render with no separate event
@@ -8600,7 +8599,7 @@ document.addEventListener("click", (e) => {
   // notes specifically, never the smart header routing above - a member
   // tapping it to read the changelog must not land in Community's
   // notification center just because they happen to have unread there.
-  else if (action === "open-release-notes") { openNotifications(); }
+  else if (action === "open-release-notes") { closeNavMenu(); openNotifications(); }
   else if (action === "prefill-from-recent") {
     const w = Number(el.dataset.weight), r = Number(el.dataset.reps), st = Number(el.dataset.sets);
     if (isFinite(w)) applyFieldValue("step", "weight", w);
@@ -8611,6 +8610,11 @@ document.addEventListener("click", (e) => {
     showToast(`מולא: ${entrySummaryFromParts(w, r, st)}`);
   }
   else if (action === "open-support") { openSupport(); }
+  else if (action === "open-me") {
+    if (document.getElementById("supportOverlay").classList.contains("open")) closeSupport();
+    if (settingsOpen) closeSettings();
+    window.switchAppTab("me");
+  }
   else if (action === "close-support") {
     // THE BACKDROP GUARD, missing when this shipped and reported from a real
     // phone the same day: "trying to put text it closes page". #supportOverlay

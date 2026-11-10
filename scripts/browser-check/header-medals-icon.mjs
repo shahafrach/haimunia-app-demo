@@ -70,12 +70,16 @@ check(
   medalHit.reachable === true && medalHit.interceptedBy !== "notificationsBellBtn",
   medalHit.error || `topmost is ${medalHit.topDesc}${medalHit.interceptedBy ? ` (inside #${medalHit.interceptedBy})` : ""}`,
 );
-const bellHit = await hitTest(page, "#notificationsBellBtn", ["medalsBtn", "notificationsBellBtn"]);
-check(
-  "the bell's own tap resolves to itself, not the medal icon next to it",
-  bellHit.reachable === true && bellHit.interceptedBy !== "medalsBtn",
-  bellHit.error || `topmost is ${bellHit.topDesc}${bellHit.interceptedBy ? ` (inside #${bellHit.interceptedBy})` : ""}`,
-);
+// The release-notes/notifications button shows only with a count on it (audit L6, 2026-11).
+const bellShown = await page.locator("#notificationsBellBtn").isVisible();
+if (bellShown) {
+  const bellHit = await hitTest(page, "#notificationsBellBtn", ["medalsBtn", "notificationsBellBtn"]);
+  check(
+    "the bell's own tap resolves to itself, not the medal icon next to it",
+    bellHit.reachable === true && bellHit.interceptedBy !== "medalsBtn",
+    bellHit.error || `topmost is ${bellHit.topDesc}${bellHit.interceptedBy ? ` (inside #${bellHit.interceptedBy})` : ""}`,
+  );
+} else check("with nothing to show, the header has no mystery icon (the bell is hidden)", true);
 
 // The actual point of the feature: tapping it opens achievements.
 await page.click("#medalsBtn");
