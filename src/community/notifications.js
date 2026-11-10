@@ -71,6 +71,8 @@
     pr_circle:        { category: "community", pref: "pr_circle",        icon: "🏅", title: "שיא אישי חדש במעגל" },
     workout_reminder: { category: "community", pref: "workout_reminder", icon: "⏰", title: "זמן לאימון" },
     weekly_digest:    { category: "community", pref: "weekly_digest",    icon: "📈", title: "הסיכום השבועי שלך מוכן" },
+    // Account safety, not a preference: always pushed (202611100001). Opens the Circle tab, where the cancel banner is.
+    reset_requested:  { category: "community", pref: "reset_requested",  icon: "🔐", title: "התבקש איפוס לסיסמה שלך" },
   };
   // Opt-in, except a reaction to your own post: no stored row means on for that one type
   // (the server twin is notif_pref_allows, migration 202611080001).

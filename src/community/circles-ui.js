@@ -38,7 +38,7 @@
         <h1 id="pageTitle-${tabKey}" class="scene-page__title">${esc(title)}</h1>
       </div>
       <div class="scene-sheet">
-${uiToastHtml()}${renderOutboxBanner()}${inner}</div></section>`;
+${uiToastHtml()}${renderOutboxBanner()}${resetBannerHtml()}${inner}</div></section>`;
   }
 
   // The list of circles with a checkbox each, used wherever the member picks
@@ -72,7 +72,7 @@ ${uiToastHtml()}${renderOutboxBanner()}${inner}</div></section>`;
       <div style="font-weight:800;margin-bottom:4px;">איך ההרשמה עובדת</div>
       <ul style="margin:0;padding-inline-start:18px;">
         <li>${bidiText("בוחרים שם כניסה וסיסמה. בלי אימייל ובלי מספר טלפון.")}</li>
-        <li>${bidiText("מקבלים קוד שחזור אחד, ושומרים אותו. הוא הדרך היחידה לאפס סיסמה שנשכחה.")}</li>
+        <li>${bidiText("מקבלים קוד שחזור אחד, ושומרים אותו. איתו מאפסים סיסמה שנשכחה מיד; בלי קוד, רק אחרי 12 שעות.")}</li>
         <li>${bidiText("אפשר להוסיף אימות דו-שלבי באפליקציית אימות, ב״אני״. זה אופציונלי.")}</li>
         <li>${bidiText("נשארים מחוברים במכשיר עד שמתנתקים.")}</li>
       </ul></div>`;
