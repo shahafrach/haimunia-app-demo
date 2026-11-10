@@ -307,6 +307,12 @@ function renderNavSettingsRow() {
   // every OTHER screen it appears on.
   return `
     <div class="divider-label">כללי</div>
+    <button class="navrow" data-action="open-release-notes">
+      <span class="icon-chip icon-chip-steel" aria-hidden="true">✨</span>
+      <span class="nav-label">מה חדש באפליקציה</span>
+      ${unseenReleaseNotes().length ? `<span class="tab-badge" aria-label="${unseenReleaseNotes().length} חדשים">${unseenReleaseNotes().length}</span>` : ""}
+      ${navChevronHtml()}
+    </button>
     <button class="navrow" data-action="open-settings">
       <span class="icon-chip icon-chip-steel">${ICONS.settingsIcon}</span>
       <span class="nav-label">הגדרות</span>
@@ -1789,6 +1795,10 @@ function updateNotificationsBadge() {
   badge.textContent = count > 9 ? "9+" : String(count);
   badge.style.display = count > 0 ? "flex" : "none";
   if (btn) btn.setAttribute("aria-label", social > 0 ? `התראות, ${social} חדשות` : "עדכוני גרסה");
+  // Audit L6 (2026-11): an icon with nothing behind it read as a mystery. It
+  // shows only with a count on it; "מה חדש" is a text row in the menu and in
+  // Settings at all times.
+  if (btn) btn.hidden = count === 0;
 }
 // Prefers the real community notification center when there's something
 // unread there; falls back to the offline release-notes overlay otherwise
@@ -5701,7 +5711,7 @@ function renderDayEntriesListHtml(dayEntries, dayWods) {
         if (group.length === 1) {
           const e = group[0];
           return `
-        <div class="log-row">
+        <div class="log-row cal-entry-row">
           <div class="flex items-center gap-8">
             ${isFlameworthyEntry(e, celebratableIds) ? ICONS.flame : ""}
             <span style="font-weight:700; font-size:14px;">${bidiText(movementById(e.exerciseId) ? movementById(e.exerciseId).name : "?")}</span>
@@ -8589,7 +8599,7 @@ document.addEventListener("click", (e) => {
   // notes specifically, never the smart header routing above - a member
   // tapping it to read the changelog must not land in Community's
   // notification center just because they happen to have unread there.
-  else if (action === "open-release-notes") { openNotifications(); }
+  else if (action === "open-release-notes") { closeNavMenu(); openNotifications(); }
   else if (action === "prefill-from-recent") {
     const w = Number(el.dataset.weight), r = Number(el.dataset.reps), st = Number(el.dataset.sets);
     if (isFinite(w)) applyFieldValue("step", "weight", w);
