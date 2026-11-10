@@ -10,12 +10,8 @@
 // there. Classic <script>, no IIFE, loaded before cloud.js; see
 // src/community/events.js's header for why each of those matters.
 //
-// WHAT STAYED BEHIND, deliberately: the Realtime subscription block
-// (realtimeDebounce, ensureNotifRealtime, ensureFeedRealtime,
-// ensureChallengeRealtime and their handlers). It is one debounce and one
-// channel-lifecycle rule serving notifications, feed and challenges alike —
-// platform, not a feature — so it stays in cloud.js with the rest of the
-// core rather than being copied into three modules.
+// Realtime is gone (decisions.md, Infrastructure: no Realtime); the client
+// reads notifications when the centre opens and on each render's badge count.
 //
 // communityIsIOSDevice() comes with it. app.js has its own near-copy under
 // the name isIOSDevice, differing by a String() coercion; the two are named

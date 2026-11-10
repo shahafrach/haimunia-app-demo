@@ -2251,15 +2251,9 @@ function emitCommunityPrCreated(entry, mov, detail) {
   // (record_id, movement, new_result, previous_result, improvement).
   // Server recomputes improvement from the record before any post.
   //
-  // Launch-readiness audit item 1: onPrCreatedForChallenges (cloud.js) reads
-  // a *numeric* value to drive an individual_performance challenge's
-  // progress, and new_result/previous_result/improvement above are
-  // formatted DISPLAY STRINGS ('150 ק״ג × 5', '~150 ק״ג (1RM משוער)') that
-  // must stay display strings for onPrCreated's share-prompt consumer. This
-  // is the one raw number this event actually has before formatting -
-  // detail.weight for a rep-record PR, detail.est (the estimated 1RM) for
-  // an est-1RM-only PR - added under its own key so neither consumer has to
-  // parse the other's shape.
+  // new_value_numeric is the one raw number this event has before formatting
+  // (detail.weight for a rep-record PR, detail.est for an estimated-1RM PR);
+  // the fields above are display strings for the share prompt.
   const record = {
     record_id: entry.id, movement: mov.name, new_result: newResult,
     new_value_numeric: detail.repRecordPR ? detail.weight : detail.est,
@@ -2268,9 +2262,8 @@ function emitCommunityPrCreated(entry, mov, detail) {
     // is flagged so the card never prints it as a lifted weight.
     previous_value_numeric: detail.repRecordPR ? detail.prevRepRecord : detail.prevEst1RM,
     estimated: !detail.repRecordPR,
-    // See the comment on emitPR at the call site: onPrCreated (the
-    // share-prompt) must not open for a trivial record; onPrCreatedForChallenges
-    // must not care. Defaults true (treat as trivial / don't praise) if the
+    // See the comment on emitPR at the call site: the share prompt must not
+    // open for a trivial record. Defaults true (treat as trivial / don't praise) if the
     // caller ever forgets to set priorForExercise, since silence is the
     // safe failure here, not an unearned invitation to share.
     trivial: !(detail.priorForExercise >= MIN_ENTRIES_BEFORE_PR),
@@ -2476,23 +2469,10 @@ async function saveSet(sanityConfirmed) {
   // prTotal both read through it now, not the raw flag.
   const priorForExercise = entriesFor(selectedId, editId).filter((e) => (e.type === "duration") === (logEntryType === "duration")).length;
   const celebratePR = isPR && !existing && priorForExercise >= MIN_ENTRIES_BEFORE_PR;
-  // The community PR event deliberately does NOT take the >= 3 gate, only
-  // the never-on-an-edit half. Two reasons, both functional rather than
-  // editorial: PR_CREATED also drives an individual_performance challenge's
-  // numeric progress (see onPrCreatedForChallenges in cloud.js), so gating
-  // the EVENT would silently make challenge scoring depend on how many
-  // prior sets happen to be on file - a different bug, not a fix.
-  //
-  // Fresh-eyes audit: the event's OTHER consumer, cloud.js's PR-share
-  // prompt ("שיא חדש זוהה. לשתף עם המועדון?"), has no such excuse - it is
-  // pure praise/invitation-to-share, the exact thing celebratePR above
-  // exists to withhold, and a brand-new member hit it on their literal
-  // first-ever set, back to back with the achievement-unlock celebration
-  // for the same non-event. So the record now carries `trivial` (computed
-  // from this same priorForExercise, attached below) for that ONE consumer
-  // to check before opening its dialog - onPrCreatedForChallenges ignores
-  // the field entirely and keeps reading new_value_numeric unconditionally,
-  // so challenge progress is untouched by this.
+  // The community PR event takes only the never-on-an-edit half of the >= 3
+  // gate. The share prompt is praise, so the record carries `trivial`
+  // (from priorForExercise, attached below) and the prompt stays closed for a
+  // member's first sets; the event itself still fires.
   const emitPR = isPR && !existing;
   if (emitPR && prDetail) prDetail.priorForExercise = priorForExercise;
   // 3. And when an edit takes a row that WAS the record below the bar, say
