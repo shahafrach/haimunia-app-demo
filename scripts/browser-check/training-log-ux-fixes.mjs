@@ -249,7 +249,7 @@ if (partner) {
   check("Add (ladder panel): it still looks like a link", partner.decoration === "underline", partner.decoration);
 }
 
-// ---- control: without the class these are 36px again ----
+// ---- control: since audit L5 (2026-11) the base .link-btn is 44px itself ----
 const strippedHeights = await page.evaluate(() => {
   const els = [...document.querySelectorAll("#content .link-btn--tap")];
   els.forEach((el) => el.classList.remove("link-btn--tap"));
@@ -258,8 +258,8 @@ const strippedHeights = await page.evaluate(() => {
   return hs;
 });
 check(
-  "control: dropping .link-btn--tap DOES take them back under 44px",
-  strippedHeights.length > 0 && strippedHeights.every((r) => r.h < 44),
+  "control: without .link-btn--tap they are still 44px (the base .link-btn is 44px now)",
+  strippedHeights.length > 0 && strippedHeights.every((r) => r.h >= 44),
   strippedHeights.length
     ? JSON.stringify(strippedHeights)
     : "nothing carried the class — the measurement above is not attributable to it",

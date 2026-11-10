@@ -100,7 +100,10 @@ check("no what's-new popup for a fresh install (nothing to catch up on)", !whats
 // --- Notifications bell ---
 const badgeHiddenFresh = await page.evaluate(() => document.getElementById("notificationsBadge").style.display !== "flex");
 check("bell badge shows nothing for a fresh install", badgeHiddenFresh);
-await page.click("[data-action='open-notifications']");
+// Since audit L6 (2026-11) the header button is hidden while it has nothing to show;
+// its handler is still what the checks below are about, so it is invoked directly.
+check("with nothing to show, the header bell is hidden", !(await page.locator("#notificationsBellBtn").isVisible()));
+await page.evaluate(() => document.getElementById("notificationsBellBtn").click());
 await page.waitForTimeout(200);
 // THE BELL NO LONGER OPENS AN EMPTY CHANGELOG, and this pair of checks used
 // to require that it did.
