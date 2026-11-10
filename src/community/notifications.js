@@ -904,27 +904,22 @@
     // work. A control that can do nothing should say so rather than sit there
     // looking tappable, so the dead button is replaced by the fact itself.
     const canMarkAll = c.rows.some((r) => !r.read_at);
-    // Immersive club redesign, IMPLEMENTATION_SPEC.md §8 Notifications:
-    // "reuse the Community scene, not a new photograph... club wall only in
-    // the header zone or beneath a solid scrim" - the community-logo-wall
-    // photo as a compact strip above the title, everything below (the
-    // actual notification rows) stays the plain opaque/scannable list the
-    // spec explicitly says is fine here. Same isolation:isolate fix the
-    // achievements mini-scene needed (z-index:-3 media otherwise escapes
-    // behind the modal's own opaque background).
-    const headerStrip = `<div class="scene-page--community" style="position:relative; isolation:isolate; margin:-18px -18px 14px; height:100px; overflow:hidden;">
-    </div>`;
+    // Audit M9 (2026-11): the 100px scene strip drew an empty band above the
+    // title (there is no photo behind it any more), the close control was a
+    // 36px text link, and an empty list showed two empty-state lines. Now the
+    // standard sheet header (index.html's .modal-head: h2 plus an icon close
+    // button), and the mark-all row only when there is a list to mark.
+    const markRow = !c.rows.length ? "" : `<div class="chip-row" style="margin-top:0;margin-bottom:4px;">${canMarkAll
+            ? `<button class="link-btn" data-community-action="notif-mark-all">סימון הכול כנקרא</button>`
+            : `<span class="footer-note" style="margin:0;">הכול כבר סומן כנקרא.</span>`}</div>`;
     return `<div class="modal-overlay open" role="dialog" aria-modal="true" aria-labelledby="notifCenterTitle" data-notif-center data-cloud-dialog="notifCenter" style="align-items:center;padding:20px 12px;">
       <div class="modal-sheet" style="border-radius:20px;max-height:88vh;overflow:auto;width:100%;max-width:520px;">
         <div style="padding:18px 18px calc(env(safe-area-inset-bottom,0px) + 16px);">
-          ${headerStrip}
-          <div class="flex" style="justify-content:space-between;align-items:center;margin-bottom:6px;">
-            <h2 id="notifCenterTitle" style="margin-top:0;font-weight:800;font-size:16px;margin-bottom:0;">התראות</h2>
-            <button class="link-btn" data-community-action="notif-close" aria-label="סגירה">סגירה</button>
+          <div class="modal-head" style="padding:0 0 6px;">
+            <h2 id="notifCenterTitle" class="modal-title">התראות</h2>
+            ${sheetCloseBtnHtml("notif-close")}
           </div>
-          <div class="chip-row" style="margin-top:0;margin-bottom:4px;">${canMarkAll
-            ? `<button class="link-btn" data-community-action="notif-mark-all">סימון הכול כנקרא</button>`
-            : `<span class="footer-note" style="margin:0;">הכול כבר סומן כנקרא.</span>`}</div>
+          ${markRow}
           ${body}
           ${moreHtml}
           ${olderHtml}

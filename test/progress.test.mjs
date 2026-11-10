@@ -135,3 +135,9 @@ test("Rx and scaled are separate lists; Rx+ rides with Rx", () => {
   assert.deepEqual(rx.map((x) => x.id), [1, 3]);
   assert.deepEqual(scaled.map((x) => x.id), [2, 4]);
 });
+
+test("digest lines: a Latin lift name after a Hebrew prefix is joined with a hyphen and isolated (audit L2)", () => {
+  const lines = P.digestLines({ workouts: 2, target: 3, prs: [], e1rm: [{ name: "Back Squat", to: 120, pct: 5 }], run: 0, weeksMet: 0 });
+  const line = lines.find((l) => l.startsWith("1RM"));
+  assert.equal(line, "1RM משוער ב-⁨Back Squat⁩: 120 ק״ג (עלייה של 5%)");
+});
