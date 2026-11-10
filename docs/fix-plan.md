@@ -158,60 +158,62 @@ Legend: **Mig** needs a migration. **Sec** touches RLS, auth or edge functions.
 - **Manual:** Supabase dashboard, Authentication, Users: sort by email, check
   that every address ends in `@members.haimuniya.invalid`.
 
-### F19 · Medium · works · Lost recovery code: reset without the app owner (added 2026-11-10)
+### F19 · High · works · Lost recovery code: self-service reset (added and decided 2026-11-10)
 - **Why:** today a member with no code must message the app owner, who runs
-  `owner_issue_reset_code` in the SQL editor. You asked for a button that does
-  it with nobody in the middle.
-- **Constraint:** with no email, no phone and no code, nothing proves who is
-  asking. A reset that needs only a username lets anyone take over any account.
-  So the button does not reset on its own: **a friend from one of the member's
-  circles approves it in the app.** The friend is the proof; you are not involved.
+  `owner_issue_reset_code` in the SQL editor. Decided: a button, nobody in the
+  middle, no friend approval.
+- **Risk you accepted (stated so the build session does not reopen it):** with
+  no email, phone, code or approval, the username alone starts a reset. Anyone who
+  knows a username can take that account over after 12 hours unless the real
+  owner cancels. The push (below) and the banner are the only warnings, and they
+  reach only a device that is signed in or has push allowed. This is why it is
+  High.
 - **Flow:**
   1. Forgot screen, "אין לי קוד" -> username -> Edge Function `request-reset`
      (no session). Same answer for a known and an unknown username. It stores a
-     request (only the hash of a random request token, 24h expiry) and returns
-     the token to that device.
-  2. The device says "בקשו מחבר/ה במעגל לאשר באפליקציה". The member tells the
-     friend themselves (WhatsApp, in person).
-  3. The friend sees a card on the Circle tab: "<name> ביקש/ה לאפס סיסמה.
-     לאשר רק אם דיברתם איתו/ה." and taps אישור (RPC `approve_reset_request`).
-  4. Back on the requesting device: new password -> `request-reset` checks the
-     token and the approval, sets the password, revokes every session, shows a
-     new recovery code once (the same tail as `handleRecover`).
-- **Rules (security):**
-  - Approver: a signed-up member who shares a circle with the requester, is not
-    the requester, and joined that circle at least 7 days ago. **Couple: 1
-    approval. Friends: 2 approvals** from different members, so one circle-mate
-    cannot request and approve a takeover alone.
-  - **Cancel window:** after approval the reset waits 12 hours. Any signed-in
-    session of that account sees a banner "בקשה לאיפוס הסיסמה שלך. לא אתם?
-    ביטול" and can cancel it. A cancel blocks new requests for 24 hours.
-  - Rate limits: 3 requests per username per day, the IP limit from
-    `recovery.mjs`; approvals rate-limited per approver.
-  - A member in no circle cannot use it; the owner SQL line stays as the
-    fallback (`ops/PASSWORD_RESET.md`).
-  - No push notification (decisions.md allows four types; this is not one). The
-    card appears when the friend opens the Circle tab.
+     request (only the hash of a random request token) and returns the token to
+     that device only.
+  2. The account's devices get a push, "התבקש איפוס לסיסמה שלך. לא אתם? פתחו
+     וביטלו.", and every signed-in session shows a banner with ביטול.
+  3. After **12 hours**, if nobody cancelled, the requesting device can set a new
+     password: `request-reset` checks the token and the time, sets the password,
+     revokes every session, and shows a new recovery code once (the same tail as
+     `handleRecover`). The token expires 24 hours after the wait ends.
+- **Rules (decided):**
+  - 12-hour wait; cancel from any signed-in session; a cancel blocks new
+    requests for that username for 24 hours.
+  - Rate limits: 3 requests per username per day, plus the IP limit and window
+    from `recovery.mjs`. A new request replaces an open one and restarts the
+    12 hours.
+  - Works for every member, in a circle or not. The owner SQL line stays as a
+    faster path (`ops/PASSWORD_RESET.md`).
+  - Push: a fifth notification type, sent even if the member's other
+    notification switches are off, to every device that already allowed push.
+    No push permission is asked for because of it.
 - **Files:** new migration (`reset_requests` table, no client grants;
-  `approve_reset_request` and `pending_reset_requests_for_me` as
-  `SECURITY DEFINER`, `search_path ''`, execute revoked from `public` and
-  `anon`, added to the reviewed-functions table); new Edge Function
-  `supabase/functions/request-reset` with logic in `_shared/recovery.mjs`;
-  `src/community/recovery.js` (forgot screen, waiting state, cancel banner);
-  `src/community/circles-ui.js` (approval card); `deploy-edge-functions.yml`
-  (add the function to the list); `docs/ops/PASSWORD_RESET.md`.
-- **Decision record:** this changes "Home and recovery" in decisions.md. Add a
-  line there in the consolidation session after you approve the merge.
-- Mig **yes** · Sec **yes** (RLS, definer functions, edge function, auth) · Risk **high**.
-- **Verify:** pgTAP file in `supabase/tests/` (cross-circle: a stranger cannot
-  approve or list; self-approval refused; Friends needs 2; expired and
-  cancelled refused); unit tests for the edge-function logic in
-  `test/recovery-edge-functions.test.mjs`; browser `circles-client.mjs` with the
-  mock (request, approve, reset). `supabase test db` needs Docker: if the session
+  `my_pending_reset()` and `cancel_my_reset()` as `SECURITY DEFINER`,
+  `search_path ''`, execute revoked from `public` and `anon`, granted to
+  `authenticated`, in the reviewed-functions table; the new notification type
+  wherever the type list is constrained); new Edge Function
+  `supabase/functions/request-reset` with logic in `_shared/recovery.mjs`, and it
+  triggers `notif_push_send`; `src/community/recovery.js` (forgot screen, waiting
+  state with the time left, cancel banner); `src/community/notifications.js`
+  (the push text and deep link); `deploy-edge-functions.yml` (add the function);
+  `docs/ops/PASSWORD_RESET.md`.
+- **Decision record:** changes "Home and recovery" and the "four notifications"
+  line in decisions.md. The consolidation session after the merge writes both,
+  with the accepted risk above.
+- Mig **yes** · Sec **yes** (definer functions, edge functions, auth, push) · Risk **high**.
+- **Verify:** pgTAP file in `supabase/tests/` (no client can read
+  `reset_requests`; a member sees and cancels only their own; anon refused);
+  unit tests in `test/recovery-edge-functions.test.mjs` (unknown username gives
+  the same answer; reset refused before 12 hours, after cancel, after expiry,
+  with a wrong token; limits); browser `circles-client.mjs` with the mock
+  (request, banner, cancel). `supabase test db` needs Docker: if the session
   cannot run it, it says so and the PR does not merge until CI runs it.
-- **Manual:** after merge, phone test with two accounts: request on one, approve
-  on the other, wait the 12 hours (or test with a shortened window locally),
-  sign in with the new password; also try cancelling from a signed-in device.
+- **Manual:** after merge, with two phones: request on one, check the push and
+  the banner on the other, cancel; request again (after the 24-hour block, or on
+  a test account), wait 12 hours, set the new password and sign in.
 
 ### F6 · Medium · looks · Welcome sheet: white subtitle, title on the top edge, docked right on desktop (M1, M2)
 - **Root cause:** the classic-palette override list (`index.html:180-184`)
@@ -378,13 +380,13 @@ at once would conflict. Update each branch from `main` before merging.
 | 3 | One settings screen and touch targets | `fix/p3-ux-consistency-touch` | F11, F12, F13, F14 (F15 only if you choose two columns) | L | none |
 | 4 | Strip and perf | `fix/p4-strip-perf` | F16, F17, F18 | S | none |
 
-**Before phase 1:** decide F5 (email in login) and approve the F19 rules (2 approvals in Friends, 12-hour wait). **Before phase 3:** decide F15
+**Before phase 1:** decide F5 (email in login). F19 is decided. **Before phase 3:** decide F15
 (F11 and F12 are decided).
 
 **Phone checks after each merge:**
 1. Airplane mode: the Circle tab shows the offline state; type "1,250.5" and "٢٠"
-   into a weight; sign in with a Hebrew username and read the message; with two
-   accounts, run the F19 lost-code reset end to end and cancel one from a signed-in device.
+   into a weight; sign in with a Hebrew username and read the message; run the F19
+   lost-code reset end to end on two phones and cancel one from the signed-in phone.
 2. Clear data, light theme: the welcome sheet; the notification centre empty;
    privacy and terms back links; a PR post date; a weekly summary line with a Latin lift.
 3. Menu: no daily streak, weeks on target instead; Me from the menu signed out
