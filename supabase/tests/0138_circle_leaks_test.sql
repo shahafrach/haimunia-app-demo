@@ -227,7 +227,7 @@ select is(tests.leak_dml('insert into public.reset_requests (user_id, token_hmac
 
 -- recovery_codes (no client grant at all: every probe is refused)
 select tests.set_auth(tests.uid('m1'));
-select is(tests.leak_count('recovery_codes', 'reset_requests', 'user_id = tests.uid(''m3'')'), 0::bigint, 'recovery_codes: select sees zero rows of circle B');
+select is(tests.leak_count('recovery_codes', 'user_id = tests.uid(''m3'')'), 0::bigint, 'recovery_codes: select sees zero rows of circle B');
 select is(tests.leak_dml('update public.recovery_codes set kind = kind where user_id = tests.uid(''m3'')'), 0, 'recovery_codes: update touches zero rows of circle B');
 select is(tests.leak_dml('delete from public.recovery_codes where user_id = tests.uid(''m3'')'), 0, 'recovery_codes: delete removes zero rows of circle B');
 select is(tests.leak_dml('insert into public.recovery_codes (user_id, kind, code_hmac) values (tests.uid(''m1''), ''recovery'', repeat(''s'', 64))'), 0, 'recovery_codes: insert is refused');
