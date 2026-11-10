@@ -1,5 +1,5 @@
 // F19 (fix plan, 2026-11-10): the lost-code reset. A member with no recovery
-// code resets with the username alone after a 12-hour wait that any signed-in
+// code resets with the username alone after a one-hour wait that any signed-in
 // session can cancel. These drive the shared logic the request-reset Edge
 // Function wires (supabase/functions/_shared/recovery.mjs).
 import { test } from "node:test";
@@ -61,7 +61,7 @@ test("a request answers the same for a known and an unknown username, and stores
   assert.deepEqual(w.pushes.map((p) => p.id), ["u-dana"], "the account's devices are told");
 });
 
-test("the reset completes only after 12 hours, once, with the right token", async () => {
+test("the reset completes only after the one-hour wait, once, with the right token", async () => {
   const w = makeWorld();
   const { request_token } = (await ask(w)).body;
   w.now += RESET_WAIT_MS - 60e3;
@@ -100,11 +100,11 @@ test("a request expires 24 hours after its wait ends", async () => {
 test("a new request replaces the open one and restarts the wait", async () => {
   const w = makeWorld();
   const first = (await ask(w)).body.request_token;
-  w.now += RESET_WAIT_MS - 3600e3;
+  w.now += RESET_WAIT_MS / 2;
   const second = (await ask(w, "dana", "198.51.100.2")).body.request_token;
-  w.now += 3600e3 + 1000;
+  w.now += RESET_WAIT_MS / 2 + 1000;
   assert.equal((await finish(w, first)).status, 400, "the replaced token is dead");
-  assert.equal((await finish(w, second, {}, "198.51.100.2")).status, 400, "and the new one waits its own 12 hours");
+  assert.equal((await finish(w, second, {}, "198.51.100.2")).status, 400, "and the new one waits its own hour");
   w.now += RESET_WAIT_MS;
   assert.equal((await finish(w, second, {}, "198.51.100.3")).status, 200);
 });
@@ -155,4 +155,8 @@ test("the Edge Function wires this handler, runs without a session, and is deplo
   const deploy = fs.readFileSync(new URL("../.github/workflows/deploy-edge-functions.yml", import.meta.url), "utf8");
   assert.match(deploy, /options: \[[^\]]*request-reset[^\]]*\]/);
   assert.ok(fs.existsSync(new URL("../supabase/functions/request-reset/deno.lock", import.meta.url)), "it has its own lockfile");
+});
+
+test("the wait is one hour (owner's decision, 2026-11-10)", () => {
+  assert.equal(RESET_WAIT_MS, 60 * 60 * 1000);
 });
