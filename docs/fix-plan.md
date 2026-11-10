@@ -215,6 +215,28 @@ Legend: **Mig** needs a migration. **Sec** touches RLS, auth or edge functions.
   the banner on the other, cancel; request again (after the 24-hour block, or on
   a test account), wait 12 hours, set the new password and sign in.
 
+### F20 · Medium · security · Usernames must never reach other members (added and decided 2026-11-10)
+- **Why:** after F19 a username alone starts a reset, so a username a circle-mate
+  can see is half an account takeover. Members see each other's display name
+  and emoji only (decisions.md, Profile).
+- **Check:** every path from the database to another member's screen:
+  - Database: grep `supabase/migrations/` for every function or view that
+    returns `username` or the auth email (which contains it), and whether
+    `authenticated` can still call it. One lead: `202609160002` returns a
+    `username` column from a gym-era list function; confirm it is dropped or
+    revoked.
+  - Client: grep `username` in `cloud.js` and `src/community/*.js`; nothing
+    renders it except the member's own Me screen and the login forms.
+  - Share cards and invite links (`src/share-cards.js`, invite URLs) carry no username.
+- **Fix:** if anything leaks, revoke it or drop the column from the result in a
+  NEW migration (in the same Phase 1 migration file as F19, so the branch adds
+  only one); client copies removed.
+- **Files:** depends on findings; at least `supabase/tests/` (one pgTAP test:
+  a circle-mate calling every member-facing function gets no username).
+- Mig maybe (same file as F19) · Sec **yes** (RLS, definer functions) · Risk med.
+- **Verify:** the pgTAP test above; `test/` grep guard that no member-facing
+  render uses `.username`.
+
 ### F6 · Medium · looks · Welcome sheet: white subtitle, title on the top edge, docked right on desktop (M1, M2)
 - **Root cause:** the classic-palette override list (`index.html:180-184`)
   resets the welcome intro and title but not `.scene-page__subtitle`, and its
@@ -332,9 +354,7 @@ Legend: **Mig** needs a migration. **Sec** touches RLS, auth or edge functions.
   `training-log-polish.mjs`.
 
 ### F15 · Low · looks · Desktop is a 480px column (L7)
-- **Decision (yours).** **Recommendation:** accept it. This is a phone app for
-  friends; a two-column layout is a large change for a screen nobody uses. If you
-  want it, it is its own later session, size L.
+- **Decided 2026-11-10: keep the 480px phone column.** No work; closed.
 - Mig no · Sec no · Risk n/a.
 
 ### F16 · Low · perf · Gym-app leftovers (L12)
@@ -375,13 +395,12 @@ at once would conflict. Update each branch from `main` before merging.
 
 | # | Session | Branch | Items | Size | Gate |
 |---|---|---|---|---|---|
-| 1 | Offline, input and auth safety | `fix/p1-offline-auth-security` | F1, F2, F3, F4, F5, F19 | L | **Migration gate** (F19) and edge functions deploy on merge. |
+| 1 | Offline, input and auth safety | `fix/p1-offline-auth-security` | F1, F2, F3, F4, F5, F19, F20 | L | **Migration gate** (F19) and edge functions deploy on merge. |
 | 2 | Welcome, sheets, legal, RTL | `fix/p2-welcome-sheets-legal-rtl` | F6, F7, F8, F9, F10 | M | none |
 | 3 | One settings screen and touch targets | `fix/p3-ux-consistency-touch` | F11, F12, F13, F14 (F15 only if you choose two columns) | L | none |
 | 4 | Strip and perf | `fix/p4-strip-perf` | F16, F17, F18 | S | none |
 
-**Before phase 1:** nothing; F5 and F19 are decided. Do the F5 dashboard check first. **Before phase 3:** decide F15
-(F11 and F12 are decided).
+**Before phase 1:** nothing; F5 and F19 are decided. Do the F5 dashboard check first. **Before phase 3:** nothing; F11, F12 and F15 are decided.
 
 **Phone checks after each merge:**
 1. Airplane mode: the Circle tab shows the offline state; type "1,250.5" and "٢٠"
