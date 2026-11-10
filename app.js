@@ -208,7 +208,7 @@ function renderBottomTabBar() {
 // at all times, exactly like the old static tabbar's buttons always were.
 function renderNavWho() {
   const initial = userName ? userName.trim().charAt(0) : "";
-  const streak = computeCurrentStreak();
+  const met = weeksOnTargetThisYear();
   // data-action="open-achievements" added here (2026-09-08, immersive
   // redesign): the ONLY two existing triggers for this
   // (#userGreeting/the "לכל המדליות..." link) both live inside the main
@@ -243,22 +243,9 @@ function renderNavWho() {
       <div class="who-avatar">${esc(initial)}</div>
       <div style="flex:1; min-width:0;">
         <div class="who-name">${userName ? bidiText(userName) : "אורח/ת"}</div>
-        <!-- Design spec Appendix A.9: the zero-streak branch here used to
-             read "בואו נתחיל להתאמן" - the THIRD instance of "בואו נתחיל" in
-             the app, after the welcome sheet's primary button and the
-             onboarding explainer's (both index.html, both genuine calls to
-             action). This one is not a button. It is the sub-line of the
-             .who card, i.e. a STATUS line about the member, sitting directly
-             under their name - so a member with no current streak had their
-             state reported to them as an imperative, and the same words meant
-             three different things in three places.
-             The replacement is a fact, in the same shape as the streak > 0
-             branch it alternates with: that branch says what the streak IS,
-             so this one says where it starts. It is also true for both people
-             who land here - someone who has never trained and someone whose
-             streak lapsed - which "בואו נתחיל להתאמן" was not, and it leaves
-             "בואו נתחיל" to the two buttons that actually ask for a tap. -->
-        <div class="who-sub">${streak > 0 ? `${streak} ${streak === 1 ? "יום" : "ימים"} ברצף` : "הרצף מתחיל באימון הבא"}</div>
+        <!-- Weeks the weekly target was met this year, never a daily streak
+             (decisions.md; audit M3). A week that was missed is not mentioned. -->
+        <div class="who-sub">${met > 0 ? (met === 1 ? "שבוע אחד ביעד השנה" : `${met} שבועות ביעד השנה`) : "השבועות ביעד ייספרו כאן"}</div>
       </div>
       <div class="flex items-center gap-6" style="flex-shrink:0; color:var(--color-text-muted); font-size:12px; font-weight:700;" aria-hidden="true">
         <span>מדליות</span>
@@ -842,8 +829,7 @@ function totalSessions() { return new Set(loggedDates()).size; }
 // Live bug hunt (2026-09-11): raw ms-division drifts by the DST offset around
 // a spring-forward/fall-back transition, which can flip a day count
 // off-by-one right at local midnight once the drift accumulates.
-// computeCurrentStreak() already gets this right elsewhere in this file via
-// setDate() local-calendar-day counting; this matches that.
+// It counts local calendar days with setDate(), not milliseconds.
 //
 // Extracted from daysSinceBoxStart() when the benchmark retest reminder
 // needed the same arithmetic. A second copy of a DST-correct day count is the
@@ -5559,30 +5545,12 @@ function buildDayIndex() {
   }
   return { ent, wod };
 }
-// Consecutive days, counting backward from today, with at least one logged
-// entry. Today not being logged yet doesn't break the streak — it's just
-// not counted until it is; the first fully-empty day (including today, if
-// yesterday also has nothing) resets it to 0.
-function computeCurrentStreak() {
-  let streak = 0;
-  // One index for the whole walk, instead of two array scans per day.
-  const index = buildDayIndex();
-  const d = new Date(todayISO() + "T00:00:00");
-  if (!hasAnyEntryOn(localISODate(d), index)) d.setDate(d.getDate() - 1);
-  while (hasAnyEntryOn(localISODate(d), index)) {
-    streak++;
-    d.setDate(d.getDate() - 1);
-  }
-  return streak;
-}
-function updateStreakLabel() {
-  const el = document.getElementById("streakLabel");
-  if (!el) return;
-  const streak = computeCurrentStreak();
-  if (streak <= 0) { el.style.display = "none"; return; }
-  el.innerHTML = `${ICONS.flame}<span>${streak}</span>`;
-  el.style.display = "flex";
-  el.setAttribute("aria-label", `${streak} ${streak === 1 ? "יום" : "ימים"} ברצף`);
+// No daily streak (docs/circles/decisions.md, "Targets and metrics": count weeks
+// the target was met, no daily streaks; audit M3, 2026-11). The nav card shows
+// weeks on target this year instead, from the same count Home uses.
+function weeksOnTargetThisYear() {
+  const days = typeof window.communityTrainingDays === "function" ? window.communityTrainingDays() : [];
+  return BoxLogProgress.weeksYear(days, weeklyTargetForRing(), todayISO()).metCount;
 }
 // COMM-341. Training days / total sets / PR days for the month currently
 // shown - a real feature (a monthly summary), not just decoration, so it
@@ -7000,7 +6968,6 @@ function render() {
   // be re-checked as the member's situation changes rather than once at the
   // moment the browser offered it. No-op unless all four conditions hold.
   maybeShowInstallBanner();
-  updateStreakLabel();
   // Cloud.js's rerender() is literally window.render (see its own
   // definition) - so a community notification arriving, or being read,
   // already reaches here on the very next render with no separate event

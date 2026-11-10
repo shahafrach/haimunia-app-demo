@@ -157,7 +157,7 @@ check("control: with something genuinely unseen, the list renders real version e
 await page.click("#notificationsOverlay button[data-action='close-notifications']");
 await page.waitForTimeout(150);
 
-// --- Streak + recent-history: log a set today, check both ---
+// --- No streak + recent-history: log a set today, check both ---
 await selectMovement(page, "Strict");
 await page.fill("[data-field='weight'].stepper-val", "60");
 await page.dispatchEvent("[data-field='weight'].stepper-val", "change");
@@ -167,9 +167,9 @@ await page.click("[data-action='save-set']");
 await page.waitForTimeout(300);
 await dismissCelebrationIfOpen(page);
 
-const streakVisible = await page.evaluate(() => document.getElementById("streakLabel").style.display === "flex");
-const streakText = await page.evaluate(() => document.getElementById("streakLabel").textContent.trim());
-check("streak indicator shows 1 after logging today's only set", streakVisible && streakText === "1", `visible=${streakVisible} text="${streakText}"`);
+// No daily streak (decisions.md; audit M3, 2026-11): the header has no day counter at all.
+const streakGone = await page.evaluate(() => !document.getElementById("streakLabel"));
+check("no daily-streak counter in the header after logging a set", streakGone);
 await page.screenshot({ path: `${outDir}/roadmap-03-streak.png` });
 
 // Log a second set for the same exercise -> recent-history strip should appear.
