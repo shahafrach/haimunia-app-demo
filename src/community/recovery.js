@@ -32,6 +32,7 @@
   function recoveryClear() {
     const r = recoveryUi();
     r.view = ""; r.busy = false; r.error = ""; r.code = ""; r.saved = false; r.copied = false; r.source = "";
+    r.drafts = {};
     r.rotateOpen = false;
   }
   /** True while a code is waiting to be saved, or being made: the gate shows nothing else. */
@@ -100,7 +101,7 @@
     if (!data || !data.ok || typeof data.recovery_code !== "string") { r.error = RECOVERY_GENERIC_ERROR; return rerender(); }
     // Every session of that account was ended by the server; this device is signed out too.
     r.view = "show"; r.source = "recover"; r.code = data.recovery_code; r.saved = false; r.copied = false; r.error = "";
-    r.has = true;
+    r.has = true; r.drafts = {};
     rerender();
   }
 
@@ -239,7 +240,7 @@
     const r = recoveryUi();
     // Every session of that account was ended by the server; the new code is shown once.
     r.view = "show"; r.source = "recover"; r.code = data.recovery_code; r.saved = false; r.copied = false; r.error = "";
-    r.has = true; r.draftUsername = stored.username;
+    r.has = true; r.draftUsername = stored.username; r.drafts = {};
     rerender();
   }
 
@@ -353,6 +354,34 @@
         ${rotate}
       </div></div>`;
   }
+
+  // What the member has typed in the recovery forms survives a re-render.
+  // A background update (a session event, a status load) redraws the gate, and
+  // a redraw mid-typing used to empty the code and password fields, so the
+  // submit went nowhere (E2E 02-friend, step 18). Kept in memory only, wiped
+  // with the screen (recoveryClear) and after a successful reset.
+  const RECOVERY_DRAFT_FORMS = ["communityRecover", "communityResetRequest", "communityResetComplete"];
+  document.addEventListener("input", (event) => {
+    const el = /** @type {HTMLInputElement} */ (event.target);
+    const form = el && el.form;
+    if (!form || RECOVERY_DRAFT_FORMS.indexOf(form.id) < 0 || !el.name) return;
+    const r = recoveryUi();
+    if (!r.drafts) r.drafts = {};
+    (r.drafts[form.id] = r.drafts[form.id] || {})[el.name] = el.value;
+  });
+  /** After a render: put the typed values back into a recovery form that was redrawn. */
+  function restoreRecoveryDrafts() {
+    const drafts = recoveryUi().drafts || {};
+    for (const id of Object.keys(drafts)) {
+      const form = /** @type {HTMLFormElement | null} */ (document.getElementById(id));
+      if (!form) continue;
+      for (const name of Object.keys(drafts[id])) {
+        const el = /** @type {HTMLInputElement | undefined} */ (form.elements.namedItem(name));
+        if (el && el !== document.activeElement && el.value !== drafts[id][name]) el.value = drafts[id][name];
+      }
+    }
+  }
+  window.restoreRecoveryDrafts = restoreRecoveryDrafts;
 
   document.addEventListener("submit", (event) => {
     const form = /** @type {HTMLFormElement} */ (event.target);

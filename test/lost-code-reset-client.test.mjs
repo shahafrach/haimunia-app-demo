@@ -111,3 +111,27 @@ test("signed in with nothing pending: no banner", async () => {
   await new Promise((r) => setTimeout(r, 50));
   assert.equal(window.document.querySelector("[data-reset-banner]"), null);
 });
+
+test("a re-render while the member types on the forgot screen keeps what was typed (E2E 02-friend, step 18)", async () => {
+  const mock = createMockSupabase();
+  const window = await bootCommunity(mock, { syncEnabled: false });
+  window.document.getElementById("tabCommunityBtn").click();
+  await openCommunityLogin(window);
+  click(window, '[data-community-action="recovery-open"]');
+  await waitFor(() => !!window.document.getElementById("communityRecover"), 3000);
+  const typeIn = (name, v) => {
+    const el = window.document.querySelector(`#communityRecover [name="${name}"]`);
+    el.value = v;
+    el.dispatchEvent(new window.Event("input", { bubbles: true }));
+  };
+  typeIn("username", "dana");
+  typeIn("code", "ABCD-EFGH-JKLM-NPQR");
+  typeIn("password", "BrandNewPass1");
+  window.render();
+  assert.equal(window.document.querySelector('#communityRecover [name="code"]').value, "ABCD-EFGH-JKLM-NPQR");
+  assert.equal(window.document.querySelector('#communityRecover [name="password"]').value, "BrandNewPass1");
+  click(window, '[data-community-action="recovery-close"]');
+  click(window, '[data-community-action="recovery-open"]');
+  await waitFor(() => !!window.document.getElementById("communityRecover"), 3000);
+  assert.equal(window.document.querySelector('#communityRecover [name="code"]').value, "", "closing the screen forgets it");
+});
