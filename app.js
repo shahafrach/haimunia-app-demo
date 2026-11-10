@@ -175,6 +175,10 @@ function getNavItems() {
     { id: "history", tab: "history", rowId: "tabHistoryBtn", label: "התקדמות", tint: "blue", icon: ICONS.chartIcon, main: true },
     { id: "calendar", tab: "calendar", rowId: "tabCalendarBtn", label: "לוח שנה", tint: "yellow", icon: ICONS.calendarIcon, main: false },
     { id: "wod", tab: "wod", rowId: "tabWodBtn", label: "אימונים", tint: "purple", icon: ICONS.stopwatchIcon, main: false },
+    // Audit M6, M7 (2026-11): Me opened only from the circle avatar, so a
+    // signed-out member (and the support sheet pointing there) had no way in.
+    // A menu row for everyone; signed out it is the sign-in screen.
+    { id: "me", tab: "me", rowId: "tabMeBtn", label: "אני והחשבון", tint: "teal", icon: ICONS.communityIcon, main: false },
   ];
   return items;
 }
@@ -206,8 +210,15 @@ function renderBottomTabBar() {
 // a normally-hidden container" treatment renderSettingsBody() already relies on
 // - so the tabAddBtn/tabHistoryBtn/etc. ids these rows carry stay resolvable
 // at all times, exactly like the old static tabbar's buttons always were.
+// One name (audit M7): signed in with a profile, the name the circles see;
+// otherwise the private log's own name.
+function shownMemberName() {
+  const p = typeof window.communityProfileName === "function" ? window.communityProfileName() : "";
+  return p || userName;
+}
 function renderNavWho() {
-  const initial = userName ? userName.trim().charAt(0) : "";
+  const shownName = shownMemberName();
+  const initial = shownName ? shownName.trim().charAt(0) : "";
   const met = weeksOnTargetThisYear();
   // data-action="open-achievements" added here (2026-09-08, immersive
   // redesign): the ONLY two existing triggers for this
@@ -242,7 +253,7 @@ function renderNavWho() {
     <button class="who" data-action="open-achievements" aria-label="פתיחת מדליות והישגים" style="width:100%; text-align:inherit;">
       <div class="who-avatar">${esc(initial)}</div>
       <div style="flex:1; min-width:0;">
-        <div class="who-name">${userName ? bidiText(userName) : "אורח/ת"}</div>
+        <div class="who-name">${shownName ? bidiText(shownName) : "אורח/ת"}</div>
         <!-- Weeks the weekly target was met this year, never a daily streak
              (decisions.md; audit M3). A week that was missed is not mentioned. -->
         <div class="who-sub">${met > 0 ? (met === 1 ? "שבוע אחד ביעד השנה" : `${met} שבועות ביעד השנה`) : "השבועות ביעד ייספרו כאן"}</div>
@@ -1888,7 +1899,8 @@ function renderSupportContent() {
     return `
     <div class="settings-block">
       <div class="settings-block-title">פנייה</div>
-      <div class="footer-note" style="margin-bottom:0;">${esc("פנייה נשלחת מתוך החשבון שלכם, בלי מייל ובלי טלפון. כדי לכתוב פנייה צריך להיכנס לחשבון במסך \"אני\".")}</div>
+      <div class="footer-note" style="margin-bottom:0;">${esc("פנייה נשלחת מתוך החשבון שלכם, בלי מייל ובלי טלפון. כדי לכתוב פנייה צריך להיכנס לחשבון.")}</div>
+      <button class="chip-btn" data-action="open-me" style="margin-top:10px;">כניסה לחשבון</button>
     </div>`;
   }
   return `
@@ -6501,7 +6513,9 @@ function renderSettingsBody() {
     ? `<div class="settings-warn" role="status">⚠️<span>${esc(days === null ? "עדיין לא ביצעתם גיבוי — לא הורדתם קובץ גיבוי" : `קובץ הגיבוי האחרון שהורדתם הוא מלפני ${days} ימים`)} — ייצוא גיבוי למטה</span></div>`
     : "";
   const backupSettingsPanel = typeof window.renderBackupSettingsPanel === "function" ? window.renderBackupSettingsPanel() : "";
-  const initial = userName ? userName.trim().charAt(0) : "";
+  const profileName = typeof window.communityProfileName === "function" ? window.communityProfileName() : "";
+  const shownName = shownMemberName();
+  const initial = shownName ? shownName.trim().charAt(0) : "";
   // COMM-323: card-based redesign - .settings-pane of .settings-block
   // cards instead of the old flat .divider-label + bare .card list. The
   // profile card reuses .who (the exact same avatar+name component the nav
@@ -6514,11 +6528,19 @@ function renderSettingsBody() {
       <div class="who" style="margin:0;">
         <div class="who-avatar">${esc(initial)}</div>
         <div style="flex:1; min-width:0;">
-          <div class="who-name">${userName ? bidiText(userName) : "אורח/ת"}</div>
-          <div class="who-sub">פרופיל אישי</div>
+          <div class="who-name">${shownName ? bidiText(shownName) : "אורח/ת"}</div>
+          <div class="who-sub">${profileName ? "השם שרואים במעגלים" : "פרופיל אישי"}</div>
         </div>
         <button class="icon-chip icon-chip-steel" data-action="edit-user-name" aria-label="עריכת פרופיל">${ICONS.edit}</button>
       </div>
+      <!-- Audit M6, M7: the account part of the settings is Me; one row leads there from here, signed in or not. -->
+      <button class="exercise-row" data-action="open-me" style="margin:10px 0 0;">
+        <div style="text-align:right;">
+          <div style="font-weight:700; font-size:13.5px;">${profileName ? "החשבון והמעגלים שלי" : "כניסה או הרשמה"}</div>
+          <div style="color:var(--color-text-muted); font-size:12px; margin-top:2px;">${profileName ? "פרופיל, יעד שבועי, שיתוף, התראות ואבטחה" : "למעגלים עם חברים, גיבוי בענן והתראות. היומן עובד גם בלי"}</div>
+        </div>
+        <span style="color:var(--color-text-muted); flex-shrink:0;">${ICONS.chevronsLeft}</span>
+      </button>
 
       <div class="settings-block">
         <div class="settings-block-title">מראה</div>
@@ -8578,6 +8600,11 @@ document.addEventListener("click", (e) => {
     showToast(`מולא: ${entrySummaryFromParts(w, r, st)}`);
   }
   else if (action === "open-support") { openSupport(); }
+  else if (action === "open-me") {
+    if (document.getElementById("supportOverlay").classList.contains("open")) closeSupport();
+    if (settingsOpen) closeSettings();
+    window.switchAppTab("me");
+  }
   else if (action === "close-support") {
     // THE BACKDROP GUARD, missing when this shipped and reported from a real
     // phone the same day: "trying to put text it closes page". #supportOverlay
