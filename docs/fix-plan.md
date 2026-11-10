@@ -157,6 +157,11 @@ Legend: **Mig** needs a migration. **Sec** touches RLS, auth or edge functions.
   `test/password-recovery-client.test.mjs`; browser `a11y-screens-palettes.mjs` (login).
 - **Manual:** Supabase dashboard, Authentication, Users: sort by email, check
   that every address ends in `@members.haimuniya.invalid`.
+  The one that matters is the owner's own account: the gym-era setup
+  (`202609150003_bootstrap_staff_accounts.sql`) gave the admin a real email on
+  purpose. If the owner account on the current project has one, change it to
+  `<username>@members.haimuniya.invalid` in the dashboard (or ask Phase 1 to add
+  the step) before this merges, or that account can no longer sign in.
 
 ### F19 · High · works · Lost recovery code: self-service reset (added and decided 2026-11-10)
 - **Why:** today a member with no code must message the app owner, who runs
