@@ -53,8 +53,17 @@ ${uiToastHtml()}${renderOutboxBanner()}${inner}</div></section>`;
   }
 
   // ---- The gate -----------------------------------------------------------------
+  // No server config. Offline it is almost always a first boot with no cached
+  // cloud-config.js (sw.js keeps the last good one): say so. Online it is a
+  // deploy without a project, and a member must never read developer setup
+  // steps (audit H1); those live in COMMUNITY_SETUP.md.
   function gateNotConfigured() {
-    return `<div class="chart-card"><div style="font-weight:800;font-size:18px;margin-bottom:8px;">המעגלים מוכנים לחיבור</div><div style="color:var(--color-text-muted);font-size:13px;line-height:1.7;">יש ליצור פרויקט Supabase ולמלא את cloud-config.js (ראו COMMUNITY_SETUP.md). עד אז היומן הפרטי עובד במלואו, והמעגלים יופיעו כאן.</div></div>`;
+    const offline = typeof navigator !== "undefined" && navigator.onLine === false;
+    const title = offline ? "אין חיבור כרגע" : "המעגלים לא זמינים כרגע";
+    const body = offline
+      ? "היומן הפרטי עובד במלואו. המעגלים יופיעו כאן כשהחיבור יחזור."
+      : "היומן הפרטי עובד במלואו. המעגלים יחזרו לכאן בקרוב.";
+    return `<div class="chart-card" data-circles-unavailable="${offline ? "offline" : "config"}"><div style="font-weight:800;font-size:18px;margin-bottom:8px;">${title}</div><div style="color:var(--color-text-muted);font-size:13px;line-height:1.7;">${bidiText(body)}</div></div>`;
   }
   function gateCard(inner) { return `<div class="chart-card">${inner}</div>`; }
   // What signing up involves, said before it starts (shown on both pre-signup screens).

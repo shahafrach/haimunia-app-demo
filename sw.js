@@ -11,6 +11,9 @@ const SW_VERSION = "5.0.3";
 // with a shared prefix, this demo's own cleanup could delete the real
 // app's cached assets (Cache Storage is origin-wide, not scoped per SW).
 const CACHE = `haimunia-demo-v${SW_VERSION}`;
+// The last good cloud-config.js, for offline boots. See the fetch handler.
+const CONFIG_CACHE = "haimunia-demo-config";
+const CONFIG_KEY = "./cloud-config.js";
 
 // Required: the offline training log cannot render/run without these. A miss
 // here fails the whole install (the old service worker — and its own cache —
@@ -273,8 +276,27 @@ self.addEventListener("fetch", (e) => {
 
   // Environment configuration must never be served stale. It may change
   // independently of the app shell when switching demo/staging projects.
+  // Still network-first and never served stale while online. Offline, the last
+  // good copy is served instead of an empty config: an empty one made the
+  // Circle tab show developer setup text to a signed-in member (audit H1).
+  // CONFIG_CACHE does not start with "haimunia-demo-v", so activate keeps it
+  // across app updates.
   if (url.pathname.endsWith("/cloud-config.js")) {
-    e.respondWith(fetch(req, { cache: "no-store" }).catch(() => new Response("window.HAIMUNIA_CONFIG={};", { headers: { "Content-Type": "application/javascript" } })));
+    e.respondWith(
+      (async () => {
+        try {
+          const res = await fetch(req, { cache: "no-store" });
+          if (res && res.ok && !res.redirected) {
+            const copy = res.clone();
+            e.waitUntil(caches.open(CONFIG_CACHE).then((c) => c.put(CONFIG_KEY, copy)).catch(() => {}));
+          }
+          return res;
+        } catch (err) {
+          const cached = await caches.open(CONFIG_CACHE).then((c) => c.match(CONFIG_KEY)).catch(() => null);
+          return cached || new Response("window.HAIMUNIA_CONFIG={};", { headers: { "Content-Type": "application/javascript" } });
+        }
+      })()
+    );
     return;
   }
 

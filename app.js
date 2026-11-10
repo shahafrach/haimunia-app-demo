@@ -5366,11 +5366,12 @@ function renderStepper(field, label, value, step, min, action) {
         <button class="stepper-btn" data-action="${a}" data-field="${f}" data-dir="-1" data-step="${st}" data-min="${mn}" aria-label="הפחתה — ${esc(label)}">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg>
         </button>
-        <input class="stepper-val mono" type="text" inputmode="decimal" data-action="${a}" data-field="${f}" data-min="${mn}" value="${v}" aria-label="${esc(label)}" />
+        <input class="stepper-val mono" type="text" inputmode="decimal" data-action="${a}" data-field="${f}" data-min="${mn}" value="${v}" aria-label="${esc(label)}" aria-describedby="stepErr-${a}-${f}" />
         <button class="stepper-btn" data-action="${a}" data-field="${f}" data-dir="1" data-step="${st}" data-min="${mn}" aria-label="הוספה — ${esc(label)}">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
         </button>
       </div>
+      <span class="field-error stepper-error" id="stepErr-${a}-${f}" role="status" hidden></span>
     </div>`;
 }
 
@@ -8692,10 +8693,14 @@ document.addEventListener("keydown", (e) => {
 document.addEventListener("input", (e) => {
   const el = e.target;
   if (!el.classList || !el.classList.contains("stepper-val")) return;
-  const raw = String(el.value).trim().replace(",", ".");
-  if (raw === "" || raw === "-" || raw === ".") return;
-  const val = parseFloat(raw);
-  if (!isFinite(val)) return;
+  const raw = String(el.value).trim();
+  if (raw === "" || raw === "-" || raw === "." || raw === ",") { setStepperError(el, ""); return; }
+  // Audit M8: one parser (src/format.js) for "1,250.5", "62,5" and Arabic-Indic
+  // digits. Anything else, or a negative, is flagged and NOT written to state,
+  // so focusout puts the last good value back instead of the field minimum.
+  const val = parseLocaleNumber(raw);
+  if (!isFinite(val) || val < 0) { setStepperError(el, "מספר לא תקין. אפשר להקליד ספרות ונקודה עשרונית."); return; }
+  setStepperError(el, "");
   const action = el.dataset.action, field = el.dataset.field;
   // "5 דקות 75 שניות" MEANS 6:15, and used to save as 5:59.
   //
@@ -8741,8 +8746,31 @@ document.addEventListener("focusout", (e) => {
   const action = el.dataset.action, field = el.dataset.field, min = +el.dataset.min;
   const current = getFieldValue(action, field);
   const safe = (typeof current === "number" && isFinite(current)) ? current : 0;
-  applyFieldValue(action, field, clampField(action, field, +safe.toFixed(2), min));
+  const applied = clampField(action, field, +safe.toFixed(2), min);
+  // Say what happened instead of changing the number silently (audit M8).
+  const typed = parseLocaleNumber(el.value);
+  const raw = String(el.value).trim();
+  if (raw !== "" && (!isFinite(typed) || typed < 0)) setStepperError(el, `הערך לא נשמר. הוחזר הערך הקודם, ${applied}.`);
+  else if (isFinite(typed) && typed < applied) setStepperError(el, `הערך המינימלי כאן הוא ${applied}.`);
+  else if (isFinite(typed) && typed > applied) setStepperError(el, `הערך המרבי כאן הוא ${applied}.`);
+  else setStepperError(el, "");
+  applyFieldValue(action, field, applied);
 });
+// A +/- tap sets a valid number, so any message under that stepper is stale.
+document.addEventListener("click", (e) => {
+  const btn = e.target && e.target.closest && e.target.closest(".stepper-btn");
+  const inp = btn && btn.closest(".stepper") && btn.closest(".stepper").querySelector(".stepper-val");
+  if (inp) setStepperError(inp, "");
+});
+// The one line under a stepper that says why its number is not what was typed.
+function setStepperError(input, message) {
+  const box = input.closest && input.closest(".stepper");
+  const out = box && box.querySelector(".stepper-error");
+  if (message) input.setAttribute("aria-invalid", "true"); else input.removeAttribute("aria-invalid");
+  if (!out) return;
+  out.textContent = message;
+  out.hidden = !message;
+}
 document.getElementById("wodPickerSearch").addEventListener("keydown", (e) => {
   if (e.key !== "Enter") return;
   const q = e.target.value.trim();

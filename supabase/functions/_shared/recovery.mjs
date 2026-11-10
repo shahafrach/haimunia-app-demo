@@ -114,16 +114,19 @@ export async function handleRecover(req, deps) {
   const ip = String(req.ip || "unknown");
 
   // Throttle on what the caller claims and where they come from, before looking at anything.
+  // The IP key counts every request. The username key counts only well-formed
+  // ones (audit L8, 2026-11): junk such as an empty or malformed code can
+  // never match, so it no longer spends the real member's five attempts.
+  const shapeOk = usernameOk(username) && looksLikeCode(code) && passwordOk(password);
   const userKey = await hmacHex(deps.secret, ATTEMPT_DOMAIN + "user:" + username);
   const ipKey = await hmacHex(deps.secret, ATTEMPT_DOMAIN + "ip:" + ip);
   const since = now - ATTEMPT_WINDOW_MS;
   const [byUser, byIp] = await Promise.all([deps.store.countAttempts(userKey, since), deps.store.countAttempts(ipKey, since)]);
   if (byUser >= ATTEMPT_LIMIT || byIp >= ATTEMPT_LIMIT) return fail();
-  await deps.store.addAttempts([userKey, ipKey]);
+  await deps.store.addAttempts(shapeOk ? [userKey, ipKey] : [ipKey]);
   await deps.store.purgeAttempts(now - 24 * 60 * 60 * 1000);
 
   // Both checks always run, so the time taken does not say which one a code matched.
-  const shapeOk = usernameOk(username) && looksLikeCode(code) && passwordOk(password);
   const userId = shapeOk ? await deps.store.lookupUser(username) : null;
   const stored = userId ? await deps.store.getRecoveryHmac(userId) : null;
   const given = await recoveryHmac(deps.secret, code);

@@ -56,6 +56,19 @@ test("the app's own entry points are served, including the ones index.html loads
   }
 });
 
+test("an encoded, doubled or folded spelling of a blocked path is still blocked (audit L10)", async () => {
+  for (const p of ["/%64ocs/journal.md", "/%2564ocs/journal.md", "//docs/journal.md", "/DOCS/journal.md",
+                   "/docs%2fjournal.md", "/%73upabase/migrations/x.sql", "/README%2Emd", "/%E0%A4%A",
+                   "/%5cdocs/journal.md"]) {
+    const { status, passedThrough } = await serve(p);
+    assert.equal(status, 404, `${p} must be blocked`);
+    assert.ok(!passedThrough, `${p} must not reach the asset`);
+  }
+  for (const p of ["/src/format.js", "/assets/scenes/welcome.webp", "/index.html?tab=add"]) {
+    assert.equal((await serve(p)).status, 200, `${p} must still be served`);
+  }
+});
+
 test("the schema, the audits, the runbooks and the tests are not public", async () => {
   for (const p of [
     "/supabase/migrations/202608260001_community_foundation.sql",
