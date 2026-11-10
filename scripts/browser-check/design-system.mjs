@@ -97,7 +97,10 @@ for (const [palette, scheme] of [["chalk", "light"], ["slate", "dark"]]) {
   await page.waitForSelector("#communityProfile", { timeout: 8000 });
   const me = await facts(page);
   check(`${palette}/${scheme} Me: no sideways scroll`, me.overflow <= 1, String(me.overflow));
-  check(`${palette}/${scheme} Me: Appearance is on the page`, await page.locator('[data-appearance-root="me"] [data-action="set-palette"]').count() === 6);
+  // Appearance is set in one place, Settings; Me links there (audit M7, 2026-11).
+  check(`${palette}/${scheme} Me: no second set of appearance controls, a link to Settings instead`,
+    (await page.locator('#content [data-appearance-root] [data-action="set-palette"]').count()) === 0
+      && (await page.locator('#content [data-action="open-settings"]').count()) >= 1);
   check(`${palette}/${scheme}: no console errors`, errors.length === 0, errors.join(" | "));
   await ctx.close();
 }
