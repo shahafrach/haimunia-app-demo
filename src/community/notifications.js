@@ -912,7 +912,7 @@
       <div class="modal-sheet" style="border-radius:20px;max-height:88vh;overflow:auto;width:100%;max-width:520px;">
         <div style="padding:18px 18px calc(env(safe-area-inset-bottom,0px) + 16px);">
           <div class="modal-head" style="padding:0 0 6px;">
-            <h2 class="modal-title" id="notifCenterTitle">התראות</h2>
+            <h2 id="notifCenterTitle" class="modal-title">התראות</h2>
             ${sheetCloseBtnHtml("notif-close")}
           </div>
           ${markRow}
