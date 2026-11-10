@@ -147,11 +147,11 @@ Legend: **Mig** needs a migration. **Sec** touches RLS, auth or edge functions.
   חד-פעמי.", and correct the sign-up line to say that. No phone number or name
   in the file.
 - **Files (add):** `src/community/recovery.js`.
-- **Decision (yours): email in login.** decisions.md says no email and the
-  recovery code replaced email reset; there is no planned email reset in it.
-  **Recommendation:** remove the email branch and label ("שם כניסה" only),
-  after you confirm in the dashboard that no account signs in with a real email.
-  If your own owner account does, change it to a username account first.
+- **Decided 2026-11-10: remove email from login.** Delete the email branch in
+  `login()` (`auth.js:666-690`) and the label becomes "שם כניסה" (`auth.js:336`);
+  the empty-field message (`auth.js:684`) loses "או אימייל". Grep `אימייל` and
+  `looksLikeEmail` across `src/community/` for any other copy or path. F19 is the
+  recovery for a lost code, so nobody needs email.
 - Mig no · Sec **yes** (auth) · Risk low.
 - **Verify:** `test/community-username-password-auth.test.mjs`,
   `test/password-recovery-client.test.mjs`; browser `a11y-screens-palettes.mjs` (login).
@@ -380,7 +380,7 @@ at once would conflict. Update each branch from `main` before merging.
 | 3 | One settings screen and touch targets | `fix/p3-ux-consistency-touch` | F11, F12, F13, F14 (F15 only if you choose two columns) | L | none |
 | 4 | Strip and perf | `fix/p4-strip-perf` | F16, F17, F18 | S | none |
 
-**Before phase 1:** decide F5 (email in login). F19 is decided. **Before phase 3:** decide F15
+**Before phase 1:** nothing; F5 and F19 are decided. Do the F5 dashboard check first. **Before phase 3:** decide F15
 (F11 and F12 are decided).
 
 **Phone checks after each merge:**
