@@ -2400,6 +2400,7 @@
 
   window.afterRenderCommunity = function () {
     ensureCommunityDataLoaded();
+    restoreRecoveryDrafts();
     // The Circle tab loads what its section needs, once per circle.
     if (window.haimuniaActiveTab === "community" && state.circles.loaded && state.profile && state.profile.recovery_verified_at) {
       const c = currentCircle();
