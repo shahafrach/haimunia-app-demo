@@ -142,8 +142,11 @@ test("the invite UI handles invalid and rate-limited results", () => {
   assert.match(cloudJs, /data === "invalid"/);
 });
 
-test("CSP allows only the configured Supabase project and permits signed post images", () => {
+test("CSP allows only the configured Supabase project, and nothing from the gym app's buckets or Realtime", () => {
+  // Fix plan F16 (2026-11): the post-photos and avatar-photos buckets and Realtime are dropped
+  // (decisions.md), so images come only from the app and connect-src has no wss: host.
   assert.doesNotMatch(indexHtml, /https:\/\/\*\.supabase\.co/);
-  assert.match(indexHtml, /img-src[^;]*https:\/\/hvwakffluwvegedefoth\.supabase\.co/);
-  assert.match(indexHtml, /connect-src[^;]*https:\/\/hvwakffluwvegedefoth\.supabase\.co[^;]*wss:\/\/hvwakffluwvegedefoth\.supabase\.co/);
+  assert.match(indexHtml, /img-src 'self' data: blob:;/);
+  assert.match(indexHtml, /connect-src[^;]*https:\/\/hvwakffluwvegedefoth\.supabase\.co/);
+  assert.doesNotMatch(indexHtml, /wss:\/\//);
 });

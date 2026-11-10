@@ -44,8 +44,7 @@
   // Security hunt (2026-09-11): first real call site - navigateToNotifTarget()
   // below used a naive manual escape instead. See that call site's own comment.
   var cssSel = window.BoxLogSafe.cssSel;
-  // Live bug hunt (2026-09-11): saveProfile()/postAnnouncement()/
-  // setWeeklyChallenge() sanitized human-typed text with only
+  // Live bug hunt (2026-09-11): saveProfile() and its gym-era siblings sanitized human-typed text with only
   // `.trim().slice(N)` - no control-char, bidi-override, or zero-width
   // stripping at all. Confirmed live: a display name typed as
   // "safe_photo" + RLO + "gnp.exe" was stored verbatim and painted as
@@ -107,17 +106,6 @@
     // ever opened).
     communityDataLoaded: false, communityDataLoading: false,
     
-    // COACHENGAGE IS GONE (N3). COMM-226 shipped the coach-engage section behind
-    // a per-device localStorage flag, default off; COMM-304 built the producer
-    // and flipped it on. What was left was a switch every coach carried their
-    // own copy of: an admin could not turn the section off for the club, two
-    // coaches could disagree about whether it existed, and clearing site data
-    // turned it back on. The section now reads isModuleEnabled("engagement_alerts"),
-    // the club switch that 202609100002 already uses to gate
-    // coach_notify_engagement_flags(), so the alert and the dashboard it belongs
-    // to answer to one control. The default does not move: that key ships
-    // enabled and the device flag defaulted on.
-    //
     // NOTIFPUSH STAYS, AND ITS COMMENT WAS WRONG. It used to say push "stays
     // default off in production until VAPID keys are provisioned", while the
     // code reads `!== "0"` - default ON. Both halves were true of different

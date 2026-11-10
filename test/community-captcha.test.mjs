@@ -140,8 +140,7 @@ test("the CSP allows exactly those provider hosts and does not widen connect-src
     "'self'",
     "https://challenges.cloudflare.com",
     "https://hvwakffluwvegedefoth.supabase.co",
-    "wss://hvwakffluwvegedefoth.supabase.co",
-  ].sort(), "connect-src holds only self, the Supabase project, and the Turnstile verification host");
+  ].sort(), "connect-src holds only self, the Supabase project, and the Turnstile verification host (no wss: Realtime is gone, decisions.md)");
   // The strict directives that were never weakened.
   assert.match(csp, /object-src 'none'/);
   assert.match(csp, /base-uri 'none'/);

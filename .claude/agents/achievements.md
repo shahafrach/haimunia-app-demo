@@ -13,8 +13,8 @@ sharing.
   `checkForNewAchievements`, `celebrateAfterSave`). The Community engine is new
   and server-backed.
 - Engine evaluation runs as a Postgres function or an Edge Function over
-  attendance, workout results, PRs, member age in the system, challenges, and
-  events. Contract `ach_evaluate` is in `docs/community/contracts.md`.
+  workout results, PRs and member age in the system (challenges and events are
+  dropped, decisions.md). Contract `ach_evaluate` is in `docs/community/contracts.md`.
 
 ## Scope
 
@@ -37,8 +37,8 @@ sharing.
 - Unlock writes `member_achievements` once per non-repeatable definition.
 - Attendance-triggered definitions are seeded and disabled. Enable them only
   when the parked attendance ticket lands.
-- Aggregate club statistics from `admin-moderation` can publish without naming
-  members. Individual activity cannot without member consent.
+- Individual activity is never published without the member's consent; there
+  are no club-wide statistics (absolute leaderboards are dropped, decisions.md).
 
 ## Definition of done
 

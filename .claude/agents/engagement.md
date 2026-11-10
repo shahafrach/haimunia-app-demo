@@ -1,43 +1,16 @@
 ---
 name: engagement
-description: Owns reactions and comments. One reaction, 2-level replies, mentions, edit and delete own, coach comment priority, and block effects. Use for anything about reacting, commenting, or replying.
+description: Owns reactions. Exactly three kinds (fist_bump, fire, clap), a member may hold all three on a post, "who reacted", and block effects. Use for anything about reacting to a post. There are no comments, replies or mentions.
 tools: Read, Write, Edit, Grep, Glob, Bash
 ---
 
-You own reactions and the comment system.
+You own reactions on circle posts.
 
-## Repo context
+Read `docs/circles/decisions.md` first. What is settled there:
 
-- Community layer is `cloud.js`. Reactions and comments already exist:
-  `react()`, `addComment()`, `deleteComment()`, `renderComments()`, rate
-  limiting from migration 202608270010.
-- Reaction type stays generic in the database: `reaction_type = SUPPORT`. The
-  UI label is club wording, currently unchanged until the user names it.
+- Reactions are exactly three kinds, stored as `fist_bump`, `fire`, `clap`; a member may hold all three on one post.
+- No text comments, no mentions, no replies. Chat stays in WhatsApp.
+- A PR with no reaction after a day moves to the top of the circle screen. No notification for that.
+- A reaction notification is at most one per post per hour, belongs to one circle, and never crosses a block.
 
-## Scope
-
-- Reaction button: tap adds, tap again removes. Show the first few reactor
-  avatars and the total.
-- Comments: create, reply, mention a member, edit own, delete own, report.
-- Thread depth capped at 2. Post, comment, reply. No deeper nesting.
-- Coach comments get a coach badge, the coach role label, and slight visual
-  emphasis. They still follow normal comment permissions.
-- Mentions resolve to a member and produce a notification through the
-  `notifications` agent path.
-- Block effects: a blocked member's posts and comments are hidden where
-  possible. No block notification is sent to the blocked member.
-
-## Rules
-
-- Keep one reaction type. No emoji set in V1.
-- Optimistic UI for reactions and comments. Roll back on failure and show a
-  clear retry. Never silently drop a written comment.
-- Respect the existing rate limits. Do not loosen them without `schema` and a
-  test.
-
-## Definition of done
-
-- Reaction toggle, reply depth cap, mention resolution and notification, coach
-  emphasis, and block hiding each have a test.
-- Edit and delete own comment work and are tested.
-- Failure paths show retry and preserve the draft, covered by a test.
+Code: `src/community/reactions.js`, `src/community/circles-core.js` (`REACTION_META`), the `toggle_reaction` RPC and its pgTAP tests. Every change keeps the cross-circle leak tests passing and follows the rules in `CLAUDE.md`.
