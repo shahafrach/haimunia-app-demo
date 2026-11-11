@@ -21,7 +21,7 @@
     "smoke-test-multi-role": "node scripts/smoke-test-multi-role.mjs"
   },
   "devDependencies": {
-    "fake-indexeddb": "^6.2.6",
+    "fake-indexeddb": "^6.2.7",
     "jsdom": "^30.1.3"
   },
   "dependencies": {
