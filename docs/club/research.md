@@ -9,13 +9,60 @@ read-only clone; this session has no push access to it). File paths without a pr
 web-search extracts of the official pages linked below, not from reading them in full. Verify the numbers marked
 **(verify)** on the live page before relying on them.
 
+## Owner decisions (2026-11-11)
+
+The owner answered the open questions and corrected the plan on 2026-11-11. They are settled. Session 1 copies them
+into `docs/circles/decisions.md` and `docs/journal.md`.
+
+| # | Decision |
+|---|---|
+| 1 | The owner connects the Claude GitHub app to the `haimuniya` account. Session 3 assumes push access to `haimuniya/haimunia-app`. If push access is still missing when that session starts, it stops and reports. |
+| 2 | The transfer carries body weight. **The recorded exception:** the backup is encrypted on the phone; the key never reaches the server, because it exists only in the code the member copies; the server stores ciphertext only, for at most 24 hours, and deletes it on the first download. A test proves the stored blob is not valid JSON and contains no plaintext field names. |
+| 3 | The club has **no cloud copy of the private log**. A new phone is covered by the backup file and the transfer code. The club UI hides every cloud-backup entry point. |
+| 4 | Club share defaults: post every workout, PRs as percent improvement, absolute weights off. A member's privacy setting always wins, as in BOX-LOG. |
+| 5 | If the owner leaves or deletes the account, ownership passes to the coach. With no coach, nobody owns the club until the owner reassigns it. The one-line SQL lives in `docs/ops/CLUB_OWNERSHIP.md` (written in session 1; the line is under C). |
+| 6 | Anonymous sign-in limit: 300 per hour for launch week, then 60. It is set through `set-auth-config.yml`, never by hand. The join screen shows "יותר מדי הרשמות כרגע, נסו שוב בעוד שעה" on a 429. |
+| 7 | The new app's IndexedDB is `haimunia-club-db`, named at repo birth. Import reads the 3.1.1 backup format unchanged. |
+| 8 | "שאלה למאמן" is a WhatsApp link to the coach's number in the club config, added only once the coach agrees; until then the button is hidden. Bug reports from the club app go to `bug_reports` with `app = 'club'`. The owner does not read them in routine operation, and nothing in the club flow waits on him. |
+| 9 | One direction only: old app → club app. The backup file covers the other way. |
+| A | Migrations deploy through the **Supabase GitHub integration** on merge to `main` (see "Migration path" below for what the repository proves today). |
+| B | Zero work for the owner: every recurring or launch-time step a workflow can do is a workflow. The owner's gates are only: approve PRs, one Cloudflare visit (Pages project and Turnstile hostname), name the coach, and go/no-go on the pilot. |
+| C | Four sessions, not nine (see "Build sessions"). |
+| T | **Timing.** Launch either before 22.11.2026 or after 19.01.2027. The owner is away in between, and the design must run with zero owner involvement in that period. |
+| O | The old app stays live and unchanged for at least one month after launch. After that the owner decides whether to keep it or replace it with a pointer to the new address. |
+
+## Migration path: what is live today
+
+The repository does not settle this, and this session cannot read the Supabase dashboard (no project link, and
+`supabase.com` is blocked).
+
+| Evidence | Says |
+|---|---|
+| `docs/ops/MIGRATIONS.md`, CLAUDE.md | manual: `npm run push:prod` |
+| `.github/workflows/apply-migrations.yml` | `workflow_dispatch` only, typed `apply`, on `main` only, with the same gates as `push:prod` |
+| `docs/ops/PASSWORD_RESET.md:26` | "both happen on merge to `main`" (the migration and the function) |
+| `docs/feedback-inbox.md:31` | "applied (label `deploy-backend`)"; no workflow in `.github/workflows/` reads that label |
+| `.github/workflows/deploy-edge-functions.yml:51-59` | Edge Functions **do** deploy on push to `main` |
+| Supabase GitHub integration | configured in the Supabase dashboard; nothing in the repository shows it, so it can be neither confirmed nor ruled out from here |
+
+**The gate written into every session:** merge to `main`, then the session confirms with a read-only check that
+production has no pending migration. Session 1 adds `migration-status.yml`, a read-only workflow: `workflow_dispatch`
+plus `push` to `main` on `supabase/migrations/**`. It waits 10 minutes for the integration, then runs
+`supabase migration list --linked` and `check:drift`, and fails if anything is pending.
+- Green: the integration is live. Session 1 rewrites `MIGRATIONS.md` and the CLAUDE.md rule to say so. `push:prod`
+  stays as the manual fallback and is no longer a gate.
+- Red with pending migrations: the integration is not live. The session dispatches `apply-migrations.yml` (`confirm = apply`)
+  itself. Approving the PR is the owner's instruction for that run. The session reports that the integration needs
+  connecting, which is a dashboard step for the owner after his return, and does not block the launch.
+- No manual `push:prod` step anywhere.
+
 ## Summary: where the plan as given is wrong or incomplete
 
 | # | Finding | Effect | Fix |
 |---|---|---|---|
-| 1 | Supabase Auth allows **30 anonymous sign-ins per hour per IP** by default ([rate limits](https://supabase.com/docs/guides/auth/rate-limits)). Every sign-up here starts anonymous (decisions.md, Auth). | 250 members joining on launch night over the gym's Wi-Fi share one IP. The 31st person in an hour gets a 429. | Owner raises `rate_limit_anonymous_users` before launch (dashboard or `set-auth-config.yml`), and the join screen says "try again in an hour" on 429. Turnstile still gates each sign-up. |
+| 1 | Supabase Auth allows **30 anonymous sign-ins per hour per IP** by default ([rate limits](https://supabase.com/docs/guides/auth/rate-limits)). Every sign-up here starts anonymous (decisions.md, Auth). | 250 members joining on launch night over the gym's Wi-Fi share one IP. The 31st person in an hour gets a 429. | Decided (6): `set-auth-config.yml` gains an `anon_limit` input (`rate_limit_anonymous_users`). The pilot session sets it to 300 before the link goes out. A scheduled check lowers it to 60 after seven days (session 1, see K). The join screen shows "יותר מדי הרשמות כרגע, נסו שוב בעוד שעה" on 429. Turnstile still gates each sign-up. |
 | 2 | Push subscriptions belong to a **user**, not an app. `notif_push_pending` (`202611100001_lost_code_reset.sql:101`) sends every notification to every live subscription of the user. | A member signed in to both BOX-LOG and the club app gets club pushes on BOX-LOG and the other way round, and the tap opens a screen that app does not have. | Add `push_subscriptions.app` (`box-log`/`club`). Route club-circle notifications to `club` subscriptions only; everything else to `box-log`. |
-| 3 | Decision 8 uploads body weight (encrypted). decisions.md says "Body weight never leaves the device", and `202610280001` bans it from `private_records`. | Contradiction between decisions. | Record the exception in decisions.md: ciphertext the server cannot decrypt, kept at most 24 h, deleted after one download. The key must never reach the server (see D). Owner gate. |
+| 3 | Decision 8 uploads body weight (encrypted). decisions.md says "Body weight never leaves the device", and `202610280001` bans it from `private_records`. | Contradiction between decisions. | Decided (2): the exception is recorded in decisions.md in session 1. The server holds ciphertext it cannot decrypt, at most 24 h, deleted on the first download; the key lives only in the code (see D). |
 | 4 | The old app's usage counting and CSP point at `jajmlyrjlkhclgphbfbb.supabase.co`, the **deleted** project (`old:app-config.js`, `old:index.html:68`). `training_log_usage` was dropped by `202610250001_strip_gym.sql:1503`. | Counting is silently dead today. Decision 9 needs a new table, not a URL change. | New forward migration that recreates `training_log_usage` on the BOX-LOG project, plus the old app's one update (config and CSP). |
 | 5 | `case v_type when 'couple' then 2 else 20` appears **twice** (`202610250003_circles_schema.sql:270`, `202610250004_circle_lifecycle_rpcs.sql:394`). The default use count `else 5` is a third copy (`:404`). `circle_share_defaults` uses `else` for friends (`:204`). | A new type `club` silently gets a cap of 20, five uses per link and friends' defaults. | Every `case`/`else` on `type` becomes explicit, and an unknown type raises an error. Twins listed in C. |
 | 6 | `notif_on_pr_post` (`202611080001_push_triggers.sql:143`) writes one notification per circle member on every PR. The week card (`202610260001_circle_notifications.sql:266`) is per member per circle. The owner gets a `circle_joined` for every join (`:215`). | Fan-out to 249 members, against decision 7. 250 join pushes to the owner, against decision 6. | All three skip `type = 'club'` in the trigger itself, not only through preferences. |
@@ -34,9 +81,10 @@ web-search extracts of the official pages linked below, not from reading them in
 | WOD-builder tags | one settings row `wodMovementTags` | own store |
 
 The origins differ (`haimuniya.github.io` vs `haimunia.pages.dev`), and IndexedDB is per origin. The new app starts
-empty whatever its database is called. **Data moves only through the backup file or the transfer code.** The new repo
-keeps `haimunia-demo-db` v10 (renaming it later costs a migration), or renames it to `haimunia-club-db` at birth. Recommendation:
-rename at birth, while no device has it.
+empty whatever its database is called. **Data moves only through the backup file or the transfer code.** Decided (7):
+the new app opens `haimunia-club-db` at version 1, with 5.x's store set (the eight stores plus `syncOutbox`,
+`wodMovementTags`, `communityOutbox`), from the first commit. Import still accepts 3.1.1's
+`customWodMovementTags` array and writes it into the `wodMovementTags` store.
 
 **Backup format.** Both apps write and read `{app: "box-log", version: 1}` (`old:app.js:3116`, `app.js:3606`).
 `buildBackupPayload` is the same in both. The sanitizers in `src/sanitize.js` differ only in comments. `MOVEMENTS` and
@@ -81,7 +129,7 @@ limit (`MAX_BACKUP_BYTES`) and `importItems: 20000` per list apply to both.
 | Share defaults per circle, privacy panel | `privacy.js`, `sharing-core.js` | **adapt**: one circle, club defaults |
 | Notifications center, push toggles | `notifications.js` | **adapt**: only reaction and trained-together |
 | Workout reminder and weekly digest push | `reminders.js` | **port** (personal, opt-in, no fan-out) |
-| Private log cloud backup with consent | `cloud.js` `private_records`, `renderBackupConsentCard`, `src/dormancy.js` | **open question** (see G, Q3) |
+| Private log cloud backup with consent | `cloud.js` `private_records`, `renderBackupConsentCard`, `src/dormancy.js` | **skip** (decided 3): the `private_records` upload, the consent card, the dormancy panel and every cloud-backup entry point are removed, not hidden behind a flag. A test asserts that no request to `private_records` is made |
 | Outbox and idempotency | `src/outbox.js` | **port** |
 | `analytics_events`, event bus | `src/analytics.js`, `src/eventbus.js` | **skip** for the club: usage counting replaces it (decision 9), so there is one counter, not two |
 | Founder link, benchmark of the month, weekly competition, couple | `circles*.js`, migrations `202610290002`, `…0006` | **skip** (circles-only) |
@@ -103,21 +151,33 @@ All changes live in one new migration in this repo (one branch at a time adds a 
 | Member cap (`202610250003:270`, `202610250004:394`) | `else 20` | explicit `when 'friends' then 20 when 'club' then 250 else raise` |
 | `circle_members.role` (`202610250003:241`) | owner, member | add `coach`, valid only when `type = 'club'`. One coach at most (partial unique index) |
 | `circle_members_guard_role` (`:289`) | a role never changes by update | keep; the coach is set by a granted-to-no-role `owner_set_coach(club, username)` |
-| Owner handoff (`circle_members_after_delete`, `202610250004:143`) | longest-standing member | club: the coach first; with no coach, nobody (the club stays ownerless and the owner reassigns by SQL). A random member must never inherit 250 people |
+| Owner handoff (`circle_members_after_delete`, `202610250004:143`) | longest-standing member | club (decided 5): the coach becomes the owner, and the coach seat is empty; with no coach, the club has no owner until the owner reassigns it. A random member never inherits 250 people. Account deletion goes through the same trigger (202610290003) |
 | Last member deletes the circle (same function) | yes | club: never automatic |
 | `remove_member` (`202610250004:348`) | owner only | owner or coach. The coach cannot remove the owner or another coach |
 | `clubs_update_owner` policy | owner edits settings | unchanged; the coach gets RPCs only |
 | `circle_invites` (`202610250003:307`) | `max_uses` 1–20, 7-day expiry, 20 per day | club link: one active row, `max_uses` = cap, no expiry (`expires_at` far future, or a nullable column with a check tied to type) |
 | `create_circle_invite` | issues a new link | club: `rotate_club_link(club)`, owner or coach. It deletes the old row and returns the new token once, 5 rotations per day |
 | `join_circle` (`202610250004:423`) | 10 attempts per user per hour; `circle_full`, `too_many_circles` (10) | unchanged; the club counts as one of a member's 10 circles |
-| `circle_share_defaults` (`:204`) | `else` = friends | explicit `when 'club'`: workouts as a post, PRs and percents, `show_weights` false. **Owner decision** (Q4) |
+| `circle_share_defaults` (`:204`) | `else` = friends | explicit `when 'club'` (decided 4): `share_workouts` true, `share_prs` true, `share_percent` true, `share_weekly_count` true, `show_weights` false. `set_share_defaults` lets a member turn any of them off, and hidden data is never sent (decisions.md) |
 | Announcements | dropped (`strip_gym`, decisions.md "Drop") | new table `club_announcements(id, club_id, author_id, body ≤ 500, pinned, created_at)`; RLS read for club members; writes only through `post_announcement`/`pin_announcement`/`delete_announcement` (owner or coach, 10 per day). No notification. decisions.md gets the club exception |
 | Delete others' posts | none | `moderator_delete_post(post)` for the owner or coach of that club only, soft delete, `notifications` text cleared as in `circle_members_after_delete` |
 | Notifications | reaction, trained_together, circle_joined, week_card, pr_circle | `notif_on_pr_post`, `notif_week_card_due` and `notif_on_circle_join` return early for `type = 'club'`. Reaction (1 per post per hour) and trained-together stay |
 | `push_subscriptions` | per user | add `app` (finding 2); `register_push_subscription` takes it; `notif_push_pending` joins on it |
 | `training_log_usage` | dropped | recreate (finding 4): insert-only for `anon` through a definer function, 1 row per device per event per day, purge at 400 days, `training_log_usage_report()` granted to no role |
 | `transfer_blobs` | — | see D |
-| `bug_reports` | owner reads | add `app` (`box-log`/`club`); see J |
+| `bug_reports` | owner reads | add `app` (`box-log`/`club`), default `box-log`; see J |
+| Owner admin | SQL editor | granted-to-no-role functions `owner_create_club`, `owner_set_coach`, `owner_set_club_owner`, run by a new `club-admin.yml` workflow (`workflow_dispatch`, Management API SQL endpoint, the existing `SUPABASE_ACCESS_TOKEN`). It prints counts only, never a token or a username list: the repository is public, so its logs are public |
+
+**Reassigning an ownerless club** (decided 5). Session 1 puts this line in `docs/ops/CLUB_OWNERSHIP.md`. Run it in the
+Supabase SQL editor, or as `club-admin.yml` with `action = set_owner`:
+
+```sql
+select public.owner_set_club_owner('<username>');
+```
+
+It makes that member the owner of the one `club`-type circle. It refuses a username that is not a member, and it
+demotes the current owner, if there is one, to member. It is `SECURITY DEFINER` with `search_path ''`, granted to no
+role, and listed in the definer guard.
 
 **Functions that assume couple or friends** (each is a twin to fix together): `circles_schema` `:270`, `:281`,
 `:297`; `circle_lifecycle_rpcs` `:204` (defaults), `:228` (create), `:394` (cap), `:404` (uses); clients
@@ -133,7 +193,9 @@ hide `type = 'club'`** in its circle list, or a member in both sees the club in 
 5. A PR post in a club writes zero `pr_circle` rows; no week-card and no join notification for a club.
 6. A club notification is selected for an `app = 'club'` subscription only.
 7. `transfer_blobs` and `training_log_usage`: no select for `anon`/`authenticated`; `0113` and `0135` (definer guard) list the new functions.
-8. The owner-handoff rule: the owner leaves → the coach becomes the owner; no coach → no owner, the club survives.
+8. The owner-handoff rule: the owner leaves, or requests account deletion → the coach becomes the owner; no coach → no owner, the club survives; `owner_set_club_owner` restores one.
+9. Transfer blob (decided 2): after a `transfer-put` of a fixture backup that includes body weight, the stored `ciphertext` does not parse as JSON (also after gunzip), and contains none of the byte strings `"entries"`, `"bodyweightEntries"`, `"weight"`, `"sessionNotes"`, `"app"`, `"box-log"`. It runs as a Deno test of the function and as a pgTAP check on the row.
+10. The club's share defaults are the decided ones; a member's `set_share_defaults` off wins on the next post.
 
 ## D. Transfer code
 
@@ -169,6 +231,9 @@ dropped every bucket). 5 MB × the pending limit below is the worst-case databas
 - `transfer-take`: 10 attempts per IP per 15 min. A miss costs an attempt. Guessing 2^104 is hopeless anyway.
 - CORS allow-list: exactly `https://haimuniya.github.io` for put and `https://haimunia.pages.dev` for take (today's functions send `*`, `_shared/recovery.mjs:72`).
 
+**The stored blob is opaque** (decided 2): see test 9 in C. The function also refuses a body that parses as JSON,
+so a client bug cannot upload plaintext.
+
 **Purge.** `pg_cron` hourly: `delete from transfer_blobs where created_at < now() - interval '24 hours'`, plus the
 delete-on-take. It is listed in the job-health check like the other jobs.
 
@@ -197,8 +262,13 @@ delete-on-take. It is listed in the job-health check like the other jobs.
 | CSP | Meta CSP as in `old:index.html:62`, with `connect-src 'self' https://hvwakffluwvegedefoth.supabase.co`, plus the Turnstile host for `script-src`/`frame-src`. | — |
 | Supabase Auth | Add `https://haimunia.pages.dev` to the redirect URL list. No email is involved, so the Site URL can stay BOX-LOG's. | — |
 
-Owner clicks: (1) create the GitHub repo, (2) connect Pages and name it, (3) add the Turnstile hostname, (4) raise the
-anonymous sign-in limit, (5) approve `push:prod` for the club migration.
+Owner steps (decision B): **one Cloudflare visit.** It creates the Pages project `haimunia` from `shahafrach/haimunia-club`
+(granting Cloudflare's GitHub app access to that repo) and adds `haimunia.pages.dev` to the existing Turnstile widget.
+Everything else is done by a session or a workflow:
+- The session creates the private repo (`mcp__github__create_repository`, requested at session start).
+- `set-auth-config.yml` sets the redirect URL and the anonymous limit.
+- `deploy-edge-functions.yml` deploys the functions on merge.
+- The migration path is above.
 
 ## G. Capacity on the Free plan
 
@@ -206,7 +276,7 @@ Quotas: 500 MB database per project, 5 GB egress, 50,000 MAU, 500,000 Edge Funct
 idle (the keepalive covers that) ([billing](https://supabase.com/docs/guides/platform/billing-on-supabase),
 [pricing](https://supabase.com/pricing)) **(verify)**.
 
-Assumptions: 250 members, 150 active weekly, 3 workouts each, every workout posted (club defaults, Q4).
+Assumptions: 250 members, 150 active weekly, 3 workouts each, every workout posted (decided 4).
 
 | Item | Arithmetic | Per year |
 |---|---|---|
@@ -217,10 +287,9 @@ Assumptions: 250 members, 150 active weekly, 3 workouts each, every workout post
 | `transfer_blobs` | worst case 40 × 5 MB, gone within 24 h | ≤ 200 MB transient |
 | `private_records` (if the club backs up the private log) | 250 × ~3,000 records × ~500 B | **~375 MB** |
 
-**Without the private-log backup** the club adds about 120 MB a year to BOX-LOG's footprint, inside 500 MB with room
-for BOX-LOG. **With it** the project fills in one year. `private_records.payload` has no size check
-(`202608260001_community_foundation.sql:24`). Recommendation: no private-log cloud backup for the club (Q3); the
-backup file and the transfer code cover a phone change.
+Decided (3): the club has no private-log cloud backup, so the club adds about **120 MB a year** to BOX-LOG's footprint,
+inside 500 MB with room for BOX-LOG. With the backup it would have filled the project in a year
+(`private_records.payload` has no size check, `202608260001_community_foundation.sql:24`).
 
 Egress: the feed reads 30 posts × ~1 KB × 150 members × 2 opens a day ≈ 9 MB/day ≈ 270 MB/month, plus the transfer
 downloads (~250 × 1 MB once). Well under 5 GB.
@@ -257,7 +326,7 @@ What leaves the device:
 | Mode | Leaves the device |
 |---|---|
 | Offline | Usage counts only (`device_id` random, `event`, `screen`; switch in Settings, off forgets the id), sent to Supabase. Nothing else. |
-| Connected | Plus: username (no email), display name and emoji; club membership and role; posts per the share settings (workout summary or count, PR lift and percent, absolute weight only if chosen); reactions; trained-together tags; push endpoint; feedback text if sent; the recovery-code HMAC. **Never**: body weight, measurements, session notes, the private log (if Q3 holds). |
+| Connected | Plus: username (no email), display name and emoji; club membership and role; posts per the share settings (workout summary or count, PR lift and percent, absolute weight only if chosen); reactions; trained-together tags; push endpoint; feedback text if sent; the recovery-code HMAC. **Never**: body weight, measurements, session notes, the private log (decided 3). |
 | Transfer (one time) | The full backup **including body weight and notes**, encrypted on the phone. The server holds only ciphertext and a hash of the lookup, for at most 24 h; it is deleted on first download. |
 
 The club privacy page (Hebrew, `privacy.html` pattern) needs: the controller (the owner, contact), the table above,
@@ -278,8 +347,10 @@ BOX-LOG stores feedback in `bug_reports`, read by the owner through `feedback-in
 | 3. **Split**: "שאלה למאמן" opens WhatsApp to the coach's number (`supportWhatsApp` in config; nothing stored); "תקלה באפליקציה" goes to `bug_reports` with `app = 'club'` | only bugs, on demand | answers on WhatsApp as today | none new |
 | 4. Hide support | none | none | bugs go unseen |
 
-**Recommendation: 3.** It matches how the club already talks (WhatsApp), stores nothing new, and the owner sees only real
-app defects.
+**Decided: 3** (decision 8).
+- "שאלה למאמן" is hidden until the coach agrees and `coachWhatsApp` is set in `app-config.js` of the club repo; then it opens `https://wa.me/<number>`.
+- "תקלה באפליקציה" writes to `bug_reports` with `app = 'club'`.
+- The owner does not read them routinely. The `feedback-inbox` workflow can filter by `app` when he chooses to. No club flow waits on a reply.
 
 ## K. Risks to member data
 
@@ -295,35 +366,86 @@ app defects.
 | An owner leaving hands 250 people to a random member | The handoff rule in C. |
 | Shared project: a BOX-LOG migration breaks the club | The club's pgTAP tests run on every migration in this repo; the club repo has no migrations. |
 | Quota exhaustion locks both apps | G: no private-log backup for the club; cap transfers; purge jobs. |
+| The owner is away 22.11.2026 to 19.01.2027 and something needs him | See below. |
+
+**Running with zero owner involvement** (decision T). Everything that can fail between 22.11.2026 and 19.01.2027
+must fail safe or be handled by someone else:
+
+| Event | Handled by |
+|---|---|
+| Lost password | recovery code, then the one-hour self-service reset (decisions.md); no owner step |
+| Owner account gone or owner leaves | the coach becomes the owner (decided 5) |
+| Abusive member or post | the coach removes or deletes |
+| Join link leaked | the coach rotates it |
+| Club full (250) | `circle_full` message; the coach removes inactive members |
+| Transfer purge job stops | blobs stay, but each take still deletes its blob and the 40-blob cap stops new uploads. Data is not lost; transfers pause until the cap frees |
+| Anonymous limit not lowered | the scheduled `auth-launch-limit.yml` (session 1) runs daily: if `rate_limit_anonymous_users` is above 60 and the last successful `set-auth-config.yml` run is more than 7 days old, it sets 60, and otherwise does nothing. About 15 s a day of Actions minutes |
+| Project paused for inactivity | not with daily members; `keepalive.yml` is already scheduled |
+| A bug report | waits in `bug_reports`; nothing blocks on it |
+| GitHub Actions minutes run out (happened 2026-09-19) | the apps keep working; only the limit-lowering check stops. The pilot session confirms the minutes left before the link goes out |
+
+Launch before 22.11.2026 only if all four sessions finish and the pilot is a "go" by **20.11.2026**, leaving two days to
+watch it run. Otherwise launch after 19.01.2027. The old app's one-month minimum then ends while the owner is back.
 
 ---
 
 ## Build sessions
 
-| # | Name | Repo | Scope | Owner gate |
-|---|---|---|---|---|
-| 0 | **Decisions** | demo | Amend decisions.md and journal.md: club type, coach role, announcements, the body-weight transfer exception, `training_log_usage` back, the club notification rule. Docs only. | Approve the PR |
-| 1 | **Club schema** | demo | One migration: everything in C plus `transfer_blobs`, `training_log_usage`, `push_subscriptions.app`, `bug_reports.app`; pgTAP tests 1–8; BOX-LOG client hides `club` circles and sends `app` on push register. | Review, merge, `npm run push:prod` |
-| 2 | **Transfer functions** | demo | `transfer-put`, `transfer-take`, CORS allow-list, IP limits, purge job, job-health entry, Deno tests. | Merge; deploy-edge-functions |
-| 3 | **Load test** | demo | `0152_club_load_test.sql` (H). | Merge |
-| 4 | **Club repo birth** | haimunia-club | Copy 5.x's client, strip circles-only parts (B "skip"), port the percentage table and usage counting, rename the DB, config for `haimunia.pages.dev`, `_headers`, `_middleware.js`, CSP, sw precache, tests. Offline mode only. | Create the repo, connect Pages, add the Turnstile hostname |
-| 5 | **Club connected mode** | haimunia-club | Join by link, sign-up, recovery, the feed, reactions, trained-together, announcements read, coach tools, notifications (2 types), push with `app = 'club'`, offline → connected (the log stays on the device; nothing is uploaded), support split (J), privacy page. | Name the coach; raise the anonymous limit; test on 2 phones |
-| 6 | **Club transfer import** | haimunia-club | The code-paste screen (installed only), decrypt, import with `prefs`, placeholder WOD, save-as-file fallback, `persist()`. | — |
-| 7 | **Old app launch update** | haimunia-app | Banner, transfer-code export, usage config and CSP to the BOX-LOG project, version bump, rollback tag. No DB change. | Owner pushes it (this session has no push access); creates the rollback tag; merges at launch |
-| 8 | **Pilot** | both | 3 members move over on iPhone and Android; check counts match; then the club gets the link. | Go / no-go |
+Four sessions (decision C). Each session reads CLAUDE.md, `docs/circles/decisions.md` and this file first. Each
+ends with one full `npm test` and one browser-check run, in the foreground, and reports the printed numbers.
 
-Sessions 1–3 are sequential in this repo (one migration branch at a time). 4 can start in parallel with 1.
+### 1. BOX-LOG club backend
 
-## Open questions for the owner
+| | |
+|---|---|
+| Repo | `shahafrach/haimunia-app-demo`, one branch, one PR at the end |
+| Depends on | nothing. Before writing the migration it checks that no other open PR adds one (CLAUDE.md, Parallel work) |
+| Scope | **Decisions:** decisions.md and journal.md get the owner decisions above. **Schema:** one migration with everything in C, `transfer_blobs`, `training_log_usage`, `push_subscriptions.app`, `bug_reports.app`, the owner functions. **BOX-LOG client:** hides `type = 'club'` circles and sends `app = 'box-log'` on push register. **Transfer functions:** `transfer-put`, `transfer-take` (D), purge job and job-health entry. **Workflows:** `set-auth-config.yml` gains `anon_limit` and the club redirect URL; new `auth-launch-limit.yml` (daily, K), `club-admin.yml` (C), `migration-status.yml` (Migration path). **Load test:** `0152_club_load_test.sql` (H). **Docs:** `docs/ops/CLUB_OWNERSHIP.md`, and `MIGRATIONS.md` corrected once the migration path is known |
+| Owner gates | approve the PR |
+| Done when | the PR is green on a branch updated from `main` and merged; `migration-status.yml` is green (or `apply-migrations.yml` ran, per Migration path); `check-edge-functions-deployed.mjs` passes; `club-admin.yml action=create_club` has run, creating the club with the owner as its first member |
+| Must pass | `npm test`; `node scripts/browser-check/run-all.mjs`; `supabase test db` (CI) with tests 1–10 from C and `0152`; `check-migration-immutability`, `check-migration-versions`; the Deno tests for both functions, including the opaque-blob test (decided 2); `test/sw-precache.test.mjs` and the design-token guards for any client change |
 
-| # | Question | Recommendation |
+### 2. Haimunia club app
+
+| | |
+|---|---|
+| Repo | `shahafrach/haimunia-club` (new, private), created by the session |
+| Depends on | session 1 merged and its migration applied |
+| Scope | **Birth:** 5.x's client copied without the circles-only parts (B, "skip"), the percentage table and usage counting ported, `haimunia-club-db` (decided 7), config for `haimunia.pages.dev`, `_headers`, `_middleware.js`, CSP, the `sw.js` precache list. **Offline mode.** **Connected mode:** join by link, the 429 message (decided 6), sign-up and recovery, feed, reactions, trained-together, announcements, coach tools, two notification types, push with `app = 'club'`, offline → connected with the log kept on the device and nothing uploaded, no cloud-backup entry point (decided 3), the support split (decided 8), the privacy page (I). **Transfer import:** installed-only paste screen, decrypt, import with `prefs`, placeholder WOD, save-as-file fallback, `persist()` |
+| Owner gates | **one mid-session gate**: the Cloudflare visit (F). The session pushes the repo, prints the two steps, and **waits until the owner types "continue"**. Then the PR to the club repo's `main`, approved by the owner |
+| Done when | `https://haimunia.pages.dev` serves the merged `main`; a smoke run on the live URL passes (offline log, join with a test link, one reaction, a transfer round trip with a synthetic backup that includes body weight); the test account is then deleted |
+| Must pass | the ported jsdom suite, plus new tests: `haimunia-club-db` names and stores; import of `old:test/fixtures/old-app-backup-v1.json`, `old-app-backup-emom.json` and `v2.34.0-device.json` with counts equal to the file and old club-WOD results kept; a ciphertext made by the old app's export code decrypts here (a shared fixture); no `private_records` request; the transfer screen refuses outside standalone mode; 429 shows the Hebrew line; the design-token and contrast guards; `sw-precache`. Browser checks in Chromium for every new screen (layout, keyboard, a11y). An e2e run against local Supabase: join, 251st join refused, coach removes and rotates, a member's privacy off wins |
+
+### 3. Haimunia old app update
+
+| | |
+|---|---|
+| Repo | `haimuniya/haimunia-app`. **Needs push access** (decided 1). If it is missing at start, the session stops and reports; it does nothing else |
+| Depends on | session 1 (the transfer function and `training_log_usage` live) and session 2 (the new URL live) |
+| Scope | One release (decision 10): the banner to the new address, the transfer-code export (encrypt on the phone, `transfer-put`, the code shown once and copyable), the usage config and CSP pointed at `hvwakffluwvegedefoth.supabase.co`, `APP_VERSION`/`SW_VERSION` bumped, `CHANGES.md`. No IndexedDB version or store change. The banner shows from the date in `app-config.js` `clubBannerFrom` (set to launch day); the transfer entry in Settings works from the merge, so the pilot can use it before the banner shows. The session creates the rollback ref itself as a branch `rollback-3.1.1` (the old repo's CLAUDE.md asks the owner for a tag; a branch needs no owner step) |
+| Owner gates | merge the PR at launch |
+| Done when | the PR is open and green and the rollback branch exists. The owner's merge is the launch |
+| Must pass | the full `npm test` of that repo, including `storage-compat`, `upgrade-in-place`, `old-app-backup-imports` and `usage-counting` (no real count sent); new tests: the transfer payload round-trips through the club app's decrypt fixture, the code has ≥ 100 bits, the request body is not JSON, and the banner is hidden before `clubBannerFrom`; the browser checks in `scripts/browser-check/` |
+
+### 4. Haimunia pilot
+
+| | |
+|---|---|
+| Repos | both apps (read), `haimunia-app-demo` (workflow runs only) |
+| Depends on | sessions 1–3 done; the old app PR merged by the owner |
+| Scope | **Before:** confirm the Actions minutes left, and that the coach is named (`club-admin.yml action=set_coach` after the coach has joined). **Pilot:** the coach picks three members, at least one iPhone and one Android. Each makes a transfer code in the old app, installs the club app from the banner flow, pastes the code, and sends a screenshot of both count screens. **Check:** counts are equal per group (entries, WOD results, custom movements and WODs, body weight, measurements, notes); a reaction push arrives on each phone. **Launch** (after go): run `set-auth-config.yml` with `anon_limit = 300`, then the coach sends the link. **Seven days later:** `auth-launch-limit.yml` lowers it to 60 on its own; the session lists that run in its checklist and the date it is expected |
+| Owner gates | name the coach; go / no-go |
+| Done when | three matching count reports, three pushes received, the limit raised, the link sent by the coach |
+| Must pass | the counts check; `migration-status.yml` green; `scheduled-job-alert` reports every job healthy (including the transfer purge) |
+
+Order: 1 → 2 → 3 → 4. Launch before 22.11.2026 only if session 4 says "go" by 20.11.2026; otherwise the four sessions run
+in full before the owner leaves, and session 4 waits until after 19.01.2027.
+
+## Still open
+
+| # | Item | Proposal |
 |---|---|---|
-| 1 | Who gets push access to `haimuniya/haimunia-app` for session 7? This session was refused. | Grant the Claude GitHub app access to the `haimuniya` org for that repo, or apply the PR yourself. |
-| 2 | May the transfer carry body weight, against "never leaves the device"? | Yes, as recorded in finding 3: encrypted, key never on the server, 24 h, one download. |
-| 3 | Does the club get the private-log cloud backup? | No. It is the only thing that can fill the free database (G). The file and the transfer code cover a new phone. |
-| 4 | Club share defaults: post every workout, or a weekly count as friends? | Post every workout (a feed needs content), PRs as percent, absolute weights off. |
-| 5 | If the owner leaves or deletes their account, who owns the club? | The coach; with no coach, nobody until you reassign it by SQL. |
-| 6 | Anonymous sign-in limit for launch night? | 300 per hour for launch week, then back to 60. |
-| 7 | Rename the IndexedDB to `haimunia-club-db` in the new app? | Yes, at birth, before any device has data. |
-| 8 | Coach contact for "שאלה למאמן" (J)? | The coach's WhatsApp number in the club repo's config (public file: only if the coach agrees). |
-| 9 | Should the old app also accept a transfer back (club → old)? | No. One direction only; the backup file already goes both ways. |
+| 1 | **First join link for the coach.** A join token must never appear in a public repository's workflow logs, so `club-admin.yml` cannot print it. The coach needs a first link. | Fold it into "name the coach". `owner_create_club` makes the owner's existing BOX-LOG account the club's first member. The owner opens the club app once, signs in, taps "קישור הצטרפות" and sends it to the coach in the same message that asks the coach to accept. Confirm the owner has a BOX-LOG username on the project. |
+| 2 | **Is the Supabase GitHub integration connected?** The repository cannot show it (Migration path). | Session 1's `migration-status.yml` answers it on the first merge. If it is not connected, connecting it is a dashboard step for after 19.01.2027, and `apply-migrations.yml` covers the launch. |
+| 3 | **Launch window.** Today is 11.11.2026; launching before 22.11.2026 needs four sessions and a pilot in nine days. | Plan for after 19.01.2027 unless session 1 is merged by 14.11.2026. |
+| 4 | **Coach's WhatsApp number** is stored in a committed config file of a private repo, served to every visitor of the site. | Only with the coach's consent (decided 8); the button stays hidden until then. |
