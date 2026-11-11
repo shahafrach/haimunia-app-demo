@@ -14,7 +14,8 @@ set local search_path to public, extensions, tests;
 select * from no_plan();
 
 -- =====================================================================
--- 1. Dropped tables are gone
+-- 1. Dropped tables are gone (training_log_usage came back in 202611110001,
+--    for the Haimunia club apps: 0152 covers it)
 -- =====================================================================
 select is_empty(
   $$ select tablename from pg_tables
@@ -31,7 +32,7 @@ select is_empty(
           'onboarding_progress', 'onboarding_step_content', 'owner_reports',
           'permissions', 'pins', 'post_comments', 'post_media', 'posting_restrictions',
           'reports', 'role_permissions', 'roles', 'saved_posts', 'storage_erasure_queue',
-          'training_log_usage', 'weekly_challenges', 'weekly_challenges_archive',
+          'weekly_challenges', 'weekly_challenges_archive',
           'weekly_recaps') $$,
   'no gym, staff, coach, feed, challenge, event, recap or moderation table survives');
 
