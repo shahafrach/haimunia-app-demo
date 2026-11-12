@@ -18,6 +18,7 @@ const ALLOWED = new Map([
   ["recovery_lookup_user", "service_role only: the recover-password Edge Function's username lookup"],
   ["owner_issue_reset_code", "granted to no role: run by the owner in the SQL editor"],
   ["reset_lookup_user", "service_role only: the request-reset Edge Function's username lookup"],
+  ["owner_user_by_name", "granted to no role: the club owner functions' username lookup (SQL editor or club-admin.yml), 202611120001"],
 ]);
 
 function functionsReadingEmail(sql) {

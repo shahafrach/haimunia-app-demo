@@ -393,7 +393,8 @@
       }
       const json = sub.toJSON ? sub.toJSON() : sub;
       const { error } = await client.from("push_subscriptions").upsert(
-        { user_id: state.user.id, endpoint: json.endpoint, keys: json.keys || {}, revoked_at: null },
+        // app: which app this device's pushes are for (202611120001). Club circles push to the club app only.
+        { user_id: state.user.id, endpoint: json.endpoint, keys: json.keys || {}, revoked_at: null, app: "box-log" },
         { onConflict: "endpoint" });
       if (error) { setMessage(failText(NOTIF_PERMISSION_DENIED_TEXT, error)); return false; }
       state.notif.pushSub = { endpoint: json.endpoint };

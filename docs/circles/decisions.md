@@ -110,6 +110,27 @@ Two owner findings from the live app.
 - **hCaptcha is not used.** Turnstile is the only captcha and the only third-party script. The CSP names only the Turnstile host.
 - **`analytics_events` stays**: first-party, purged at 90 days, disclosed on the privacy pages.
 
+## Haimunia club (2026-11-11)
+
+Owner decisions for the Haimunia club, which runs on this project beside BOX-LOG. The research, the numbers
+behind them and the four build sessions are in [`docs/club/research.md`](../club/research.md).
+
+- **The club is one circle of a third type, `club`.** At most one exists. Cap 250 (the club counts as one of a member's 10 circles). It is created once by `owner_create_club`, never from the app. Every branch on a circle type is explicit and an unknown type raises, so no type silently inherits friends' limits.
+- **Roles:** owner, at most one coach, members. The coach removes members (never the owner), deletes any post in the club (soft delete), rotates the join link and writes announcements. In a couple or friends circle nothing changes.
+- **One fixed join link** (`rotate_club_link`, owner or coach, 5 rotations a day). It does not expire; the cap limits joins.
+- **Ownership** passes to the coach when the owner leaves or deletes the account; with no coach the club has no owner until `owner_set_club_owner` runs ([`docs/ops/CLUB_OWNERSHIP.md`](../ops/CLUB_OWNERSHIP.md)). A club is never deleted automatically and never handed to a random member.
+- **Announcements return, for the club only:** 500 characters, one pinned, never a notification. This is the one exception to "Drop" above.
+- **Notifications in a club:** "reaction on your post" and "trained together" only. No PR fan-out, no week card, no join notification to the owner, enforced in the triggers.
+- **Push by app:** `push_subscriptions.app` is `box-log` or `club`. A circle notification is pushed only to the app that shows that circle; a personal one (reminder, digest, reset alert) to every device. BOX-LOG never lists the club.
+- **Club share defaults:** every workout posted, PRs as percent improvement, absolute weights off. A member's own setting always wins.
+- **No cloud copy of the private log in the club.** A new phone is covered by the backup file and the transfer code.
+- **The recorded exception to "body weight never leaves the device": the one-time transfer code.** The backup, body weight included, is encrypted on the phone with a key that exists only in the code the member copies. The server holds ciphertext and a hash of the lookup, at most 24 hours, deleted on the first download, and refuses anything that looks like plaintext. It cannot decrypt it.
+- **`training_log_usage` returns** for the two Haimunia apps only: per device, per day, insert-only for anon, totals through a function granted to no role, purged at 400 days. This reverses the 2026-10-25 drop.
+- **Anonymous sign-ins:** 300 an hour for launch week through `set-auth-config.yml`, then 60, lowered by `auth-launch-limit.yml` on its own.
+- **Bug reports from the club app** are `bug_reports.app = 'club'`. The owner does not read them in routine operation and nothing in the club waits on him.
+- **Zero routine work for the owner.** His gates: approve PRs, one Cloudflare visit, name the coach, go or no-go on the pilot. Everything recurring is a workflow (`club-admin.yml`, `auth-launch-limit.yml`, `migration-status.yml`).
+- **Timing:** launch before 22.11.2026 or after 19.01.2027; the design runs with no owner involvement in between.
+
 ## Superseded
 
 The 2026-10-02 version of this file said "same repo and same project", "keep
