@@ -73,6 +73,11 @@ insert into public.invite_codes (code_hash, role, active, max_uses) values (repe
 insert into public.recovery_codes (user_id, kind, code_hmac) values (tests.uid('m3'), 'recovery', repeat('r', 64));
 insert into public.reset_requests (user_id, token_hmac, created_at, ready_at, expires_at) values (tests.uid('m3'), repeat('d', 64), now() - interval '1 hour', now() + interval '11 hours', now() + interval '35 hours');
 insert into public.recovery_attempts (key_hash) values (repeat('q', 64));
+-- 202611120001 (Haimunia club)
+insert into public.club_announcements (club_id, author_id, body) values ('b0000000-0000-4000-8000-00000000000b', tests.uid('owner'), 'probe');
+insert into public.transfer_blobs (lookup_hash, iv, ciphertext, ip_hash) values (repeat('c', 64), extensions.gen_random_bytes(12), extensions.gen_random_bytes(64), repeat('c', 64));
+insert into public.transfer_attempts (ip_hash, action, attempt_count) values (repeat('c', 64), 'put', 1);
+insert into public.training_log_usage (device_id, event, screen) values ('e0000000-0000-4000-8000-000000000001', 'app_open', '');
 insert into public.invites (club_id, code_hash, role) values ('b0000000-0000-4000-8000-00000000000b', repeat('f', 64), 'member');
 insert into public.job_health_state (id) values (true) on conflict do nothing;
 insert into public.member_achievements (user_id, achievement_id) select tests.uid('m3'), id from public.achievement_definitions where code = 'leak_probe';
@@ -123,6 +128,10 @@ select cmp_ok((select count(*) from public.reminder_prefs where user_id = tests.
 select cmp_ok((select count(*) from public.reactions where post_id = 'b1000000-0000-4000-8000-000000000001'), '>', 0::bigint, 'reactions: the victim row exists');
 select cmp_ok((select count(*) from public.request_idempotency where user_id = tests.uid('m3')), '>', 0::bigint, 'request_idempotency: the victim row exists');
 select cmp_ok((select count(*) from public.workout_posts where club_id = 'b0000000-0000-4000-8000-00000000000b'), '>', 0::bigint, 'workout_posts: the victim row exists');
+select cmp_ok((select count(*) from public.club_announcements where club_id = 'b0000000-0000-4000-8000-00000000000b'), '>', 0::bigint, 'club_announcements: the victim row exists');
+select cmp_ok((select count(*) from public.transfer_blobs where lookup_hash = repeat('c', 64)), '>', 0::bigint, 'transfer_blobs: the victim row exists');
+select cmp_ok((select count(*) from public.transfer_attempts where ip_hash = repeat('c', 64)), '>', 0::bigint, 'transfer_attempts: the victim row exists');
+select cmp_ok((select count(*) from public.training_log_usage where device_id = 'e0000000-0000-4000-8000-000000000001'), '>', 0::bigint, 'training_log_usage: the victim row exists');
 
 -- Positive controls for the attacker's own circle.
 select tests.set_auth(tests.uid('m1'));
@@ -231,6 +240,34 @@ select is(tests.leak_count('recovery_codes', 'user_id = tests.uid(''m3'')'), 0::
 select is(tests.leak_dml('update public.recovery_codes set kind = kind where user_id = tests.uid(''m3'')'), 0, 'recovery_codes: update touches zero rows of circle B');
 select is(tests.leak_dml('delete from public.recovery_codes where user_id = tests.uid(''m3'')'), 0, 'recovery_codes: delete removes zero rows of circle B');
 select is(tests.leak_dml('insert into public.recovery_codes (user_id, kind, code_hmac) values (tests.uid(''m1''), ''recovery'', repeat(''s'', 64))'), 0, 'recovery_codes: insert is refused');
+
+-- club_announcements (202611120001): members of the announcement's own circle only
+select tests.set_auth(tests.uid('m1'));
+select is(tests.leak_count('club_announcements', 'club_id = ''b0000000-0000-4000-8000-00000000000b'''), 0::bigint, 'club_announcements: select sees zero rows of circle B');
+select is(tests.leak_dml('update public.club_announcements set body = ''hacked'' where club_id = ''b0000000-0000-4000-8000-00000000000b'''), 0, 'club_announcements: update touches zero rows of circle B');
+select is(tests.leak_dml('delete from public.club_announcements where club_id = ''b0000000-0000-4000-8000-00000000000b'''), 0, 'club_announcements: delete removes zero rows of circle B');
+select is(tests.leak_dml('insert into public.club_announcements (club_id, author_id, body) values (''b0000000-0000-4000-8000-00000000000b'', tests.uid(''m1''), ''x'')'), 0, 'club_announcements: insert into circle B is refused');
+
+-- transfer_blobs (202611120001; no client grant at all)
+select tests.set_auth(tests.uid('m1'));
+select is(tests.leak_count('transfer_blobs', 'lookup_hash = repeat(''c'', 64)'), 0::bigint, 'transfer_blobs: select sees zero rows');
+select is(tests.leak_dml('update public.transfer_blobs set ip_hash = ip_hash where lookup_hash = repeat(''c'', 64)'), 0, 'transfer_blobs: update touches zero rows');
+select is(tests.leak_dml('delete from public.transfer_blobs where lookup_hash = repeat(''c'', 64)'), 0, 'transfer_blobs: delete removes zero rows');
+select is(tests.leak_dml('insert into public.transfer_blobs (lookup_hash, iv, ciphertext, ip_hash) values (repeat(''d'', 64), ''\x000000000000000000000000'', ''\x0000000000000000000000000000000000'', repeat(''d'', 64))'), 0, 'transfer_blobs: insert is refused');
+
+-- transfer_attempts (202611120001; no client grant at all)
+select tests.set_auth(tests.uid('m1'));
+select is(tests.leak_count('transfer_attempts', 'ip_hash = repeat(''c'', 64)'), 0::bigint, 'transfer_attempts: select sees zero rows');
+select is(tests.leak_dml('update public.transfer_attempts set attempt_count = 0 where ip_hash = repeat(''c'', 64)'), 0, 'transfer_attempts: update touches zero rows');
+select is(tests.leak_dml('delete from public.transfer_attempts where ip_hash = repeat(''c'', 64)'), 0, 'transfer_attempts: delete removes zero rows');
+select is(tests.leak_dml('insert into public.transfer_attempts (ip_hash, action) values (repeat(''d'', 64), ''take'')'), 0, 'transfer_attempts: insert is refused');
+
+-- training_log_usage (202611120001; anon may insert three columns, nobody reads)
+select tests.set_auth(tests.uid('m1'));
+select is(tests.leak_count('training_log_usage', 'device_id = ''e0000000-0000-4000-8000-000000000001'''), 0::bigint, 'training_log_usage: select sees zero rows');
+select is(tests.leak_dml('update public.training_log_usage set screen = screen where device_id = ''e0000000-0000-4000-8000-000000000001'''), 0, 'training_log_usage: update touches zero rows');
+select is(tests.leak_dml('delete from public.training_log_usage where device_id = ''e0000000-0000-4000-8000-000000000001'''), 0, 'training_log_usage: delete removes zero rows');
+select is(tests.leak_dml('insert into public.training_log_usage (device_id, event, screen) values (''e0000000-0000-4000-8000-000000000002'', ''app_open'', '''')'), 0, 'training_log_usage: an authenticated insert is refused (anon only)');
 
 -- recovery_attempts
 select tests.set_auth(tests.uid('m1'));
@@ -398,12 +435,16 @@ select cmp_ok((select count(*) from public.recovery_attempts where key_hash = re
 select cmp_ok((select count(*) from public.reactions where post_id = 'b1000000-0000-4000-8000-000000000001'), '>', 0::bigint, 'reactions: the victim rows survived');
 select cmp_ok((select count(*) from public.request_idempotency where user_id = tests.uid('m3')), '>', 0::bigint, 'request_idempotency: the victim rows survived');
 select cmp_ok((select count(*) from public.workout_posts where club_id = 'b0000000-0000-4000-8000-00000000000b'), '>', 0::bigint, 'workout_posts: the victim rows survived');
+select cmp_ok((select count(*) from public.club_announcements where club_id = 'b0000000-0000-4000-8000-00000000000b'), '>', 0::bigint, 'club_announcements: the victim rows survived');
+select cmp_ok((select count(*) from public.transfer_blobs where lookup_hash = repeat('c', 64)), '>', 0::bigint, 'transfer_blobs: the victim rows survived');
+select cmp_ok((select count(*) from public.transfer_attempts where ip_hash = repeat('c', 64)), '>', 0::bigint, 'transfer_attempts: the victim rows survived');
+select cmp_ok((select count(*) from public.training_log_usage where device_id = 'e0000000-0000-4000-8000-000000000001'), '>', 0::bigint, 'training_log_usage: the victim rows survived');
 
 -- Every table in public is covered above.
 select is_empty(
   $$ select c.relname::text from pg_class c
       where c.relnamespace = 'public'::regnamespace and c.relkind in ('r', 'p')
-        and c.relname not in ('account_deletion_requests', 'achievement_definitions', 'analytics_events', 'blocks', 'bug_reports', 'benchmark_results', 'circle_invites', 'circle_members', 'circle_targets', 'clubs', 'edge_function_invocations', 'invite_attempts', 'invite_codes', 'invite_redemptions', 'invites', 'job_health_state', 'member_achievements', 'member_targets', 'notification_batches', 'notification_preferences', 'notifications', 'post_training_partners', 'private_records', 'profiles', 'push_subscriptions', 'rate_limits', 'reactions', 'recovery_attempts', 'recovery_codes', 'reset_requests', 'reminder_prefs', 'request_idempotency', 'workout_posts') $$,
+        and c.relname not in ('account_deletion_requests', 'achievement_definitions', 'analytics_events', 'blocks', 'bug_reports', 'benchmark_results', 'circle_invites', 'circle_members', 'circle_targets', 'clubs', 'edge_function_invocations', 'invite_attempts', 'invite_codes', 'invite_redemptions', 'invites', 'job_health_state', 'member_achievements', 'member_targets', 'notification_batches', 'notification_preferences', 'notifications', 'post_training_partners', 'private_records', 'profiles', 'push_subscriptions', 'rate_limits', 'reactions', 'recovery_attempts', 'recovery_codes', 'reset_requests', 'reminder_prefs', 'request_idempotency', 'workout_posts', 'club_announcements', 'transfer_blobs', 'transfer_attempts', 'training_log_usage') $$,
   'this file covers every table in public: a new table must be added here');
 
 select * from finish();
