@@ -53,12 +53,14 @@ in sync. `test/design-tokens-guard.test.mjs` fails on a color literal outside
 the block, and `test/design-contrast.test.mjs` fails if a palette drops below
 WCAG 2.2 AA (4.5:1 text, 3:1 UI parts).
 
-**Migrations reach the database through `npm run push:prod`, never by hand.**
-It refuses unless you are on a clean, in-sync `main`, both migration guards
-pass, and the database has nothing the repository does not — then shows you
-every schema-changing statement and waits for you to type `apply`. The full
-procedure is **[`docs/ops/MIGRATIONS.md`](docs/ops/MIGRATIONS.md)**. Sessions
-without an explicit instruction never run migrations or link to a database.
+**Migrations reach the database by merging to `main`, never by hand.** The
+Supabase GitHub integration applies a merged migration, and
+`migration-status.yml` checks about 10 minutes later that the repository and the
+project agree. If it is red with PENDING, the fallback is `apply-migrations.yml`
+(`confirm = apply`) or `npm run push:prod` from a clean, in-sync `main`. The
+full procedure is **[`docs/ops/MIGRATIONS.md`](docs/ops/MIGRATIONS.md)**.
+Sessions without an explicit instruction never run migrations or link to a
+database.
 
 **Never edit an applied migration. Forward migrations only.** Supabase
 tracks migrations by filename, so editing one that has already run is
