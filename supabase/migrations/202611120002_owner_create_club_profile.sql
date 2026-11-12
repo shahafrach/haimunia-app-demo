@@ -4,10 +4,37 @@
 -- "join by the link". No club exists yet, so there is no link, and no profile row either: in this
 -- schema a profile is created by join_circle. owner_create_club then inserts a club whose
 -- created_by, and a circle_members row whose user_id, both reference profiles(id), and fails.
--- The fix: create the same minimal profile join_circle creates (on conflict do nothing).
--- Nothing else changes. The function stays granted to no role.
+-- owner_user_by_name also refused an account with no profile (it meant to refuse deleted ones).
+-- The fix: owner_user_by_name refuses only an account whose profile is deleted, and
+-- owner_create_club creates the same minimal profile join_circle creates (on conflict do nothing).
+-- Nothing else changes. Both functions stay granted to no role.
 
 begin;
+
+create or replace function public.owner_user_by_name(p_who text)
+returns uuid language plpgsql stable set search_path = '' as $$
+declare v_id uuid;
+begin
+  if p_who ~ '^sha256:[0-9a-f]{64}$' then
+    select u.id into v_id from auth.users u
+     where u.email like '%@members.haimuniya.invalid'
+       and encode(extensions.digest(split_part(u.email, '@', 1), 'sha256'), 'hex') = substr(p_who, 8)
+       and not coalesce(u.is_anonymous, false) and u.deleted_at is null
+     limit 1;
+  else
+    select u.id into v_id from auth.users u
+     where u.email = lower(btrim(coalesce(p_who, ''))) || '@members.haimuniya.invalid'
+       and not coalesce(u.is_anonymous, false) and u.deleted_at is null
+     limit 1;
+  end if;
+  -- A deleted account is refused. An account with no profile yet (signed up, not yet in any
+  -- circle) is a real member and is found: owner_create_club gives it its profile.
+  if v_id is not null and exists (select 1 from public.profiles p where p.id = v_id and p.deleted_at is not null) then
+    return null;
+  end if;
+  return v_id;
+end $$;
+revoke all on function public.owner_user_by_name(text) from public, anon, authenticated, service_role;
 
 create or replace function public.owner_create_club(p_owner text, p_name text, p_emoji text default null)
 returns text language plpgsql security definer set search_path = '' as $$
