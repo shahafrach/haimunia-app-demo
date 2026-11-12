@@ -129,7 +129,7 @@ behind them and the four build sessions are in [`docs/club/research.md`](../club
 - **Anonymous sign-ins:** 300 an hour for launch week through `set-auth-config.yml`, then 60, lowered by `auth-launch-limit.yml` on its own.
 - **Bug reports from the club app** are `bug_reports.app = 'club'`. The owner does not read them in routine operation and nothing in the club waits on him.
 - **Zero routine work for the owner.** His gates: approve PRs, one Cloudflare visit, name the coach, go or no-go on the pilot. Everything recurring is a workflow (`club-admin.yml`, `auth-launch-limit.yml`, `migration-status.yml`).
-- **Timing:** launch before 22.11.2026 or after 19.01.2027; the design runs with no owner involvement in between.
+- **Timing:** launch after 19.01.2027 (decided 2026-11-12). The steps are in [`docs/club/LAUNCH.md`](../club/LAUNCH.md).
 
 ## Superseded
 
