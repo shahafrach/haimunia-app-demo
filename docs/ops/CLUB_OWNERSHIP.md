@@ -28,4 +28,4 @@ The previous owner, if there is one, becomes a member. A coach who becomes the o
 | Name the coach | `action = set_coach`, `who = <username>` | `select public.owner_set_coach('<username>');` |
 | Usage totals | `action = usage_report` | `select public.training_log_usage_report(12);` |
 
-These functions are granted to no role. Only the SQL editor and the Management API (which `club-admin.yml` uses with `SUPABASE_ACCESS_TOKEN`) can run them. The repository is public, so the workflow masks the username and sends only its sha256.
+These functions are granted to no role. Only the SQL editor and the Management API (which `club-admin.yml` uses with `SUPABASE_ACCESS_TOKEN`) can run them. The repository is public, so its workflow logs are public. The workflow never puts the username in an `env:` block (GitHub prints those before any masking), reads it from the event payload, masks it, and sends only its sha256 to the database. To keep even the dispatch input free of it, enter `sha256:<hex>` instead of the name: the sha256 of the lower-case username, for example from `printf %s name | sha256sum`.

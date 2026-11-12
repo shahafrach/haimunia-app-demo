@@ -36,10 +36,13 @@ test("club-admin.yml: manual, masked before checkout, the actions the script kno
   const y = wf("club-admin.yml");
   assert.match(y, /^on:\s*\n\s+workflow_dispatch:/m);
   assert.doesNotMatch(y, /^\s+(schedule|push|pull_request):/m);
-  assert.ok(y.indexOf("::add-mask::$WHO") < y.indexOf("actions/checkout"), "the username is masked first");
+  assert.doesNotMatch(y, /\$\{\{\s*inputs\.who/, "the username never goes through an expression, so never into an env: block GitHub prints");
+  assert.match(y, /GITHUB_EVENT_PATH/, "it is read from the event payload file");
+  const run = y.slice(y.indexOf("- name: run the action"));
+  assert.ok(run.indexOf('::add-mask::$who') < run.indexOf("node scripts/club-admin.mjs"), "masked before the script runs");
   assert.match(y, /options: \[create_club, set_coach, set_owner, usage_report\]/);
   assert.deepEqual(ACTIONS, ["create_club", "set_coach", "set_owner", "usage_report"]);
-  assert.doesNotMatch(y, /echo[^\n]*\$WHO(?!")/, "the username is never echoed");
+  assert.doesNotMatch(y, /echo[^\n]*\$who(?!")/i, "the username is never echoed except into add-mask");
 });
 
 // ---------------------------------------------------------- migration-status
