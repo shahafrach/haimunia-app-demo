@@ -1,25 +1,28 @@
 # How a migration reaches production
 
-**Status: manual, and honestly so, until 2026-10-01.**
+**Status: automatic since 2026-11-12. A merge to `main` applies the migration.**
 
-The right answer is a CI job that applies migrations after `check:drift`
-passes, so no human is ever the thing standing between a merge and the
-database. It cannot be built today: GitHub Actions minutes ran out on
-2026-09-19 and reset on **2026-10-01**, and every job in this repository
-currently fails in about two seconds with zero steps. A workflow written now
-would sit red and unrun, and "we have a deploy gate" would become the most
-dangerous kind of false belief — the same shape as launch-readiness **B2**,
-where six migrations the client already called had never been applied and
-nothing noticed.
+The Supabase GitHub integration is connected to the `box-log` project. When a
+merge to `main` adds a migration, the integration applies it. It shows as the
+`Supabase Preview` check on the merge commit. That was confirmed with
+`202611120001` (#163): the check went green on `main`, and
+`supabase_migrations.schema_migrations` then held it as the newest of 217.
 
-So the gate is local, it refuses rather than warns, and it is one command:
+Two things stand beside it:
+
+- **`migration-status.yml`** runs on every push to `main` that touches
+  `supabase/migrations/**`. It waits 10 minutes, then fails if any repository
+  migration is missing on the project, or the project has one the repository
+  lacks. It only reads.
+- **The manual fallback** for when that check is red with PENDING: dispatch
+  `apply-migrations.yml` (`confirm = apply`), or run the local gate:
 
 ```bash
 npm run push:prod
 ```
 
-That is the whole procedure. The rest of this file is what it checks, why, and
-the two rules it cannot check for you.
+The rest of this file is the two rules no tool checks for you, what the
+fallback refuses and why, and the log.
 
 ---
 
@@ -137,38 +140,22 @@ npm run check:immutable
    from scratch, then `supabase test db` must pass. A migration that only works
    against your current local database is not proven.
 4. **Open the PR, and say in it which suites you ran and what they printed.**
-   CI is dark until 2026-10-01, so the person merging is the only evidence there
-   is. `1940 pass, 0 fail` is a result; "tests pass" is not.
-5. **Merge**, then `git checkout main && git pull`.
-6. **`npm run push:prod`**, read the plan, type `apply`.
-7. **Record it** — add a line to [the push log](#the-push-log) below, and to
-   the next consolidation entry. What was applied, when, and by whom is the
-   only audit trail this project has while the push is manual, and a PR
-   description alone is not one: nobody can read the history of production
-   out of thirty PR bodies.
+   `1940 pass, 0 fail` is a result; "tests pass" is not. CI runs
+   `supabase test db` on the PR.
+5. **Update the branch from `main`, wait for every check to go green, merge.**
+   The integration applies the migration.
+6. **Read `migration-status.yml`** on the merge commit, about 10 minutes later.
+   Green means applied. Red with PENDING means dispatch `apply-migrations.yml`
+   (`confirm = apply`), or `npm run push:prod` from a clean, in-sync `main`.
+7. **Record it.** Add a line to [the push log](#the-push-log) below.
 
 ---
 
-## When the minutes come back — 2026-10-01
+## The fallback stays
 
-The local gate stays; a CI job is added beside it, not instead of it.
-
-The shape to build, and the reason for each part:
-
-- Triggered on push to `main`, touching `supabase/migrations/**` only.
-- Runs both guards and `check:drift` **first**, and stops if drift shows
-  anything applied-but-not-in-repo.
-- Applies with `supabase db push --linked --yes`, using `SUPABASE_DB_URL` from
-  repository secrets.
-- Re-runs `check:drift` afterwards and **fails the job** if it is not clean.
-- Refuses loudly if the secret is missing, rather than skipping quietly —
-  the rule `backup-database.yml` already follows. A deploy job that reports
-  green while deploying nothing converts "we have no gate" into "we think we
-  have a gate".
-
-Keep `push:prod` working after that. It is how you apply a migration when the
-runner is down, the quota is out, or you need to watch it happen — and it is
-the only version of this gate that has actually been exercised.
+Keep `push:prod` and `apply-migrations.yml` working. They are how a migration
+reaches the project when the integration is disconnected, is down, or did not
+run. `migration-status.yml` is what tells you that happened.
 
 ---
 
@@ -193,6 +180,7 @@ last column there is no way to tell an approved push from an assumed one.
 | 2026-09-23 11:2x | `202609230006`, `202609230007` | session A | session A's user, after reading the `--dry-run` plan | `npm run push:prod --yes` |
 | 2026-09-23 ~11:5x | `202609230008` | session B | session B's user, per-push, having been told the board would go red | `npm run push:prod --yes` |
 | 2026-09-24 | `202609230009`, `202609230010`, `202609230011`, `202609230012`, `202609230013` | the owner, from his own machine | the owner — including `…13` (#83), whose merge and push were his decision | `npm run push:prod`, after a `--dry-run`; `check:drift` clean at 197 afterwards |
+| 2026-11-12 ~07:1x | `202611120001` | the Supabase GitHub integration, on the merge of #163 | the owner, by approving #163 | merge to `main`; `schema_migrations` read back at 217, newest `202611120001` |
 
 Nothing pending: `check:drift` reads **197 migrations, repo and database
 agree** (2026-09-24).
