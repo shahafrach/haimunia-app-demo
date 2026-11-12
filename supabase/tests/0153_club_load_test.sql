@@ -152,11 +152,13 @@ create table tests.victim as
    group by author_id order by count(*) desc, author_id limit 1;
 select ok((select n from tests.victim) >= 12, 'the removed member has a dozen posts or more');
 do $$
-declare v_t0 timestamptz;
+declare
+  v_t0 timestamptz;
+  v_victim uuid := (select author_id from tests.victim);
 begin
   perform tests.set_auth(tests.uid('owner'));
   v_t0 := clock_timestamp();
-  perform public.remove_member(tests.kid(), (select author_id from tests.victim));
+  perform public.remove_member(tests.kid(), v_victim);
   perform tests.clear_auth();
   insert into tests.timing values ('remove member', extract(epoch from clock_timestamp() - v_t0) * 1000);
 end $$;

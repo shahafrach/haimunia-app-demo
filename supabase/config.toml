@@ -105,5 +105,12 @@ verify_jwt = false
 [functions.request-reset]
 verify_jwt = false
 
+# The Haimunia transfer code (docs/club/research.md, D): no account on either side.
+[functions.transfer-put]
+verify_jwt = false
+
+[functions.transfer-take]
+verify_jwt = false
+
 [analytics]
 enabled = false

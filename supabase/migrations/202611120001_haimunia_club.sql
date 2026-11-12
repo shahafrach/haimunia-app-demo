@@ -391,6 +391,9 @@ revoke all on public.club_announcements from public, anon, authenticated;
 grant select on public.club_announcements to authenticated;
 create policy club_announcements_read on public.club_announcements for select to authenticated
   using (public.is_circle_member(club_id));
+-- Two-step login (202611070002): every table with a client policy carries the restrictive aal2 policy.
+create policy aal2_required on public.club_announcements as restrictive for all to authenticated
+  using ((select public.aal_satisfied())) with check ((select public.aal_satisfied()));
 
 -- 10 per caller per day. Pinning one unpins any other: a club has at most one pinned announcement.
 create or replace function public.club_announcement_post(p_club_id uuid, p_body text, p_pinned boolean default false)
@@ -900,6 +903,9 @@ revoke all on table public.training_log_usage from public, anon, authenticated;
 grant insert (device_id, event, screen) on table public.training_log_usage to anon;
 create policy training_log_usage_insert_anon on public.training_log_usage
   for insert to anon with check (true);
+-- authenticated has no grant here; the restrictive policy is the 202611070002 rule for every policied table.
+create policy aal2_required on public.training_log_usage as restrictive for all to authenticated
+  using ((select public.aal_satisfied())) with check ((select public.aal_satisfied()));
 
 -- Totals only, never a row or a device id. Granted to no role: the SQL editor (postgres) runs it.
 create or replace function public.training_log_usage_report(p_weeks integer default 12)
