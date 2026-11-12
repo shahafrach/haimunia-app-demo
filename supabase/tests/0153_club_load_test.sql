@@ -112,6 +112,9 @@ declare
   v_n integer;
 begin
   perform tests.set_auth(tests.lid(3));
+  -- One call first: the first call in a session also compiles the plpgsql function, which is not what a
+  -- member opening the feed again pays. The timed call is the second.
+  perform count(*) from public.circle_feed(tests.kid(), null, 30);
   v_t0 := clock_timestamp();
   select count(*) into v_n from public.circle_feed(tests.kid(), null, 30);
   perform set_config('tests.feed_rows', v_n::text, true);

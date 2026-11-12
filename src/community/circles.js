@@ -83,7 +83,9 @@
     state.circles.loadError = !!error;
     if (error) return;
     const rows = Array.isArray(data) ? data : [];
-    state.circles.list = rows.filter((r) => r && r.clubs).map((r) => ({
+    // The Haimunia club (type 'club') lives in the club app, not here: BOX-LOG shows couples and friends
+    // only, so a member of both never sees the club with the friends UI (docs/club/research.md, C).
+    state.circles.list = rows.filter((r) => r && r.clubs && r.clubs.type !== "club").map((r) => ({
       id: r.club_id, role: r.role, joined_at: r.joined_at, share_defaults: r.share_defaults || {},
       name: r.clubs.name, type: r.clubs.type, emoji: r.clubs.emoji, mode: r.clubs.mode,
       benchmark_enabled: !!r.clubs.benchmark_enabled, invite_policy: r.clubs.invite_policy,

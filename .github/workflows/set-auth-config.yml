@@ -15,8 +15,16 @@
 #   mailer_autoconfirm               = true   ("Confirm email" off)
 # then reads both back and fails unless both are true. Idempotent: run it again
 # on any new project. CAPTCHA stays as the owner set it in the dashboard.
+# The run name carries anon_limit so auth-launch-limit.yml can find the launch-week
+# raise (the Actions API does not return a run's inputs).
+run-name: set-auth-config anon_limit=${{ inputs.anon_limit }}
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      anon_limit:
+        description: "Anonymous sign-ins per hour per IP (empty: leave it). 300 for the club's launch week; auth-launch-limit.yml lowers it to 60 after seven days."
+        required: false
+        default: ""
 permissions:
   contents: read
 concurrency:
@@ -64,3 +72,25 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           echo "$state"
           [ "$state" = '{"anonymous_sign_ins":true,"confirm_email_off":true,"totp_enroll":true,"totp_verify":true}' ]
+      - name: set the anonymous sign-in limit, if asked, and verify it
+        if: ${{ inputs.anon_limit != '' }}
+        env:
+          ANON_LIMIT: ${{ inputs.anon_limit }}
+        run: |
+          set +x
+          case "$ANON_LIMIT" in ''|*[!0-9]*) echo "anon_limit must be a whole number."; exit 1 ;; esac
+          if [ "$ANON_LIMIT" -lt 1 ] || [ "$ANON_LIMIT" -gt 1000 ]; then echo "anon_limit must be 1 to 1000."; exit 1; fi
+          PROJECT_REF="$(tr -d '[:space:]' < supabase/PROJECT_REF)"
+          API="https://api.supabase.com/v1/projects/$PROJECT_REF/config/auth"
+          code=$(curl -sS -o /dev/null -w '%{http_code}' -X PATCH "$API" \
+            -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data-raw "{\"rate_limit_anonymous_users\":$ANON_LIMIT}")
+          if [ "$code" -lt 200 ] || [ "$code" -ge 300 ]; then
+            echo "PATCH $API answered HTTP $code. The limit is not known to have changed."
+            exit 1
+          fi
+          now=$(curl -sS "$API" -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(String(JSON.parse(s).rate_limit_anonymous_users)))')
+          echo "anonymous sign-ins per hour: $now" | tee -a "$GITHUB_STEP_SUMMARY"
+          [ "$now" = "$ANON_LIMIT" ]
