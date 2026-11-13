@@ -410,7 +410,24 @@ set local role anon;
 select lives_ok($$ insert into public.training_log_usage (device_id, event, screen) values ('e1000000-0000-4000-8000-000000000003', 'screen_open', 'circle') $$,
   'the new app counts a screen');
 reset role;
+select set_config('request.headers', '{"origin": "https://example.com"}', true);
+set local role anon;
+select lives_ok($$ insert into public.training_log_usage (device_id, event, screen) values ('e1000000-0000-4000-8000-000000000004', 'app_open', '') $$,
+  'a count from neither app is not an error');
+reset role;
+select set_config('request.headers', '{"origin": "https://haimunia.pages.dev", "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36"}', true);
+set local role anon;
+select lives_ok($$ insert into public.training_log_usage (device_id, event, screen) values ('e1000000-0000-4000-8000-000000000005', 'app_open', '') $$,
+  'a headless browser on the club page is not an error');
+reset role;
+select set_config('request.headers', '{"origin": "https://haimunia.pages.dev", "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.3"}', true);
+set local role anon;
+select lives_ok($$ insert into public.training_log_usage (device_id, event, screen) values ('e1000000-0000-4000-8000-000000000006', 'app_open', '') $$,
+  'a scanner with the malformed Safari/537.3 is not an error');
+reset role;
 select set_config('request.headers', '', true);
+select is((select count(*)::int from public.training_log_usage where device_id in ('e1000000-0000-4000-8000-000000000004', 'e1000000-0000-4000-8000-000000000005', 'e1000000-0000-4000-8000-000000000006')), 0,
+  'none of the three is stored: no Origin of either app, a headless client, a scanner');
 select is((select app from public.training_log_usage where device_id = 'e1000000-0000-4000-8000-000000000001'), 'old', 'the old app is recognised by its Origin');
 select is((select app from public.training_log_usage where device_id = 'e1000000-0000-4000-8000-000000000003'), 'club', 'the new app too');
 select is((select count(*)::int from public.training_log_usage where device_id = 'e1000000-0000-4000-8000-000000000001'), 1, 'one row per device, event and day');

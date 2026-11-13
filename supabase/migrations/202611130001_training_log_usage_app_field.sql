@@ -10,6 +10,11 @@
 --   2. the trigger still overwrites it from the Origin header, whatever the phone sent.
 -- So anon still cannot choose the app; it can only stop being refused for naming it.
 --
+-- Bots: on 2026-11-13 about half the counts came from crawlers (HeadlessChrome, and a Linux "Chrome/134"
+-- with the malformed "Safari/537.3"). A real browser always sends Origin on this CORS request, so a count
+-- whose Origin is neither app is dropped, and so is one whose User-Agent names a headless or bot client.
+-- The 'unknown' rows already stored are those same clients and are deleted.
+--
 -- training_log_usage_report gains p_app (null = every app), so one app's numbers can be read alone.
 -- Forward only; 202611120001 is not edited.
 
@@ -17,6 +22,52 @@ grant insert (app) on table public.training_log_usage to anon;
 
 comment on table public.training_log_usage is
   'Pseudonymous per-device, per-day usage counts from the Haimunia club apps (the old app on haimuniya.github.io and the new one on haimunia.pages.dev). Insert-only for anon (device_id, event, screen, app); app is always overwritten from the Origin header. No role can select a row; totals through training_log_usage_report() (granted to no role). At most 2,000 rows a day, purged after 400 days. 202611120001, 202611130001.';
+
+create or replace function public.training_log_usage_before_insert()
+returns trigger language plpgsql security definer set search_path = '' as $$
+declare
+  v_headers json;
+  v_origin text;
+  v_agent text;
+begin
+  new.day := (now() at time zone 'Asia/Jerusalem')::date;
+  begin
+    v_headers := nullif(current_setting('request.headers', true), '')::json;
+  exception when others then
+    v_headers := null;
+  end;
+  v_origin := v_headers ->> 'origin';
+  v_agent := coalesce(v_headers ->> 'user-agent', '');
+  -- The Origin decides the app; whatever the phone sent in app is overwritten.
+  new.app := case v_origin
+    when 'https://haimuniya.github.io' then 'old'
+    when 'https://haimunia.pages.dev' then 'club'
+    else 'unknown'
+  end;
+  -- Neither app's page sent this: a script or crawler, not a member.
+  if new.app = 'unknown' then
+    return null;
+  end if;
+  -- A headless or self-declared bot client running one of the pages.
+  if v_agent ~* '(headless|\ybot\y|bot/|crawl|spider|slurp|lighthouse|phantomjs|playwright|puppeteer|selenium)'
+     or v_agent ~ 'Safari/537\.3$' then
+    return null;
+  end if;
+  if (select count(*) from public.training_log_usage u where u.day = new.day) >= 2000 then
+    return null;
+  end if;
+  if exists (
+    select 1 from public.training_log_usage u
+     where u.day = new.day and u.device_id = new.device_id
+       and u.event = new.event and u.screen = new.screen
+  ) then
+    return null;
+  end if;
+  return new;
+end $$;
+revoke all on function public.training_log_usage_before_insert() from public, anon, authenticated;
+
+delete from public.training_log_usage where app = 'unknown';
 
 drop function if exists public.training_log_usage_report(integer);
 
