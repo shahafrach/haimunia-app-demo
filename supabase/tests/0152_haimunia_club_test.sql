@@ -402,19 +402,40 @@ select lives_ok($$ insert into public.training_log_usage (device_id, event, scre
 select lives_ok($$ insert into public.training_log_usage (device_id, event, screen) values ('e1000000-0000-4000-8000-000000000001', 'app_open', '') $$,
   'a repeat the same day is dropped, not an error');
 select throws_ok($$ select count(*) from public.training_log_usage $$, '42501', null, 'anon cannot read a row');
-select throws_ok($$ insert into public.training_log_usage (device_id, event, screen, app) values ('e1000000-0000-4000-8000-000000000002', 'app_open', '', 'club') $$,
-  '42501', null, 'anon cannot choose the app');
+select lives_ok($$ insert into public.training_log_usage (device_id, event, screen, app) values ('e1000000-0000-4000-8000-000000000002', 'app_open', '', 'club') $$,
+  'a count that names its app is accepted (202611130001: the apps send it)');
 reset role;
 select set_config('request.headers', '{"origin": "https://haimunia.pages.dev"}', true);
 set local role anon;
 select lives_ok($$ insert into public.training_log_usage (device_id, event, screen) values ('e1000000-0000-4000-8000-000000000003', 'screen_open', 'circle') $$,
   'the new app counts a screen');
 reset role;
+select set_config('request.headers', '{"origin": "https://example.com"}', true);
+set local role anon;
+select lives_ok($$ insert into public.training_log_usage (device_id, event, screen) values ('e1000000-0000-4000-8000-000000000004', 'app_open', '') $$,
+  'a count from neither app is not an error');
+reset role;
+select set_config('request.headers', '{"origin": "https://haimunia.pages.dev", "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36"}', true);
+set local role anon;
+select lives_ok($$ insert into public.training_log_usage (device_id, event, screen) values ('e1000000-0000-4000-8000-000000000005', 'app_open', '') $$,
+  'a headless browser on the club page is not an error');
+reset role;
+select set_config('request.headers', '{"origin": "https://haimunia.pages.dev", "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.3"}', true);
+set local role anon;
+select lives_ok($$ insert into public.training_log_usage (device_id, event, screen) values ('e1000000-0000-4000-8000-000000000006', 'app_open', '') $$,
+  'a scanner with the malformed Safari/537.3 is not an error');
+reset role;
 select set_config('request.headers', '', true);
+select is((select count(*)::int from public.training_log_usage where device_id in ('e1000000-0000-4000-8000-000000000004', 'e1000000-0000-4000-8000-000000000005', 'e1000000-0000-4000-8000-000000000006')), 0,
+  'none of the three is stored: no Origin of either app, a headless client, a scanner');
 select is((select app from public.training_log_usage where device_id = 'e1000000-0000-4000-8000-000000000001'), 'old', 'the old app is recognised by its Origin');
 select is((select app from public.training_log_usage where device_id = 'e1000000-0000-4000-8000-000000000003'), 'club', 'the new app too');
 select is((select count(*)::int from public.training_log_usage where device_id = 'e1000000-0000-4000-8000-000000000001'), 1, 'one row per device, event and day');
-select is((public.training_log_usage_report(4) -> 'apps_7d' ->> 'old')::int, 1, 'the report counts devices per app, totals only');
+select is((select app from public.training_log_usage where device_id = 'e1000000-0000-4000-8000-000000000002'), 'old', 'anon still cannot choose the app: the Origin overwrites what the phone sent');
+select is((public.training_log_usage_report(4) -> 'apps_7d' ->> 'old')::int, 2, 'the report counts devices per app, totals only');
+select is((public.training_log_usage_report(4, 'club') ->> 'devices_seen')::int, 1, 'the report reads one app alone');
+select is((public.training_log_usage_report(4) ->> 'devices_seen')::int, 3, 'and every app when none is named');
+select throws_ok($$ select public.training_log_usage_report(4, 'nope') $$, '22023', null, 'an unknown app is refused');
 update public.training_log_usage set day = day - 401;
 select ok(public.training_log_usage_purge() >= 2, 'counts older than 400 days are purged');
 select ok(exists (select 1 from cron.job where jobname = 'training-log-usage-purge'), 'the purge is scheduled');
