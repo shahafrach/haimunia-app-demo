@@ -26,3 +26,7 @@ docs/owner-guide/
 # repo. The root IS the website, so nothing unreviewed belongs here even when
 # functions/_middleware.js already 404s it.
 /_*.mjs
+
+# Audit local secrets (never commit)
+audit.env
+.env.audit
