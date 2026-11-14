@@ -1,5 +1,6 @@
 // transfer-put: POST { lookup, iv, ciphertext } from the old Haimunia app
-// (https://haimuniya.github.io) -> { status: "stored" }. One encrypted backup,
+// (https://haimuniya.github.io) or the club app's Safari tab
+// (https://haimunia.pages.dev, F-001) -> { status: "stored" }. One encrypted backup,
 // kept at most 24 hours, deleted on the first take (docs/club/research.md, D).
 // No account exists on either side of a transfer, so the gateway's JWT check is
 // off (supabase/config.toml) and every rule is in ../_shared/transfer.mjs and the
@@ -9,10 +10,10 @@
 // under the transfer domain prefix. SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY
 // are injected by the runtime.
 import { createClient } from "npm:@supabase/supabase-js@2.57.4";
-import { handleTransferPut, corsHeaders, PUT_ORIGIN } from "../_shared/transfer.mjs";
+import { handleTransferPut, corsHeaders, putCorsOrigin } from "../_shared/transfer.mjs";
 
 Deno.serve(async (req: Request) => {
-  const cors = corsHeaders(PUT_ORIGIN);
+  const cors = corsHeaders(putCorsOrigin(req.headers.get("origin")));
   const reply = (status: number, body: unknown) =>
     new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json", "Cache-Control": "no-store" } });
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
@@ -36,10 +37,14 @@ Deno.serve(async (req: Request) => {
 
   const out = await handleTransferPut({ body, ip, origin: req.headers.get("origin"), bodyBytes }, {
     secret,
-    put: async (lookupHash: string, ivB64: string, ciphertextB64: string, ipHash: string) => {
-      const { data, error } = await supabase.rpc("transfer_put", {
+    put: async (lookupHash: string, ivB64: string, ciphertextB64: string, ipHash: string, deviceHash: string | null) => {
+      // p_device_hash only when there is one: a put without it (the old app) then also works against a
+      // database that has not applied 202611140002 yet.
+      const args: Record<string, string> = {
         p_lookup_hash: lookupHash, p_iv_b64: ivB64, p_ciphertext_b64: ciphertextB64, p_ip_hash: ipHash,
-      });
+      };
+      if (deviceHash) args.p_device_hash = deviceHash;
+      const { data, error } = await supabase.rpc("transfer_put", args);
       if (error) throw error;
       return String(data);
     },

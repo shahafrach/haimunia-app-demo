@@ -12,7 +12,7 @@ import { readFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
 import {
   handleTransferPut, handleTransferTake, sha256Hex, ipHash, decodesToJson,
-  PUT_ORIGIN, TAKE_ORIGIN, MAX_BODY_BYTES,
+  PUT_ORIGIN, TAKE_ORIGIN, PUT_ORIGINS, isPutOrigin, putCorsOrigin, MAX_BODY_BYTES, deviceHash,
 } from "../supabase/functions/_shared/transfer.mjs";
 
 const SECRET = "test-secret-not-a-real-one";
@@ -45,10 +45,15 @@ async function encryptBackup(backup) {
 
 // A fake database with transfer_put / transfer_take's rules.
 function makeDb() {
-  const db = { blobs: new Map(), puts: new Map(), takes: new Map(), now: Date.now() };
-  db.put = async (lookupHash, ivB64, ctB64, ip) => {
+  const db = { blobs: new Map(), puts: new Map(), devicePuts: new Map(), takes: new Map(), now: Date.now() };
+  // 202611140002: 30 per IP, then 3 per device (only when the app sends one), per day.
+  db.put = async (lookupHash, ivB64, ctB64, ip, device) => {
     const n = (db.puts.get(ip) || 0) + 1; db.puts.set(ip, n);
-    if (n > 5) return "rate_limited";
+    if (n > 30) return "rate_limited";
+    if (device != null) {
+      const d = (db.devicePuts.get(device) || 0) + 1; db.devicePuts.set(device, d);
+      if (d > 3) return "rate_limited";
+    }
     if (db.blobs.size >= 40) return "full";
     if (db.blobs.has(lookupHash)) return "exists";
     db.blobs.set(lookupHash, { iv: ivB64, ct: ctB64, at: db.now });
@@ -107,14 +112,93 @@ test("a client bug that uploads plaintext is refused before the database", async
   assert.ok(decodesToJson(plain) && !decodesToJson(b64(crypto.getRandomValues(new Uint8Array(64)))));
 });
 
-test("origins: put only from the old app, take only from the club app", async () => {
+test("origins: put from the old app or the club app (F-001), take only from the club app", async () => {
   const db = makeDb();
   const { body } = await encryptBackup(fixture);
-  assert.equal((await put(db, body, { origin: TAKE_ORIGIN })).status, 403);
   assert.equal((await put(db, body, { origin: null })).status, 403);
-  assert.equal((await put(db, body)).status, 200);
+  assert.equal((await put(db, body)).status, 200, "the old app may put");
+  assert.equal((await put(db, (await encryptBackup(fixture)).body, { origin: TAKE_ORIGIN })).status, 200, "the club app may put");
   assert.equal((await take(db, { lookup: body.lookup }, { origin: PUT_ORIGIN })).status, 403);
-  assert.equal(db.blobs.size, 1, "a refused take does not consume the blob");
+  assert.equal(db.blobs.size, 2, "a refused take does not consume either blob");
+});
+
+test("F-001: the put origin allowlist is exact: old origin allowed, new origin allowed, anything else refused", async () => {
+  assert.deepEqual([...PUT_ORIGINS], ["https://haimuniya.github.io", "https://haimunia.pages.dev"]);
+  assert.ok(isPutOrigin("https://haimuniya.github.io"));
+  assert.ok(isPutOrigin("https://haimunia.pages.dev"));
+  const refused = [
+    null, undefined, "", "null", "https://evil.example", "http://haimunia.pages.dev", "http://haimuniya.github.io",
+    "https://haimunia.pages.dev.evil.example", "https://preview.haimunia.pages.dev", "https://evil.github.io",
+    "https://haimuniya.github.io/", "https://HAIMUNIA.pages.dev", "https://haimunia.pages.dev:443", " https://haimunia.pages.dev",
+  ];
+  for (const origin of refused) {
+    assert.equal(isPutOrigin(origin), false, `refused: ${JSON.stringify(origin)}`);
+    const db = makeDb();
+    const out = await put(db, (await encryptBackup(fixture)).body, { origin });
+    assert.deepEqual(out, { status: 403, body: { error: "origin" } }, `put refused from ${JSON.stringify(origin)}`);
+    assert.equal(db.blobs.size, 0);
+  }
+  assert.equal(putCorsOrigin("https://haimunia.pages.dev"), "https://haimunia.pages.dev", "CORS echoes an allowed origin");
+  assert.equal(putCorsOrigin("https://haimuniya.github.io"), "https://haimuniya.github.io");
+  assert.equal(putCorsOrigin("https://evil.example"), PUT_ORIGIN, "CORS never echoes a refused origin");
+});
+
+test("F-001: limits are the same for both put origins (30 puts per IP per day are shared)", async () => {
+  const db = makeDb();
+  for (let i = 0; i < 30; i++) {
+    const origin = i % 2 ? TAKE_ORIGIN : PUT_ORIGIN;
+    assert.equal((await put(db, (await encryptBackup(fixture)).body, { origin })).status, 200);
+  }
+  assert.equal((await put(db, (await encryptBackup(fixture)).body, { origin: TAKE_ORIGIN })).status, 429);
+});
+
+test("F-001: a code put from the club app is taken once by the installed club app", async () => {
+  const db = makeDb();
+  const { code, body } = await encryptBackup(withBodyWeight);
+  assert.equal((await put(db, body, { origin: TAKE_ORIGIN })).status, 200);
+  const { lookup } = await derive(code);
+  assert.equal((await take(db, { lookup })).status, 200);
+  assert.equal((await take(db, { lookup })).status, 404, "single use holds for the new origin");
+});
+
+const DEVICE = "3f2b8c1e-9d4a-4b7e-8f21-6c5d0a9e7b13";
+const withDevice = async (device = DEVICE) => ({ ...(await encryptBackup(fixture)).body, device });
+
+test("per device: 3 puts a day, the same from both origins and across IPs; the IP limit still holds", async () => {
+  const db = makeDb();
+  assert.equal((await put(db, await withDevice(), { origin: PUT_ORIGIN })).status, 200);
+  assert.equal((await put(db, await withDevice(), { origin: TAKE_ORIGIN, ip: "203.0.113.20" })).status, 200);
+  assert.equal((await put(db, await withDevice(), { origin: TAKE_ORIGIN, ip: "203.0.113.21" })).status, 200);
+  assert.deepEqual(await put(db, await withDevice(), { origin: PUT_ORIGIN, ip: "203.0.113.22" }), { status: 429, body: { error: "rate_limited" } },
+    "the fourth from one device is refused, whatever the origin or IP");
+  assert.equal((await put(db, await withDevice("another-device-0000000001"))).status, 200, "another device on the same IP passes");
+  assert.equal((await put(db, (await encryptBackup(fixture)).body)).status, 200, "a put with no device (the old app) is held only by the IP limit");
+});
+
+test("shared gym Wi-Fi: 30 members on one IP each put once; the 31st is refused", async () => {
+  const db = makeDb();
+  for (let i = 0; i < 30; i++) {
+    const origin = i % 2 ? TAKE_ORIGIN : PUT_ORIGIN;
+    assert.equal((await put(db, await withDevice("member-device-" + String(i).padStart(10, "0")), { origin })).status, 200, `member ${i + 1}`);
+  }
+  assert.equal((await put(db, await withDevice("member-device-0000000099"))).status, 429);
+});
+
+test("the device id is checked for shape and only its HMAC reaches the database", async () => {
+  const db = makeDb();
+  for (const device of ["", "short", "x".repeat(65), "has space in it 123", 42, { a: 1 }]) {
+    assert.deepEqual(await put(db, { ...(await encryptBackup(fixture)).body, device }), { status: 400, body: { error: "invalid" } }, JSON.stringify(device));
+  }
+  assert.equal(db.puts.size, 0, "a bad device is refused before the database");
+  const seen = [];
+  await handleTransferPut({ body: await withDevice(), ip: "203.0.113.5", origin: TAKE_ORIGIN },
+    { secret: SECRET, put: async (_l, _iv, _ct, _ip, dev) => { seen.push(dev); return "stored"; } });
+  assert.match(seen[0], /^[0-9a-f]{64}$/);
+  assert.equal(seen[0], await deviceHash(SECRET, DEVICE));
+  assert.notEqual(seen[0], await ipHash(SECRET, DEVICE), "a different domain prefix from the IP hash");
+  await handleTransferPut({ body: (await encryptBackup(fixture)).body, ip: "203.0.113.5", origin: PUT_ORIGIN },
+    { secret: SECRET, put: async (_l, _iv, _ct, _ip, dev) => { seen.push(dev); return "stored"; } });
+  assert.equal(seen[1], null, "no device sent, none passed on");
 });
 
 test("shape checks and the body cap", async () => {
@@ -129,7 +213,7 @@ test("shape checks and the body cap", async () => {
 
 test("the database's answers map to HTTP: 429, 503, 409", async () => {
   const db = makeDb();
-  for (let i = 0; i < 5; i++) assert.equal((await put(db, (await encryptBackup(fixture)).body)).status, 200);
+  for (let i = 0; i < 30; i++) assert.equal((await put(db, (await encryptBackup(fixture)).body)).status, 200);
   assert.deepEqual(await put(db, (await encryptBackup(fixture)).body), { status: 429, body: { error: "rate_limited" } });
   const full = makeDb();
   for (let i = 0; i < 40; i++) full.blobs.set("k" + i, { iv: "", ct: "", at: full.now });
