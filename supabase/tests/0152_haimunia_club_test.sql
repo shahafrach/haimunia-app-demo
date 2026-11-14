@@ -345,7 +345,7 @@ select is(public.transfer_put(repeat('4', 64), tests.b64(extensions.gen_random_b
   'plaintext', 'any valid JSON is refused');
 select is(public.transfer_put(repeat('5', 64), '***', tests.b64(extensions.gen_random_bytes(64)), repeat('e', 64)), 'invalid', 'bad base64 is invalid');
 select is(public.transfer_put(repeat('6', 64), tests.b64(extensions.gen_random_bytes(12)), repeat('AAAA', 1747627), repeat('f', 64)),
-  'too_large', 'more than 5 MiB of ciphertext is refused');
+  'too_large', 'more than 1 MiB of ciphertext is refused (5 MiB before 202611140002)');
 -- The per-IP and per-device limits (30 and 3 a day since 202611140002) are tested in 0156.
 select is(public.transfer_put(repeat('7', 64), tests.b64(extensions.gen_random_bytes(12)), tests.b64(extensions.gen_random_bytes(64)), repeat('e', 64), 'not-a-hash'),
   'invalid', 'a device hash that is not 64 hex is invalid');

@@ -8,6 +8,15 @@
 -- The global cap goes from 40 to 300 pending blobs over 24 hours (owner decision 2026-11-14). The 24-hour
 -- expiry, single use and the take limit are unchanged.
 --
+-- STORAGE (owner decision 2026-11-14). The blobs are bytea rows in this table, so they count against the
+-- database size (500 MB on the free plan, shared with BOX-LOG). Two limits keep them small:
+--   - one code holds at most 1 MiB of ciphertext (was 5 MiB). Measured: the old-app fixture is 673 B and a
+--     large member (3 years of daily sets, two WODs a day, daily body weight, notes) is 361,991 B; 4x that
+--     is over 1 MiB, so the 1 MiB ceiling applies.
+--   - all blobs in the table together hold at most 150 MB (150,000,000 bytes) of ciphertext, counting rows
+--     that have expired but are not purged yet (transfer_purge runs hourly), so the bound is real. A put
+--     that would pass it gets 'full', the same answer as the count cap.
+--
 -- transfer_put gains p_device_hash with a default, so the deployed Edge Function, which calls with four
 -- named arguments, keeps working between this migration and its redeploy.
 
@@ -16,6 +25,12 @@ alter table public.transfer_attempts add constraint transfer_attempts_action_che
   check (action in ('put', 'take', 'put_device'));
 comment on column public.transfer_attempts.ip_hash is
   'HMAC of the caller''s IP (action put, take) or of the app''s random device id (action put_device), under the transfer domain prefix. 202611120001, 202611140002.';
+
+-- NOT VALID: a pending blob from before this migration (at most 5 MiB, gone within 24 hours) does not
+-- block it; every new row is checked.
+alter table public.transfer_blobs drop constraint transfer_blobs_ciphertext_check;
+alter table public.transfer_blobs add constraint transfer_blobs_ciphertext_check
+  check (octet_length(ciphertext) between 17 and 1048576) not valid;
 
 drop function public.transfer_put(text, text, text, text);
 
@@ -35,8 +50,8 @@ begin
     return 'rate_limited';
   end if;
   if p_lookup_hash is null or p_lookup_hash !~ '^[0-9a-f]{64}$' then return 'invalid'; end if;
-  -- 5 MiB of ciphertext is at most 6,990,508 base64 characters.
-  if p_ciphertext_b64 is null or char_length(p_ciphertext_b64) > 6990508 then return 'too_large'; end if;
+  -- 1 MiB of ciphertext is at most 1,398,104 base64 characters.
+  if p_ciphertext_b64 is null or char_length(p_ciphertext_b64) > 1398104 then return 'too_large'; end if;
   begin
     v_iv := decode(p_iv_b64, 'base64');
     v_ct := decode(p_ciphertext_b64, 'base64');
@@ -44,12 +59,16 @@ begin
     return 'invalid';
   end;
   if octet_length(v_iv) <> 12 or octet_length(v_ct) < 17 then return 'invalid'; end if;
-  if octet_length(v_ct) > 5242880 then return 'too_large'; end if;
+  if octet_length(v_ct) > 1048576 then return 'too_large'; end if;
   if public.transfer_looks_plaintext(v_ct) then return 'plaintext'; end if;
 
   -- Serialise the global cap.
   perform pg_advisory_xact_lock(hashtextextended('transfer_put', 0));
   if (select count(*) from public.transfer_blobs b where b.created_at > now() - interval '24 hours') >= 300 then
+    return 'full';
+  end if;
+  -- Every row, expired or not: an expired row takes space until the hourly purge.
+  if (select coalesce(sum(octet_length(b.ciphertext)), 0) from public.transfer_blobs b) + octet_length(v_ct) > 150000000 then
     return 'full';
   end if;
   insert into public.transfer_blobs (lookup_hash, iv, ciphertext, ip_hash)

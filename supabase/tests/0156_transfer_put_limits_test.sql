@@ -1,4 +1,4 @@
--- 202611140002: transfer_put allows 30 puts per IP and 3 per device a day. A put with no device (the old
+-- 202611140002: transfer_put allows 30 puts per IP and 3 per device a day, 1 MiB per code and 150 MB in all. A put with no device (the old
 -- app sends none) is held only by the IP limit. Rate checks run before the blob is stored.
 
 \set rls_helpers_included true
@@ -60,6 +60,38 @@ update public.transfer_blobs set created_at = now() - interval '25 hours' where 
 set local role service_role;
 select is(public.transfer_put(repeat('f', 64), translate(encode(extensions.gen_random_bytes(12), 'base64'), E'\n', ''),
   translate(encode(extensions.gen_random_bytes(64), 'base64'), E'\n', ''), repeat('a', 64)), 'stored', 'blobs older than 24 hours do not count toward the cap');
+reset role;
+
+-- Storage: at most 1 MiB of ciphertext per code.
+delete from public.transfer_blobs;
+delete from public.transfer_attempts;
+create function tests.put_bytes(p_lookup text, p_ct bytea) returns text language sql as
+  $$ select public.transfer_put(p_lookup, translate(encode(extensions.gen_random_bytes(12), 'base64'), E'\n', ''),
+       translate(encode(p_ct, 'base64'), E'\n', ''), repeat('7', 64)) $$;
+grant execute on function tests.put_bytes(text, bytea) to service_role;
+set local role service_role;
+select is(tests.put_bytes(repeat('1', 64), decode(repeat('ab', 1048576), 'hex')), 'stored', 'exactly 1 MiB of ciphertext is stored');
+select is(tests.put_bytes(repeat('2', 64), decode(repeat('ab', 1048577), 'hex')), 'too_large', 'one byte over 1 MiB is too_large');
+reset role;
+select throws_ok($$ insert into public.transfer_blobs (lookup_hash, iv, ciphertext, ip_hash)
+  values (repeat('3', 64), extensions.gen_random_bytes(12), decode(repeat('ab', 1048577), 'hex'), repeat('7', 64)) $$,
+  '23514', null, 'and the table refuses a row over 1 MiB');
+
+-- Storage: at most 150 MB (150,000,000 bytes) in the table, expired-but-unpurged rows included.
+delete from public.transfer_blobs;
+insert into public.transfer_blobs (lookup_hash, iv, ciphertext, ip_hash)
+select encode(extensions.digest('bytes' || i, 'sha256'), 'hex'), extensions.gen_random_bytes(12), decode(repeat('ab', 1048576), 'hex'), repeat('e', 64)
+  from generate_series(1, 143) i;   -- 149,946,368 bytes
+select is((select sum(octet_length(ciphertext))::bigint from public.transfer_blobs), 149946368::bigint, 'setup: 143 MiB pending');
+set local role service_role;
+select is(tests.put_bytes(repeat('4', 64), decode(repeat('ab', 50000), 'hex')), 'stored', '50 KB more still fits under 150 MB');
+select is(tests.put_bytes(repeat('5', 64), decode(repeat('ab', 10000), 'hex')), 'full', '10 KB more would pass 150 MB: full, the same answer as the count cap');
+reset role;
+update public.transfer_blobs set created_at = now() - interval '25 hours';
+set local role service_role;
+select is(tests.put_bytes(repeat('6', 64), decode(repeat('ab', 10000), 'hex')), 'full', 'expired rows still count until the purge removes them');
+select ok(public.transfer_purge() >= 144, 'the hourly purge removes them');
+select is(tests.put_bytes(repeat('6', 64), decode(repeat('ab', 10000), 'hex')), 'stored', 'and then there is room again');
 reset role;
 
 select * from finish();

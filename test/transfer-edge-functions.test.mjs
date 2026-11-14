@@ -12,7 +12,7 @@ import { readFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
 import {
   handleTransferPut, handleTransferTake, sha256Hex, ipHash, decodesToJson,
-  PUT_ORIGIN, TAKE_ORIGIN, PUT_ORIGINS, isPutOrigin, putCorsOrigin, MAX_BODY_BYTES, deviceHash,
+  PUT_ORIGIN, TAKE_ORIGIN, PUT_ORIGINS, isPutOrigin, putCorsOrigin, MAX_BODY_BYTES, MAX_CIPHERTEXT_BYTES, deviceHash,
 } from "../supabase/functions/_shared/transfer.mjs";
 
 const SECRET = "test-secret-not-a-real-one";
@@ -55,8 +55,11 @@ function makeDb() {
       if (d > 3) return "rate_limited";
     }
     if (db.blobs.size >= 300) return "full"; // 202611140002
+    const bytes = [...db.blobs.values()].reduce((n, r) => n + (r.bytes || 0), 0);
+    const mine = Buffer.from(ctB64, "base64").length;
+    if (bytes + mine > 150000000) return "full";
     if (db.blobs.has(lookupHash)) return "exists";
-    db.blobs.set(lookupHash, { iv: ivB64, ct: ctB64, at: db.now });
+    db.blobs.set(lookupHash, { iv: ivB64, ct: ctB64, at: db.now, bytes: mine });
     return "stored";
   };
   db.take = async (lookupHash, ip) => {
@@ -199,6 +202,32 @@ test("the device id is checked for shape and only its HMAC reaches the database"
   await handleTransferPut({ body: (await encryptBackup(fixture)).body, ip: "203.0.113.5", origin: PUT_ORIGIN },
     { secret: SECRET, put: async (_l, _iv, _ct, _ip, dev) => { seen.push(dev); return "stored"; } });
   assert.equal(seen[1], null, "no device sent, none passed on");
+});
+
+test("storage: one code holds at most 1 MiB of ciphertext; a large member's log fits with room", async () => {
+  assert.equal(MAX_CIPHERTEXT_BYTES, 1048576);
+  assert.ok(MAX_BODY_BYTES < 1.5 * 1024 * 1024, "the request body cap follows the ciphertext cap");
+  const db = makeDb();
+  const body = (n) => ({ lookup: crypto.getRandomValues(new Uint8Array(32)).reduce((s, b) => s + b.toString(16).padStart(2, "0"), ""),
+    iv: b64(new Uint8Array(12)), ciphertext: b64(crypto.getRandomValues(new Uint8Array(n).fill(7))) });
+  const big = new Uint8Array(1048576); for (let i = 0; i < big.length; i += 65536) crypto.getRandomValues(big.subarray(i, i + 65536));
+  const atCap = { ...body(17), ciphertext: b64(big) };
+  assert.equal((await put(db, atCap)).status, 200, "exactly 1 MiB is accepted");
+  const over = new Uint8Array(1048577); over.set(big);
+  assert.deepEqual(await put(db, { ...body(17), ciphertext: b64(over) }), { status: 413, body: { error: "too_large" } }, "one byte more is refused");
+  // Measured on 2026-11-14: a large realistic member (3 years, 5,475 sets, 2,190 WODs, daily body weight) is
+  // 361,991 B of ciphertext; the old-app fixture is 673 B.
+  assert.ok(361991 * 2 < MAX_CIPHERTEXT_BYTES);
+});
+
+test("storage: pending codes hold at most 150 MB in all; past that, the same 'full' answer", async () => {
+  const db = makeDb();
+  for (let i = 0; i < 143; i++) db.blobs.set("k" + i, { iv: "", ct: "", at: db.now, bytes: 1048576 }); // 149,946,368 B
+  const small = (await encryptBackup(fixture)).body;
+  assert.equal((await put(db, small)).status, 200, "a small code still fits under 150 MB");
+  const big = crypto.getRandomValues(new Uint8Array(60000));
+  const out = await put(db, { lookup: "e".repeat(64), iv: b64(new Uint8Array(12)), ciphertext: b64(big) });
+  assert.deepEqual(out, { status: 503, body: { error: "full" } }, "60 KB more would pass 150 MB: full, like the count cap");
 });
 
 test("shape checks and the body cap", async () => {

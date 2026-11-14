@@ -284,7 +284,7 @@ Assumptions: 250 members, 150 active weekly, 3 workouts each, every workout post
 | Reactions | 23,400 × 4 × ~200 B | ~19 MB |
 | Notifications | ≤ 1 per post per hour plus tags, ~30,000 × ~600 B | ~18 MB (purge after 90 days → ~5 MB standing) |
 | `training_log_usage` | 2 apps × 300 devices × 3 events × 365 × ~120 B | ~40 MB (purge at 400 days) |
-| `transfer_blobs` | worst case 300 × 5 MB (40 before 202611140002), gone within 24 h | ≤ 1.5 GB transient |
+| `transfer_blobs` | at most 1 MiB per code and 150 MB in all (202611140002; was 40 × 5 MB), gone within 24 h | ≤ 150 MB transient |
 | `private_records` (if the club backs up the private log) | 250 × ~3,000 records × ~500 B | **~375 MB** |
 
 Decided (3): the club has no private-log cloud backup, so the club adds about **120 MB a year** to BOX-LOG's footprint,

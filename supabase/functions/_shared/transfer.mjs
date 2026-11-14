@@ -8,7 +8,8 @@
 // (kept on the phone). It sends { lookup, iv, ciphertext }. This side stores the
 // sha256 of the lookup, the IV and the ciphertext, through the database functions
 // transfer_put / transfer_take (202611120001, 202611140002), which also hold the limits:
-// 30 puts per IP and 3 per device per day, 300 pending blobs in all, 10 takes per IP
+// 30 puts per IP and 3 per device per day, 300 pending blobs and 150 MB of them in all,
+// at most 1 MiB of ciphertext per code, 10 takes per IP
 // per 15 minutes, one take per blob, 24 hours at most. The IP and the device id are
 // never stored, only an HMAC of each under its own domain prefix. The device is a
 // random id the club app keeps in localStorage and sends as `device`; the old app
@@ -32,8 +33,10 @@ export function putCorsOrigin(origin) {
 }
 export const IP_DOMAIN = "haimunia:transfer-ip:v1:";
 export const DEVICE_DOMAIN = "haimunia:transfer-device:v1:";
-export const MAX_CIPHERTEXT_BYTES = 5 * 1024 * 1024;
-// base64 of 5 MiB, plus room for the rest of the JSON body.
+// 202611140002: 1 MiB (was 5 MiB). A large member's log is about 362 KB here; see that migration.
+export const MAX_CIPHERTEXT_BYTES = 1024 * 1024;
+export const MAX_CIPHERTEXT_B64 = Math.ceil(MAX_CIPHERTEXT_BYTES / 3) * 4;
+// base64 of 1 MiB, plus room for the rest of the JSON body.
 export const MAX_BODY_BYTES = Math.ceil(MAX_CIPHERTEXT_BYTES / 3) * 4 + 4096;
 
 const enc = new TextEncoder();
@@ -64,6 +67,8 @@ export function corsHeaders(origin) {
 
 const B64 = /^[A-Za-z0-9+/]+={0,2}$/;
 const isB64 = (s) => typeof s === "string" && s.length % 4 === 0 && B64.test(s);
+/** Decoded length of a valid base64 string, without decoding it. */
+const b64Bytes = (s) => (s.length / 4) * 3 - (s.endsWith("==") ? 2 : s.endsWith("=") ? 1 : 0);
 const isLookup = (s) => typeof s === "string" && /^[0-9a-f]{64}$/.test(s);
 // A random id from the phone (a UUID in the club app). Optional: the old app sends none.
 const isDevice = (s) => typeof s === "string" && /^[A-Za-z0-9-]{16,64}$/.test(s);
@@ -95,6 +100,7 @@ export async function handleTransferPut(req, deps) {
   if (req.bodyBytes != null && req.bodyBytes > MAX_BODY_BYTES) return { status: 413, body: { error: "too_large" } };
   const b = req.body && typeof req.body === "object" ? req.body : {};
   if (!isLookup(b.lookup) || !isB64(b.iv) || !isB64(b.ciphertext)) return { status: 400, body: { error: "invalid" } };
+  if (b64Bytes(b.ciphertext) > MAX_CIPHERTEXT_BYTES) return { status: 413, body: { error: "too_large" } };
   if (b.device != null && !isDevice(b.device)) return { status: 400, body: { error: "invalid" } };
   if (decodesToJson(b.ciphertext)) return { status: 400, body: { error: "plaintext" } };
   const device = b.device != null ? await deviceHash(deps.secret, b.device) : null;
