@@ -54,7 +54,7 @@ function makeDb() {
       const d = (db.devicePuts.get(device) || 0) + 1; db.devicePuts.set(device, d);
       if (d > 3) return "rate_limited";
     }
-    if (db.blobs.size >= 40) return "full";
+    if (db.blobs.size >= 300) return "full"; // 202611140002
     if (db.blobs.has(lookupHash)) return "exists";
     db.blobs.set(lookupHash, { iv: ivB64, ct: ctB64, at: db.now });
     return "stored";
@@ -216,7 +216,7 @@ test("the database's answers map to HTTP: 429, 503, 409", async () => {
   for (let i = 0; i < 30; i++) assert.equal((await put(db, (await encryptBackup(fixture)).body)).status, 200);
   assert.deepEqual(await put(db, (await encryptBackup(fixture)).body), { status: 429, body: { error: "rate_limited" } });
   const full = makeDb();
-  for (let i = 0; i < 40; i++) full.blobs.set("k" + i, { iv: "", ct: "", at: full.now });
+  for (let i = 0; i < 300; i++) full.blobs.set("k" + i, { iv: "", ct: "", at: full.now });
   assert.deepEqual(await put(full, (await encryptBackup(fixture)).body), { status: 503, body: { error: "full" } });
   const dup = makeDb();
   const { body } = await encryptBackup(fixture);

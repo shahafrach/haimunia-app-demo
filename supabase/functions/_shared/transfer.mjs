@@ -8,7 +8,7 @@
 // (kept on the phone). It sends { lookup, iv, ciphertext }. This side stores the
 // sha256 of the lookup, the IV and the ciphertext, through the database functions
 // transfer_put / transfer_take (202611120001, 202611140002), which also hold the limits:
-// 30 puts per IP and 3 per device per day, 40 pending blobs in all, 10 takes per IP
+// 30 puts per IP and 3 per device per day, 300 pending blobs in all, 10 takes per IP
 // per 15 minutes, one take per blob, 24 hours at most. The IP and the device id are
 // never stored, only an HMAC of each under its own domain prefix. The device is a
 // random id the club app keeps in localStorage and sends as `device`; the old app

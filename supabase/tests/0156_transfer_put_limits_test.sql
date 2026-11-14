@@ -11,7 +11,7 @@ select * from no_plan();
 
 delete from public.transfer_blobs;
 delete from public.transfer_attempts;
--- Keep the global cap (40 pending) out of the way: every put below sends invalid base64, which is checked
+-- Keep the global cap (300 pending) out of the way: every put below sends invalid base64, which is checked
 -- after both rate limits and stores nothing.
 create function tests.put(p_ip text, p_device text) returns text language sql as
   $$ select public.transfer_put(repeat('a', 64), '***', 'AAAA', p_ip, p_device) $$;
@@ -45,6 +45,22 @@ reset role;
 select is((select count(*)::int from public.transfer_attempts where action = 'put_device'), 3, 'one window per device (9, 8, 7), beside the IP windows');
 select ok((select bool_and(ip_hash ~ '^[0-9a-f]{64}$') from public.transfer_attempts), 'only hashes are stored');
 select is((select count(*)::int from public.transfer_blobs b where b.ip_hash = repeat('7', 64)), 0, 'the device hash is not written to the blob');
+
+-- The global cap: 300 pending blobs over 24 hours (was 40). Two are stored above.
+insert into public.transfer_blobs (lookup_hash, iv, ciphertext, ip_hash)
+select encode(extensions.digest('cap' || i, 'sha256'), 'hex'), extensions.gen_random_bytes(12), extensions.gen_random_bytes(64), repeat('e', 64)
+  from generate_series(1, 297) i;
+set local role service_role;
+select is(public.transfer_put(repeat('d', 64), translate(encode(extensions.gen_random_bytes(12), 'base64'), E'\n', ''),
+  translate(encode(extensions.gen_random_bytes(64), 'base64'), E'\n', ''), repeat('a', 64)), 'stored', 'the 300th pending blob is stored');
+select is(public.transfer_put(repeat('f', 64), translate(encode(extensions.gen_random_bytes(12), 'base64'), E'\n', ''),
+  translate(encode(extensions.gen_random_bytes(64), 'base64'), E'\n', ''), repeat('a', 64)), 'full', 'the 301st is refused as full');
+reset role;
+update public.transfer_blobs set created_at = now() - interval '25 hours' where lookup_hash like 'c%' or lookup_hash = repeat('d', 64);
+set local role service_role;
+select is(public.transfer_put(repeat('f', 64), translate(encode(extensions.gen_random_bytes(12), 'base64'), E'\n', ''),
+  translate(encode(extensions.gen_random_bytes(64), 'base64'), E'\n', ''), repeat('a', 64)), 'stored', 'blobs older than 24 hours do not count toward the cap');
+reset role;
 
 select * from finish();
 rollback;

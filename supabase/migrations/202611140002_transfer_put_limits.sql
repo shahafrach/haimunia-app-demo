@@ -5,7 +5,8 @@
 -- localStorage; the Edge Function sends only an HMAC of it under the transfer domain (like the IP), so
 -- the id itself is never stored. Both put origins get the same limits. A put with no device (the old app,
 -- haimuniya.github.io, which sends none) is held only by the per-IP limit.
--- The global cap (40 pending blobs), the 24-hour expiry, single use and the take limit are unchanged.
+-- The global cap goes from 40 to 300 pending blobs over 24 hours (owner decision 2026-11-14). The 24-hour
+-- expiry, single use and the take limit are unchanged.
 --
 -- transfer_put gains p_device_hash with a default, so the deployed Edge Function, which calls with four
 -- named arguments, keeps working between this migration and its redeploy.
@@ -48,7 +49,7 @@ begin
 
   -- Serialise the global cap.
   perform pg_advisory_xact_lock(hashtextextended('transfer_put', 0));
-  if (select count(*) from public.transfer_blobs b where b.created_at > now() - interval '24 hours') >= 40 then
+  if (select count(*) from public.transfer_blobs b where b.created_at > now() - interval '24 hours') >= 300 then
     return 'full';
   end if;
   insert into public.transfer_blobs (lookup_hash, iv, ciphertext, ip_hash)

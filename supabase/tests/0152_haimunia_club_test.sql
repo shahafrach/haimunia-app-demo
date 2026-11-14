@@ -384,13 +384,13 @@ reset role;
 
 insert into public.transfer_blobs (lookup_hash, iv, ciphertext, ip_hash)
 select encode(extensions.digest('cap' || i, 'sha256'), 'hex'), extensions.gen_random_bytes(12), extensions.gen_random_bytes(64), repeat('e', 64)
-  from generate_series(1, 40) i;
+  from generate_series(1, 300) i;
 set local role service_role;
 select is(public.transfer_put(repeat('a', 64), tests.b64(extensions.gen_random_bytes(12)), tests.b64(extensions.gen_random_bytes(64)), repeat('c', 64)),
-  'full', 'with 40 pending blobs a new put is refused');
+  'full', 'with 300 pending blobs a new put is refused (202611140002)');
 reset role;
 update public.transfer_blobs set created_at = now() - interval '25 hours';
-select is(public.transfer_purge(), 40, 'transfer_purge deletes blobs older than 24 hours');
+select is(public.transfer_purge(), 300, 'transfer_purge deletes blobs older than 24 hours');
 select ok(exists (select 1 from cron.job where jobname = 'transfer-purge'), 'the purge is scheduled');
 
 -- =====================================================================================================
