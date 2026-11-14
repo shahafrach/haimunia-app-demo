@@ -77,7 +77,10 @@ insert into public.recovery_attempts (key_hash) values (repeat('q', 64));
 insert into public.club_announcements (club_id, author_id, body) values ('b0000000-0000-4000-8000-00000000000b', tests.uid('owner'), 'probe');
 insert into public.transfer_blobs (lookup_hash, iv, ciphertext, ip_hash) values (repeat('c', 64), extensions.gen_random_bytes(12), extensions.gen_random_bytes(64), repeat('c', 64));
 insert into public.transfer_attempts (ip_hash, action, attempt_count) values (repeat('c', 64), 'put', 1);
+-- 202611130001 drops a count from neither app's Origin, so the victim row carries the club app's.
+select set_config('request.headers', '{"origin": "https://haimunia.pages.dev"}', true);
 insert into public.training_log_usage (device_id, event, screen) values ('e0000000-0000-4000-8000-000000000001', 'app_open', '');
+select set_config('request.headers', '', true);
 insert into public.invites (club_id, code_hash, role) values ('b0000000-0000-4000-8000-00000000000b', repeat('f', 64), 'member');
 insert into public.job_health_state (id) values (true) on conflict do nothing;
 insert into public.member_achievements (user_id, achievement_id) select tests.uid('m3'), id from public.achievement_definitions where code = 'leak_probe';
