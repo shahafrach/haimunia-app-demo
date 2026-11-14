@@ -77,6 +77,8 @@ insert into public.recovery_attempts (key_hash) values (repeat('q', 64));
 insert into public.club_announcements (club_id, author_id, body) values ('b0000000-0000-4000-8000-00000000000b', tests.uid('owner'), 'probe');
 insert into public.transfer_blobs (lookup_hash, iv, ciphertext, ip_hash) values (repeat('c', 64), extensions.gen_random_bytes(12), extensions.gen_random_bytes(64), repeat('c', 64));
 insert into public.transfer_attempts (ip_hash, action, attempt_count) values (repeat('c', 64), 'put', 1);
+-- 202611140001 (F-002)
+insert into public.club_staff_actions (club_id, actor_id, action) values ('b0000000-0000-4000-8000-00000000000b', tests.uid('owner'), 'link_rotate');
 -- 202611130001 drops a count from neither app's Origin, so the victim row carries the club app's.
 select set_config('request.headers', '{"origin": "https://haimunia.pages.dev"}', true);
 insert into public.training_log_usage (device_id, event, screen) values ('e0000000-0000-4000-8000-000000000001', 'app_open', '');
@@ -134,6 +136,7 @@ select cmp_ok((select count(*) from public.workout_posts where club_id = 'b00000
 select cmp_ok((select count(*) from public.club_announcements where club_id = 'b0000000-0000-4000-8000-00000000000b'), '>', 0::bigint, 'club_announcements: the victim row exists');
 select cmp_ok((select count(*) from public.transfer_blobs where lookup_hash = repeat('c', 64)), '>', 0::bigint, 'transfer_blobs: the victim row exists');
 select cmp_ok((select count(*) from public.transfer_attempts where ip_hash = repeat('c', 64)), '>', 0::bigint, 'transfer_attempts: the victim row exists');
+select cmp_ok((select count(*) from public.club_staff_actions where club_id = 'b0000000-0000-4000-8000-00000000000b'), '>', 0::bigint, 'club_staff_actions: the victim row exists');
 select cmp_ok((select count(*) from public.training_log_usage where device_id = 'e0000000-0000-4000-8000-000000000001'), '>', 0::bigint, 'training_log_usage: the victim row exists');
 
 -- Positive controls for the attacker's own circle.
@@ -257,6 +260,14 @@ select is(tests.leak_count('transfer_blobs', 'lookup_hash = repeat(''c'', 64)'),
 select is(tests.leak_dml('update public.transfer_blobs set ip_hash = ip_hash where lookup_hash = repeat(''c'', 64)'), 0, 'transfer_blobs: update touches zero rows');
 select is(tests.leak_dml('delete from public.transfer_blobs where lookup_hash = repeat(''c'', 64)'), 0, 'transfer_blobs: delete removes zero rows');
 select is(tests.leak_dml('insert into public.transfer_blobs (lookup_hash, iv, ciphertext, ip_hash) values (repeat(''d'', 64), ''\x000000000000000000000000'', ''\x0000000000000000000000000000000000'', repeat(''d'', 64))'), 0, 'transfer_blobs: insert is refused');
+
+-- club_staff_actions (202611140001; no client grant at all, not even to the club's own staff)
+select tests.set_auth(tests.uid('m1'));
+select is(tests.leak_count('club_staff_actions', 'club_id = ''b0000000-0000-4000-8000-00000000000b'''), 0::bigint, 'club_staff_actions: select sees zero rows');
+select is(tests.leak_dml('update public.club_staff_actions set action = ''member_remove'' where club_id = ''b0000000-0000-4000-8000-00000000000b'''), 0, 'club_staff_actions: update touches zero rows');
+select is(tests.leak_dml('delete from public.club_staff_actions where club_id = ''b0000000-0000-4000-8000-00000000000b'''), 0, 'club_staff_actions: delete removes zero rows');
+select is(tests.leak_dml('insert into public.club_staff_actions (club_id, actor_id, action) values (''b0000000-0000-4000-8000-00000000000b'', tests.uid(''m1''), ''link_rotate'')'), 0, 'club_staff_actions: insert is refused');
+select tests.clear_auth();
 
 -- transfer_attempts (202611120001; no client grant at all)
 select tests.set_auth(tests.uid('m1'));
@@ -441,13 +452,14 @@ select cmp_ok((select count(*) from public.workout_posts where club_id = 'b00000
 select cmp_ok((select count(*) from public.club_announcements where club_id = 'b0000000-0000-4000-8000-00000000000b'), '>', 0::bigint, 'club_announcements: the victim rows survived');
 select cmp_ok((select count(*) from public.transfer_blobs where lookup_hash = repeat('c', 64)), '>', 0::bigint, 'transfer_blobs: the victim rows survived');
 select cmp_ok((select count(*) from public.transfer_attempts where ip_hash = repeat('c', 64)), '>', 0::bigint, 'transfer_attempts: the victim rows survived');
+select cmp_ok((select count(*) from public.club_staff_actions where club_id = 'b0000000-0000-4000-8000-00000000000b'), '>', 0::bigint, 'club_staff_actions: the victim rows survived');
 select cmp_ok((select count(*) from public.training_log_usage where device_id = 'e0000000-0000-4000-8000-000000000001'), '>', 0::bigint, 'training_log_usage: the victim rows survived');
 
 -- Every table in public is covered above.
 select is_empty(
   $$ select c.relname::text from pg_class c
       where c.relnamespace = 'public'::regnamespace and c.relkind in ('r', 'p')
-        and c.relname not in ('account_deletion_requests', 'achievement_definitions', 'analytics_events', 'blocks', 'bug_reports', 'benchmark_results', 'circle_invites', 'circle_members', 'circle_targets', 'clubs', 'edge_function_invocations', 'invite_attempts', 'invite_codes', 'invite_redemptions', 'invites', 'job_health_state', 'member_achievements', 'member_targets', 'notification_batches', 'notification_preferences', 'notifications', 'post_training_partners', 'private_records', 'profiles', 'push_subscriptions', 'rate_limits', 'reactions', 'recovery_attempts', 'recovery_codes', 'reset_requests', 'reminder_prefs', 'request_idempotency', 'workout_posts', 'club_announcements', 'transfer_blobs', 'transfer_attempts', 'training_log_usage') $$,
+        and c.relname not in ('account_deletion_requests', 'achievement_definitions', 'analytics_events', 'blocks', 'bug_reports', 'benchmark_results', 'circle_invites', 'circle_members', 'circle_targets', 'clubs', 'edge_function_invocations', 'invite_attempts', 'invite_codes', 'invite_redemptions', 'invites', 'job_health_state', 'member_achievements', 'member_targets', 'notification_batches', 'notification_preferences', 'notifications', 'post_training_partners', 'private_records', 'profiles', 'push_subscriptions', 'rate_limits', 'reactions', 'recovery_attempts', 'recovery_codes', 'reset_requests', 'reminder_prefs', 'request_idempotency', 'workout_posts', 'club_announcements', 'transfer_blobs', 'transfer_attempts', 'training_log_usage', 'club_staff_actions') $$,
   'this file covers every table in public: a new table must be added here');
 
 select * from finish();

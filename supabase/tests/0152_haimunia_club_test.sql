@@ -345,9 +345,10 @@ select is(public.transfer_put(repeat('4', 64), tests.b64(extensions.gen_random_b
   'plaintext', 'any valid JSON is refused');
 select is(public.transfer_put(repeat('5', 64), '***', tests.b64(extensions.gen_random_bytes(64)), repeat('e', 64)), 'invalid', 'bad base64 is invalid');
 select is(public.transfer_put(repeat('6', 64), tests.b64(extensions.gen_random_bytes(12)), repeat('AAAA', 1747627), repeat('f', 64)),
-  'too_large', 'more than 5 MiB of ciphertext is refused');
-select is(public.transfer_put(repeat('7', 64), tests.b64(extensions.gen_random_bytes(12)), tests.b64(extensions.gen_random_bytes(64)), repeat('e', 64)),
-  'rate_limited', 'the sixth put from one IP in a day is refused');
+  'too_large', 'more than 1 MiB of ciphertext is refused (5 MiB before 202611140002)');
+-- The per-IP and per-device limits (30 and 3 a day since 202611140002) are tested in 0156.
+select is(public.transfer_put(repeat('7', 64), tests.b64(extensions.gen_random_bytes(12)), tests.b64(extensions.gen_random_bytes(64)), repeat('e', 64), 'not-a-hash'),
+  'invalid', 'a device hash that is not 64 hex is invalid');
 reset role;
 
 -- The stored blob is not JSON and holds no plaintext field name (owner decision 2).
@@ -383,13 +384,13 @@ reset role;
 
 insert into public.transfer_blobs (lookup_hash, iv, ciphertext, ip_hash)
 select encode(extensions.digest('cap' || i, 'sha256'), 'hex'), extensions.gen_random_bytes(12), extensions.gen_random_bytes(64), repeat('e', 64)
-  from generate_series(1, 40) i;
+  from generate_series(1, 300) i;
 set local role service_role;
 select is(public.transfer_put(repeat('a', 64), tests.b64(extensions.gen_random_bytes(12)), tests.b64(extensions.gen_random_bytes(64)), repeat('c', 64)),
-  'full', 'with 40 pending blobs a new put is refused');
+  'full', 'with 300 pending blobs a new put is refused (202611140002)');
 reset role;
 update public.transfer_blobs set created_at = now() - interval '25 hours';
-select is(public.transfer_purge(), 40, 'transfer_purge deletes blobs older than 24 hours');
+select is(public.transfer_purge(), 300, 'transfer_purge deletes blobs older than 24 hours');
 select ok(exists (select 1 from cron.job where jobname = 'transfer-purge'), 'the purge is scheduled');
 
 -- =====================================================================================================
