@@ -12,8 +12,22 @@
 // one take per blob, 24 hours at most. The IP itself is never stored, only an
 // HMAC of it under this file's own domain prefix.
 
+// Puts come from the old app and, since F-001 (owner decision 2026-11-14), from the
+// club app's Safari tab, which hands its log to the club app installed on the home
+// screen. Takes still come only from the club app. Limits, expiry and single use
+// are the database's and do not depend on the origin.
 export const PUT_ORIGIN = "https://haimuniya.github.io";
 export const TAKE_ORIGIN = "https://haimunia.pages.dev";
+export const PUT_ORIGINS = Object.freeze([PUT_ORIGIN, TAKE_ORIGIN]);
+
+/** True only for an exact match with one of the allowed put origins. */
+export function isPutOrigin(origin) {
+  return typeof origin === "string" && PUT_ORIGINS.includes(origin);
+}
+/** The origin to echo in Access-Control-Allow-Origin for a put request. */
+export function putCorsOrigin(origin) {
+  return isPutOrigin(origin) ? origin : PUT_ORIGIN;
+}
 export const IP_DOMAIN = "haimunia:transfer-ip:v1:";
 export const MAX_CIPHERTEXT_BYTES = 5 * 1024 * 1024;
 // base64 of 5 MiB, plus room for the rest of the JSON body.
@@ -66,7 +80,7 @@ function originRefused(origin, allowed) {
  */
 export async function handleTransferPut(req, deps) {
   if (!deps.secret) return { status: 500, body: { error: "not_configured" } };
-  if (originRefused(req.origin, PUT_ORIGIN)) return { status: 403, body: { error: "origin" } };
+  if (!isPutOrigin(req.origin)) return { status: 403, body: { error: "origin" } };
   if (req.bodyBytes != null && req.bodyBytes > MAX_BODY_BYTES) return { status: 413, body: { error: "too_large" } };
   const b = req.body && typeof req.body === "object" ? req.body : {};
   if (!isLookup(b.lookup) || !isB64(b.iv) || !isB64(b.ciphertext)) return { status: 400, body: { error: "invalid" } };

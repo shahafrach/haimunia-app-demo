@@ -12,7 +12,7 @@ import { readFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
 import {
   handleTransferPut, handleTransferTake, sha256Hex, ipHash, decodesToJson,
-  PUT_ORIGIN, TAKE_ORIGIN, MAX_BODY_BYTES,
+  PUT_ORIGIN, TAKE_ORIGIN, PUT_ORIGINS, isPutOrigin, putCorsOrigin, MAX_BODY_BYTES,
 } from "../supabase/functions/_shared/transfer.mjs";
 
 const SECRET = "test-secret-not-a-real-one";
@@ -107,14 +107,53 @@ test("a client bug that uploads plaintext is refused before the database", async
   assert.ok(decodesToJson(plain) && !decodesToJson(b64(crypto.getRandomValues(new Uint8Array(64)))));
 });
 
-test("origins: put only from the old app, take only from the club app", async () => {
+test("origins: put from the old app or the club app (F-001), take only from the club app", async () => {
   const db = makeDb();
   const { body } = await encryptBackup(fixture);
-  assert.equal((await put(db, body, { origin: TAKE_ORIGIN })).status, 403);
   assert.equal((await put(db, body, { origin: null })).status, 403);
-  assert.equal((await put(db, body)).status, 200);
+  assert.equal((await put(db, body)).status, 200, "the old app may put");
+  assert.equal((await put(db, (await encryptBackup(fixture)).body, { origin: TAKE_ORIGIN })).status, 200, "the club app may put");
   assert.equal((await take(db, { lookup: body.lookup }, { origin: PUT_ORIGIN })).status, 403);
-  assert.equal(db.blobs.size, 1, "a refused take does not consume the blob");
+  assert.equal(db.blobs.size, 2, "a refused take does not consume either blob");
+});
+
+test("F-001: the put origin allowlist is exact: old origin allowed, new origin allowed, anything else refused", async () => {
+  assert.deepEqual([...PUT_ORIGINS], ["https://haimuniya.github.io", "https://haimunia.pages.dev"]);
+  assert.ok(isPutOrigin("https://haimuniya.github.io"));
+  assert.ok(isPutOrigin("https://haimunia.pages.dev"));
+  const refused = [
+    null, undefined, "", "null", "https://evil.example", "http://haimunia.pages.dev", "http://haimuniya.github.io",
+    "https://haimunia.pages.dev.evil.example", "https://preview.haimunia.pages.dev", "https://evil.github.io",
+    "https://haimuniya.github.io/", "https://HAIMUNIA.pages.dev", "https://haimunia.pages.dev:443", " https://haimunia.pages.dev",
+  ];
+  for (const origin of refused) {
+    assert.equal(isPutOrigin(origin), false, `refused: ${JSON.stringify(origin)}`);
+    const db = makeDb();
+    const out = await put(db, (await encryptBackup(fixture)).body, { origin });
+    assert.deepEqual(out, { status: 403, body: { error: "origin" } }, `put refused from ${JSON.stringify(origin)}`);
+    assert.equal(db.blobs.size, 0);
+  }
+  assert.equal(putCorsOrigin("https://haimunia.pages.dev"), "https://haimunia.pages.dev", "CORS echoes an allowed origin");
+  assert.equal(putCorsOrigin("https://haimuniya.github.io"), "https://haimuniya.github.io");
+  assert.equal(putCorsOrigin("https://evil.example"), PUT_ORIGIN, "CORS never echoes a refused origin");
+});
+
+test("F-001: limits are the same for both put origins (5 puts per IP per day are shared)", async () => {
+  const db = makeDb();
+  for (let i = 0; i < 5; i++) {
+    const origin = i % 2 ? TAKE_ORIGIN : PUT_ORIGIN;
+    assert.equal((await put(db, (await encryptBackup(fixture)).body, { origin })).status, 200);
+  }
+  assert.equal((await put(db, (await encryptBackup(fixture)).body, { origin: TAKE_ORIGIN })).status, 429);
+});
+
+test("F-001: a code put from the club app is taken once by the installed club app", async () => {
+  const db = makeDb();
+  const { code, body } = await encryptBackup(withBodyWeight);
+  assert.equal((await put(db, body, { origin: TAKE_ORIGIN })).status, 200);
+  const { lookup } = await derive(code);
+  assert.equal((await take(db, { lookup })).status, 200);
+  assert.equal((await take(db, { lookup })).status, 404, "single use holds for the new origin");
 });
 
 test("shape checks and the body cap", async () => {

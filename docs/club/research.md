@@ -229,7 +229,7 @@ dropped every bucket). 5 MB × the pending limit below is the worst-case databas
 (`supabase/config.toml:101`) and the same IP hash (`recover-password/index.ts:28`, `cf-connecting-ip`):
 - `transfer-put`: 5 per IP per day; at most **40 pending blobs in total** (about 200 MB worst case; the function refuses more with "try later").
 - `transfer-take`: 10 attempts per IP per 15 min. A miss costs an attempt. Guessing 2^104 is hopeless anyway.
-- CORS allow-list: exactly `https://haimuniya.github.io` for put and `https://haimunia.pages.dev` for take (today's functions send `*`, `_shared/recovery.mjs:72`).
+- CORS allow-list: exactly `https://haimuniya.github.io` for put and `https://haimunia.pages.dev` for take (since F-001, 2026-11-14, put also accepts `https://haimunia.pages.dev`; decisions.md) (today's functions send `*`, `_shared/recovery.mjs:72`).
 
 **The stored blob is opaque** (decided 2): see test 9 in C. The function also refuses a body that parses as JSON,
 so a client bug cannot upload plaintext.
