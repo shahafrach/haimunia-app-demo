@@ -59,7 +59,7 @@ insert into tests.definer_reviewed (name, args, class, anon_allowed, reason) val
   ('transfer_take', 'text, text', 'global_safe', false, 'transfer-take Edge Function only (service_role): deletes and returns one ciphertext by lookup hash, at most once, within 24 hours; per-IP limit (202611120001)'),
   ('transfer_purge', '', 'global_safe', false, 'cron job: deletes transfer blobs older than 24 hours and old attempt windows (202611120001)'),
   ('training_log_usage_before_insert', '', 'global_safe', false, 'trigger: stamps day and app on an anonymous usage count, drops repeats and caps 2,000 a day; counts every row, so definer (202611120001)'),
-  ('training_log_usage_report', 'integer', 'global_safe', false, 'owner-only: granted to no role and refuses any call with an auth.uid(); totals only, never a row (202611120001)'),
+  ('training_log_usage_report', 'integer, text', 'global_safe', false, 'owner-only: granted to no role and refuses any call with an auth.uid(); totals only, never a row (202611120001; p_app filter 202611130001)'),
   ('training_log_usage_purge', '', 'global_safe', false, 'cron job: deletes usage counts older than 400 days (202611120001)'),
   ('owner_create_club', 'text, text, text', 'global_safe', false, 'owner-only: granted to no role and refuses any call with an auth.uid(); creates the one club with the named account as owner (202611120001)'),
   ('owner_set_coach', 'text', 'global_safe', false, 'owner-only: granted to no role and refuses any call with an auth.uid(); makes one club member the coach (202611120001)'),
