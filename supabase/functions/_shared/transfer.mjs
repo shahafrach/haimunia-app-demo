@@ -7,10 +7,12 @@
 // the code with HKDF: `lookup` (32 bytes, sent here as hex) and the AES-GCM key
 // (kept on the phone). It sends { lookup, iv, ciphertext }. This side stores the
 // sha256 of the lookup, the IV and the ciphertext, through the database functions
-// transfer_put / transfer_take (202611120001), which also hold the limits:
-// 5 puts per IP per day, 40 pending blobs in all, 10 takes per IP per 15 minutes,
-// one take per blob, 24 hours at most. The IP itself is never stored, only an
-// HMAC of it under this file's own domain prefix.
+// transfer_put / transfer_take (202611120001, 202611140002), which also hold the limits:
+// 30 puts per IP and 3 per device per day, 40 pending blobs in all, 10 takes per IP
+// per 15 minutes, one take per blob, 24 hours at most. The IP and the device id are
+// never stored, only an HMAC of each under its own domain prefix. The device is a
+// random id the club app keeps in localStorage and sends as `device`; the old app
+// sends none, so only the IP limit holds for it.
 
 // Puts come from the old app and, since F-001 (owner decision 2026-11-14), from the
 // club app's Safari tab, which hands its log to the club app installed on the home
@@ -29,6 +31,7 @@ export function putCorsOrigin(origin) {
   return isPutOrigin(origin) ? origin : PUT_ORIGIN;
 }
 export const IP_DOMAIN = "haimunia:transfer-ip:v1:";
+export const DEVICE_DOMAIN = "haimunia:transfer-device:v1:";
 export const MAX_CIPHERTEXT_BYTES = 5 * 1024 * 1024;
 // base64 of 5 MiB, plus room for the rest of the JSON body.
 export const MAX_BODY_BYTES = Math.ceil(MAX_CIPHERTEXT_BYTES / 3) * 4 + 4096;
@@ -39,9 +42,15 @@ const hex = (buf) => Array.from(new Uint8Array(buf), (b) => b.toString(16).padSt
 export async function sha256Hex(text) {
   return hex(await crypto.subtle.digest("SHA-256", enc.encode(String(text))));
 }
-export async function ipHash(secret, ip) {
+async function hmacHex(secret, text) {
   const key = await crypto.subtle.importKey("raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  return hex(await crypto.subtle.sign("HMAC", key, enc.encode(IP_DOMAIN + String(ip || "unknown"))));
+  return hex(await crypto.subtle.sign("HMAC", key, enc.encode(text)));
+}
+export function ipHash(secret, ip) {
+  return hmacHex(secret, IP_DOMAIN + String(ip || "unknown"));
+}
+export function deviceHash(secret, device) {
+  return hmacHex(secret, DEVICE_DOMAIN + String(device));
 }
 
 export function corsHeaders(origin) {
@@ -56,6 +65,8 @@ export function corsHeaders(origin) {
 const B64 = /^[A-Za-z0-9+/]+={0,2}$/;
 const isB64 = (s) => typeof s === "string" && s.length % 4 === 0 && B64.test(s);
 const isLookup = (s) => typeof s === "string" && /^[0-9a-f]{64}$/.test(s);
+// A random id from the phone (a UUID in the club app). Optional: the old app sends none.
+const isDevice = (s) => typeof s === "string" && /^[A-Za-z0-9-]{16,64}$/.test(s);
 
 /** True when the base64 decodes to JSON: a client that forgot to encrypt. The database checks again. */
 export function decodesToJson(b64) {
@@ -75,7 +86,7 @@ function originRefused(origin, allowed) {
 
 /**
  * transfer-put. req: { body, ip, origin, bodyBytes }.
- * deps: { secret, put(lookupHash, ivB64, ciphertextB64, ipHash) -> status string }
+ * deps: { secret, put(lookupHash, ivB64, ciphertextB64, ipHash, deviceHash | null) -> status string }
  * Answers: 200 { status: "stored" } | 400 { error } | 403 { error: "origin" } | 413 | 429 | 503 { error: "full" }
  */
 export async function handleTransferPut(req, deps) {
@@ -84,8 +95,10 @@ export async function handleTransferPut(req, deps) {
   if (req.bodyBytes != null && req.bodyBytes > MAX_BODY_BYTES) return { status: 413, body: { error: "too_large" } };
   const b = req.body && typeof req.body === "object" ? req.body : {};
   if (!isLookup(b.lookup) || !isB64(b.iv) || !isB64(b.ciphertext)) return { status: 400, body: { error: "invalid" } };
+  if (b.device != null && !isDevice(b.device)) return { status: 400, body: { error: "invalid" } };
   if (decodesToJson(b.ciphertext)) return { status: 400, body: { error: "plaintext" } };
-  const status = await deps.put(await sha256Hex(b.lookup), b.iv, b.ciphertext, await ipHash(deps.secret, req.ip));
+  const device = b.device != null ? await deviceHash(deps.secret, b.device) : null;
+  const status = await deps.put(await sha256Hex(b.lookup), b.iv, b.ciphertext, await ipHash(deps.secret, req.ip), device);
   switch (status) {
     case "stored": return { status: 200, body: { status: "stored" } };
     case "rate_limited": return { status: 429, body: { error: "rate_limited" } };

@@ -10,6 +10,7 @@
 -- actor_id and target_id are plain uuids, not foreign keys: the record has to outlive the account
 -- (a cascade would erase the trail when someone is removed or deletes their account).
 -- Nobody reads it from the app: no client role has any grant; the owner reads it in the SQL editor.
+-- Kept 12 months, then purged daily by the club-staff-actions-purge cron job.
 -- Friends and couple circles are not logged: they have no staff, only an owner of a small private group.
 --
 -- The six functions below are 202611120001's bodies unchanged, plus one club_staff_log() call each.
@@ -30,7 +31,7 @@ create index club_staff_actions_club_time_idx on public.club_staff_actions (club
 alter table public.club_staff_actions enable row level security;
 revoke all on public.club_staff_actions from public, anon, authenticated, service_role;
 comment on table public.club_staff_actions is
-  'F-002: who did what as club staff (remove member, remove post, rotate link, post, pin, unpin or delete an announcement). Ids and time only, no text. Written only by club_staff_log() from the staff functions; no client role can read or write it. 202611140001.';
+  'F-002: who did what as club staff (remove member, remove post, rotate link, post, pin, unpin or delete an announcement). Ids and time only, no text. Written only by club_staff_log() from the staff functions; no client role can read or write it. Kept 12 months (club_staff_actions_purge, daily). 202611140001.';
 
 -- Called only from the SECURITY DEFINER functions below (they run as the owner). Granted to no role.
 create or replace function public.club_staff_log(p_club_id uuid, p_action text, p_target_id uuid)
@@ -41,6 +42,19 @@ begin
   values (p_club_id, auth.uid(), p_action, p_target_id);
 end $$;
 revoke all on function public.club_staff_log(uuid, text, uuid) from public, anon, authenticated, service_role;
+
+-- Retention: 12 months (owner decision 2026-11-14). Daily, like the other purges.
+create or replace function public.club_staff_actions_purge()
+returns integer language plpgsql security definer set search_path = '' as $$
+declare v_n integer;
+begin
+  delete from public.club_staff_actions where created_at < now() - interval '12 months';
+  get diagnostics v_n = row_count;
+  return v_n;
+end $$;
+revoke all on function public.club_staff_actions_purge() from public, anon, authenticated;
+grant execute on function public.club_staff_actions_purge() to service_role;
+select cron.schedule('club-staff-actions-purge', '17 4 * * *', $$select public.club_staff_actions_purge()$$);
 
 create or replace function public.remove_member(p_club_id uuid, p_user_id uuid)
 returns void language plpgsql security definer set search_path = '' as $$

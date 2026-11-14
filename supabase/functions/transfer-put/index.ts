@@ -37,9 +37,10 @@ Deno.serve(async (req: Request) => {
 
   const out = await handleTransferPut({ body, ip, origin: req.headers.get("origin"), bodyBytes }, {
     secret,
-    put: async (lookupHash: string, ivB64: string, ciphertextB64: string, ipHash: string) => {
+    put: async (lookupHash: string, ivB64: string, ciphertextB64: string, ipHash: string, deviceHash: string | null) => {
       const { data, error } = await supabase.rpc("transfer_put", {
         p_lookup_hash: lookupHash, p_iv_b64: ivB64, p_ciphertext_b64: ciphertextB64, p_ip_hash: ipHash,
+        p_device_hash: deviceHash,
       });
       if (error) throw error;
       return String(data);

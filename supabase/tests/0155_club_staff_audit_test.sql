@@ -102,6 +102,15 @@ select results_eq(
 select is((select count(*)::int from public.club_staff_actions a where a.club_id <> tests.kid()), 0, 'nothing logged outside the club');
 select is((select count(*)::int from public.club_staff_actions a where a::text like '%אימון%'), 0, 'no announcement text is copied into the log');
 
+-- Retention: 12 months, purged daily.
+insert into public.club_staff_actions (club_id, actor_id, action, target_id, created_at) values
+  (tests.kid(), tests.uid('owner'), 'link_rotate', null, now() - interval '13 months'),
+  (tests.kid(), tests.uid('owner'), 'link_rotate', null, now() - interval '11 months');
+select is(public.club_staff_actions_purge(), 1, 'the purge deletes the row older than 12 months');
+select is(tests.log_count('link_rotate'), 2, 'and keeps the 11-month-old row and today''s');
+select ok(exists (select 1 from cron.job where jobname = 'club-staff-actions-purge' and command like '%club_staff_actions_purge%'), 'the purge is scheduled');
+select ok(not has_function_privilege('authenticated', 'public.club_staff_actions_purge()', 'execute'), 'the purge is not callable by authenticated');
+
 -- An authenticated caller cannot read it even through the table name.
 select tests.set_auth(tests.uid('owner'));
 select throws_ok($$ select count(*) from public.club_staff_actions $$, '42501', null, 'even the club owner cannot read the log from the app');
