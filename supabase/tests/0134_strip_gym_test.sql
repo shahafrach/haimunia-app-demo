@@ -75,7 +75,8 @@ select is_empty(
 -- =====================================================================
 select is_empty(
   $$ select jobname from cron.job
-      where jobname ~ '(recap|member-of-week|announcement|challenge|event|feed|coach|health-score|onboarding|streak|weekly|monthly|wod)' $$,
+      -- feed(?!back): app-feedback-purge (202611150003) is the club app's feedback box, not the dropped feed.
+      where jobname ~ '(recap|member-of-week|announcement|challenge|event|feed(?!back)|coach|health-score|onboarding|streak|weekly|monthly|wod)' $$,
   'no cron job names a dropped feature');
 select isnt_empty(
   $$ select 1 from cron.job where jobname = 'purge-due-accounts' $$,

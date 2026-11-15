@@ -21,7 +21,8 @@ delete from public.transfer_attempts where action in ('client_error_ip', 'feedba
 
 create function tests.as_club(p_ip text) returns void language plpgsql as $fn$
 begin
-  perform set_config('request.headers', json_build_object('origin', 'https://haimunia.pages.dev', 'x-forwarded-for', p_ip || ', 10.0.0.1')::text, true);
+  -- cf-connecting-ip is the key (Cloudflare sets it); the x-forwarded-for first entry is noise a client could send.
+  perform set_config('request.headers', json_build_object('origin', 'https://haimunia.pages.dev', 'cf-connecting-ip', p_ip, 'x-forwarded-for', '6.6.6.6, ' || p_ip)::text, true);
 end $fn$;
 create function tests.err(p_fp text default 'abcd1234') returns void language sql as $fn$
   select public.client_error_report('3.12.0', 'add', 'error', 'TypeError', 'x is not a function', 'app.js', 120, 7, p_fp)
@@ -112,9 +113,38 @@ select tests.as_club('198.51.100.2');
 select lives_ok($$ select tests.err() $$, 'another IP is not affected');
 select tests.clear_auth();
 select is(tests.err_count(), 31, 'and is stored');
+-- The per-IP key cannot be chosen by the caller (review on #178). 31 reports, each with a fresh made-up first
+-- x-forwarded-for entry and no cf-connecting-ip: the last entry, which the gateway appended, is the key.
+delete from public.client_error_reports;
+delete from public.transfer_attempts where action = 'client_error_ip';
+create function tests.err_spoofed(p_n integer) returns void language plpgsql as $fn$
+begin
+  perform set_config('request.headers', json_build_object('origin', 'https://haimunia.pages.dev',
+    'x-forwarded-for', '6.6.6.' || p_n || ', 198.51.100.77')::text, true);
+  perform tests.err('5eed' || lpad(to_hex(p_n), 4, '0'));
+end $fn$;
+grant execute on function tests.err_spoofed(integer) to anon;
+set local role anon;
+select tests.err_spoofed(i) from generate_series(1, 31) i;
+select tests.clear_auth();
+select is(tests.err_count(), 30, 'a changed first x-forwarded-for entry does not escape the per-IP limit');
+-- With cf-connecting-ip present, x-forwarded-for is not read at all.
+delete from public.client_error_reports;
+delete from public.transfer_attempts where action = 'client_error_ip';
+create function tests.err_cf(p_n integer) returns void language plpgsql as $fn$
+begin
+  perform set_config('request.headers', json_build_object('origin', 'https://haimunia.pages.dev',
+    'cf-connecting-ip', '198.51.100.88', 'x-forwarded-for', '7.7.7.' || p_n)::text, true);
+  perform tests.err('cf00' || lpad(to_hex(p_n), 4, '0'));
+end $fn$;
+grant execute on function tests.err_cf(integer) to anon;
+set local role anon;
+select tests.err_cf(i) from generate_series(1, 31) i;
+select tests.clear_auth();
+select is(tests.err_count(), 30, 'cf-connecting-ip decides the bucket; x-forwarded-for cannot split it');
 -- Errors: 2,000 a day in total.
 insert into public.client_error_reports (app, app_version, screen, kind, message, file, fp)
-select 'club', '3.12.0', 'add', 'error', 'seed', 'app.js', 'abcd1234' from generate_series(1, 1969);
+select 'club', '3.12.0', 'add', 'error', 'seed', 'app.js', 'abcd1234' from generate_series(1, 2000 - tests.err_count());  -- up to exactly 2,000
 set local role anon;
 select tests.as_club('198.51.100.3');
 select tests.err();
@@ -160,7 +190,7 @@ select ok((select bool_and(ip_hash ~ '^[0-9a-f]{64}$') from public.transfer_atte
 
 -- 5. Purges, schedules and the owner read -------------------------------------------------------------
 update public.client_error_reports set created_at = now() - interval '31 days' where message = 'seed';
-select ok(public.client_error_reports_purge() >= 1969, 'error reports older than 30 days are purged');
+select ok(public.client_error_reports_purge() >= 1900, 'error reports older than 30 days are purged');
 select is((select count(*)::int from public.client_error_reports where message = 'seed'), 0, 'none left');
 update public.app_feedback set created_at = now() - interval '13 months' where body = 'seed';
 select ok(public.app_feedback_purge() >= 480, 'feedback older than 12 months is purged');

@@ -13,7 +13,8 @@ What the club app sends without a member's name, where it lands, and how the own
 Neither table has a user, username, name, device or IP column. The app (`club`, `old` or `unknown`) comes
 from the request's Origin header, never from the caller. Limits: feedback 5 a day per device, 20 a day per
 IP and 500 a day in total; errors 30 an hour per IP and 2,000 a day. The counters are HMACs in
-`transfer_attempts` and are deleted after 2 days.
+`transfer_attempts` and are deleted after 2 days. The IP is `cf-connecting-ip` (set by Cloudflare), else the
+last `x-forwarded-for` entry (the one the gateway appended), never the first, which a client can set.
 
 No client role can read either table (RLS on, no policies, every grant revoked). Read them in the Supabase
 SQL editor, which runs as the owner.

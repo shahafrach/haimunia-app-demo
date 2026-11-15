@@ -10,7 +10,8 @@
 --
 -- Limits follow the transfer-put pattern (202611120001, 202611140002): a per-IP and, for feedback, a
 -- per-device counter in public.transfer_attempts through transfer_rate_ok(), keyed by an HMAC under its own
--- domain prefix, never the raw value. The hourly transfer_purge() already deletes counter rows older than
+-- domain prefix, never the raw value. The IP is cf-connecting-ip, else the last x-forwarded-for entry (never
+-- the first, which a client can set). The hourly transfer_purge() already deletes counter rows older than
 -- 2 days. The HMAC key is a random 32 bytes made here and kept in public.client_report_key, which has no
 -- grant at all; only these definer functions read it. Refusals never raise (a raise would roll back the
 -- counter): a call over a limit returns quietly and stores nothing. Bad fields raise 22023.
@@ -56,8 +57,7 @@ begin
 end $$;
 revoke all on function public.client_report_app() from public, anon, authenticated, service_role;
 
--- HMAC(key, domain || value) as hex. For the IP the value is the first x-forwarded-for address (the client,
--- as the API gateway forwards it), else x-real-ip, else 'unknown' (one shared bucket for callers without one).
+-- HMAC(key, domain || value) as hex: the counters never hold the raw value.
 create or replace function public.client_report_hash(p_domain text, p_value text)
 returns text language plpgsql stable set search_path = '' as $$
 declare v_key bytea;
@@ -67,18 +67,28 @@ begin
 end $$;
 revoke all on function public.client_report_hash(text, text) from public, anon, authenticated, service_role;
 
+-- HMAC(key, domain || value) as hex. For the IP, in order of trust:
+--   1. cf-connecting-ip: set by Cloudflare at the edge from the TCP peer; a client-sent value is overwritten.
+--   2. the LAST x-forwarded-for entry: proxies append the peer they saw, so the last entry is the one a
+--      client cannot choose (the first entry is whatever the client sent, and was the review finding on #178).
+--   3. x-real-ip, else 'unknown' (one shared bucket for callers without any of these).
 create or replace function public.client_report_ip_hash(p_domain text)
 returns text language plpgsql stable set search_path = '' as $$
 declare
   v_headers json;
   v_ip text;
+  v_xff text[];
 begin
   begin
     v_headers := nullif(current_setting('request.headers', true), '')::json;
   exception when others then
     v_headers := null;
   end;
-  v_ip := nullif(btrim(split_part(coalesce(v_headers ->> 'x-forwarded-for', ''), ',', 1)), '');
+  v_ip := nullif(btrim(coalesce(v_headers ->> 'cf-connecting-ip', '')), '');
+  if v_ip is null then
+    v_xff := string_to_array(coalesce(v_headers ->> 'x-forwarded-for', ''), ',');
+    if coalesce(array_length(v_xff, 1), 0) > 0 then v_ip := nullif(btrim(v_xff[array_length(v_xff, 1)]), ''); end if;
+  end if;
   if v_ip is null then v_ip := nullif(btrim(coalesce(v_headers ->> 'x-real-ip', '')), ''); end if;
   return public.client_report_hash(p_domain, coalesce(v_ip, 'unknown'));
 end $$;
