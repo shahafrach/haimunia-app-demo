@@ -50,7 +50,10 @@ function check(label, ok, detail = "") {
   if (!ok) failed = true;
 }
 
-const target = await resolveTarget();
+// frame-guard.js is the backstop for a host that sends no headers. With the site's own _headers
+// (X-Frame-Options DENY, frame-ancestors 'none'; F-008) the browser refuses the iframe before the
+// script runs, so this check serves the tree without them. test/f008-csp-header.test.mjs pins the headers.
+const target = await resolveTarget({ siteHeaders: false });
 console.log(`Target: ${target.url}${target.local ? " (local static server)" : ""}`);
 
 const browser = await chromium.launch();

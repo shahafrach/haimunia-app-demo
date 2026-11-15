@@ -18,8 +18,24 @@ const MIME = {
   ".webmanifest": "application/manifest+json",
 };
 
-export function startStaticServer(root) {
+// The production host (Cloudflare Pages) sends the `/*` block of _headers with every response,
+// CSP included (F-008). Sending it here too means a check fails if that policy breaks a screen.
+async function siteHeaders(root) {
+  let text = "";
+  try { text = await readFile(path.join(root, "_headers"), "utf8"); } catch (e) { return {}; }
+  const out = {};
+  let inAll = false;
+  for (const line of text.split("\n")) {
+    if (/^\S/.test(line) && !line.startsWith("#")) { inAll = line.trim() === "/*"; continue; }
+    const m = inAll && line.match(/^\s+([A-Za-z-]+):\s*(.+)$/);
+    if (m) out[m[1]] = m[2].trim();
+  }
+  return out;
+}
+
+export async function startStaticServer(root, opts = {}) {
   const resolvedRoot = path.resolve(root);
+  const extra = opts.siteHeaders === false ? {} : await siteHeaders(resolvedRoot);
   const server = http.createServer(async (req, res) => {
     try {
       let urlPath = decodeURIComponent(req.url.split("?")[0]);
@@ -30,7 +46,7 @@ export function startStaticServer(root) {
       if (st.isDirectory()) { res.writeHead(404); res.end(); return; }
       const ext = path.extname(filePath);
       const body = await readFile(filePath);
-      res.writeHead(200, { "Content-Type": MIME[ext] || "application/octet-stream" });
+      res.writeHead(200, { ...extra, "Content-Type": MIME[ext] || "application/octet-stream" });
       res.end(body);
     } catch (e) {
       res.writeHead(404);
