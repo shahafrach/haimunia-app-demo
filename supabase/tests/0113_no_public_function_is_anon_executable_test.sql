@@ -66,8 +66,14 @@ select set_eq(
        join pg_namespace n on n.oid = p.pronamespace
       where n.nspname = 'public'
         and has_function_privilege('anon', p.oid, 'execute') $$,
-  $$ values ('job_health_status()') $$,
-  'exactly one function in public is executable by anon, and it is job_health_status() - anything else here is a missing `revoke all on function ... from public, anon`');
+  $$ values ('job_health_status()'),
+            ('client_error_report(text,text,text,text,text,text,integer,integer,text)'),
+            ('feedback_submit(text,text,text,boolean,text,text)') $$,
+  'exactly three functions in public are executable by anon: job_health_status(), and since 202611150003 the two insert-only report functions of the club app (client_error_report, feedback_submit) - anything else here is a missing `revoke all on function ... from public, anon`');
+-- 202611150003 (3.12.0). client_error_report() and feedback_submit() are granted to anon on purpose: an
+-- offline-first member has no session, and both are insert-only into tables no client role can read, with
+-- per-IP (and for feedback per-device) HMAC limits, a daily cap, and a purge. They return void and store
+-- no user, device or IP column. 0158 pins their limits and that anon can select from neither table.
 
 select is(
   (select count(*)::int
@@ -75,8 +81,8 @@ select is(
      join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public'
       and has_function_privilege('anon', p.oid, 'execute')),
-  1,
-  'and there is exactly one of them - the count says so on its own, so an overload sneaking in under the same name is still a failure');
+  3,
+  'and there are exactly three of them - the count says so on its own, so an overload sneaking in under the same name is still a failure');
 
 -- The named exception really is the one with no arguments. A `revoke` names a
 -- signature, so an overload is a different function with default privileges -

@@ -84,6 +84,9 @@ select set_config('request.headers', '{"origin": "https://haimunia.pages.dev"}',
 insert into public.training_log_usage (device_id, event, screen) values ('e0000000-0000-4000-8000-000000000001', 'app_open', '');
 select set_config('request.headers', '', true);
 insert into public.invites (club_id, code_hash, role) values ('b0000000-0000-4000-8000-00000000000b', repeat('f', 64), 'member');
+-- 202611150003 (3.12.0): two insert-only report tables and the HMAC key (the migration's own row).
+insert into public.client_error_reports (app, app_version, screen, kind, message, file, fp) values ('club', '3.12.0', 'add', 'error', 'probe', 'app.js', 'c0ffee00');
+insert into public.app_feedback (app, app_version, screen, device_type, body) values ('club', '3.12.0', 'add', 'ios', 'probe');
 insert into public.job_health_state (id) values (true) on conflict do nothing;
 insert into public.member_achievements (user_id, achievement_id) select tests.uid('m3'), id from public.achievement_definitions where code = 'leak_probe';
 insert into public.member_targets (user_id, paused_until) values (tests.uid('m3'), null);
@@ -138,6 +141,9 @@ select cmp_ok((select count(*) from public.transfer_blobs where lookup_hash = re
 select cmp_ok((select count(*) from public.transfer_attempts where ip_hash = repeat('c', 64)), '>', 0::bigint, 'transfer_attempts: the victim row exists');
 select cmp_ok((select count(*) from public.club_staff_actions where club_id = 'b0000000-0000-4000-8000-00000000000b'), '>', 0::bigint, 'club_staff_actions: the victim row exists');
 select cmp_ok((select count(*) from public.training_log_usage where device_id = 'e0000000-0000-4000-8000-000000000001'), '>', 0::bigint, 'training_log_usage: the victim row exists');
+select cmp_ok((select count(*) from public.client_error_reports where fp = 'c0ffee00'), '>', 0::bigint, 'client_error_reports: the victim row exists');
+select cmp_ok((select count(*) from public.app_feedback where body = 'probe'), '>', 0::bigint, 'app_feedback: the victim row exists');
+select cmp_ok((select count(*) from public.client_report_key), '>', 0::bigint, 'client_report_key: the key row exists');
 
 -- Positive controls for the attacker's own circle.
 select tests.set_auth(tests.uid('m1'));
@@ -282,6 +288,19 @@ select is(tests.leak_count('training_log_usage', 'device_id = ''e0000000-0000-40
 select is(tests.leak_dml('update public.training_log_usage set screen = screen where device_id = ''e0000000-0000-4000-8000-000000000001'''), 0, 'training_log_usage: update touches zero rows');
 select is(tests.leak_dml('delete from public.training_log_usage where device_id = ''e0000000-0000-4000-8000-000000000001'''), 0, 'training_log_usage: delete removes zero rows');
 select is(tests.leak_dml('insert into public.training_log_usage (device_id, event, screen) values (''e0000000-0000-4000-8000-000000000002'', ''app_open'', '''')'), 0, 'training_log_usage: an authenticated insert is refused (anon only)');
+
+-- client_error_reports, app_feedback, client_report_key (202611150003; insert only through the definer functions, nobody reads)
+select tests.set_auth(tests.uid('m1'));
+select is(tests.leak_count('client_error_reports', 'fp = ''c0ffee00'''), 0::bigint, 'client_error_reports: select sees zero rows');
+select is(tests.leak_dml('update public.client_error_reports set message = ''x'' where fp = ''c0ffee00'''), 0, 'client_error_reports: update touches zero rows');
+select is(tests.leak_dml('delete from public.client_error_reports where fp = ''c0ffee00'''), 0, 'client_error_reports: delete removes zero rows');
+select is(tests.leak_dml('insert into public.client_error_reports (app, app_version, screen, kind, message, file, fp) values (''club'', ''1'', ''add'', ''error'', ''x'', ''app.js'', ''00000000'')'), 0, 'client_error_reports: a direct insert is refused');
+select is(tests.leak_count('app_feedback', 'body = ''probe'''), 0::bigint, 'app_feedback: select sees zero rows');
+select is(tests.leak_dml('update public.app_feedback set body = ''x'' where body = ''probe'''), 0, 'app_feedback: update touches zero rows');
+select is(tests.leak_dml('delete from public.app_feedback where body = ''probe'''), 0, 'app_feedback: delete removes zero rows');
+select is(tests.leak_dml('insert into public.app_feedback (app, app_version, screen, device_type, body) values (''club'', ''1'', ''add'', ''ios'', ''x'')'), 0, 'app_feedback: a direct insert is refused');
+select is(tests.leak_count('client_report_key', 'true'), 0::bigint, 'client_report_key: select sees nothing');
+select is(tests.leak_dml('delete from public.client_report_key'), 0, 'client_report_key: delete removes nothing');
 
 -- recovery_attempts
 select tests.set_auth(tests.uid('m1'));
@@ -454,12 +473,15 @@ select cmp_ok((select count(*) from public.transfer_blobs where lookup_hash = re
 select cmp_ok((select count(*) from public.transfer_attempts where ip_hash = repeat('c', 64)), '>', 0::bigint, 'transfer_attempts: the victim rows survived');
 select cmp_ok((select count(*) from public.club_staff_actions where club_id = 'b0000000-0000-4000-8000-00000000000b'), '>', 0::bigint, 'club_staff_actions: the victim rows survived');
 select cmp_ok((select count(*) from public.training_log_usage where device_id = 'e0000000-0000-4000-8000-000000000001'), '>', 0::bigint, 'training_log_usage: the victim rows survived');
+select cmp_ok((select count(*) from public.client_error_reports where fp = 'c0ffee00'), '>', 0::bigint, 'client_error_reports: the victim row survived');
+select cmp_ok((select count(*) from public.app_feedback where body = 'probe'), '>', 0::bigint, 'app_feedback: the victim row survived');
+select cmp_ok((select count(*) from public.client_report_key), '>', 0::bigint, 'client_report_key: the key survived');
 
 -- Every table in public is covered above.
 select is_empty(
   $$ select c.relname::text from pg_class c
       where c.relnamespace = 'public'::regnamespace and c.relkind in ('r', 'p')
-        and c.relname not in ('account_deletion_requests', 'achievement_definitions', 'analytics_events', 'blocks', 'bug_reports', 'benchmark_results', 'circle_invites', 'circle_members', 'circle_targets', 'clubs', 'edge_function_invocations', 'invite_attempts', 'invite_codes', 'invite_redemptions', 'invites', 'job_health_state', 'member_achievements', 'member_targets', 'notification_batches', 'notification_preferences', 'notifications', 'post_training_partners', 'private_records', 'profiles', 'push_subscriptions', 'rate_limits', 'reactions', 'recovery_attempts', 'recovery_codes', 'reset_requests', 'reminder_prefs', 'request_idempotency', 'workout_posts', 'club_announcements', 'transfer_blobs', 'transfer_attempts', 'training_log_usage', 'club_staff_actions') $$,
+        and c.relname not in ('account_deletion_requests', 'achievement_definitions', 'analytics_events', 'blocks', 'bug_reports', 'benchmark_results', 'circle_invites', 'circle_members', 'circle_targets', 'clubs', 'edge_function_invocations', 'invite_attempts', 'invite_codes', 'invite_redemptions', 'invites', 'job_health_state', 'member_achievements', 'member_targets', 'notification_batches', 'notification_preferences', 'notifications', 'post_training_partners', 'private_records', 'profiles', 'push_subscriptions', 'rate_limits', 'reactions', 'recovery_attempts', 'recovery_codes', 'reset_requests', 'reminder_prefs', 'request_idempotency', 'workout_posts', 'club_announcements', 'transfer_blobs', 'transfer_attempts', 'training_log_usage', 'club_staff_actions', 'client_error_reports', 'app_feedback', 'client_report_key') $$,
   'this file covers every table in public: a new table must be added here');
 
 select * from finish();
