@@ -9,9 +9,12 @@ name: club-admin
 #   set_owner     makes `who` (already a club member) the owner
 #   usage_report  prints the usage totals (devices per week and per app; no ids)
 #
-# THE REPOSITORY IS PUBLIC, SO THIS LOG IS PUBLIC. The username is masked before
-# anything else runs and is hashed before it reaches SQL; the log shows a
-# one-word status, or totals only.
+# THE REPOSITORY IS PUBLIC, SO THIS LOG IS PUBLIC. The username is never put in
+# an env: block, because GitHub prints a step's env in its log header before any
+# ::add-mask:: can run (run 43255246472 leaked one that way, 2026-11-12). The
+# script reads it from the event payload file, masks it first, and the node
+# script hashes it before it reaches SQL. The log shows a one-word status, or
+# totals only. A "sha256:<hex>" value works too and is never secret.
 on:
   workflow_dispatch:
     inputs:
@@ -39,12 +42,7 @@ jobs:
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       ACTION: ${{ inputs.action }}
-      WHO: ${{ inputs.who }}
     steps:
-      - name: mask the username
-        run: |
-          set +x
-          if [ -n "$WHO" ]; then echo "::add-mask::$WHO"; fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -58,4 +56,6 @@ jobs:
       - name: run the action
         run: |
           set +x
-          node scripts/club-admin.mjs
+          who="$(node -e 'const e=require(process.env.GITHUB_EVENT_PATH);process.stdout.write(String((e.inputs&&e.inputs.who)||""))')"
+          if [ -n "$who" ]; then echo "::add-mask::$who"; fi
+          WHO="$who" node scripts/club-admin.mjs
