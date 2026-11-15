@@ -437,8 +437,14 @@ select is((public.training_log_usage_report(4) -> 'apps_7d' ->> 'old')::int, 2, 
 select is((public.training_log_usage_report(4, 'club') ->> 'devices_seen')::int, 1, 'the report reads one app alone');
 select is((public.training_log_usage_report(4) ->> 'devices_seen')::int, 3, 'and every app when none is named');
 select throws_ok($$ select public.training_log_usage_report(4, 'nope') $$, '22023', null, 'an unknown app is refused');
-update public.training_log_usage set day = day - 401;
-select ok(public.training_log_usage_purge() >= 2, 'counts older than 400 days are purged');
+-- 180 days since 202611150002 (was 400). A count 179 days old stays; one 181 days old goes.
+update public.training_log_usage set day = day - 179 where device_id = 'e1000000-0000-4000-8000-000000000003';
+update public.training_log_usage set day = day - 181 where device_id <> 'e1000000-0000-4000-8000-000000000003';
+select ok(public.training_log_usage_purge() >= 2, 'counts older than 180 days are purged');
+select is((select count(*)::int from public.training_log_usage where device_id <> 'e1000000-0000-4000-8000-000000000003'), 0,
+  'nothing older than 180 days is left');
+select is((select count(*)::int from public.training_log_usage where device_id = 'e1000000-0000-4000-8000-000000000003'), 1,
+  'a count 179 days old is kept');
 select ok(exists (select 1 from cron.job where jobname = 'training-log-usage-purge'), 'the purge is scheduled');
 
 select * from finish();
