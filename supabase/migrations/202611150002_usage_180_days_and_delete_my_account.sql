@@ -1,4 +1,4 @@
--- Two changes for the Haimunia club apps (owner, 2026-11-15).
+-- Three changes for the Haimunia club apps (owner, 2026-11-15).
 --
 -- 1. Usage counts are purged after 180 days, not 400. training_log_usage_purge() and the table comment come
 --    from 202611120001 and 202611130001, both applied, so the change is made here (forward only).
@@ -17,10 +17,15 @@
 --    foreign key, so nothing cascades there.
 --    The training log on the phone is untouched. A BOX-LOG cloud backup (private_records, keyed to
 --    auth.users with on delete cascade) goes with the account.
+--    It requires aal_satisfied() (F-016): a password-only session of a member with a verified factor is
+--    refused, as everywhere else since 202611070002.
 --    Rate limited to 3 calls an hour (check_rate_limit, as bug_report_submit). Like every caller of
 --    check_rate_limit, the count is written in the call's own transaction: a call that raises rolls it back,
 --    and a call that succeeds removes the account and its rate_limits row (on delete cascade). The limit is
 --    a backstop against a burst inside one window, not a lockout.
+--
+-- 3. request_account_deletion() (30-day deletion, BOX-LOG) gets the same null-uid and aal2 checks (F-016,
+--    twin of 2). Its body is otherwise the one from 202610290003.
 
 -- =====================================================================================================
 -- 1. Usage counts: 180 days
@@ -48,6 +53,9 @@ declare
   v_uid uuid := auth.uid();
 begin
   if v_uid is null then raise exception 'not authorized' using errcode = 'P0001'; end if;
+  -- F-016: a member with two-step login needs the aal2 session (202611070002). A password-only session
+  -- can prove the code and nothing else, least of all delete the account for good.
+  if not public.aal_satisfied() then raise exception 'not authorized' using errcode = 'P0001'; end if;
 
   -- check_rate_limit RETURNS false when over the limit; it does not raise.
   if not public.check_rate_limit('delete_my_account', 3, 60) then
@@ -82,3 +90,30 @@ grant execute on function public.delete_my_account() to authenticated;
 comment on function public.delete_my_account() is
   'The caller deletes their own account at once: out of every circle (leave_circle''s cleanup), posts deleted for real, reactions given, push subscriptions, notifications, profile, then the auth user. Staff audit rows (ids only) stay. 3 calls an hour. 202611150002.';
 
+
+-- =====================================================================================================
+-- 3. request_account_deletion(): the same two checks (F-016, twin)
+-- =====================================================================================================
+-- The body from 202610290003, unchanged, after a null-uid check and the aal2 requirement. Without the
+-- null check an anonymous-role call did nothing useful but still ran every statement with auth.uid() null;
+-- without the aal check a password-only session of a member with two-step login could start the deletion.
+-- create or replace keeps its grants and its row in tests.definer_reviewed.
+create or replace function public.request_account_deletion() returns void
+language plpgsql security definer set search_path = '' as $$
+begin
+  if auth.uid() is null then raise exception 'not authorized' using errcode = 'P0001'; end if;
+  if not public.aal_satisfied() then raise exception 'not authorized' using errcode = 'P0001'; end if;
+  -- Out of every circle at once, with the cleanup leave_circle gets: the
+  -- circle_members_after_delete trigger removes their posts, reactions, tags and
+  -- benchmark results there, passes ownership to the longest-standing member,
+  -- and deletes a circle whose last member this was. The member count and the
+  -- Couple's second seat free up now, not at the purge 30 days later.
+  delete from public.circle_members m where m.user_id = auth.uid();
+  insert into public.account_deletion_requests(user_id) values (auth.uid())
+  on conflict (user_id) do update set requested_at = now(), purge_after = now() + interval '30 days';
+  update public.profiles set deleted_at = now() where id = auth.uid();
+  delete from public.push_subscriptions where user_id = auth.uid();
+  perform set_config('app.allow_moderation_write', 'on', true);
+  update public.workout_posts set deleted_at = now() where author_id = auth.uid();
+  perform set_config('app.allow_moderation_write', 'off', true);
+end $$;
