@@ -69,7 +69,7 @@
     </form>`;
     const canShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
     const made = `<div data-invite-ready="1">
-      <label class="field"><span class="field-label">קישור ההזמנה</span><input class="text-input" id="circleInviteLink" dir="ltr" readonly value="${esc(sheet.link || "")}" onfocus="this.select()"/></label>
+      <label class="field"><span class="field-label">קישור ההזמנה</span><input class="text-input" id="circleInviteLink" dir="ltr" readonly value="${esc(sheet.link || "")}" data-select-on-focus/></label>
       <div class="footer-note" style="margin:6px 0 10px;">${esc("שלחו אותו רק למי שרוצים להזמין. מי שמקבל אותו יכול להצטרף למעגל.")}</div>
       <div class="chip-row">${canShare ? `<button class="chip-btn primary" data-community-action="c-invite-share">שיתוף</button>` : ""}<button class="chip-btn${canShare ? "" : " primary"}" data-community-action="c-invite-copy">${sheet.copied ? "הועתק" : "העתקה"}</button></div>
     </div>`;
@@ -82,7 +82,7 @@
     const err = sheet.error ? `<div class="field-error" role="alert" data-founder-error="1" style="margin-bottom:10px;">${esc(sheet.error)}</div>` : "";
     const body = sheet.link
       ? `<div data-founder-ready="1">
-          <label class="field"><span class="field-label">הקישור לחבר/ה</span><input class="text-input" id="founderLink" dir="ltr" readonly value="${esc(sheet.link)}" onfocus="this.select()"/></label>
+          <label class="field"><span class="field-label">הקישור לחבר/ה</span><input class="text-input" id="founderLink" dir="ltr" readonly value="${esc(sheet.link)}" data-select-on-focus/></label>
           <div class="footer-note" style="margin:6px 0 10px;">${esc("הקישור מוצג רק עכשיו, תקף 7 ימים ופועל פעם אחת.")}</div>
           <div class="chip-row">${canShare ? `<button class="chip-btn primary" data-community-action="c-founder-share">שיתוף</button>` : ""}<button class="chip-btn${canShare ? "" : " primary"}" data-community-action="c-founder-copy">${sheet.copied ? "הועתק" : "העתקה"}</button></div>
         </div>`
@@ -285,3 +285,11 @@
       if (s && s.kind === "medal") { const at = s.picked.indexOf(t.dataset.medalCircle); if (at >= 0) s.picked.splice(at, 1); else s.picked.push(t.dataset.medalCircle); s.error = ""; rerender(); }
     }
   });
+
+// F-008 (2026-11-15): the read-only link fields select their text on focus. This was an inline
+// onfocus handler calling this.select(), which script-src 'self' (no 'unsafe-inline') already blocked;
+// one delegated listener does it without inline script.
+document.addEventListener("focusin", (e) => {
+  const t = e.target;
+  if (t && t.matches && t.matches("input[data-select-on-focus]")) { try { t.select(); } catch (err) { /* nothing to select */ } }
+});

@@ -10,9 +10,16 @@
 # previous host, GitHub Pages, could not send headers at all, which is why
 # frame-guard.js and the meta CSP exist as backstops.) docs/deploy/HEADERS.md
 # is the superseded plan from that era; verify with `curl -sI` on the site.
+#
+# F-008 (2026-11-15): the header CSP was only frame-ancestors. It is now the full policy, the same
+# hosts as the <meta> CSP in index.html: scripts from this origin plus Turnstile, network to this
+# origin, the Supabase project and Turnstile (the meta CSP allows Turnstile in connect-src too), no
+# plugins, no inline script anywhere (style="" attributes are the one inline allowance).
+# test/f008-csp-header.test.mjs keeps the hosts of the two policies equal. box-log.pages.dev shuts
+# down on 2026-12-15.
 /*
   X-Frame-Options: DENY
-  Content-Security-Policy: frame-ancestors 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self' https://hvwakffluwvegedefoth.supabase.co https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'
   Strict-Transport-Security: max-age=31536000; includeSubDomains
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer

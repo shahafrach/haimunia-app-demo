@@ -10,11 +10,11 @@ import { startStaticServer } from "./server.mjs";
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const projectRoot = path.resolve(here, "../../../");
 
-export async function resolveTarget() {
+export async function resolveTarget(opts = {}) {
   if (process.env.TARGET_URL) {
     return { url: process.env.TARGET_URL, local: false, close: async () => {} };
   }
-  const { url, close } = await startStaticServer(projectRoot);
+  const { url, close } = await startStaticServer(projectRoot, opts);
   return { url, local: true, close };
 }
 
