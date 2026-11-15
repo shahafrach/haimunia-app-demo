@@ -54,7 +54,11 @@ test("THE ORDERING THAT MAKES A LATE POLL SAFE: check() runs before the deadline
   const start = Date.now();
   const result = await waitFor(() => flag, 50, 200);
   assert.equal(result, true, "a poll arriving after the deadline still resolves a true condition");
-  assert.ok(Date.now() - start >= 200, "and this really did poll after the deadline, not before it");
+  // F-004: Node fires a timer on libuv's cached loop clock, which can trail Date.now() by up to a
+  // millisecond, so a 200 ms interval can measure 199 here (CI on haimunia-app-demo #170 and #173: the
+  // runner timed the test at 200.3 ms while this difference was under 200). What this pins is that the
+  // second poll came long after the 50 ms deadline; 190 keeps that beyond doubt and drops the clock skew.
+  assert.ok(Date.now() - start >= 190, "and this really did poll after the deadline, not before it");
 });
 
 test("a condition that never comes true still rejects", async () => {
