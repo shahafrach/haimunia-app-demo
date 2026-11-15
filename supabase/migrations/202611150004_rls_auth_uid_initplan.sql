@@ -1,4 +1,4 @@
--- 202611150001: RLS policies call auth.uid() once per statement, not once per row (F-005).
+-- 202611150004: RLS policies call auth.uid() once per statement, not once per row (F-005).
 --
 -- Supabase's linter (splinter 0003_auth_rls_initplan, WARN) flagged every public policy that calls
 -- auth.uid() bare: Postgres re-evaluates it for each row. Wrapped as (select auth.uid()), the planner
