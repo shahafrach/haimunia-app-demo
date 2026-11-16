@@ -83,8 +83,17 @@ begin
 end;
 $$;
 revoke all on function public.cron_invoke_edge_function(text) from public, anon, authenticated;
-comment on function public.cron_invoke_edge_function(text) is
-  'Scheduler bridge (202609050005, 202609230008, 202611160001). POSTs an empty JSON body to <edge_functions_base_url>/<p_slug> via pg_net with Authorization: Bearer <edge_functions_cron_secret>, or <edge_functions_service_role_key> while the cron secret is still its placeholder (F-023). Every value is read at run time from Supabase Vault; none is ever written into a migration. Returns NULL with a NOTICE and makes no request while the base URL or both credentials are unset. p_slug must match ^[a-z][a-z0-9_-]{2,63}$. Records the request id in public.edge_function_invocations so job_health_check() can attribute the answer. SECURITY DEFINER to read vault.decrypted_secrets, GRANTED TO NO ROLE: only the cron job owner calls it.';
+-- APPENDED, never replaced: this function's comment carries the rollback-coupling warning for 202609070001
+-- (202609080003) and 202609050005's original text, and supabase/tests/0092 fails if either is lost.
+-- `comment on` replaces, so the new sentence is added to what is there.
+do $c$
+begin
+  execute format('comment on function public.cron_invoke_edge_function(text) is %L',
+    coalesce(obj_description('public.cron_invoke_edge_function(text)'::regprocedure, 'pg_proc'), '')
+    || ' 202611160001 (F-023): the Authorization header carries the Vault secret edge_functions_cron_secret '
+    || '(the Edge Function secret EDGE_CRON_SECRET, written by set-vault-secrets) when it is set, and '
+    || 'edge_functions_service_role_key only while the cron secret is still its placeholder.');
+end $c$;
 
 create or replace function public.edge_functions_ready()
 returns boolean
