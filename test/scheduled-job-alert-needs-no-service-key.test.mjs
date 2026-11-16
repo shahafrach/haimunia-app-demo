@@ -83,3 +83,20 @@ test("the check fails on a stale verdict, not only on ok:false", () => {
   assert.match(script, /ageMinutes > MAX_AGE_MINUTES/, "and compared, not merely logged");
 });
 
+
+test("F-023: the operator hint starts from what the hourly check saw, and names the Edge Function answers", () => {
+  // On 2026-11-16 the alert said two jobs failed; the hint sent the operator to scheduled_job_health(),
+  // which looks only at the latest cron run and returned nothing. The failures were Edge Functions
+  // answering 401, which job_health_check() (202609230008) records as "edge: <slug>".
+  const script = fs.readFileSync(new URL("../scripts/check-scheduled-job-health.mjs", import.meta.url), "utf8");
+  const hint = script.slice(script.indexOf("Operator view"));
+  const first = hint.indexOf("public.job_health_state");
+  assert.ok(first > 0, "the hint names job_health_state");
+  assert.match(hint, /An "edge: <slug>" entry means that Edge Function answered non-2xx/);
+  assert.match(script, /from public\.edge_function_invocations i join net\._http_response r on r\.id = i\.request_id where i\.invoked_at > now\(\) - interval '1 hour' group by 1,2;/,
+    "the query for the Edge Function answers, as in QUEUE Q-23");
+  assert.match(hint, /EDGE_ANSWERS_SQL/);
+  assert.doesNotMatch(hint, /select \* from public\.scheduled_job_health\(\) where not healthy/, "no longer the first thing to run");
+  // docs/ops/MONITORING.md and INCIDENT_RESPONSE.md say the same; they sit under CI's paths-ignore, so no
+  // test asserts on them (workflow-minutes.test.mjs).
+});
