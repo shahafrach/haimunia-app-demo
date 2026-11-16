@@ -104,6 +104,12 @@ async function postAlert(text) {
   }
 }
 
+// The Edge Function answers job_health_check() (202609230008) reads for its "edge: <slug>" entries. F-023:
+// on 2026-11-16 scheduled_job_health() returned no rows while two jobs failed with 401, so the hint names
+// the queries that show what job_health_state saw.
+const EDGE_ANSWERS_SQL =
+  "select i.slug, r.status_code, count(*) from public.edge_function_invocations i join net._http_response r on r.id = i.request_id where i.invoked_at > now() - interval '1 hour' group by 1,2;";
+
 async function main() {
   const cfg = {
     url: process.env.SUPABASE_URL || readConfig().url,
@@ -176,9 +182,11 @@ async function main() {
 
   const msg =
     `🔴 scheduled-job-health: ${problems.join(" ")}\n\n` +
-    `Operator view (service_role, from the SQL editor or psql - never from CI):\n` +
-    `  select * from public.scheduled_job_health() where not healthy;\n` +
-    `  select failing_jobs, last_checked_at from public.job_health_state;`;
+    `Operator view (service_role, from the SQL editor or psql - never from CI). What the hourly check saw:\n` +
+    `  select failing_jobs, last_checked_at from public.job_health_state;\n` +
+    `An "edge: <slug>" entry means that Edge Function answered non-2xx. Its recent answers:\n` +
+    `  ${EDGE_ANSWERS_SQL}\n` +
+    `(scheduled_job_health() looks only at the latest cron run and never shows Edge Function answers.)`;
   console.error(msg);
   await postAlert(msg);
   process.exit(1);

@@ -35,7 +35,10 @@ people hold it before you need it at 22:00.
 2. **Decide: is data exposed or being destroyed right now?** If yes, it is
    SEV-1 and containment comes before diagnosis. Skip to §Containment.
 3. **Check the obvious shared causes** before assuming a bug:
-   - `select * from public.scheduled_job_health() where not healthy;`
+   - `select failing_jobs, last_checked_at from public.job_health_state;`
+     (an `edge: <slug>` entry means that Edge Function answered non-2xx; the
+     query for its answers is in `docs/ops/MONITORING.md` §1c.
+     `scheduled_job_health()` shows only the cron side.)
    - Supabase dashboard → is the project itself up, and is it out of disk
      or connection budget?
    - Did something deploy? `git log --oneline -5` on the Pages branch.

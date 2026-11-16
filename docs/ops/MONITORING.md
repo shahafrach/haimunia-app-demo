@@ -120,14 +120,30 @@ status, and a conservative `healthy` boolean. Run it from the SQL editor
 or psql when an alert has already told you something is wrong — never from
 CI, which is the whole point of 1b.
 
+**Start with what the hourly check saw.** The alert is raised from
+`job_health_state`, which `job_health_check()` (`202609230008`) writes. That
+check also reads the latest HTTP answer of every Edge Function a cron job
+calls, and `scheduled_job_health()` does not: on 2026-11-16 it returned no
+rows while `notif_push_send` and `purge_abandoned_profiles` were answering
+401 (F-023).
+
 ```sql
+-- 1. The names the hourly check flagged:
+select failing_jobs, failing_count, last_checked_at, first_seen
+  from public.job_health_state;
+
+-- 2. An "edge: <slug>" entry means that Edge Function answered non-2xx.
+--    Its answers in the last hour (expect only 200s):
+select i.slug, r.status_code, count(*)
+  from public.edge_function_invocations i
+  join net._http_response r on r.id = i.request_id
+ where i.invoked_at > now() - interval '1 hour'
+ group by 1, 2;
+
+-- 3. The cron side only (latest run per job; never shows Edge Function answers):
 select jobname, last_status, last_run, seconds_since_last_run
   from public.scheduled_job_health()
  where not healthy;
-
--- or, the same names as the hourly check saw them:
-select failing_jobs, failing_count, last_checked_at, first_seen
-  from public.job_health_state;
 ```
 
 `healthy` is false when a job is inactive, when its last run failed, when
