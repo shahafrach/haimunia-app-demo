@@ -183,6 +183,27 @@ test("claude-review runs when a PR is opened and on @claude, not on every push",
     "a comment must still have to say @claude to start a runner");
 });
 
+// F-021: on a public repository anyone can comment "@claude" on an open PR, and the review job holds the
+// OAuth token with pull-requests: write and id-token: write. Both comment paths must check that the
+// commenter has write access; the pull_request path keeps its same-repo check instead.
+test("claude-review answers @claude only from OWNER, MEMBER or COLLABORATOR, on both comment paths", () => {
+  const guard = `contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)`;
+  const ifBlock = reviewYml.slice(reviewYml.indexOf("    if: >-"), reviewYml.indexOf("    steps:"));
+  assert.ok(ifBlock.length > 0, "the job-level if: is where the event payload is checked");
+  const branches = ifBlock.split(/\)\s*\|\|\s*\(/);
+  assert.equal(branches.length, 3, "three branches: pull_request, pull_request_review_comment, issue_comment");
+  const byEvent = (name) => branches.find((b) => b.includes(`github.event_name == '${name}'`)) || "";
+  for (const name of ["pull_request_review_comment", "issue_comment"]) {
+    const b = byEvent(name);
+    assert.ok(b, `${name} branch present`);
+    assert.ok(b.includes(guard), `${name}: the comment's author_association must be OWNER, MEMBER or COLLABORATOR`);
+    assert.ok(b.includes("contains(github.event.comment.body, '@claude')"), `${name}: still an @claude mention`);
+  }
+  const pr = byEvent("pull_request");
+  assert.ok(pr.includes("github.event.pull_request.head.repo.full_name == github.repository"), "pull_request keeps its same-repo check");
+  assert.ok(!/author_association\s*==\s*'NONE'|CONTRIBUTOR|FIRST_TIME/.test(ifBlock), "no wider association list");
+});
+
 // ---------------------------------------------------------------------------
 // e2e.yml boots Docker and a Supabase stack. It must not run on every PR.
 // ---------------------------------------------------------------------------
