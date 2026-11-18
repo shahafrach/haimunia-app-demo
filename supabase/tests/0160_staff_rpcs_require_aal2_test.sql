@@ -2,7 +2,7 @@
 -- of a member with a verified MFA factor, changes nothing, and works at aal2. A staff member without a factor is
 -- not affected at aal1.
 --
---   Club K:           owner (owner, has a factor), coach (coach, has a factor), m3, m4
+--   Club K:           owner (owner, has a factor), coach (coach, has a factor), m3, norec
 --   Friends circle F: m1 (owner, has a factor), m2
 
 \set rls_helpers_included true
@@ -29,13 +29,13 @@ insert into public.clubs (id, name, type, created_by) values (tests.fid(), 'Frie
 insert into public.circle_members (club_id, user_id, role) values (tests.fid(), tests.uid('m1'), 'owner'), (tests.fid(), tests.uid('m2'), 'member');
 select is(public.owner_create_club('owner', 'Haimunia'), 'created', 'setup: the club');
 insert into public.circle_members (club_id, user_id, role) values
-  (tests.kid(), tests.uid('coach'), 'member'), (tests.kid(), tests.uid('m3'), 'member'), (tests.kid(), tests.uid('m4'), 'member');
+  (tests.kid(), tests.uid('coach'), 'member'), (tests.kid(), tests.uid('m3'), 'member'), (tests.kid(), tests.uid('norec'), 'member');
 select is(public.owner_set_coach('coach'), 'set', 'setup: the coach');
 
 insert into public.workout_posts (id, author_id, club_id, post_type, title, status, published_at, occurred_on) values
   ('f2810000-0000-4000-8000-000000000001', tests.uid('m3'), tests.kid(), 'POST_WORKOUT', 'K m3', 'active', now(), current_date),
   ('f2810000-0000-4000-8000-000000000002', tests.uid('coach'), tests.kid(), 'POST_WORKOUT', 'K coach', 'active', now(), current_date),
-  ('f2810000-0000-4000-8000-000000000003', tests.uid('m4'), tests.kid(), 'POST_WORKOUT', 'K m4', 'active', now(), current_date);
+  ('f2810000-0000-4000-8000-000000000003', tests.uid('norec'), tests.kid(), 'POST_WORKOUT', 'K norec', 'active', now(), current_date);
 
 insert into auth.mfa_factors (id, user_id, friendly_name, factor_type, status, created_at, updated_at, secret) values
   ('f2820000-0000-4000-8000-000000000001', tests.uid('owner'), 'club', 'totp', 'verified', now(), now(), 'JBSWY3DPEHPK3PXP'),
@@ -70,13 +70,13 @@ select throws_ok($$ select public.post_delete('f2810000-0000-4000-8000-000000000
 select tests.set_auth_aal(tests.uid('coach'), 'aal1');
 select throws_ok($$ select public.post_delete('f2810000-0000-4000-8000-000000000003') $$, 'P0001', 'not authorized', 'aal1 coach: post_delete of a member''s post refused');
 select throws_ok($$ select public.post_delete('f2810000-0000-4000-8000-000000000002') $$, 'P0001', 'not authorized', 'aal1 coach: post_delete of their own post refused too');
-select throws_ok($$ select public.remove_member(tests.kid(), tests.uid('m4')) $$, 'P0001', 'not authorized', 'aal1 coach: remove_member refused');
+select throws_ok($$ select public.remove_member(tests.kid(), tests.uid('norec')) $$, 'P0001', 'not authorized', 'aal1 coach: remove_member refused');
 select tests.set_auth_aal(tests.uid('m1'), 'aal1');
 select throws_ok($$ select public.create_circle_invite(tests.fid()) $$, 'P0001', 'not authorized', 'aal1 circle owner: create_circle_invite refused');
 select throws_ok($$ select public.update_circle(tests.fid(), '{"name":"Renamed"}'::jsonb) $$, 'P0001', 'not authorized', 'aal1 circle owner: update_circle refused');
 select tests.clear_auth();
 
-select is((select count(*)::int from public.circle_members where club_id = tests.kid() and user_id in (tests.uid('m3'), tests.uid('m4'))), 2, 'aal1: nobody was removed');
+select is((select count(*)::int from public.circle_members where club_id = tests.kid() and user_id in (tests.uid('m3'), tests.uid('norec'))), 2, 'aal1: nobody was removed');
 select is((select count(*)::int from public.workout_posts where id in ('f2810000-0000-4000-8000-000000000001', 'f2810000-0000-4000-8000-000000000002', 'f2810000-0000-4000-8000-000000000003') and deleted_at is null), 3, 'aal1: no post was deleted');
 select is((select count(*)::int from public.club_announcements where club_id = tests.kid()), 1, 'aal1: no announcement was posted or deleted');
 select ok(not (select pinned from public.club_announcements where id = :'ann'::uuid), 'aal1: nothing was pinned');
