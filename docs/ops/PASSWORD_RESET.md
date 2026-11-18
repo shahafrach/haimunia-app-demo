@@ -17,7 +17,8 @@ username and per address; every failure reads the same.
 ## When the code is lost: the member does it alone (one hour)
 
 **Off since 2026-11-18 (Q-38e):** `request-reset` answers 410 and no screen offers it. A reset with no proof is an
-account takeover. In the club: Face ID, the recovery code, or "פתיחת חשבון חדש" (decisions.md).
+account takeover (Q-41). The way back is the recovery code; a code a reset hands out can reset the
+password again but never removes two-step login.
 
 
 On the "שכחתי סיסמה" screen the member taps "אין לי קוד שחזור" and types the username

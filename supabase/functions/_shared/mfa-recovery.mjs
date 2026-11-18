@@ -20,7 +20,8 @@ const FAIL = () => json(400, { error: "recovery_failed" });
  * deps: { secret, getUser(token) -> {id,is_anonymous}|null, randomBytes?, now?, store }
  * store: countAttempts(keyHash, sinceMs) -> n; addAttempts(keyHashes); purgeAttempts(beforeMs);
  *   getRecoveryHmac(userId) -> string|null; consumeReset(userId, code) -> bool;
- *   removeTotpFactors(userId) -> bool; putRecoveryCode(userId, hmac); clearReset(userId)
+ *   removeTotpFactors(userId) -> bool; putRecoveryCode(userId, hmac); clearReset(userId);
+ *   revokeOtherSessions(accessToken): every session of the account except the caller's
  */
 export async function handleMfaRecovery(req, deps) {
   if (!deps.secret) return json(500, { error: "not_configured" });
@@ -39,13 +40,17 @@ export async function handleMfaRecovery(req, deps) {
   await deps.store.addAttempts([userKey, ipKey]);
   await deps.store.purgeAttempts(now - 24 * 60 * 60 * 1000);
 
+  // Q-41: only the member's own recovery code (RECOVERY_DOMAIN, made while signed in) removes two-step
+  // login. A code a reset handed out (RECOVERY_AFTER_RESET_DOMAIN) and the owner's reset code do not: with
+  // them a password reset could be chained into removing the second factor.
   const stored = await deps.store.getRecoveryHmac(user.id);
   const given = await recoveryHmac(deps.secret, code);
   const recoveryMatch = timingSafeEqualStrings(stored || "0".repeat(64), given) && !!stored;
-  const resetMatch = await deps.store.consumeReset(user.id, code);
-  if (!looksLikeCode(code) || !(recoveryMatch || resetMatch)) return FAIL();
+  if (!looksLikeCode(code) || !recoveryMatch) return FAIL();
 
   if (!(await deps.store.removeTotpFactors(user.id))) return FAIL();
+  // Every other session of the account ends (Q-41): a factor change is a security change.
+  await deps.store.revokeOtherSessions(m[1]);
   const next = generateCode(deps.randomBytes);
   await deps.store.putRecoveryCode(user.id, await recoveryHmac(deps.secret, next));
   await deps.store.clearReset(user.id);
