@@ -9,7 +9,7 @@
 // Secrets: RECOVERY_CODE_HMAC_SECRET (rotate-recovery-secret workflow).
 // SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are injected by the runtime.
 import { createClient } from "npm:@supabase/supabase-js@2.57.4";
-import { handleRecover, CORS_HEADERS } from "../_shared/recovery.mjs";
+import { handleRecover, handleMemberReset, CORS_HEADERS } from "../_shared/recovery.mjs";
 
 Deno.serve(async (req: Request) => {
   const reply = (status: number, body: unknown) =>
@@ -27,7 +27,11 @@ Deno.serve(async (req: Request) => {
   try { body = await req.json(); } catch { /* the handler treats a missing body as a failure */ }
   const ip = (req.headers.get("cf-connecting-ip") || req.headers.get("x-forwarded-for") || "").split(",")[0].trim();
 
-  const out = await handleRecover({ body, ip }, {
+  // Q-38: { reset_code, new_password } with no username is the code a club's coach or owner handed over.
+  const memberReset = !!body && typeof body === "object" && typeof (body as Record<string, unknown>).reset_code === "string" &&
+    !(body as Record<string, unknown>).username;
+  const handler = memberReset ? handleMemberReset : handleRecover;
+  const out = await handler({ body, ip }, {
     secret,
     store: {
       lookupUser: async (username: string) => {
@@ -59,6 +63,12 @@ Deno.serve(async (req: Request) => {
       },
       clearReset: async (userId: string) => {
         await supabase.from("recovery_codes").delete().eq("user_id", userId).eq("kind", "reset");
+      },
+      consumeMemberReset: async (code: string) => {
+        const { data, error } = await supabase.rpc("member_reset_consume", { p_code: code });
+        if (error || !data || typeof data !== "object") return null;
+        const d = data as { user_id?: string; username?: string };
+        return d.user_id && d.username ? { user_id: String(d.user_id), username: String(d.username) } : null;
       },
       countAttempts: async (keyHash: string, sinceMs: number) => {
         const { count } = await supabase.from("recovery_attempts").select("id", { count: "exact", head: true })

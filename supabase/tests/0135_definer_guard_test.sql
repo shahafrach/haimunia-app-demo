@@ -52,6 +52,9 @@ create table tests.definer_reviewed (
 insert into tests.definer_reviewed (name, args, class, anon_allowed, reason) values
   ('is_club_staff', 'uuid', 'caller_own_rows', false, 'RLS helper: is the caller the owner or coach of this club-type circle; reads only the caller''s own membership row (202611120001)'),
   ('rotate_club_link', 'uuid', 'circle_scoped', false, 'owner or coach of ONE club replaces its join link; 5 a day (202611120001)'),
+  ('club_issue_reset_code', 'uuid, uuid', 'circle_scoped', false, 'owner or coach of ONE club issues a 24-hour, one-use password reset code for a member of that club, never the owner or the caller; 10 a day (202611180003)'),
+  ('member_reset_consume', 'text', 'global_safe', false, 'recover-password helper: service_role only; spends a member reset code once and names its account (202611180003)'),
+  ('owner_approve_reset_request', 'text, text', 'global_safe', false, 'owner-only: granted to no role and refuses any call with an auth.uid(); ends the wait of one self-service reset whose reference matches (202611180003)'),
   ('rotate_club_invite', 'uuid', 'circle_scoped', false, 'owner or coach of ONE club replaces its join link and short code; 5 a day, shared with rotate_club_link (202611180002)'),
   ('club_announcement_post', 'uuid, text, boolean', 'circle_scoped', false, 'owner or coach of ONE club posts an announcement there; no notification; 10 a day (202611120001)'),
   ('club_announcement_set_pinned', 'uuid, boolean', 'circle_scoped', false, 'owner or coach of the announcement''s own club pins or unpins it (202611120001)'),

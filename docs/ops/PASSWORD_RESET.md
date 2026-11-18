@@ -14,6 +14,26 @@ password twice. The server checks the code, sets the password, signs the account
 everywhere, and shows a NEW code, once. The old one is dead. Five attempts per 15 minutes per
 username and per address; every failure reads the same.
 
+## In the club app: the coach gives a reset code (Q-38, 202611180003)
+
+The owner or the coach opens the club's member list and taps "איפוס סיסמה" next to a member. The app
+shows an 8-character code (for example `ABCD 2345`), valid for 24 hours and once. The member taps
+"שכחתי סיסמה" on the login screen, types that code and a new password twice, and is signed in. They
+do not need their username. Every other session of the account ends; the recovery code is unchanged.
+A coach can never reset the owner, and nobody resets themself (they are signed in). 10 codes a day
+per staff member; each is in `club_staff_actions` as `member_password_reset`.
+
+## The owner, locked out, with no coach (Q-38b)
+
+On the phone: "שכחתי סיסמה", then "אין קוד מהמאמן", then the username. The phone shows a
+6-character reference, for example `A1B2C3`. Then, from the GitHub app: Actions, **club-admin**,
+Run workflow, action `approve_reset`, `who` = the username, `ref` = the reference. The run prints
+one word (`approved`). Back on the phone: "המשך", a new password twice, signed in.
+
+Nothing secret is printed, and the repository is public: the username is masked and hashed, the
+reference is only the start of an HMAC, and the request token that completes the reset never leaves
+the phone. Without the workflow the same request completes on its own after the one-hour wait.
+
 ## When the code is lost: the member does it alone (one hour)
 
 On the "שכחתי סיסמה" screen the member taps "אין לי קוד שחזור" and types the username

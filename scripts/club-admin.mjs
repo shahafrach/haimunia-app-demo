@@ -10,7 +10,7 @@
 import { readFileSync, appendFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 
-export const ACTIONS = ["create_club", "set_coach", "set_owner", "usage_report"];
+export const ACTIONS = ["create_club", "set_coach", "set_owner", "usage_report", "approve_reset"];
 export const CLUB_NAME = "האימוניה";
 
 export function whoRef(username) {
@@ -19,13 +19,21 @@ export function whoRef(username) {
   return "sha256:" + createHash("sha256").update(u).digest("hex");
 }
 
-/** The one SQL statement for an action. Only a hash and fixed text are interpolated. */
-export function actionSql(action, username) {
+/** approve_reset's reference: 6 hex characters, from the phone's reset screen (never secret). */
+export function refValue(ref) {
+  const r = String(ref ?? "").replace(/[\s-]/g, "").toUpperCase();
+  if (!/^[0-9A-F]{6}$/.test(r)) throw new Error("the reference is the 6 characters the phone shows (0-9, A-F)");
+  return r;
+}
+
+/** The one SQL statement for an action. Only a hash, a checked reference and fixed text are interpolated. */
+export function actionSql(action, username, ref) {
   switch (action) {
     case "create_club": return `select public.owner_create_club('${whoRef(username)}', '${CLUB_NAME}') as status`;
     case "set_coach": return `select public.owner_set_coach('${whoRef(username)}') as status`;
     case "set_owner": return `select public.owner_set_club_owner('${whoRef(username)}') as status`;
     case "usage_report": return "select public.training_log_usage_report(12) as status";
+    case "approve_reset": return `select public.owner_approve_reset_request('${whoRef(username)}', '${refValue(ref)}') as status`;
     default: throw new Error(`unknown action; use one of ${ACTIONS.join(", ")}`);
   }
 }
@@ -34,6 +42,7 @@ export function actionSql(action, username) {
 export function isSuccess(action, status) {
   if (action === "usage_report") return status != null && typeof status === "object";
   if (action === "create_club") return status === "created" || status === "exists";
+  if (action === "approve_reset") return status === "approved" || status === "already";
   return status === "set" || status === "already";
 }
 
@@ -51,7 +60,7 @@ async function main() {
   const token = process.env.SUPABASE_ACCESS_TOKEN;
   if (!token) throw new Error("SUPABASE_ACCESS_TOKEN is not set");
   const action = process.env.ACTION;
-  const sql = actionSql(action, action === "usage_report" ? "" : process.env.WHO);
+  const sql = actionSql(action, action === "usage_report" ? "" : process.env.WHO, process.env.REF);
   const ref = readFileSync(new URL("../supabase/PROJECT_REF", import.meta.url), "utf8").trim();
   const rows = await query(ref, token, sql);
   const status = rows?.[0]?.status ?? null;
