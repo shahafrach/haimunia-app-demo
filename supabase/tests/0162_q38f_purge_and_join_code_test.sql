@@ -117,11 +117,11 @@ update public.transfer_attempts set attempt_count = 20 where action = 'join_code
 select tests.set_auth(tests.uid('m2'));
 select is(public.join_circle('ZZZZ2345') ->> 'status', 'rate_limited', 'the 21st from that address, from any account, is refused');
 select tests.clear_auth();
-select ok((select attempt_count from public.transfer_attempts where ip_hash = 'global' and action = 'join_code_wrong') >= 9, 'wrong codes are counted globally');
+select ok((select attempt_count from public.transfer_attempts where ip_hash = repeat('0', 64) and action = 'join_code_wrong') >= 9, 'wrong codes are counted globally');
 
 -- Global: once 300 wrong codes came in an hour, codes wait for everyone; the long token does not.
 select set_config('request.headers', '{"cf-connecting-ip": "198.51.100.200"}', true);
-update public.transfer_attempts set attempt_count = 300 where ip_hash = 'global' and action = 'join_code_wrong';
+update public.transfer_attempts set attempt_count = 300 where ip_hash = repeat('0', 64) and action = 'join_code_wrong';
 select tests.set_auth(tests.uid('m3'));
 select is(public.join_circle(:'code1') ->> 'status', 'rate_limited', 'over the global ceiling even the right code waits');
 

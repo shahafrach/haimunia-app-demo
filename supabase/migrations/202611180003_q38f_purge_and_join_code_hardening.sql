@@ -254,6 +254,12 @@ begin
   end if;
 end $$;
 
+-- The counters live in transfer_attempts: the code's per-IP count under an IP HMAC (64 hex, as the table
+-- requires), and the global wrong-code count under the all-zero key, which no HMAC can produce by chance.
+alter table public.transfer_attempts drop constraint transfer_attempts_action_check;
+alter table public.transfer_attempts add constraint transfer_attempts_action_check
+  check (action in ('put', 'take', 'put_device', 'join_code', 'join_code_wrong'));
+
 create or replace function public.join_code_key()
 returns text language sql stable security definer set search_path = '' as $$
   select s.decrypted_secret from vault.decrypted_secrets s where s.name = 'join_code_hmac_key' limit 1
@@ -329,7 +335,7 @@ begin
       return jsonb_build_object('status', 'rate_limited');
     end if;
     if exists (select 1 from public.transfer_attempts a
-                where a.ip_hash = 'global' and a.action = 'join_code_wrong'
+                where a.ip_hash = repeat('0', 64) and a.action = 'join_code_wrong'
                   and a.window_started_at > now() - interval '60 minutes' and a.attempt_count >= 300) then
       return jsonb_build_object('status', 'rate_limited');
     end if;
@@ -349,7 +355,7 @@ begin
        and i.uses < i.max_uses and i.expires_at > now()
     returning i.club_id into v_club;
     if v_club is null then
-      if v_code_hmac is not null then perform public.transfer_rate_ok('global', 'join_code_wrong', 1000000, 60); end if;
+      if v_code_hmac is not null then perform public.transfer_rate_ok(repeat('0', 64), 'join_code_wrong', 1000000, 60); end if;
       return jsonb_build_object('status', 'invalid');
     end if;
 
