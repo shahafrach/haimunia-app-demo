@@ -181,7 +181,12 @@ function randomHex(randomBytes, n) {
  *   putResetRequest(id, { token_hmac, ready_at, expires_at }); deleteResetRequest(id);
  *   notifyResetRequested(id, readyAtMs)
  */
+// Q-38e (2026-11-18, owner): OFF. A reset with no proof is an account takeover: anyone who knew a username
+// could take the account after the hour. Recovery is a passkey, the recovery code, or a new account. Both
+// actions answer 410, so a request opened before the switch can no longer complete either.
+export const RESET_REQUEST_DISABLED = true;
 export async function handleResetRequest(req, deps) {
+  if (RESET_REQUEST_DISABLED) return json(410, { error: "reset_disabled" });
   if (!deps.secret) return json(500, { error: "not_configured" });
   const now = (deps.now || Date.now)();
   const body = req.body && typeof req.body === "object" ? req.body : {};

@@ -289,7 +289,9 @@
       <div style="color:var(--color-text-muted);font-size:14px;line-height:1.6;margin-bottom:14px;">${bidiText("מקלידים את שם הכניסה, את קוד השחזור ששמרתם ואת הסיסמה החדשה. אחרי האיפוס מקבלים קוד שחזור חדש, והקוד הישן מפסיק לעבוד.")}</div>
       ${r.error ? `<div class="field-error" role="alert" data-recovery-error="1" style="margin-bottom:10px;">${esc(r.error)}</div>` : ""}
       <form id="communityRecover">${field("communityRecover", "username", LOGIN_NAME_LABEL, `<input class="text-input" name="username" dir="ltr" autocapitalize="off" autocomplete="username" placeholder="${esc(LOGIN_NAME_LABEL)}" value="${esc(r.draftUsername || "")}" required/>`)}${field("communityRecover", "code", "קוד שחזור", `<input class="text-input mono" name="code" dir="ltr" autocapitalize="characters" autocomplete="off" spellcheck="false" maxlength="24" placeholder="XXXX-XXXX-XXXX-XXXX" required/>`)}${field("communityRecover", "password", "סיסמה חדשה", `<input class="text-input" name="password" type="password" dir="ltr" autocomplete="new-password" placeholder="${esc(PASSWORD_RULE_TEXT)}" required/>`)}${field("communityRecover", "passwordConfirm", "אימות הסיסמה החדשה", `<input class="text-input" name="passwordConfirm" type="password" dir="ltr" autocomplete="new-password" placeholder="הקלידו שוב" required/>`)}<button class="save-btn" type="submit"${r.busy ? " disabled" : ""} style="margin-top:12px;">${r.busy ? "מאפסים…" : "איפוס הסיסמה"}</button></form>
-      <div style="display:flex;justify-content:center;margin-top:14px;"><button class="gate-alt" data-community-action="recovery-lost-open">אין לי קוד שחזור</button></div>`);
+`);
+    // Q-38e: the "אין לי קוד שחזור" self-service reset is off (request-reset answers 410). Its screens below stay
+    // unreachable until the open requests have expired; a later cleanup removes them.
   }
 
   // No code: ask with the username, then wait an hour on this device.
