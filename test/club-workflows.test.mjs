@@ -40,20 +40,9 @@ test("club-admin.yml: manual, masked before checkout, the actions the script kno
   assert.match(y, /GITHUB_EVENT_PATH/, "it is read from the event payload file");
   const run = y.slice(y.indexOf("- name: run the action"));
   assert.ok(run.indexOf('::add-mask::$who') < run.indexOf("node scripts/club-admin.mjs"), "masked before the script runs");
-  assert.match(y, /options: \[create_club, set_coach, set_owner, usage_report, approve_reset\]/);
-  assert.deepEqual(ACTIONS, ["create_club", "set_coach", "set_owner", "usage_report", "approve_reset"]);
-  assert.doesNotMatch(y, /\$\{\{\s*inputs\.ref/, "the reference, too, is read from the event payload file");
+  assert.match(y, /options: \[create_club, set_coach, set_owner, usage_report\]/);
+  assert.deepEqual(ACTIONS, ["create_club", "set_coach", "set_owner", "usage_report"]);
   assert.doesNotMatch(y, /echo[^\n]*\$who(?!")/i, "the username is never echoed except into add-mask");
-});
-
-test("club-admin approve_reset (Q-38b): a hashed username and a checked 6-hex reference; one status word", () => {
-  const sql = actionSql("approve_reset", "Dana_K", "a1b2-c3");
-  assert.match(sql, /^select public\.owner_approve_reset_request\('sha256:[0-9a-f]{64}', 'A1B2C3'\) as status$/);
-  assert.doesNotMatch(sql, /dana_k/i, "the username never reaches SQL or a log");
-  for (const bad of ["", "A1B2C", "A1B2C3D", "G1B2C3", "x'); drop", null]) assert.throws(() => actionSql("approve_reset", "dana_k", bad), bad);
-  assert.equal(isSuccess("approve_reset", "approved"), true);
-  assert.equal(isSuccess("approve_reset", "already"), true);
-  for (const s of ["no_match", "no_request", "expired", "cancelled", "no_such_user", "bad_ref"]) assert.equal(isSuccess("approve_reset", s), false, s);
 });
 
 // ---------------------------------------------------------- migration-status

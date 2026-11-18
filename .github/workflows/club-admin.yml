@@ -8,10 +8,6 @@ name: club-admin
 #   set_coach     makes `who` (already a club member) the coach
 #   set_owner     makes `who` (already a club member) the owner
 #   usage_report  prints the usage totals (devices per week and per app; no ids)
-#   approve_reset ends the one-hour wait of `who`'s self-service password reset, for the request whose
-#                 6-character reference (`ref`) their phone shows (Q-38b: the owner's own way back when no
-#                 coach can reset him). Nothing usable is printed: the reference is the start of an HMAC,
-#                 and the request token that completes the reset never leaves the phone.
 #
 # THE REPOSITORY IS PUBLIC, SO THIS LOG IS PUBLIC. The username is never put in
 # an env: block, because GitHub prints a step's env in its log header before any
@@ -26,13 +22,9 @@ on:
         description: "What to do"
         required: true
         type: choice
-        options: [create_club, set_coach, set_owner, usage_report, approve_reset]
+        options: [create_club, set_coach, set_owner, usage_report]
       who:
         description: "Username (not needed for usage_report)"
-        required: false
-        default: ""
-      ref:
-        description: "approve_reset only: the 6-character reference the phone shows"
         required: false
         default: ""
 
@@ -66,5 +58,4 @@ jobs:
           set +x
           who="$(node -e 'const e=require(process.env.GITHUB_EVENT_PATH);process.stdout.write(String((e.inputs&&e.inputs.who)||""))')"
           if [ -n "$who" ]; then echo "::add-mask::$who"; fi
-          ref="$(node -e 'const e=require(process.env.GITHUB_EVENT_PATH);process.stdout.write(String((e.inputs&&e.inputs.ref)||""))')"
-          WHO="$who" REF="$ref" node scripts/club-admin.mjs
+          WHO="$who" node scripts/club-admin.mjs

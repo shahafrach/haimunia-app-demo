@@ -166,7 +166,6 @@ export const RESET_REQUESTS_PER_DAY = 3;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const TOKEN_RE = /^[0-9a-f]{64}$/;
 
-export function requestRef(tokenHmac) { return String(tokenHmac || "").slice(0, 6).toUpperCase(); }
 export function resetTokenHmac(secret, token) {
   return hmacHex(secret, RESET_DOMAIN + "token:" + String(token || ""));
 }
@@ -207,18 +206,14 @@ async function resetRequest(deps, now, username, ip) {
 
   const token = randomHex(deps.randomBytes, 32);
   const readyAt = now + RESET_WAIT_MS;
-  const tokenHmac = await resetTokenHmac(deps.secret, token);
-  // Q-38b: a short, harmless reference the phone shows (the start of the token's HMAC, never the token). The
-  // owner gives it to club-admin.yml approve_reset to end the wait for this request only. An unknown username
-  // gets one too, so the answer still does not say whether the account exists.
-  const answer = json(200, { ok: true, request_token: token, ready_at: new Date(readyAt).toISOString(), request_ref: requestRef(tokenHmac) });
+  const answer = json(200, { ok: true, request_token: token, ready_at: new Date(readyAt).toISOString() });
   const userId = await deps.store.lookupUser(username);
   if (!userId) return answer;
   const open = await deps.store.getResetRequest(userId);
   // After a cancel the account takes no request for 24 hours; the caller cannot tell.
   if (open && open.blocked_until && open.blocked_until > now) return answer;
   await deps.store.putResetRequest(userId, {
-    token_hmac: tokenHmac,
+    token_hmac: await resetTokenHmac(deps.secret, token),
     ready_at: readyAt,
     expires_at: readyAt + RESET_VALID_MS,
   });
@@ -250,45 +245,4 @@ async function resetComplete(deps, now, body, username, ip) {
   await deps.store.putRecoveryCode(userId, await recoveryHmac(deps.secret, next));
   await deps.store.clearReset(userId);
   return json(200, { ok: true, recovery_code: next });
-}
-
-// ---- The reset code a club's coach or owner hands over (Q-38, 202611180003) -----------------
-//
-// The member types only the 8-character code and a new password: the code names the account. The answer gives
-// the username back, so the app can sign the member in (and the phone can offer to save the password) without
-// asking for a name the member may also have forgotten. The recovery code is not rotated: the member who still
-// has it keeps it, and there is no extra screen. Limits: the recover-password IP key (5 per 15 minutes) and 60
-// attempts per 15 minutes in all, both counted before the code is looked at.
-export const MEMBER_RESET_GLOBAL_LIMIT = 60;
-const MEMBER_CODE_RE = /^[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{8}$/;
-export function normalizeMemberCode(input) {
-  return String(input == null ? "" : input).replace(/[\s\-\u2010-\u2015\u2212]/g, "").toUpperCase();
-}
-
-/**
- * recover-password with { reset_code, new_password } and no username.
- * store (in addition to the recover-password store): consumeMemberReset(code) -> { user_id, username } | null
- */
-export async function handleMemberReset(req, deps) {
-  if (!deps.secret) return json(500, { error: "not_configured" });
-  const now = (deps.now || Date.now)();
-  const body = req.body && typeof req.body === "object" ? req.body : {};
-  const code = normalizeMemberCode(typeof body.reset_code === "string" ? body.reset_code : "");
-  const password = typeof body.new_password === "string" ? body.new_password : "";
-  const ip = String(req.ip || "unknown");
-  const ipKey = await hmacHex(deps.secret, ATTEMPT_DOMAIN + "ip:" + ip);
-  const allKey = await hmacHex(deps.secret, ATTEMPT_DOMAIN + "member-reset:all");
-  const since = now - ATTEMPT_WINDOW_MS;
-  const [byIp, byAll] = await Promise.all([deps.store.countAttempts(ipKey, since), deps.store.countAttempts(allKey, since)]);
-  if (byIp >= ATTEMPT_LIMIT || byAll >= MEMBER_RESET_GLOBAL_LIMIT) return fail();
-  await deps.store.addAttempts([ipKey, allKey]);
-  await deps.store.purgeAttempts(now - 24 * 60 * 60 * 1000);
-  // A weak password is refused before the code is spent, so the member can try again with the same code.
-  if (!MEMBER_CODE_RE.test(code) || !passwordOk(password)) return fail();
-
-  const hit = await deps.store.consumeMemberReset(code);
-  if (!hit || !hit.user_id || !usernameOk(String(hit.username || ""))) return fail();
-  if (!(await deps.store.setPassword(hit.user_id, password))) return fail();
-  await deps.store.revokeSessions(hit.user_id);
-  return json(200, { ok: true, username: String(hit.username) });
 }
