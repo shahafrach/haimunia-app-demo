@@ -55,6 +55,9 @@ on:
       # The shared modules count: _shared/webPush.mjs IS the encryption, and a
       # change there that never deploys is a change that did not happen.
       - "supabase/functions/**"
+      # Each function's verify_jwt lives here, and the deploy reads it. Q-36: the Q-34 change
+      # (verify_jwt = false for the two scheduled functions) merged and did not deploy by itself.
+      - "supabase/config.toml"
       - ".github/workflows/deploy-edge-functions.yml"
   workflow_dispatch:
     inputs:

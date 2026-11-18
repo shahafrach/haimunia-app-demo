@@ -63,6 +63,11 @@ test("the migration sends the cron secret when set, falls back to the service_ro
 test("the deploy workflow deploys both functions when _shared changes", () => {
   const wf = read(".github/workflows/deploy-edge-functions.yml");
   assert.match(wf, /- "supabase\/functions\/\*\*"/, "a change to _shared/cronAuth.mjs triggers the deploy on merge");
+  // Q-36: verify_jwt for each function is read from supabase/config.toml at deploy time, so a change there
+  // must deploy too (the Q-34 change merged and waited for a manual run).
+  const paths = wf.match(/\n  push:\n(?:    .*\n|\s*#.*\n)*?    paths:\n((?:      .*\n)+)/);
+  assert.ok(paths, "push.paths is listed");
+  assert.match(paths[1], /^      - "supabase\/config\.toml"$/m, "a change to supabase/config.toml triggers the deploy on merge");
 });
 
 // Q-34: the cron's EDGE_CRON_SECRET is not a JWT, so with the gateway's verify_jwt on, every cron call got
