@@ -54,7 +54,7 @@ end $fn$;
 select tests.set_auth_aal(tests.uid('owner'), 'aal2');
 select public.club_announcement_post(tests.kid(), 'הודעה לבדיקה', false) as ann \gset
 select tests.clear_auth();
-select isnt(:'ann', null, 'setup: an announcement');
+select ok(:'ann'::uuid is not null, 'setup: an announcement');
 create temp table before_invites as select token_hash from public.circle_invites where club_id = tests.kid();
 grant select on before_invites to authenticated;
 
@@ -63,8 +63,8 @@ select tests.set_auth_aal(tests.uid('owner'), 'aal1');
 select ok(not public.aal_satisfied(), 'the owner''s aal1 session does not satisfy aal');
 select throws_ok($$ select public.rotate_club_link(tests.kid()) $$, 'P0001', 'not authorized', 'aal1 owner: rotate_club_link refused');
 select throws_ok($$ select public.club_announcement_post(tests.kid(), 'should not post', false) $$, 'P0001', 'not authorized', 'aal1 owner: club_announcement_post refused');
-select throws_ok(format('select public.club_announcement_set_pinned(%L::uuid, true)', :'ann'), 'P0001', 'not authorized', 'aal1 owner: club_announcement_set_pinned refused');
-select throws_ok(format('select public.club_announcement_delete(%L::uuid)', :'ann'), 'P0001', 'not authorized', 'aal1 owner: club_announcement_delete refused');
+select throws_ok(format('select public.club_announcement_set_pinned(%L::uuid, true)', :'ann'::text), 'P0001', 'not authorized', 'aal1 owner: club_announcement_set_pinned refused');
+select throws_ok(format('select public.club_announcement_delete(%L::uuid)', :'ann'::text), 'P0001', 'not authorized', 'aal1 owner: club_announcement_delete refused');
 select throws_ok($$ select public.remove_member(tests.kid(), tests.uid('m3')) $$, 'P0001', 'not authorized', 'aal1 owner: remove_member refused');
 select throws_ok($$ select public.post_delete('f2810000-0000-4000-8000-000000000001') $$, 'P0001', 'not authorized', 'aal1 owner: post_delete (moderation) refused');
 select tests.set_auth_aal(tests.uid('coach'), 'aal1');
@@ -88,8 +88,8 @@ select is((select name from public.clubs where id = tests.fid()), 'Friends F', '
 select tests.set_auth_aal(tests.uid('owner'), 'aal2');
 select lives_ok($$ select public.rotate_club_link(tests.kid()) $$, 'aal2 owner: rotate_club_link');
 select lives_ok($$ select public.club_announcement_post(tests.kid(), 'aal2 post', false) $$, 'aal2 owner: club_announcement_post');
-select lives_ok(format('select public.club_announcement_set_pinned(%L::uuid, true)', :'ann'), 'aal2 owner: club_announcement_set_pinned');
-select lives_ok(format('select public.club_announcement_delete(%L::uuid)', :'ann'), 'aal2 owner: club_announcement_delete');
+select lives_ok(format('select public.club_announcement_set_pinned(%L::uuid, true)', :'ann'::text), 'aal2 owner: club_announcement_set_pinned');
+select lives_ok(format('select public.club_announcement_delete(%L::uuid)', :'ann'::text), 'aal2 owner: club_announcement_delete');
 select lives_ok($$ select public.post_delete('f2810000-0000-4000-8000-000000000001') $$, 'aal2 owner: post_delete');
 select lives_ok($$ select public.remove_member(tests.kid(), tests.uid('m3')) $$, 'aal2 owner: remove_member');
 select tests.set_auth_aal(tests.uid('m1'), 'aal2');
