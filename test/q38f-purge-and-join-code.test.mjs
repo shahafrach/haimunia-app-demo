@@ -42,7 +42,7 @@ test("the join code: an HMAC under a Vault key, a per-IP limit and a global ceil
   const j = body("join_circle");
   assert.match(j, /transfer_rate_ok\(public\.request_ip_hash\(\), 'join_code', 20, 60\)/);
   assert.match(j, /a\.ip_hash = repeat\('0', 64\) and a\.action = 'join_code_wrong'[\s\S]*a\.attempt_count >= 300/);
-  assert.match(sql, /check \(action in \('put', 'take', 'put_device', 'join_code', 'join_code_wrong'\)\)/, "the counter's actions are allowed by the table");
+  assert.match(sql, /check \(action in \('put', 'take', 'put_device', 'client_error_ip', 'feedback_ip', 'feedback_device', 'join_code', 'join_code_wrong'\)\)/, "the counter's actions are allowed by the table");
   assert.match(j, /i\.code_hash in \(v_code_hmac, v_code_sha\)/, "the row made before this keeps working until it is rotated");
   const tokenBranch = j.slice(j.indexOf("if p_token ~ '^[0-9a-f]{64}$' then"), j.indexOf("elsif v_code"));
   assert.doesNotMatch(tokenBranch, /transfer_rate_ok/, "the long token has no IP limit added");

@@ -258,7 +258,8 @@ end $$;
 -- requires), and the global wrong-code count under the all-zero key, which no HMAC can produce by chance.
 alter table public.transfer_attempts drop constraint transfer_attempts_action_check;
 alter table public.transfer_attempts add constraint transfer_attempts_action_check
-  check (action in ('put', 'take', 'put_device', 'join_code', 'join_code_wrong'));
+  -- Every action already allowed (202611140002, 202611150003), plus the two join-code counters.
+  check (action in ('put', 'take', 'put_device', 'client_error_ip', 'feedback_ip', 'feedback_device', 'join_code', 'join_code_wrong'));
 
 create or replace function public.join_code_key()
 returns text language sql stable security definer set search_path = '' as $$
