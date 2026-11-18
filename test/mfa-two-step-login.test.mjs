@@ -29,7 +29,11 @@ function addMfa(mock, { enrolled }) {
     unenroll: async ({ factorId }) => { s.unenrolled.push(factorId); s.factors = s.factors.filter((f) => f.id !== factorId); return { data: {}, error: null }; },
   };
   const realSignOut = mock.client.auth.signOut;
-  mock.client.auth.signOut = (opts) => { s.signOutScope = (opts && opts.scope) || "global-default"; return realSignOut(); };
+  mock.client.auth.signOut = (opts) => {
+    // Q-41: turning two-step login on or off ends the OTHER sessions; recorded apart from the member's own sign-out.
+    if (opts && opts.scope === "others") { s.othersEnded = (s.othersEnded || 0) + 1; return realSignOut(opts); }
+    s.signOutScope = (opts && opts.scope) || "global-default"; return realSignOut(opts);
+  };
   return s;
 }
 
@@ -123,6 +127,7 @@ test("Me: enrol with QR and typed key, turn off with the current code, end every
   await window.haimuniaMfa.submitDisable({ elements: { code: { value: "123456" } } });
   assert.equal(window.haimuniaMfa.ui().has, false);
   assert.ok(s.unenrolled.includes("f2"));
+  assert.equal(s.othersEnded, 2, "turning it on and turning it off each end the account's other sessions (Q-41)");
 
   await window.haimuniaMfa.signOutAll();
   assert.equal(s.signOutScope, "global", "every device, not just this one");

@@ -17,6 +17,11 @@
 export const CODE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 export const CODE_LENGTH = 16;
 export const RECOVERY_DOMAIN = "box-log:recovery-code:v1:";
+// Q-41 (2026-11-18): a recovery code handed out BY a reset (recover-password's rotation) is stored under its
+// own domain. recover-password accepts both kinds; mfa-recovery accepts only RECOVERY_DOMAIN, the code a
+// member made while signed in (issue-recovery-code, which needs aal2 when the member has MFA). So a chain
+// "reset -> fresh code -> remove two-step login" can never run without the member's own second factor.
+export const RECOVERY_AFTER_RESET_DOMAIN = "box-log:recovery-code:v1:after-reset:";
 export const ATTEMPT_DOMAIN = "box-log:recovery-attempt:v1:";
 export const ATTEMPT_LIMIT = 5;
 export const ATTEMPT_WINDOW_MS = 15 * 60 * 1000;
@@ -50,6 +55,9 @@ export async function hmacHex(secret, message) {
 }
 export function recoveryHmac(secret, code) {
   return hmacHex(secret, RECOVERY_DOMAIN + normalizeCode(code));
+}
+export function recoveryAfterResetHmac(secret, code) {
+  return hmacHex(secret, RECOVERY_AFTER_RESET_DOMAIN + normalizeCode(code));
 }
 /** A comparison that does not stop at the first differing character. */
 export function timingSafeEqualStrings(a, b) {
@@ -130,15 +138,20 @@ export async function handleRecover(req, deps) {
   const userId = shapeOk ? await deps.store.lookupUser(username) : null;
   const stored = userId ? await deps.store.getRecoveryHmac(userId) : null;
   const given = await recoveryHmac(deps.secret, code);
-  const recoveryMatch = timingSafeEqualStrings(stored || "0".repeat(64), given) && !!stored;
+  const givenAfterReset = await recoveryAfterResetHmac(deps.secret, code);
+  // Both comparisons always run, so the time taken does not say which kind the stored code is.
+  const own = timingSafeEqualStrings(stored || "0".repeat(64), given);
+  const afterReset = timingSafeEqualStrings(stored || "0".repeat(64), givenAfterReset);
+  const recoveryMatch = (own || afterReset) && !!stored;
   const resetMatch = userId ? await deps.store.consumeReset(userId, code) : false;
   if (!shapeOk || !userId || !(recoveryMatch || resetMatch)) return fail();
 
   if (!(await deps.store.setPassword(userId, password))) return fail();
   await deps.store.revokeSessions(userId);
-  // Rotate: the code that was just used is dead whichever kind it was.
+  // Rotate: the code that was just used is dead whichever kind it was. The new one came from a reset, so it
+  // can reset the password again but never remove two-step login (Q-41).
   const next = generateCode(deps.randomBytes);
-  await deps.store.putRecoveryCode(userId, await recoveryHmac(deps.secret, next));
+  await deps.store.putRecoveryCode(userId, await recoveryAfterResetHmac(deps.secret, next));
   await deps.store.clearReset(userId);
   return json(200, { ok: true, recovery_code: next });
 }
@@ -181,7 +194,12 @@ function randomHex(randomBytes, n) {
  *   putResetRequest(id, { token_hmac, ready_at, expires_at }); deleteResetRequest(id);
  *   notifyResetRequested(id, readyAtMs)
  */
+// Q-38e (2026-11-18, owner): OFF. A reset with no proof is an account takeover: anyone who knew a username
+// could take the account after the hour. Recovery is a passkey, the recovery code, or a new account. Both
+// actions answer 410, so a request opened before the switch can no longer complete either.
+export const RESET_REQUEST_DISABLED = true;
 export async function handleResetRequest(req, deps) {
+  if (RESET_REQUEST_DISABLED) return json(410, { error: "reset_disabled" });
   if (!deps.secret) return json(500, { error: "not_configured" });
   const now = (deps.now || Date.now)();
   const body = req.body && typeof req.body === "object" ? req.body : {};
@@ -242,7 +260,7 @@ async function resetComplete(deps, now, body, username, ip) {
   await deps.store.deleteResetRequest(userId);
   await deps.store.revokeSessions(userId);
   const next = generateCode(deps.randomBytes);
-  await deps.store.putRecoveryCode(userId, await recoveryHmac(deps.secret, next));
+  await deps.store.putRecoveryCode(userId, await recoveryAfterResetHmac(deps.secret, next));
   await deps.store.clearReset(userId);
   return json(200, { ok: true, recovery_code: next });
 }

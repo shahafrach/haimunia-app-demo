@@ -3,6 +3,7 @@
 // logic is in ../_shared/mfa-recovery.mjs. Secrets: RECOVERY_CODE_HMAC_SECRET.
 import { createClient } from "npm:@supabase/supabase-js@2.57.4";
 import { CORS_HEADERS } from "../_shared/recovery.mjs";
+import { clientIp } from "../_shared/clientIp.mjs";
 import { handleMfaRecovery } from "../_shared/mfa-recovery.mjs";
 
 Deno.serve(async (req: Request) => {
@@ -19,7 +20,7 @@ Deno.serve(async (req: Request) => {
 
   let body: unknown = null;
   try { body = await req.json(); } catch { /* a missing body is a failure inside the handler */ }
-  const ip = (req.headers.get("cf-connecting-ip") || req.headers.get("x-forwarded-for") || "").split(",")[0].trim();
+  const ip = clientIp(req.headers);
 
   const out = await handleMfaRecovery({ authorization: req.headers.get("Authorization") || "", body, ip }, {
     secret,
@@ -46,6 +47,11 @@ Deno.serve(async (req: Request) => {
       consumeReset: async (userId: string, code: string) => {
         const { data, error } = await supabase.rpc("recovery_consume_reset_code", { p_user_id: userId, p_code: code });
         return !error && data === true;
+      },
+      revokeOtherSessions: async (accessToken: string) => {
+        // Q-41: the admin API ends every session of the token's account except this one.
+        const { error } = await supabase.auth.admin.signOut(accessToken, "others");
+        if (error) throw error;
       },
       removeTotpFactors: async (userId: string) => {
         const { data, error } = await supabase.auth.admin.mfa.listFactors({ userId });

@@ -279,7 +279,7 @@ test("both functions are wired and need no session", () => {
   for (const [name, handler] of [["transfer-put", "handleTransferPut"], ["transfer-take", "handleTransferTake"]]) {
     const src = readFileSync(new URL(`../supabase/functions/${name}/index.ts`, import.meta.url), "utf8");
     assert.match(src, new RegExp(`${handler}\\(`));
-    assert.match(src, /cf-connecting-ip/);
+    assert.match(src, /const ip = clientIp\(req\.headers\);/, "only cf-connecting-ip, through the shared helper (Q-41)");
     assert.doesNotMatch(src, /Access-Control-Allow-Origin": "\*"/);
   }
   const toml = readFileSync(new URL("../supabase/config.toml", import.meta.url), "utf8");

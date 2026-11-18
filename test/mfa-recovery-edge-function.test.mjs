@@ -22,6 +22,7 @@ async function world() {
       getRecoveryHmac: async (id) => w.recovery.get(id) || null,
       consumeReset: async () => false,
       removeTotpFactors: async () => { if (w.failRemove) return false; w.factors = []; return true; },
+      revokeOtherSessions: async (token) => { w.othersRevoked = (w.othersRevoked || []).concat(token); },
       putRecoveryCode: async (id, h) => { w.recovery.set(id, h); },
       clearReset: async () => {},
     },
