@@ -25,19 +25,9 @@
 // in _shared/webPush.mjs.
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.57.4";
 import { encryptPushPayload, buildVapidAuth, VAPID_SUBJECT } from "../_shared/webPush.mjs";
+import { isScheduledCaller } from "../_shared/cronAuth.mjs";
 
-// Same constant-shape comparison recap_weekly uses (SEC-017): a plain !==
-// short-circuits at the first differing byte, which is a timing channel for
-// recovering the service-role key.
-function timingSafeEqualStrings(a: string, b: string): boolean {
-  const enc = new TextEncoder();
-  const aBytes = enc.encode(a);
-  const bBytes = enc.encode(b);
-  const len = Math.max(aBytes.length, bBytes.length);
-  let diff = aBytes.length ^ bBytes.length;
-  for (let i = 0; i < len; i++) diff |= (aBytes[i] ?? 0) ^ (bBytes[i] ?? 0);
-  return diff === 0;
-}
+// timingSafeEqualStrings moved to ../_shared/cronAuth.mjs (F-023), with the cron-secret check.
 
 type Pending = {
   notification_id: string;
@@ -177,7 +167,9 @@ Deno.serve(async (req: Request) => {
   // which the publishable key in cloud-config.js satisfies. This function
   // reads every member's endpoints and notification bodies, so the check is
   // for the service-role key specifically.
-  if (!timingSafeEqualStrings(req.headers.get("Authorization") || "", `Bearer ${serviceRoleKey}`)) {
+  // F-023 (202611160001): the cron calls carry EDGE_CRON_SECRET, a random secret set in one step with its
+  // Vault copy; the service_role key is still accepted for a manual ops call.
+  if (!isScheduledCaller(req.headers.get("Authorization"), { cronSecret: Deno.env.get("EDGE_CRON_SECRET"), serviceRoleKey })) {
     return new Response(JSON.stringify({ error: "unauthorized" }), {
       status: 401, headers: { "Content-Type": "application/json" },
     });

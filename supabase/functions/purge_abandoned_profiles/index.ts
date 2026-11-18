@@ -58,6 +58,7 @@
 // error for its batch; anything the API refused is retried the next night.
 // See drainStorageErasure() below.
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.57.4";
+import { isScheduledCaller } from "../_shared/cronAuth.mjs";
 
 // "Versioned": a change to the abandonment predicate in
 // public.purge_abandoned_profiles()'s WHERE clause (202609010004) must
@@ -92,22 +93,7 @@ const PURGE_VERSION = 2;
 // change this safely.
 const RETENTION_DAYS = 30;
 
-// Launch-readiness audit, SEC-017. Same fix as recap_weekly's own copy of
-// this helper - plain `!==` short-circuits at the first differing byte,
-// a genuine (if low-practicality-over-a-real-network) timing side channel
-// on the service-role key. Not shared via an import: these two files are
-// deployed as independent Edge Functions.
-function timingSafeEqualStrings(a: string, b: string): boolean {
-  const enc = new TextEncoder();
-  const aBytes = enc.encode(a);
-  const bBytes = enc.encode(b);
-  const len = Math.max(aBytes.length, bBytes.length);
-  let diff = aBytes.length ^ bBytes.length;
-  for (let i = 0; i < len; i++) {
-    diff |= (aBytes[i] ?? 0) ^ (bBytes[i] ?? 0);
-  }
-  return diff === 0;
-}
+// timingSafeEqualStrings moved to ../_shared/cronAuth.mjs (F-023), with the cron-secret check.
 
 // Storage's remove() takes a list of paths per bucket. 100 per call keeps
 // each request small; STORAGE_BATCH_LIMIT caps one night's work so a very
@@ -161,7 +147,9 @@ Deno.serve(async (req: Request) => {
   // (COMM-220): only a caller presenting the actual service role key (a
   // scheduler invoking this with it, or a manual ops run per the runbook)
   // gets past this line.
-  if (!timingSafeEqualStrings(req.headers.get("Authorization") || "", `Bearer ${serviceRoleKey}`)) {
+  // F-023 (202611160001): the cron calls carry EDGE_CRON_SECRET, a random secret set in one step with its
+  // Vault copy; the service_role key is still accepted for a manual ops call.
+  if (!isScheduledCaller(req.headers.get("Authorization"), { cronSecret: Deno.env.get("EDGE_CRON_SECRET"), serviceRoleKey })) {
     return new Response(JSON.stringify({ error: "unauthorized" }), {
       status: 401,
       headers: { "Content-Type": "application/json" },

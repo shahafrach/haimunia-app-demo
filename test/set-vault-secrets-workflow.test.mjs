@@ -11,6 +11,7 @@ import os from "node:os";
 import path from "node:path";
 import http from "node:http";
 import { spawn } from "node:child_process";
+import crypto from "node:crypto";
 import { main, baseUrlFor, VERIFY_SQL } from "../scripts/set-vault-secrets.mjs";
 
 const root = new URL("../", import.meta.url);
@@ -74,8 +75,12 @@ test("the helper masks the key before using it and passes it only in a JSON body
 
 // ---- the helper as a real process -------------------------------------------
 
-function fakeApi({ keys = [{ name: "service_role", api_key: KEY }], verify = { base_url_set: true, service_role_key_set: true }, failWrite = false } = {}) {
+// A fake Management API with state: the Vault rows the helper writes, the Edge Function secrets (listed, as
+// the real API does, by the SHA-256 digest of each value), and the revealed API keys.
+const sha = (v) => crypto.createHash("sha256").update(String(v)).digest("hex");
+function fakeApi({ keys = [{ name: "service_role", api_key: KEY }], verify = null, failWrite = false, vault = {}, fnSecrets = { SUPABASE_SERVICE_ROLE_KEY: KEY } } = {}) {
   const seen = [];
+  const state = { vault: { ...vault }, fn: { ...fnSecrets } };
   const server = http.createServer((req, res) => {
     let body = "";
     req.on("data", (c) => (body += c));
@@ -83,12 +88,31 @@ function fakeApi({ keys = [{ name: "service_role", api_key: KEY }], verify = { b
       seen.push({ method: req.method, url: req.url, auth: req.headers.authorization, body });
       res.setHeader("content-type", "application/json");
       if (req.url.includes("/api-keys")) return res.end(JSON.stringify(keys));
+      if (req.url.endsWith("/secrets") && req.method === "GET") {
+        return res.end(JSON.stringify(Object.entries(state.fn).map(([name, v]) => ({ name, value: sha(v) }))));
+      }
+      if (req.url.endsWith("/secrets") && req.method === "POST") {
+        for (const { name, value } of JSON.parse(body)) state.fn[name] = value;
+        res.statusCode = 201; return res.end("{}");
+      }
       if (failWrite && body.includes("update_secret")) { res.statusCode = 500; return res.end(JSON.stringify({ message: body })); }
-      if (body.includes("jsonb_build_object")) return res.end(JSON.stringify([{ result: verify }]));
+      const q = body ? JSON.parse(body).query : "";
+      const w = q.match(/where name = '([a-z_]+)'\) then\n\s+perform vault\.update_secret\(\(select id from vault\.secrets where name = '[a-z_]+'\), '([^']*)'\)/);
+      if (w) { state.vault[w[1]] = w[2]; return res.end("[]"); }
+      if (q.includes("extensions.digest")) {
+        const p = (n) => (state.vault[n] === undefined ? null : sha(state.vault[n]).slice(0, 8));
+        return res.end(JSON.stringify([{ result: { service_role_key: p("edge_functions_service_role_key"), cron_secret: p("edge_functions_cron_secret") } }]));
+      }
+      if (q.includes("jsonb_build_object")) {
+        const v = state.vault;
+        return res.end(JSON.stringify([{ result: verify ?? {
+          base_url_set: !!v.edge_functions_base_url, service_role_key_set: !!v.edge_functions_service_role_key,
+          cron_secret_set: (v.edge_functions_cron_secret || "").length >= 32 } }]));
+      }
       res.end("[]");
     });
   });
-  return { server, seen };
+  return { server, seen, state };
 }
 
 // A preload that redirects https://api.supabase.com to the fake, so the real
@@ -108,27 +132,61 @@ globalThis.fetch = (u, o) => f(String(u).replace("https://api.supabase.com", "ht
 }
 
 async function withFake(opts, fn) {
-  const { server, seen } = fakeApi(opts);
+  const { server, seen, state } = fakeApi(opts);
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "vault-"));
-  try { await fn(server.address().port, path.join(dir, "result.json"), seen); }
+  try { await fn(server.address().port, path.join(dir, "result.json"), seen, state); }
   finally { server.close(); fs.rmSync(dir, { recursive: true, force: true }); }
 }
 
-test("as a real process: masks first, writes both secrets, prints only the mask, result holds only booleans", async () => {
-  await withFake({}, async (port, resultFile, seen) => {
+test("as a real process: masks first, writes every secret, prints only masks, the result holds booleans and hash prefixes", async () => {
+  await withFake({}, async (port, resultFile, seen, state) => {
     const r = await run(port, resultFile);
     assert.equal(r.status, 0, r.err);
-    assert.equal(r.out, `::add-mask::${KEY}\n`, "stdout is the mask command and nothing else");
-    assert.ok(!r.err.includes(KEY));
-    assert.deepStrictEqual(JSON.parse(fs.readFileSync(resultFile, "utf8")), { base_url_set: true, service_role_key_set: true });
-    assert.ok(!fs.readFileSync(resultFile, "utf8").includes(KEY));
-    const queries = seen.filter((s) => s.url.endsWith("/database/query"));
-    assert.equal(queries.length, 3);
-    assert.ok(queries.every((q) => q.auth === "Bearer sbp_test"));
-    assert.ok(queries[0].body.includes("https://abcdefghij.supabase.co/functions/v1"));
-    assert.ok(queries[1].body.includes(KEY) && queries[1].body.includes("vault.update_secret"));
-    assert.ok(seen.every((s) => !s.url.includes(KEY)), "the key is never in a URL");
+    const lines = r.out.trim().split("\n");
+    assert.ok(lines.every((l) => l.startsWith("::add-mask::")), "stdout is mask commands and nothing else");
+    assert.equal(lines[0], `::add-mask::${KEY}`, "the key is masked first");
+    const cron = state.fn.EDGE_CRON_SECRET;
+    assert.match(cron, /^[0-9a-f]{64}$/, "a fresh 32-byte random cron secret");
+    assert.ok(lines.includes(`::add-mask::${cron}`), "and it is masked too");
+    assert.equal(state.vault.edge_functions_cron_secret, cron, "the Vault and the functions hold the same cron secret");
+    const text = fs.readFileSync(resultFile, "utf8");
+    for (const v of [KEY, cron]) assert.ok(!r.err.includes(v) && !text.includes(v), "no value in stderr or the result");
+    const result = JSON.parse(text);
+    assert.equal(result.base_url_set, true);
+    assert.equal(result.service_role_key_set, true);
+    assert.equal(result.cron_secret_set, true);
+    assert.equal(result.cron_secret_matches_functions, true);
+    // Every string in the diagnosis is an 8-hex prefix or a key name.
+    const strings = JSON.stringify(result.diagnosis_before).match(/"[^"]*"/g).map((x) => x.slice(1, -1));
+    for (const v of strings) assert.ok(/^[0-9a-f]{8}$/.test(v) || /^[A-Za-z_-]+$/.test(v), `unexpected value in the result: ${v}`);
+    assert.ok(seen.every((x) => !x.url.includes(KEY) && !x.url.includes(cron)), "no value in a URL");
+    const post = seen.findIndex((x) => x.method === "POST" && x.url.endsWith("/secrets"));
+    const vaultCron = seen.findIndex((x) => x.body.includes("edge_functions_cron_secret") && x.body.includes("update_secret"));
+    assert.ok(post > -1 && vaultCron > post, "the functions' copy is written first, then the Vault's");
+    assert.ok(seen.filter((x) => x.url.endsWith("/database/query")).every((q) => q.auth === "Bearer sbp_test"));
+  });
+});
+
+test("as a real process: the diagnosis says which key the functions hold, by hash prefix only (F-023)", async () => {
+  const NEW = "sb_secret_" + "n".repeat(40);
+  await withFake({
+    keys: [{ name: "service_role", api_key: KEY }, { name: "default", type: "secret", api_key: NEW }],
+    vault: { edge_functions_service_role_key: KEY },
+    fnSecrets: { SUPABASE_SERVICE_ROLE_KEY: NEW },
+  }, async (port, resultFile) => {
+    const r = await run(port, resultFile);
+    assert.equal(r.status, 0, r.err);
+    const d = JSON.parse(fs.readFileSync(resultFile, "utf8")).diagnosis_before;
+    assert.equal(d.legacy_service_role, sha(KEY).slice(0, 8));
+    assert.deepStrictEqual(d.new_secret_keys, { default: sha(NEW).slice(0, 8) });
+    assert.equal(d.vault.service_role_key, sha(KEY).slice(0, 8));
+    assert.equal(d.functions.SUPABASE_SERVICE_ROLE_KEY, sha(NEW).slice(0, 8));
+    assert.equal(d.vault_key_is_legacy_key, true);
+    assert.equal(d.functions_key_is_legacy_key, false, "the mismatch behind the 401s is visible");
+    assert.equal(d.functions_key_is_a_new_secret_key, true);
+    assert.ok(!r.out.replace(/::add-mask::[^\n]*\n/g, "").length, "stdout holds masks only");
+    assert.ok(r.out.includes(`::add-mask::${NEW}`), "the new secret key is masked as well");
   });
 });
 
@@ -143,11 +201,31 @@ test("as a real process: a response body that echoes the key never reaches stdou
 });
 
 test("as a real process: a secret still a placeholder fails the run", async () => {
-  await withFake({ verify: { base_url_set: true, service_role_key_set: false } }, async (port, resultFile) => {
+  await withFake({ verify: { base_url_set: true, service_role_key_set: false, cron_secret_set: true } }, async (port, resultFile) => {
     const r = await run(port, resultFile);
     assert.equal(r.status, 1);
-    assert.deepStrictEqual(JSON.parse(fs.readFileSync(resultFile, "utf8")), { base_url_set: true, service_role_key_set: false });
+    const result = JSON.parse(fs.readFileSync(resultFile, "utf8"));
+    assert.equal(result.service_role_key_set, false);
   });
+});
+
+test("as a real process: if the functions' cron secret cannot be written, the Vault copy is not touched and the run fails", async () => {
+  const { server, seen, state } = fakeApi({});
+  const orig = server.listeners("request")[0];
+  server.removeAllListeners("request");
+  server.on("request", (req, res) => {
+    if (req.method === "POST" && req.url.endsWith("/secrets")) { res.statusCode = 403; return res.end(JSON.stringify({ message: "forbidden" })); }
+    return orig(req, res);
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "vault-"));
+  try {
+    const r = await run(server.address().port, path.join(dir, "result.json"));
+    assert.equal(r.status, 1);
+    assert.match(r.err, /write EDGE_CRON_SECRET: HTTP 403/);
+    assert.equal(state.vault.edge_functions_cron_secret, undefined, "the Vault still holds its placeholder");
+    assert.ok(!seen.some((x) => x.body.includes("edge_functions_cron_secret') then")), "no cron write was sent to the Vault");
+  } finally { server.close(); fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
 test("as a real process: no service_role key, an unsafe key, or no token writes nothing", async () => {
