@@ -314,7 +314,9 @@
   // Separating the two numbers with a Hebrew word removes the ambiguity at the
   // source instead of trying to mark it up afterwards.
   const USERNAME_RULE_TEXT = "3 עד 24 אותיות אנגליות קטנות, ספרות או קו תחתון";
-  const PASSWORD_RULE_TEXT = "לפחות 10 תווים, עם אות גדולה, אות קטנה וספרה";
+  // Q-38g (2026-11-18, owner): length is the rule, 10 characters or more. No uppercase or digit rule: it made
+  // members pick "Password1" and forget which letter was capital. The same in the club app and on the server.
+  const PASSWORD_RULE_TEXT = "לפחות 10 תווים";
 
   // Signup asks for a name TWICE, three screens apart, and both fields used to
   // be labelled "שם משתמש" with contradictory rules behind them: stage one
@@ -363,7 +365,6 @@
     // and bcrypt's 72 bytes): without it a long password passed here and then
     // failed recovery with only the generic answer (audit L9).
     if (password.length > 72) return "הסיסמה ארוכה מדי. אפשר עד 72 תווים.";
-    if (!/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/[0-9]/.test(password)) return "הסיסמה צריכה לכלול אות גדולה, אות קטנה וספרה באנגלית.";
     return "";
   }
   // Live, as-you-type validation for the two credential-creation forms.

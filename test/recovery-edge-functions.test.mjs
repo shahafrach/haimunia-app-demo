@@ -81,7 +81,9 @@ test("the stored tag is an HMAC under a domain prefix, never the code", async ()
 });
 test("the password rule is the client's", () => {
   assert.ok(passwordOk(GOOD_PW));
-  for (const bad of ["short1A", "alllowercase1", "ALLUPPERCASE1", "NoDigitsHereAtAll", ""]) assert.ok(!passwordOk(bad), bad);
+  // Q-38g: 10 to 72 characters, nothing else.
+  for (const ok of ["alllowercase1", "ALLUPPERCASE", "NoDigitsHereAtAll", "סיסמה ארוכה מאוד", "x".repeat(72)]) assert.ok(passwordOk(ok), ok);
+  for (const bad of ["short1A", "123456789", "", "x".repeat(73)]) assert.ok(!passwordOk(bad), bad);
 });
 
 test("issue: an authenticated member gets a code once and only its HMAC is stored", async () => {

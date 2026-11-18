@@ -63,7 +63,8 @@ enable_manual_linking = false
 # Authentication settings must be changed to match by hand - this migration
 # cannot reach them.
 minimum_password_length = 10
-password_requirements = "lower_upper_letters_digits"
+# Q-38g (2026-11-18, owner): length only. set-auth-config.yml sets the same on the project.
+password_requirements = ""
 
 [auth.email]
 enable_signup = true

@@ -52,7 +52,7 @@ async function reachCredentials(window) {
 // 1. The placeholder and the validator state the same rule
 // ===========================================================================
 
-test("a password of exactly the length the placeholder promises, with exactly the character classes it names, is accepted", async () => {
+test("a password of exactly the length the placeholder promises is accepted (Q-38g: length only)", async () => {
   const window = await bootCommunity(createMockSupabase(), { syncEnabled: false });
   await reachCredentials(window);
 
@@ -62,10 +62,9 @@ test("a password of exactly the length the placeholder promises, with exactly th
   // placeholder ever drifts from the rule again, this fails.
   const promisedLength = Number((passwordInput.placeholder.match(/\d+/) || [])[0]);
   assert.ok(promisedLength >= 10, `the placeholder must state the real minimum, said "${passwordInput.placeholder}"`);
-  assert.match(passwordInput.placeholder, /אות גדולה/, "and name the uppercase requirement");
-  assert.match(passwordInput.placeholder, /אות קטנה/, "and the lowercase one");
-  assert.match(passwordInput.placeholder, /ספרה/, "and the digit");
-  const password = "Aa1" + "b".repeat(promisedLength - 3);
+  // Q-38g: length is the whole rule; the placeholder names nothing else.
+  assert.doesNotMatch(passwordInput.placeholder, /אות גדולה|אות קטנה|ספרה/, "no character-class rule any more");
+  const password = "b".repeat(promisedLength);
   assert.equal(password.length, promisedLength);
 
   window.document.querySelector('#communityCredentials input[name="username"]').value = "dana";
