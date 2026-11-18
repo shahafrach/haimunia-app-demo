@@ -64,3 +64,21 @@ test("the deploy workflow deploys both functions when _shared changes", () => {
   const wf = read(".github/workflows/deploy-edge-functions.yml");
   assert.match(wf, /- "supabase\/functions\/\*\*"/, "a change to _shared/cronAuth.mjs triggers the deploy on merge");
 });
+
+// Q-34: the cron's EDGE_CRON_SECRET is not a JWT, so with the gateway's verify_jwt on, every cron call got
+// 401 UNAUTHORIZED_INVALID_JWT_FORMAT before the function ran. Every function gated by isScheduledCaller
+// must turn the gateway check off; the function's own check then refuses everyone else with 401.
+test("every function that uses isScheduledCaller has verify_jwt = false and refuses with 401", () => {
+  const toml = read("supabase/config.toml");
+  const dir = new URL("../supabase/functions/", import.meta.url);
+  const gated = fs.readdirSync(dir)
+    .filter((name) => name !== "_shared" && fs.existsSync(new URL(`${name}/index.ts`, dir)))
+    .filter((name) => /isScheduledCaller\(/.test(read(`supabase/functions/${name}/index.ts`)));
+  assert.deepEqual(gated.sort(), ["notif_push_send", "purge_abandoned_profiles"], "the known scheduled functions");
+  for (const fn of gated) {
+    const esc = fn.replace(/[-_]/g, "[-_]");
+    assert.match(toml, new RegExp(`\\[functions\\.${esc}\\]\\nverify_jwt = false`), `${fn}: verify_jwt = false in supabase/config.toml`);
+    const src = read(`supabase/functions/${fn}/index.ts`);
+    assert.match(src, /if \(!isScheduledCaller\([^\n]*\{\s*return new Response\(JSON\.stringify\(\{ error: "unauthorized" \}\), \{\s*status: 401/, `${fn}: the check refuses with 401`);
+  }
+});

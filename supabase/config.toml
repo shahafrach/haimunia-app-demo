@@ -112,5 +112,16 @@ verify_jwt = false
 [functions.transfer-take]
 verify_jwt = false
 
+# The scheduled functions (F-023, Q-34). The cron (public.cron_invoke_edge_function) sends EDGE_CRON_SECRET,
+# a random secret that is not a JWT, so the gateway's own check answered 401 UNAUTHORIZED_INVALID_JWT_FORMAT
+# before the function ran. The gate is the function's isScheduledCaller (_shared/cronAuth.mjs): it accepts
+# only EDGE_CRON_SECRET or the service_role key and answers 401 to anything else, the publishable key included.
+# test/edge-cron-secret.test.mjs fails if a function that uses isScheduledCaller is missing from this list.
+[functions.notif_push_send]
+verify_jwt = false
+
+[functions.purge_abandoned_profiles]
+verify_jwt = false
+
 [analytics]
 enabled = false
