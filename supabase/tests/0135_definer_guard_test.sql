@@ -52,6 +52,7 @@ create table tests.definer_reviewed (
 insert into tests.definer_reviewed (name, args, class, anon_allowed, reason) values
   ('is_club_staff', 'uuid', 'caller_own_rows', false, 'RLS helper: is the caller the owner or coach of this club-type circle; reads only the caller''s own membership row (202611120001)'),
   ('rotate_club_link', 'uuid', 'circle_scoped', false, 'owner or coach of ONE club replaces its join link; 5 a day (202611120001)'),
+  ('rotate_club_invite', 'uuid', 'circle_scoped', false, 'owner or coach of ONE club replaces its join link and short code; 5 a day, shared with rotate_club_link (202611180002)'),
   ('club_announcement_post', 'uuid, text, boolean', 'circle_scoped', false, 'owner or coach of ONE club posts an announcement there; no notification; 10 a day (202611120001)'),
   ('club_announcement_set_pinned', 'uuid, boolean', 'circle_scoped', false, 'owner or coach of the announcement''s own club pins or unpins it (202611120001)'),
   ('club_announcement_delete', 'uuid', 'circle_scoped', false, 'owner or coach of the announcement''s own club deletes it (202611120001)'),

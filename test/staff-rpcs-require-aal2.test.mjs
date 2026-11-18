@@ -47,10 +47,18 @@ test("the eight staff and owner RPCs check aal_satisfied() first", () => {
     "remove_member", "post_delete", "create_circle_invite", "update_circle"]) {
     const d = defs.get(n);
     assert.ok(d, `${n} exists`);
-    assert.equal(d.file, "202611180001_staff_rpcs_require_aal2.sql", `${n} is last defined by 202611180001`);
+    // 202611180002 (Q-37) made rotate_club_link a wrapper over rotate_club_invite; both keep the check first.
+    const last = n === "rotate_club_link" ? "202611180002_club_short_join_code.sql" : "202611180001_staff_rpcs_require_aal2.sql";
+    assert.equal(d.file, last, `${n} is last defined by ${last}`);
     assert.match(d.body, /\nbegin\n\s*-- F-028[^\n]*\n\s*if not public\.aal_satisfied\(\) then raise exception 'not authorized' using errcode = 'P0001'; end if;/,
       `${n}: the aal check is its first statement`);
   }
+});
+
+test("rotate_club_invite (202611180002) checks aal_satisfied() first, as rotate_club_link did", () => {
+  const d = latestDefinitions().get("rotate_club_invite");
+  assert.ok(d && d.definer, "rotate_club_invite is a definer function");
+  assert.match(d.body, /\nbegin\n\s*-- F-028[^\n]*\n\s*if not public\.aal_satisfied\(\) then raise exception 'not authorized' using errcode = 'P0001'; end if;/);
 });
 
 test("no current definer function that checks staff or ownership is missing the aal check", () => {
