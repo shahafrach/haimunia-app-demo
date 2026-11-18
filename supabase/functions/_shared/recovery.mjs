@@ -148,6 +148,9 @@ export async function handleRecover(req, deps) {
 
   if (!(await deps.store.setPassword(userId, password))) return fail();
   await deps.store.revokeSessions(userId);
+  // Q-38f: a recovery also removes every passkey of the account; whoever lost the phone re-adds Face ID once
+  // signed in. Best effort: no passkeys (or passkeys off on the project) is not a failure.
+  if (deps.store.revokePasskeys) await deps.store.revokePasskeys(userId);
   // Rotate: the code that was just used is dead whichever kind it was. The new one came from a reset, so it
   // can reset the password again but never remove two-step login (Q-41).
   const next = generateCode(deps.randomBytes);

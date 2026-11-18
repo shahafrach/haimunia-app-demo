@@ -107,8 +107,15 @@
   }
 
   // --- COMM-141 unread badge -------------------------------------------
+  // Q-38f: once per app open with a session, the server notes the account as active (mark_active, at most one
+  // write per 6 hours), so the year-long purge of abandoned club accounts never reaches a member who uses the app.
+  let markedActive = false;
   async function loadNotifUnread() {
     if (!state.user || !client) return;
+    if (!markedActive && !state.user.is_anonymous) {
+      markedActive = true;
+      try { Promise.resolve(client.rpc("mark_active")).catch(() => undefined); } catch (e) { /* best effort */ }
+    }
     const { data, error } = await client.rpc("notif_unread_count");
     if (!error) { state.notif.unread = Number(data) || 0; state.notif.unreadLoaded = true; rerender(); }
   }
