@@ -1,6 +1,6 @@
 # e2e user tests
 
-Three scripts that drive the real app, as real people would, against a **local**
+Four scripts that drive the real app, as real people would, against a **local**
 Supabase stack. They never touch production: every address must be loopback, and
 the browser aborts any request that is not the local page or the local stack.
 
@@ -9,6 +9,7 @@ the browser aborts any request that is not the local page or the local stack.
 | `01-owner.mjs` | Dana | bootstrap link, sign-up, Friends circle, target, PR moment, PR card, week, notifications |
 | `02-friend.mjs` | Yoav | WhatsApp invite, sign-up, reactions, trained together, leave, rejoin |
 | `03-privacy.mjs` | Noa, Avi | couple limit, circle isolation, no weights or body weight on the wire, offline queue, account deletion |
+| `04-transfer-recovery.mjs` | (API, no browser) | transfer-put then transfer-take (once, byte for byte, other origin refused); recover-password, then the five-attempt limit refusing even the right code. Needs `supabase functions serve` |
 
 CI runs them in `.github/workflows/e2e.yml`. Locally, with Docker:
 

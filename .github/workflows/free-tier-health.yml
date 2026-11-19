@@ -1,0 +1,34 @@
+name: free-tier-health
+# Q-50 (Grok backend PRR, 2026-11-19): the free plan's own limits, once a day. keepalive.yml pings the
+# project and scheduled-job-alert.yml watches pg_cron, but nothing said when the project was paused,
+# the database was filling up, or Edge Function calls were heading for the monthly quota. The check
+# and its thresholds are scripts/check-free-tier.mjs; the runbook is docs/ops/MONITORING.md.
+#
+# A separate workflow, not a job in scheduled-job-alert.yml: that one needs no secret at all and a test
+# keeps it so (test/q39-edge-error-burst.test.mjs). This one needs SUPABASE_ACCESS_TOKEN, the same
+# Management API token set-auth-config and backup-database use, and fails loud without it.
+# ALERT_WEBHOOK_URL is optional, as there: with it unset the red run is the alert.
+on:
+  schedule:
+    # 05:23 UTC daily, away from the hourly alert at :17 and the 02:17 backup.
+    - cron: "23 5 * * *"
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: free-tier-health
+  cancel-in-progress: false
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - name: project status, database size and Edge Function calls against the free plan
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
+        run: node scripts/check-free-tier.mjs

@@ -670,3 +670,15 @@ leans on both). Adding a monitoring SDK means widening that policy, which
 trades a real XSS mitigation for observability. If it is ever done, it
 should be a deliberate, documented decision with the same scrutiny the
 CAPTCHA hosts got — not a dependency someone adds in passing.
+
+## Free-tier health (Q-50)
+
+`free-tier-health.yml` runs `scripts/check-free-tier.mjs` daily at 05:23 UTC with
+`SUPABASE_ACCESS_TOKEN`. It fails (and posts to `ALERT_WEBHOOK_URL` when set) when the project
+status is not `ACTIVE_HEALTHY`, the database is above 400 MB (the free plan stops at 500 MB), or
+Edge Function calls in the last 24 hours, times 30, are above 80% of the free 500,000 a month.
+Exit 2 means it could not check, which is also red.
+
+**Egress is not checked**: the Management API has no egress figure and the edge logs carry no
+response bytes. Look at the organization's usage page (Dashboard, Organization, Usage, Egress) once
+a week; the free plan allows 5 GB uncached and 5 GB cached a month.
