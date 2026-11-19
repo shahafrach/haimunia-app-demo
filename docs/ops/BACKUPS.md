@@ -40,6 +40,26 @@ The runbook is at the top of `backup-database.yml` (download the artifact,
 with `session_replication_role = replica`). The Sunday drill does exactly that
 into a throwaway local Supabase, so the procedure is rehearsed, not hoped for.
 
+## Recovery time and recovery point
+
+Q-50 (2026-11-19). Both are measured or derived, not hoped for.
+
+- **RPO (how much can be lost): up to 24 hours.** One dump a day at 02:17 UTC, so a
+  failure just before the next dump loses that day's server rows: posts, reactions,
+  memberships, notifications. Members' private training logs are not in it at all;
+  they live on their phones (and in their own exports), so a server restore never
+  costs a member their log. A shorter RPO needs a paid plan's point-in-time recovery.
+- **RTO (how long a restore takes): the drill measures it.** The `restore-drill` job
+  times itself from download to the last row check and writes the duration, with a
+  table of rows in the dump against rows restored, to the run's summary. Every
+  table in the dump must come back with exactly as many rows as the dump holds;
+  one row short fails the drill. Target: **under 1 hour** from the decision to
+  restore until the data is back, of which the drill's own time is the mechanical
+  part. Read the latest Sunday run's summary for the current number; when it grows
+  past 30 minutes, look at why before the target is at risk.
+- **Backup age**: artifacts are kept 90 days, so the oldest restorable point is
+  about three months back.
+
 ## Notes
 
 - `docs/ops/MONITORING.md` still describes the photo-bucket half

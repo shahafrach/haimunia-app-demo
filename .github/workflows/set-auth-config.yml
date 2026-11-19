@@ -15,7 +15,10 @@
 #   mailer_autoconfirm               = true   ("Confirm email" off)
 # then reads both back and fails unless both are true. A second step turns on
 # passkeys for the club app (Q-38c/e: rp_id haimunia.pages.dev) and reads them back. Idempotent: run it again
-# on any new project. CAPTCHA stays as the owner set it in the dashboard.
+# on any new project. CAPTCHA stays as the owner set it in the dashboard: this never writes it,
+# but (Q-50, PRR 2026-11-19) the last step reads it back and FAILS when CAPTCHA (Turnstile) is
+# off or the anonymous sign-in limit is unset, and prints both to the job summary. Anonymous
+# sign-ins are on for everyone, so those two are what stand between the sign-up and a script.
 # The run name carries anon_limit so auth-launch-limit.yml can find the launch-week
 # raise (the Actions API does not return a run's inputs).
 run-name: set-auth-config anon_limit=${{ inputs.anon_limit }}
@@ -115,3 +118,25 @@ jobs:
             | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(String(JSON.parse(s).rate_limit_anonymous_users)))')
           echo "anonymous sign-ins per hour: $now" | tee -a "$GITHUB_STEP_SUMMARY"
           [ "$now" = "$ANON_LIMIT" ]
+      # Q-50 (Grok backend PRR, 2026-11-19): anonymous sign-ins are on, so CAPTCHA and the per-IP limit
+      # are the only brakes on scripted sign-ups. Neither is written here (the owner sets CAPTCHA and its
+      # secret in the dashboard); both are read back and the run fails when either is missing. Last step,
+      # so a limit the step above just set is the one checked. Only these three fields leave the API answer:
+      # never the CAPTCHA secret.
+      - name: verify CAPTCHA (Turnstile) is on and the anonymous sign-in limit is set
+        run: |
+          set +x
+          PROJECT_REF="$(tr -d '[:space:]' < supabase/PROJECT_REF)"
+          API="https://api.supabase.com/v1/projects/$PROJECT_REF/config/auth"
+          guard=$(curl -sS "$API" -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const c=JSON.parse(s);const n=c.rate_limit_anonymous_users;process.stdout.write(JSON.stringify({captcha:c.security_captcha_enabled===true,captcha_provider:c.security_captcha_provider??null,anon_limit:Number.isInteger(n)&&n>0?n:null}))})')
+          {
+            echo
+            echo "### Abuse guards (read only)"
+            echo
+            echo '```'
+            echo "$guard"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "$guard"
+          echo "$guard" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const g=JSON.parse(s);const bad=[];if(!g.captcha)bad.push("CAPTCHA is off: turn on Turnstile in Authentication -> Attack Protection");else if(g.captcha_provider!=="turnstile")bad.push("CAPTCHA provider is "+g.captcha_provider+", not turnstile (the club app only renders Turnstile)");if(g.anon_limit===null)bad.push("the anonymous sign-in limit is unset: run this workflow with anon_limit (60, or 300 in launch week)");for(const b of bad)console.log("::error::"+b);process.exit(bad.length?1:0)})'

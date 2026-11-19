@@ -323,6 +323,10 @@ jobs:
     env:
       BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
     steps:
+      # Q-50: the drill is timed. From here to the last row check is the measured restore time (RTO,
+      # docs/ops/BACKUPS.md), written to the job summary by the last step whatever the outcome.
+      - name: start the clock
+        run: echo "DRILL_START=$(date +%s)" >> "$GITHUB_ENV"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: supabase/setup-cli@45a513f8c64c0bc8e0e3dfe572b5c95be85f6359 # v3.0.1
         with:
@@ -424,14 +428,23 @@ jobs:
           set -euo pipefail
           DB="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
           fail=0
-          for t in $(grep -oE 'INSERT INTO "public"\."[a-z_]+"' data.sql | sed 's/.*\."\([a-z_]*\)"/\1/' | sort -u); do
-            n=$(psql "$DB" -tAc "select count(*) from public.$t")
-            echo "  public.$t: $n rows"
-            if [ "$n" -lt 1 ]; then
-              echo "  public.$t came back EMPTY - the backup restored nothing for it."
+          # Q-50: exact row counts, not "at least one". The expected number per table is counted from the
+          # dump itself (multi-row INSERTs, so scripts/count-dump-rows.mjs counts tuples, not statements);
+          # every table in the dump, in every schema, must hold exactly that many rows after the restore.
+          node scripts/count-dump-rows.mjs data.sql > expected-rows.tsv
+          [ -s expected-rows.tsv ] || { echo "the dump names no table with rows - that is not a backup."; exit 1; }
+          echo "| table | in the dump | restored |" > rowcounts.md
+          echo "|---|---:|---:|" >> rowcounts.md
+          while IFS=$'\t' read -r t want; do
+            schema="${t%%.*}"; table="${t#*.}"
+            n=$(psql "$DB" -tAc "select count(*) from \"$schema\".\"$table\"")
+            echo "  $t: $n rows (dump: $want)"
+            echo "| $t | $want | $n |" >> rowcounts.md
+            if [ "$n" != "$want" ]; then
+              echo "  $t restored $n rows, the dump has $want."
               fail=1
             fi
-          done
+          done < expected-rows.tsv
           # session_replication_role lets the data IN regardless of foreign
           # keys, so a restore can succeed and still leave a row pointing at a
           # parent that never arrived. Check the two relations circles hang on.
@@ -449,3 +462,19 @@ jobs:
           [ "$orphan_posts" = "0" ] || fail=1
 
           exit $fail
+
+      - name: write the drill's duration and row counts to the summary
+        if: always()
+        run: |
+          end=$(date +%s)
+          secs=$(( end - ${DRILL_START:-$end} ))
+          {
+            echo "## Restore drill"
+            echo
+            echo "Result: **${{ job.status }}**. Duration, download to last row check: **$(( secs / 60 )) min $(( secs % 60 )) s** ($secs s)."
+            echo "RTO target and RPO: docs/ops/BACKUPS.md, \"Recovery time and recovery point\"."
+            echo
+            [ -f rowcounts.md ] && cat rowcounts.md
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "restore drill: $secs s"
+

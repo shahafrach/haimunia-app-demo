@@ -105,13 +105,14 @@ jobs:
             echo "E2E_DB_URL=$(val DB_URL)"
           } >> "$GITHUB_ENV"
 
-      - name: the three user tests
+      # Q-50: 04 is API level (transfer-put -> transfer-take, recover-password with the limit spent).
+      - name: the user tests
         working-directory: scripts/e2e
         run: |
           set +e
           mkdir -p artifacts
           rc=0
-          for t in 01-owner 02-friend 03-privacy; do
+          for t in 01-owner 02-friend 03-privacy 04-transfer-recovery; do
             echo "::group::$t"
             node "$t.mjs" 2>&1 | tee "artifacts/$t.log"
             # The shell is plain `bash -e`: without PIPESTATUS the pipeline reports tee's status.
@@ -124,7 +125,7 @@ jobs:
         if: always()
         working-directory: scripts/e2e
         run: |
-          for t in 01-owner 02-friend 03-privacy; do
+          for t in 01-owner 02-friend 03-privacy 04-transfer-recovery; do
             [ -f "artifacts/$t/summary.md" ] && cat "artifacts/$t/summary.md" >> "$GITHUB_STEP_SUMMARY"
           done
           true

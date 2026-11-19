@@ -7,7 +7,8 @@
   "scripts": {
     "test:owner": "node 01-owner.mjs",
     "test:friend": "node 02-friend.mjs",
-    "test:privacy": "node 03-privacy.mjs"
+    "test:privacy": "node 03-privacy.mjs",
+    "test:transfer-recovery": "node 04-transfer-recovery.mjs"
   },
   "dependencies": {
     "playwright": "1.62.1"
