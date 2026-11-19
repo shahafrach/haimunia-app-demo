@@ -71,7 +71,10 @@ on:
     # until the migrations have been applied to that project it fails, loudly,
     # with "could not check"; that is the correct signal, not a reason to
     # pause it again.
-    - cron: "0 */6 * * *"
+    # Q-39 (2026-11-18): hourly. notif_push_send answered 401 for about seven hours and nothing alerted;
+    # an hour-long burst of bad answers (202611180004) must not fall between two runs. The repository is
+    # public, so its Actions minutes are free, and each run is one small node script.
+    - cron: "17 * * * *"
   workflow_dispatch: {}
 permissions:
   contents: read
