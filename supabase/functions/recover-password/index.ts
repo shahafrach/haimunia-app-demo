@@ -47,6 +47,23 @@ Deno.serve(async (req: Request) => {
         const { error } = await supabase.auth.admin.updateUserById(userId, { password });
         return !error;
       },
+      revokePasskeys: async (userId: string) => {
+        // Q-38f. The Auth admin passkey endpoints (Supabase docs, "Manage a user's passkeys"); the pinned
+        // supabase-js predates its passkey helpers, so plain fetch with the service role key.
+        const base = `${supabaseUrl}/auth/v1/admin/users/${encodeURIComponent(userId)}/passkeys`;
+        const headers = { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` };
+        try {
+          const res = await fetch(base, { headers });
+          if (!res.ok) return;
+          const list = await res.json().catch(() => []);
+          const items = Array.isArray(list) ? list : Array.isArray(list?.passkeys) ? list.passkeys : [];
+          for (const p of items) {
+            if (p && typeof p.id === "string") await fetch(`${base}/${encodeURIComponent(p.id)}`, { method: "DELETE", headers });
+          }
+        } catch (e) {
+          console.error("recover-password: passkeys not revoked", e instanceof Error ? e.message : "unknown");
+        }
+      },
       revokeSessions: async (userId: string) => {
         const { error } = await supabase.rpc("recovery_revoke_sessions", { p_user_id: userId });
         if (error) throw error;

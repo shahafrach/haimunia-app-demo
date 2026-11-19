@@ -13,7 +13,8 @@
 # So this sets, and nothing else:
 #   external_anonymous_users_enabled = true
 #   mailer_autoconfirm               = true   ("Confirm email" off)
-# then reads both back and fails unless both are true. Idempotent: run it again
+# then reads both back and fails unless both are true. A second step turns on
+# passkeys for the club app (Q-38c/e: rp_id haimunia.pages.dev) and reads them back. Idempotent: run it again
 # on any new project. CAPTCHA stays as the owner set it in the dashboard.
 # The run name carries anon_limit so auth-launch-limit.yml can find the launch-week
 # raise (the Actions API does not return a run's inputs).
@@ -72,6 +73,26 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           echo "$state"
           [ "$state" = '{"anonymous_sign_ins":true,"confirm_email_off":true,"totp_enroll":true,"totp_verify":true}' ]
+      # Q-38c/e (2026-11-18): sign-in with Face ID / Touch ID in the club app, Supabase's native passkeys
+      # (experimental; docs/circles/decisions.md). The relying party is the club app's own host: a passkey is
+      # bound to it for good, so it never changes. BOX-LOG and the old app are other hosts and have none.
+      - name: turn on passkeys for the club app and verify
+        run: |
+          set +x
+          PROJECT_REF="$(tr -d '[:space:]' < supabase/PROJECT_REF)"
+          API="https://api.supabase.com/v1/projects/$PROJECT_REF/config/auth"
+          code=$(curl -sS -o /dev/null -w '%{http_code}' -X PATCH "$API" \
+            -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data-raw '{"passkey_enabled":true,"webauthn_rp_id":"haimunia.pages.dev","webauthn_rp_display_name":"האימוניה","webauthn_rp_origins":"https://haimunia.pages.dev"}')
+          if [ "$code" -lt 200 ] || [ "$code" -ge 300 ]; then
+            echo "PATCH $API answered HTTP $code. Passkeys are not known to be on."
+            exit 1
+          fi
+          pk=$(curl -sS "$API" -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const c=JSON.parse(s);process.stdout.write(JSON.stringify({passkeys:c.passkey_enabled===true,rp_id:c.webauthn_rp_id,rp_origins:c.webauthn_rp_origins}))})')
+          echo "$pk" | tee -a "$GITHUB_STEP_SUMMARY"
+          [ "$pk" = '{"passkeys":true,"rp_id":"haimunia.pages.dev","rp_origins":"https://haimunia.pages.dev"}' ]
       - name: set the anonymous sign-in limit, if asked, and verify it
         if: ${{ inputs.anon_limit != '' }}
         env:
