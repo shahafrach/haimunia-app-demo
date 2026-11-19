@@ -427,7 +427,9 @@ export function createMockSupabase(seedTables = {}) {
           queueMicrotask(() => authCb && authCb("SIGNED_IN", { user: currentUser }));
           return Promise.resolve({ error: null });
         },
-        signOut: () => {
+        signOut: (opts) => {
+          // scope "others" (Q-41) ends the account's other sessions; this one stays signed in, as in Supabase.
+          if (opts && opts.scope === "others") { db.__othersSignedOut = (db.__othersSignedOut || 0) + 1; return Promise.resolve({ error: null }); }
           currentUser = null;
           queueMicrotask(() => authCb && authCb("SIGNED_OUT", null));
           return Promise.resolve({ error: null });

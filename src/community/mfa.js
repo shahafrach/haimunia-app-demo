@@ -142,8 +142,15 @@
     if (error) return setFieldErrors("communityMfaEnroll", { code: MFA_BAD_CODE });
     m.enroll = null; m.has = true; m.error = "";
     setFieldErrors("communityMfaEnroll", {});
+    endOtherSessions();
     // The way back from a lost phone is the recovery code: a member with none makes one now.
     if (!state.ui.recovery.has) recoveryIssueAndShow("existing");
+  }
+
+  // Q-41: a factor change ends every other session of the account (this device stays signed in). A failure
+  // here does not undo the change; the server-side paths (recover-password, mfa-recovery) end them too.
+  function endOtherSessions() {
+    try { client.auth.signOut({ scope: "others" }).catch(() => undefined); } catch (e) { /* nothing to undo */ }
   }
 
   // Me: turn it off. The current code is asked for again.
@@ -165,6 +172,7 @@
     if (!ok) return setFieldErrors("communityMfaDisable", { code: MFA_BAD_CODE });
     m.has = false; m.disableOpen = false;
     setFieldErrors("communityMfaDisable", {});
+    endOtherSessions();
   }
 
   // Me: end every session of this account, on every device (this one too).

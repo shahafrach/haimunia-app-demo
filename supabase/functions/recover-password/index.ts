@@ -10,6 +10,7 @@
 // SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are injected by the runtime.
 import { createClient } from "npm:@supabase/supabase-js@2.57.4";
 import { handleRecover, CORS_HEADERS } from "../_shared/recovery.mjs";
+import { clientIp } from "../_shared/clientIp.mjs";
 
 Deno.serve(async (req: Request) => {
   const reply = (status: number, body: unknown) =>
@@ -25,7 +26,7 @@ Deno.serve(async (req: Request) => {
 
   let body: unknown = null;
   try { body = await req.json(); } catch { /* the handler treats a missing body as a failure */ }
-  const ip = (req.headers.get("cf-connecting-ip") || req.headers.get("x-forwarded-for") || "").split(",")[0].trim();
+  const ip = clientIp(req.headers);
 
   const out = await handleRecover({ body, ip }, {
     secret,
@@ -45,6 +46,23 @@ Deno.serve(async (req: Request) => {
       setPassword: async (userId: string, password: string) => {
         const { error } = await supabase.auth.admin.updateUserById(userId, { password });
         return !error;
+      },
+      revokePasskeys: async (userId: string) => {
+        // Q-38f. The Auth admin passkey endpoints (Supabase docs, "Manage a user's passkeys"); the pinned
+        // supabase-js predates its passkey helpers, so plain fetch with the service role key.
+        const base = `${supabaseUrl}/auth/v1/admin/users/${encodeURIComponent(userId)}/passkeys`;
+        const headers = { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` };
+        try {
+          const res = await fetch(base, { headers });
+          if (!res.ok) return;
+          const list = await res.json().catch(() => []);
+          const items = Array.isArray(list) ? list : Array.isArray(list?.passkeys) ? list.passkeys : [];
+          for (const p of items) {
+            if (p && typeof p.id === "string") await fetch(`${base}/${encodeURIComponent(p.id)}`, { method: "DELETE", headers });
+          }
+        } catch (e) {
+          console.error("recover-password: passkeys not revoked", e instanceof Error ? e.message : "unknown");
+        }
       },
       revokeSessions: async (userId: string) => {
         const { error } = await supabase.rpc("recovery_revoke_sessions", { p_user_id: userId });

@@ -13,6 +13,7 @@
 // SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are injected by the runtime.
 import { createClient } from "npm:@supabase/supabase-js@2.57.4";
 import { handleResetRequest, CORS_HEADERS } from "../_shared/recovery.mjs";
+import { clientIp } from "../_shared/clientIp.mjs";
 
 const ms = (v: unknown) => (v ? new Date(String(v)).getTime() : null);
 
@@ -30,7 +31,7 @@ Deno.serve(async (req: Request) => {
 
   let body: unknown = null;
   try { body = await req.json(); } catch { /* the handler treats a missing body as a failure */ }
-  const ip = (req.headers.get("cf-connecting-ip") || req.headers.get("x-forwarded-for") || "").split(",")[0].trim();
+  const ip = clientIp(req.headers);
 
   const out = await handleResetRequest({ body, ip }, {
     secret,

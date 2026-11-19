@@ -61,8 +61,9 @@ select ok((:'inv1'::jsonb ->> 'code') ~ '^[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{8}$'
 select (:'inv1'::jsonb ->> 'token') as tok1, (:'inv1'::jsonb ->> 'code') as code1 \gset
 select tests.clear_auth();
 select is((select count(*)::int from public.circle_invites where club_id = tests.kid()), 1, 'still one link row per club');
+-- 202611180003 (Q-38f): an HMAC under the Vault key, no longer a plain sha256.
 select is((select code_hash from public.circle_invites where club_id = tests.kid()),
-  encode(extensions.digest(:'code1', 'sha256'), 'hex'), 'the code is stored as its sha256 only');
+  public.join_code_hmac(:'code1'), 'the code is stored as its HMAC only');
 select ok(not exists (select 1 from public.circle_invites i where i.code_hash = :'code1' or i.token_hash = :'code1'), 'never the code itself');
 select is((select expires_at from public.circle_invites where club_id = tests.kid()), 'infinity'::timestamptz, 'the link and its code do not expire');
 select is((select max_uses from public.circle_invites where club_id = tests.kid()), 100000, 'the cap, not the row, limits joins');

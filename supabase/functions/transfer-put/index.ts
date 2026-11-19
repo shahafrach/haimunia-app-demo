@@ -11,6 +11,7 @@
 // are injected by the runtime.
 import { createClient } from "npm:@supabase/supabase-js@2.57.4";
 import { handleTransferPut, corsHeaders, putCorsOrigin } from "../_shared/transfer.mjs";
+import { clientIp } from "../_shared/clientIp.mjs";
 
 Deno.serve(async (req: Request) => {
   const cors = corsHeaders(putCorsOrigin(req.headers.get("origin")));
@@ -33,7 +34,7 @@ Deno.serve(async (req: Request) => {
     bodyBytes = Math.max(declared, text.length);
     body = JSON.parse(text);
   } catch { /* the handler treats a missing body as invalid */ }
-  const ip = (req.headers.get("cf-connecting-ip") || req.headers.get("x-forwarded-for") || "").split(",")[0].trim();
+  const ip = clientIp(req.headers);
 
   const out = await handleTransferPut({ body, ip, origin: req.headers.get("origin"), bodyBytes }, {
     secret,

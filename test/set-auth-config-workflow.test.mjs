@@ -36,3 +36,10 @@ test("the token is never echoed", () => {
     assert.doesNotMatch(line, /SUPABASE_ACCESS_TOKEN\b(?!\s+is not set)/, line.trim());
   }
 });
+
+test("passkeys for the club app (Q-38c/e): its own host as the relying party, read back exactly", () => {
+  const body = code.match(/--data-raw '(\{"passkey_enabled"[^']+\})'/);
+  assert.ok(body, "a separate PATCH turns passkeys on");
+  assert.deepEqual(JSON.parse(body[1]), { passkey_enabled: true, webauthn_rp_id: "haimunia.pages.dev", webauthn_rp_display_name: "האימוניה", webauthn_rp_origins: "https://haimunia.pages.dev" });
+  assert.match(code, /\[ "\$pk" = '\{"passkeys":true,"rp_id":"haimunia\.pages\.dev","rp_origins":"https:\/\/haimunia\.pages\.dev"\}' \]/);
+});

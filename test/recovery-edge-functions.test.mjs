@@ -9,6 +9,7 @@ import fs from "node:fs";
 import {
   CODE_ALPHABET, generateCode, codeFromBytes, normalizeCode, looksLikeCode, recoveryHmac, hmacHex,
   timingSafeEqualStrings, passwordOk, handleIssue, handleRecover, GENERIC_FAILURE, ATTEMPT_LIMIT, ATTEMPT_WINDOW_MS,
+  recoveryAfterResetHmac,
 } from "../supabase/functions/_shared/recovery.mjs";
 
 const SECRET = "test-secret-not-a-real-one";
@@ -118,7 +119,8 @@ test("recover: the right code changes the password, ends every session, rotates 
   assert.equal(w.passwords.get("u-dana"), GOOD_PW);
   assert.equal(w.sessions.get("u-dana"), 0, "every session is revoked");
   assert.equal(w.sessions.get("u-yoav"), 1, "and only that member's");
-  assert.equal(w.recovery.get("u-dana"), await recoveryHmac(SECRET, out.body.recovery_code), "the new code is the stored one");
+  // Q-41: a code handed out by a reset is stored under its own domain, so mfa-recovery never accepts it.
+  assert.equal(w.recovery.get("u-dana"), await recoveryAfterResetHmac(SECRET, out.body.recovery_code), "the new code is the stored one, as an after-reset code");
   // The old code is dead; the new one works.
   const replay = await recover(w, { username: "dana", recovery_code: code, new_password: "Another1Password" });
   assert.deepEqual([replay.status, replay.body], [400, GENERIC_FAILURE]);
