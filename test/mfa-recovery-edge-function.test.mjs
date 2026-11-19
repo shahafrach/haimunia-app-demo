@@ -86,3 +86,25 @@ test("the function keeps the gateway JWT check on and never logs a code", () => 
   const src = fs.readFileSync(new URL("../supabase/functions/mfa-recovery/index.ts", import.meta.url), "utf8");
   assert.ok(!/console\.(log|error)\([^)]*(secret|code)\b/i.test(src.replace(/mfa-recovery failed/, "")));
 });
+
+// Q-45: other sessions end BEFORE the factor is removed, so a failure there changes nothing for the member.
+test("Q-45: if ending other sessions fails, the factor stays, the code is not rotated, one generic answer", async () => {
+  const w = await world();
+  const before = w.recovery.get("u-dana");
+  w.deps.store.revokeOtherSessions = async () => { throw new Error("auth down"); };
+  const out = await call(w);
+  assert.equal(out.status, 400);
+  assert.deepEqual(out.body, { error: "recovery_failed" });
+  assert.deepEqual(w.factors, ["f1"], "the authenticator factor is still there");
+  assert.equal(w.recovery.get("u-dana"), before, "the old code still works");
+});
+test("Q-45: sessions end first, then the factor goes", async () => {
+  const w = await world();
+  const order = [];
+  const rev = w.deps.store.revokeOtherSessions, rem = w.deps.store.removeTotpFactors;
+  w.deps.store.revokeOtherSessions = async (t) => { order.push("revoke"); return rev(t); };
+  w.deps.store.removeTotpFactors = async (id) => { order.push("remove"); return rem(id); };
+  const out = await call(w);
+  assert.equal(out.status, 200);
+  assert.deepEqual(order, ["revoke", "remove"]);
+});

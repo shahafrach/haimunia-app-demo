@@ -38,7 +38,7 @@
         <h1 id="pageTitle-${tabKey}" class="scene-page__title">${esc(title)}</h1>
       </div>
       <div class="scene-sheet">
-${uiToastHtml()}${renderOutboxBanner()}${resetBannerHtml()}${inner}</div></section>`;
+${uiToastHtml()}${renderOutboxBanner()}${inner}</div></section>`;
   }
 
   // The list of circles with a checkbox each, used wherever the member picks
