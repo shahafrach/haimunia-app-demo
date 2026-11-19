@@ -4,6 +4,7 @@
 // forgot screen keeps what the member types.
 import { test } from "node:test";
 import assert from "node:assert";
+import fs from "node:fs";
 import { bootCommunity, waitFor, openCommunityLogin } from "./helpers/boot.mjs";
 import { createMockSupabase } from "./helpers/mockSupabase.mjs";
 import { createCirclesMock, bootCircle, click } from "./helpers/circles.mjs";
@@ -15,27 +16,19 @@ const KEY = "haimunia-demo:resetRequest";
 const TOKEN = "c".repeat(64);
 
 
-test("signed in: a pending reset shows a banner, and cancelling it calls cancel_my_reset", async () => {
-  let cancelled = 0;
-  const mock = createCirclesMock({
-    rpc: {
-      my_pending_reset: () => ({ data: [{ ready_at: new Date(Date.now() + 6 * 3600e3).toISOString(), created_at: new Date().toISOString() }], error: null }),
-      cancel_my_reset: () => { cancelled++; return { data: true, error: null }; },
-    },
-  });
-  const window = await bootCircle(mock);
-  await waitFor(() => !!window.document.querySelector('[data-reset-banner="pending"]'), 3000);
-  assert.match(text(window), /התבקש איפוס לסיסמה שלך/);
-  click(window, '[data-community-action="recovery-reset-cancel"]');
-  await waitFor(() => !!window.document.querySelector('[data-reset-banner="cancelled"]'), 3000);
-  assert.equal(cancelled, 1);
-});
-
-test("signed in with nothing pending: no banner", async () => {
-  const mock = createCirclesMock({ rpc: { my_pending_reset: () => ({ data: [], error: null }) } });
-  const window = await bootCircle(mock);
-  await new Promise((r) => setTimeout(r, 50));
+// Q-45: the banner of a pending lost-code reset is gone (request-reset answers 410 to every request and
+// completion since Q-41, so a pending request can never finish). Nothing asks the server about one any more,
+// and a request token an older version left on this device is forgotten.
+test("signed in: no reset banner and no my_pending_reset call; an old request token is forgotten", async () => {
+  let asked = 0;
+  const mock = createCirclesMock({ rpc: { my_pending_reset: () => { asked++; return { data: [], error: null }; } } });
+  const window = await bootCircle(mock, { localStorage: { [KEY]: JSON.stringify({ username: "dana", token: TOKEN, readyAt: Date.now() }) } });
+  await new Promise((r) => setTimeout(r, 80));
   assert.equal(window.document.querySelector("[data-reset-banner]"), null);
+  assert.equal(asked, 0, "the server is not asked about a pending reset");
+  assert.equal(window.localStorage.getItem(KEY), null, "the old request token is gone");
+  const src = fs.readFileSync(new URL("../src/community/recovery.js", import.meta.url), "utf8");
+  assert.doesNotMatch(src, /request-reset|my_pending_reset|cancel_my_reset|communityResetRequest/, "no reset client code left");
 });
 
 test("a re-render while the member types on the forgot screen keeps what was typed (E2E 02-friend, step 18)", async () => {

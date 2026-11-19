@@ -48,9 +48,11 @@ export async function handleMfaRecovery(req, deps) {
   const recoveryMatch = timingSafeEqualStrings(stored || "0".repeat(64), given) && !!stored;
   if (!looksLikeCode(code) || !recoveryMatch) return FAIL();
 
+  // Every other session of the account ends (Q-41): a factor change is a security change. Q-45: first, so a
+  // failure here leaves the factor in place and the code unused (the generic failure, try again), instead of a
+  // factor removed with no new code shown.
+  try { await deps.store.revokeOtherSessions(m[1]); } catch (e) { return FAIL(); }
   if (!(await deps.store.removeTotpFactors(user.id))) return FAIL();
-  // Every other session of the account ends (Q-41): a factor change is a security change.
-  await deps.store.revokeOtherSessions(m[1]);
   const next = generateCode(deps.randomBytes);
   await deps.store.putRecoveryCode(user.id, await recoveryHmac(deps.secret, next));
   await deps.store.clearReset(user.id);
