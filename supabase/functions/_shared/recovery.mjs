@@ -72,7 +72,8 @@ export function timingSafeEqualStrings(a, b) {
 /** The same rule as the client (src/community/auth.js passwordRuleError) and supabase/config.toml. */
 export function passwordOk(pw) {
   const p = String(pw == null ? "" : pw);
-  return p.length >= 10 && p.length <= 72 && /[a-z]/.test(p) && /[A-Z]/.test(p) && /[0-9]/.test(p);
+  // Q-38g: 10 to 72 characters, nothing else (72 is bcrypt's limit).
+  return p.length >= 10 && p.length <= 72;
 }
 export function usernameOk(u) { return /^[a-z0-9_]{3,24}$/.test(u); }
 
