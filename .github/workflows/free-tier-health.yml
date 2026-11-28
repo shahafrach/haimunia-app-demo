@@ -1,7 +1,9 @@
 name: free-tier-health
 # Q-50 (Grok backend PRR, 2026-11-19): the free plan's own limits, once a day. keepalive.yml pings the
-# project and scheduled-job-alert.yml watches pg_cron, but nothing said when the project was paused,
-# the database was filling up, or Edge Function calls were heading for the monthly quota. The check
+# project and scheduled-job-alert.yml watches pg_cron, but nothing said when the project was paused or
+# the database was filling up. (Q-66: Edge Function calls are no longer counted here: the logs endpoint
+# the check used answers HTTP 410. Exit 3 means "check broken", apart from quota and from a transient
+# failure.) The check
 # and its thresholds are scripts/check-free-tier.mjs; the runbook is docs/ops/MONITORING.md.
 #
 # A separate workflow, not a job in scheduled-job-alert.yml: that one needs no secret at all and a test
@@ -27,7 +29,7 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
-      - name: project status, database size and Edge Function calls against the free plan
+      - name: project status and database size against the free plan
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}

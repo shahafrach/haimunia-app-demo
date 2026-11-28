@@ -675,10 +675,19 @@ CAPTCHA hosts got — not a dependency someone adds in passing.
 
 `free-tier-health.yml` runs `scripts/check-free-tier.mjs` daily at 05:23 UTC with
 `SUPABASE_ACCESS_TOKEN`. It fails (and posts to `ALERT_WEBHOOK_URL` when set) when the project
-status is not `ACTIVE_HEALTHY`, the database is above 400 MB (the free plan stops at 500 MB), or
-Edge Function calls in the last 24 hours, times 30, are above 80% of the free 500,000 a month.
-Exit 2 means it could not check, which is also red.
+status is not `ACTIVE_HEALTHY` or the database is above 400 MB (the free plan stops at 500 MB).
 
-**Egress is not checked**: the Management API has no egress figure and the edge logs carry no
-response bytes. Look at the organization's usage page (Dashboard, Organization, Usage, Egress) once
-a week; the free plan allows 5 GB uncached and 5 GB cached a month.
+Exit codes, all red:
+
+| exit | meaning | what to do |
+|---|---|---|
+| 1 | checked, and over a line | the run says which: restore the project, or free database space |
+| 2 | could not check this time (timeout, 5xx, 429, bad token) | re-run; if it repeats, check the token |
+| 3 | **check broken**: the Management API answered 404 or 410 for an endpoint the script uses | not a quota problem: fix `scripts/check-free-tier.mjs` |
+
+**Not checked, read by hand once a week** on the organization's usage page (Dashboard, Organization,
+Usage): **egress** (the Management API has no egress figure; the free plan allows 5 GB uncached and 5 GB
+cached a month) and **Edge Function invocations** (free: 500,000 a month). Invocations were counted
+from `analytics/endpoints/logs.all` until that endpoint started answering HTTP 410 on 2026-11-22 (Q-66);
+its replacements need one call per function or do not clearly count invocations, so the metric was
+dropped rather than guessed.
