@@ -48,7 +48,7 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: scripts/e2e/package-lock.json
-      - uses: supabase/setup-cli@45a513f8c64c0bc8e0e3dfe572b5c95be85f6359 # v3.0.1
+      - uses: supabase/setup-cli@689adcfb80d947100a1eab127289b97d1fb07b13 # v3.2.0
         with:
           # The version test.yml's migration-check job pins.
           version: 2.116.0
